@@ -11,6 +11,7 @@
 //!   * ⇒尝试探索「直接基于『枚举Narsese』」的方法
 
 use crate::io::symbols::*;
+use nar_dev_utils::manipulate;
 
 /// 作为「结构」的词项
 /// * 🚩更多通过「复合」而非「抽象特征-具体实现」复用代码
@@ -149,11 +150,128 @@ impl Term {
 
     // 复合词项 //
 
-    // TODO: 更多词项
+    /// NAL-3 / 外延集
+    /// * 🚩【2024-04-21 13:39:28】使用统一的「无序不重复集合」构造组分
+    pub fn new_set_ext(terms: impl Into<Vec<Term>>) -> Self {
+        Self::new(
+            SET_EXT_OPERATOR,
+            TermComponents::new_multi_set(terms.into()),
+        )
+    }
+
+    /// NAL-3 / 内涵集
+    /// * 🚩【2024-04-21 13:39:28】使用统一的「无序不重复集合」构造组分
+    pub fn new_set_int(terms: impl Into<Vec<Term>>) -> Self {
+        Self::new(
+            SET_INT_OPERATOR,
+            TermComponents::new_multi_set(terms.into()),
+        )
+    }
+
+    /// NAL-3 / 外延交
+    /// * 🚩【2024-04-21 13:39:28】使用统一的「无序不重复集合」构造组分
+    pub fn new_intersect_ext(terms: impl Into<Vec<Term>>) -> Self {
+        Self::new(
+            INTERSECTION_EXT_OPERATOR,
+            TermComponents::new_multi_set(terms.into()),
+        )
+    }
+
+    /// NAL-3 / 内涵交
+    /// * 🚩【2024-04-21 13:39:28】使用统一的「无序不重复集合」构造组分
+    pub fn new_intersect_int(terms: impl Into<Vec<Term>>) -> Self {
+        Self::new(
+            INTERSECTION_INT_OPERATOR,
+            TermComponents::new_multi_set(terms.into()),
+        )
+    }
+
+    /// NAL-3 / 外延差
+    pub fn new_diff_ext(term1: Term, term2: Term) -> Self {
+        Self::new(
+            DIFFERENCE_EXT_OPERATOR,
+            TermComponents::Binary(term1, term2),
+        )
+    }
+
+    /// NAL-3 / 内涵差
+    pub fn new_diff_int(term1: Term, term2: Term) -> Self {
+        Self::new(
+            DIFFERENCE_INT_OPERATOR,
+            TermComponents::Binary(term1, term2),
+        )
+    }
+
+    /// NAL-4 / 乘积
+    pub fn new_product(terms: impl Into<Vec<Term>>) -> Self {
+        Self::new(PRODUCT_OPERATOR, TermComponents::Multi(terms.into()))
+    }
+
+    /// NAL-4 / 外延像
+    pub fn new_image_ext(i_placeholder: usize, terms: impl Into<Vec<Term>>) -> Self {
+        Self::new(
+            IMAGE_EXT_OPERATOR,
+            TermComponents::MultiIndexed(i_placeholder, terms.into()),
+        )
+    }
+
+    /// NAL-4 / 内涵像
+    pub fn new_image_int(i_placeholder: usize, terms: impl Into<Vec<Term>>) -> Self {
+        Self::new(
+            IMAGE_INT_OPERATOR,
+            TermComponents::MultiIndexed(i_placeholder, terms.into()),
+        )
+    }
+
+    /// NAL-5 / 合取
+    /// * 🚩【2024-04-21 13:39:28】使用统一的「无序不重复集合」构造组分
+    pub fn new_conjunction(terms: impl Into<Vec<Term>>) -> Self {
+        Self::new(
+            CONJUNCTION_OPERATOR,
+            TermComponents::new_multi_set(terms.into()),
+        )
+    }
+
+    /// NAL-5 / 析取
+    /// * 🚩【2024-04-21 13:39:28】使用统一的「无序不重复集合」构造组分
+    pub fn new_disjunction(terms: impl Into<Vec<Term>>) -> Self {
+        Self::new(
+            DISJUNCTION_OPERATOR,
+            TermComponents::new_multi_set(terms.into()),
+        )
+    }
 
     /// NAL-5 / 否定
     pub fn new_negation(term: Term) -> Self {
         Self::new(NEGATION_OPERATOR, TermComponents::Unary(term))
+    }
+}
+
+impl TermComponents {
+    /// 多元无序不重复组分
+    /// * 🎯用于【无序不重复】的集合类组分
+    /// * 📄外延集、内涵集
+    /// * 📄外延交、内涵交
+    pub fn new_multi_set(terms: Vec<Term>) -> Self {
+        Self::Multi(manipulate!(
+            terms
+            => .sort() // 先排序
+            => .dedup() // 再去重 | 📝`dedup`即`delete duplicated`，去除连续的重复元素
+        ))
+    }
+
+    /// 二元无序组分
+    /// * 🎯用于【双元素对称性】复合词项
+    /// * ⚠️无法去重：元素数量固定为`2`
+    /// * 📄相似、等价
+    /// * 🚩使用「临时数组切片」实现（较为简洁）
+    pub fn new_binary_unordered(term1: Term, term2: Term) -> Self {
+        let [term1, term2] = manipulate!(
+            [term1, term2]
+            => .sort()
+        );
+        // 构造
+        TermComponents::Binary(term1, term2)
     }
 }
 
@@ -196,7 +314,6 @@ impl Term {
 mod conversion {
     use super::*;
     use anyhow::{anyhow, Result};
-    use nar_dev_utils::manipulate;
     use narsese::{
         conversion::inter_type::lexical_fold::TryFoldInto, lexical::Term as TermLexical,
     };
@@ -324,6 +441,9 @@ mod conversion {
     }
 
     /// 词法折叠
+    /// * 💭【2024-04-21 13:40:40】目前这种方法还是「过于粗放」
+    ///   * ⚠️容许系统内没有的词项类型
+    ///   * ⚠️容许【即便标识符在定义内，但『组分』类型不同】的情况
     impl TryFoldInto<'_, Term, anyhow::Error> for TermLexical {
         type Folder = ();
         fn try_fold_into(self, _: &'_ Self::Folder) -> Result<Term> {
@@ -361,15 +481,13 @@ mod conversion {
                     Statement {
                         subject, predicate, ..
                     },
-                ) => {
-                    // 排序：构造临时数组
-                    let [term1, term2] = manipulate!(
-                        [subject.try_fold_into(&())?, predicate.try_fold_into(&())?]
-                        => .sort()
-                    );
-                    // 构造
-                    Term::new(identifier, TermComponents::Binary(term1, term2))
-                }
+                ) => Term::new(
+                    identifier,
+                    TermComponents::new_binary_unordered(
+                        subject.try_fold_into(&())?,
+                        predicate.try_fold_into(&())?,
+                    ),
+                ),
                 // 专用 / 无序复合词项 | 不含「词项集」（在「集合词项」中）
                 (
                     INTERSECTION_EXT_OPERATOR
@@ -379,12 +497,8 @@ mod conversion {
                     Compound { terms, .. },
                 ) => Term::new(
                     identifier,
-                    // 自动排序
-                    // 🆕不同于OpenNARS：此处不会进行「唯一化」处理
-                    TermComponents::Multi(manipulate!(
-                        vec_from_lexical_terms(terms)?
-                        => .sort()
-                    )),
+                    // 视作「多元集合」：排序 & 去重
+                    TermComponents::new_multi_set(vec_from_lexical_terms(terms)?),
                 ),
                 // 专用 / 像
                 (IMAGE_EXT_OPERATOR | IMAGE_INT_OPERATOR, Compound { terms, .. }) => {
@@ -395,6 +509,7 @@ mod conversion {
                         let term: Term = term.try_fold_into(&())?;
                         // 识别「占位符位置」
                         // 🆕【2024-04-21 01:12:50】不同于OpenNARS：只会留下（且位置取决于）最后一个占位符
+                        // 📄OpenNARS在「没找到占位符」时，会将第一个元素作为占位符，然后把「占位符索引」固定为`1`
                         match term.is_placeholder() {
                             true => placeholder_index = i,
                             false => v.push(term),
@@ -420,12 +535,8 @@ mod conversion {
                 // * 📄外延集、内涵集
                 (_, Set { terms, .. }) => Term::new(
                     identifier,
-                    // 自动排序
-                    // 🆕不同于OpenNARS：此处不会进行「唯一化」处理
-                    TermComponents::Multi(manipulate!(
-                        vec_from_lexical_terms(terms)?
-                        => .sort()
-                    )),
+                    // 视作「多元集合」：排序 & 去重
+                    TermComponents::new_multi_set(vec_from_lexical_terms(terms)?),
                 ),
                 // 通用 / 陈述 | 默认视作有序
                 // * 📄继承、蕴含
