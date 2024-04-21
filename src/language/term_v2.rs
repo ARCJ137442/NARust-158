@@ -70,6 +70,14 @@ pub struct Term {
     /// * 🚩通过单一的「复合组分」实现「组合」功能
     /// * 🚩此处加上[`Box`]，便不会造成「循环包含」
     components: Box<TermComponents>,
+
+    /// 自由属性「是否为常量」
+    /// * 🎯用于决定其在记忆区、NAL-6推理中的行为
+    /// * ❓为何要设置成「结构属性」：会在系统构造「语句」时概改变
+    ///   * 📝源自OpenNARS：构造语句时所直接涉及的词项均为「常量词项」，必须进入记忆区
+    /// * 📄OpenNARS `isConstant` 属性
+    /// * 📜默认为`true`
+    is_constant: bool,
 }
 
 /// 复合词项组分
@@ -120,10 +128,23 @@ mod construct {
         /// 构造函数
         /// * ⚠️有限性：仅限在「内部」使用，不希望外部以此构造出「不符范围」的词项
         pub(super) fn new(identifier: impl Into<String>, components: TermComponents) -> Self {
-            Self {
+            // 使用默认值构造
+            let mut term = Self {
                 identifier: identifier.into(),
                 components: Box::new(components),
-            }
+                is_constant: true, // 取默认值
+            };
+            // 初始化「是否常量」为「是否不含变量」 | ⚠️后续可能会被修改
+            term.is_constant = !term.contain_var();
+            // 返回
+            term
+        }
+
+        /// 从「语句」初始化
+        /// * 🎯应对OpenNARS中「语句内初始化词项⇒必定是『常量』」的情形
+        /// * 🎯后续遇到异常的「是常量」情况，便于追溯
+        pub fn init_from_sentence(&mut self) {
+            self.is_constant = true;
         }
 
         // 原子词项 //
@@ -355,15 +376,6 @@ mod property {
         pub fn id_comp_mut(&mut self) -> (&mut str, &mut TermComponents) {
             (&mut self.identifier, &mut *self.components)
         }
-
-        /// 用于判断是否为「变量词项」
-        /// * 📄OpenNARS `instanceof Variable` 逻辑
-        pub fn instanceof_variable(&self) -> bool {
-            matches!(
-                self.identifier.as_str(),
-                VAR_INDEPENDENT | VAR_DEPENDENT | VAR_QUERY
-            )
-        }
     }
 
     impl TermComponents {
@@ -447,6 +459,25 @@ mod property {
                 Binary(term1, term2) => Box::new([term1, term2].into_iter()),
                 // 可能空
                 Multi(terms) | MultiIndexed(_, terms) => Box::new(terms.iter()),
+            };
+            b
+        }
+
+        /// 获取其中「所有元素」的迭代器（可变引用）
+        /// * 🚩返回一个迭代器，迭代其中所有「元素」
+        /// * 🎯词项的「变量代入」替换
+        /// * ⚠️并非「深迭代」：仅迭代自身的下一级词项，不会递归深入
+        pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Term> {
+            use TermComponents::*;
+            // * 📝必须添加类型注释，以便统一不同类型的`Box`，进而统一「迭代器」类型
+            let b: Box<dyn Iterator<Item = &mut Term>> = match self {
+                // 一定空
+                Empty | Named(..) => Box::new(None.into_iter()),
+                // 一定非空
+                Unary(term) => Box::new([term].into_iter()),
+                Binary(term1, term2) => Box::new([term1, term2].into_iter()),
+                // 可能空
+                Multi(terms) | MultiIndexed(_, terms) => Box::new(terms.iter_mut()),
             };
             b
         }
@@ -796,6 +827,34 @@ mod conversion {
                     subject.try_fold_into(&())?,
                     predicate.try_fold_into(&())?,
                 ),
+                (
+                    INSTANCE_RELATION, // 派生系词/实例
+                    Statement {
+                        subject, predicate, ..
+                    },
+                ) => Term::new_inheritance(
+                    Term::new_set_ext(vec![subject.try_fold_into(&())?]),
+                    predicate.try_fold_into(&())?,
+                ),
+
+                (
+                    PROPERTY_RELATION, // 派生系词/属性
+                    Statement {
+                        subject, predicate, ..
+                    },
+                ) => Term::new_inheritance(
+                    subject.try_fold_into(&())?,
+                    Term::new_set_int(vec![predicate.try_fold_into(&())?]),
+                ),
+                (
+                    INSTANCE_PROPERTY_RELATION, // 派生系词/实例属性
+                    Statement {
+                        subject, predicate, ..
+                    },
+                ) => Term::new_inheritance(
+                    Term::new_set_ext(vec![subject.try_fold_into(&())?]),
+                    Term::new_set_int(vec![predicate.try_fold_into(&())?]),
+                ),
                 // 其它情况⇒不合法
                 _ => return Err(anyhow!("非法词项：{self_str:?}")),
             };
@@ -968,9 +1027,37 @@ mod conversion {
 mod term {
     use super::*;
     use nar_dev_utils::if_return;
+
     /// 📄OpenNARS `nars.language.Term`
     impl Term {
-        /// 📄OpenNARS `getName` 方法
+        /// 用于判断是否为「变量词项」
+        /// * 📄OpenNARS `instanceof Variable` 逻辑
+        /// * 🎯判断「[是否内含变量](Self::contain_var)」
+        pub fn instanceof_variable(&self) -> bool {
+            matches!(
+                self.identifier.as_str(),
+                VAR_INDEPENDENT | VAR_DEPENDENT | VAR_QUERY
+            )
+        }
+
+        /// 用于判断是否为「陈述词项」
+        /// * 📄OpenNARS `instanceof Statement` 逻辑
+        pub fn instanceof_statement(&self) -> bool {
+            matches!(
+                self.identifier.as_str(),
+                // 四大主要系词
+                INHERITANCE_RELATION
+                    | SIMILARITY_RELATION
+                    | IMPLICATION_RELATION
+                    | EQUIVALENCE_RELATION
+                    // ↓下边都是派生系词
+                    | INSTANCE_RELATION
+                    | PROPERTY_RELATION
+                    | INSTANCE_PROPERTY_RELATION
+            )
+        }
+
+        /// 📄OpenNARS `Term.getName` 方法
         /// * 🆕使用自身内建的「获取名称」方法
         ///   * 相较OpenNARS更**短**
         ///   * 仍能满足OpenNARS的需求
@@ -981,7 +1068,7 @@ mod term {
             self.format_name()
         }
 
-        /// 📄OpenNARS `getComplexity` 方法
+        /// 📄OpenNARS `Term.getComplexity` 方法
         /// * 🚩逻辑 from OpenNARS
         ///   * 词语 ⇒ 1
         ///   * 变量 ⇒ 0
@@ -1048,7 +1135,7 @@ mod term {
 mod compound {
     use super::*;
     impl Term {
-        /// 📄OpenNARS `isCommutative` 属性
+        /// 📄OpenNARS `CompoundTerm.isCommutative` 属性
         ///
         /// # 📄OpenNARS
         ///
@@ -1074,7 +1161,7 @@ mod compound {
             )
         }
 
-        /// 📄OpenNARS `size` 属性
+        /// 📄OpenNARS `CompoundTerm.size` 属性
         /// * 🚩直接链接到[`TermComponents`]的属性
         /// * ⚠️对「像」不包括「像占位符」
         ///   * 📄`(/, A, _, B)`的`size`为`2`而非`3`
@@ -1087,7 +1174,7 @@ mod compound {
             self.components.len()
         }
 
-        /// 📄OpenNARS `componentAt` 方法
+        /// 📄OpenNARS `CompoundTerm.componentAt` 方法
         /// * 🚩直接连接到[`TermComponents`]的方法
         /// * ⚠️对「像」不受「像占位符」位置影响
         ///
@@ -1099,7 +1186,7 @@ mod compound {
             self.components.get(index)
         }
 
-        /// 📄OpenNARS `componentAt` 方法
+        /// 📄OpenNARS `CompoundTerm.componentAt` 方法
         /// * 🆕unsafe版本：若已知词项的组分数，则可经此对症下药
         /// * 🚩直接连接到[`TermComponents`]的方法
         /// * ⚠️对「像」不受「像占位符」位置影响
@@ -1116,7 +1203,7 @@ mod compound {
             self.components.get_unchecked(index)
         }
 
-        /// 📄OpenNARS `getComponents` 属性
+        /// 📄OpenNARS `CompoundTerm.getComponents` 属性
         /// * 🚩直接连接到[`TermComponents`]的方法
         /// * 🚩【2024-04-21 16:11:59】目前只需不可变引用
         ///   * 🔎OpenNARS中大部分用法是「只读」情形
@@ -1129,7 +1216,7 @@ mod compound {
             self.components.iter()
         }
 
-        /// 📄OpenNARS `cloneComponents` 方法
+        /// 📄OpenNARS `CompoundTerm.cloneComponents` 方法
         /// * 🚩直接连接到[`TermComponents`]的方法
         /// * ✅直接使用自动派生的[`TermComponents::clone`]方法，且不需要OpenNARS中的`cloneList`
         ///
@@ -1140,7 +1227,7 @@ mod compound {
             *self.components.clone()
         }
 
-        /// 📄OpenNARS `containComponent` 方法
+        /// 📄OpenNARS `CompoundTerm.containComponent` 方法
         /// * 🎯检查其是否包含**直接**组分
         /// * 🚩直接基于已有迭代器方法
         ///
@@ -1151,7 +1238,7 @@ mod compound {
             self.get_components().any(|term| term == component)
         }
 
-        /// 📄OpenNARS `containTerm` 方法
+        /// 📄OpenNARS `CompoundTerm.containTerm` 方法
         /// * 🎯检查其是否**递归**包含组分
         /// * 🚩直接基于已有迭代器方法
         ///
@@ -1170,7 +1257,7 @@ mod compound {
             &self.identifier
         }
 
-        /// 📄OpenNARS `containAllComponents` 方法
+        /// 📄OpenNARS `CompoundTerm.containAllComponents` 方法
         /// * 🎯分情况检查「是否包含所有组分」
         ///   * 📌同类⇒检查其是否包含`other`的所有组分
         ///   * 📌异类⇒检查其是否包含`other`作为整体
@@ -1202,9 +1289,9 @@ mod compound {
 /// * `renameVariables`
 /// * `applySubstitute`
 /// * `getType` => `getVariableType`
-/// * `containVarI`
-/// * `containVarD`
-/// * `containVarQ`
+/// * `containVarI` => `containVar`
+/// * `containVarD` => `containVar`
+/// * `containVarQ` => `containVar`
 /// * `containVar`
 /// * `unify`
 /// * `makeCommonVariable` (内用)
@@ -1216,13 +1303,279 @@ mod compound {
 /// # 📄OpenNARS
 ///
 /// A variable term, which does not correspond to a concept
-mod variable {}
+pub mod variable {
+    use super::*;
+    use std::collections::HashMap;
+
+    impl Term {
+        /// 📄OpenNARS `Term.isConstant` 属性
+        /// * 🚩检查其是否为「常量」：自身是否「不含变量」
+        /// * 🎯决定其是否能**成为**一个「概念」（被作为「概念」存入记忆区）
+        /// * ❓OpenNARS中在「构造语句」时又会将`isConstant`属性置为`true`，这是为何
+        ///   * 📝被`Sentence(..)`调用的`CompoundTerm.renameVariables()`会直接将词项「视作常量」
+        ///   * 💭这似乎是被认为「即便全是变量，只要是【被作为语句输入过】的，就会被认作是『常量』」
+        ///   * 📝然后这个「是否常量」会在「记忆区」中被认作「是否能从中获取概念」的依据：`if (!term.isConstant()) { return null; }`
+        /// * 🚩【2024-04-21 23:46:12】现在变为「只读属性」：接受OpenNARS中有关「设置语句时/替换变量后 变为『常量』」的设定
+        ///   * 💫【2024-04-22 00:03:10】后续仍然有一堆复杂逻辑要考虑
+        ///
+        /// # 📄OpenNARS
+        ///
+        /// Check whether the current Term can name a Concept.
+        ///
+        /// - A Term is constant by default
+        /// - A variable is not constant
+        /// - (for `CompoundTerm`) check if the term contains free variable
+        #[inline(always)]
+        pub fn is_constant(&self) -> bool {
+            !self.contain_var()
+        }
+
+        /// 📄OpenNARS `Variable.containVar` 方法
+        /// * 🚩检查其是否「包含变量」
+        ///   * 自身为「变量词项」或者其包含「变量词项」
+        /// * 🎯用于决定复合词项是否为「常量」
+        /// * 📝OpenNARS中对于复合词项的`isConstant`属性采用「惰性获取」的机制
+        ///   * `isConstant`作为`!Variable.containVar(name)`进行初始化
+        /// * 🆕实现方法：不同于OpenNARS「直接从字符串中搜索子串」的方式，基于递归方法设计
+        ///
+        /// # 📄OpenNARS
+        ///
+        /// Check whether a string represent a name of a term that contains a variable
+        #[inline]
+        pub fn contain_var(&self) -> bool {
+            self.instanceof_variable() || self.components.contain_var()
+        }
+
+        /// 📄OpenNARS `Term.renameVariables` 方法
+        /// * 🚩重命名自身变量为一系列「固定编号」
+        ///   * 📌整体逻辑：将其中所有不同名称的「变量」编篡到一个字典中，排序后以编号重命名（抹消具体名称）
+        ///   * 📝因为这些变量都位于「词项内部」，即「变量作用域全被约束在词项内」，故无需考虑「跨词项编号歧义」的问题
+        /// * 🎯用于将「变量」统一命名成固定的整数编号
+        /// * ❓目前对此存疑：必要性何在？
+        ///   * ~~不一致性：输入`<$A --> $B>`再输入`<$B --> $A>`会被看作是一样的变量~~
+        ///   * 📌既然是「变量作用域对整个词项封闭」那**任意名称都没问题**
+        ///
+        /// # 📄OpenNARS
+        ///
+        /// @ Term: Blank method to be override in CompoundTerm
+        ///
+        /// @ CompoundTerm:
+        ///   * Rename the variables in the compound, called from Sentence constructors
+        ///   * Recursively rename the variables in the compound
+        pub fn rename_variables(&mut self) {
+            unimplemented!("【2024-04-21 20:48:33】目前尚不清楚其必要性");
+        }
+
+        /// 📄OpenNARS `CompoundTerm.applySubstitute` 方法
+        /// * 🚩直接分派给其组分
+        /// * 📝OpenNARS中「原子词项」不参与「变量替代」：执行无效果
+        ///
+        /// # 📄OpenNARS
+        ///
+        /// Recursively apply a substitute to the current CompoundTerm
+        #[inline]
+        pub fn apply_substitute(&mut self, substitution: &VarSubstitution) {
+            self.components.apply_substitute(substitution)
+        }
+
+        /// 📄OpenNARS `Variable.getType` 方法
+        /// * 🎯在OpenNARS中仅用于「判断变量类型相等」
+        /// * 🚩归并到「判断词项标识符相等」
+        ///
+        /// # 📄OpenNARS
+        ///
+        /// Get the type of the variable
+        #[inline(always)]
+        pub fn get_variable_type(&self) -> &str {
+            &self.identifier
+        }
+    }
+
+    /// 📄OpenNARS `Variable.unify` 方法
+    /// * 🚩总体流程：找「可替换的变量」并（两头都）替换之
+    /// * 📝⚠️不对称性：从OpenNARS `findSubstitute`中所见，
+    ///   * `to_be_unified_1`是「包含变量，将要被消元」的那个（提供键），
+    ///   * 而`to_be_unified_2`是「包含常量，将要用于消元」的那个（提供值）
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// To unify two terms
+    ///
+    /// @param type            The type of variable that can be substituted
+    /// @param to_be_unified_1 The first term to be unified
+    /// @param to_be_unified_2 The second term to be unified
+    /// @param unified_in_1    The compound containing the first term
+    /// @param unified_in_2    The compound containing the second term
+    /// @return Whether the unification is possible
+    ///
+    /// # 📄案例
+    ///
+    /// ## 1 from OpenNARS调试 @ 【2024-04-21 21:48:21】
+    ///
+    /// 传入
+    ///
+    /// - type: "$"
+    /// - to_be_unified_1: "<$1 --> B>"
+    /// - to_be_unified_2: "<C --> B>"
+    /// - unified_in_1: <<$1 --> A> ==> <$1 --> B>>
+    /// - unified_in_2: <C --> B>
+    ///
+    /// 结果
+    /// - to_be_unified_1: "<$1 --> B>"
+    /// - to_be_unified_2: "<C --> B>"
+    /// - unified_in_1: <<C --> A> ==> <C --> B>>
+    /// - unified_in_2: <C --> B>
+    ///
+    #[allow(unused_variables)]
+    pub fn unify(
+        var_type: &str,
+        to_be_unified_1: &Term,
+        to_be_unified_2: &Term,
+        unified_in_1: &mut Term,
+        unified_in_2: &mut Term,
+    ) -> bool {
+        // 构造并找出所有「变量替代模式」
+        // * 🚩递归找出其中所有「可被替代的变量」装载进「变量替换映射」中
+        let mut substitution_1 = VarSubstitution::new();
+        let mut substitution_2 = VarSubstitution::new();
+        let has_substitute = find_substitute(
+            var_type,
+            to_be_unified_1,
+            to_be_unified_2,
+            &mut substitution_1,
+            &mut substitution_2,
+        );
+        // 根据「变量替换映射」在两头相应地替换变量
+        // * 🚩若「变量替换映射」为空，本来就不会执行
+        unified_in_1.apply_substitute(&substitution_1);
+        unified_in_2.apply_substitute(&substitution_2);
+        // 返回「是否替换了变量」
+        has_substitute
+    }
+
+    /// 📄OpenNARS `Variable.findSubstitute` 方法
+    /// * 💫【2024-04-21 21:40:45】目前尚未能完全理解此处的逻辑
+    /// * 📝【2024-04-21 21:50:42】递归查找一个「同位替代」的「变量→词项」映射
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// To recursively find a substitution that can unify two Terms without changing them
+    ///
+    /// @param type            The type of variable that can be substituted
+    /// @param to_be_unified_1 The first term to be unified
+    /// @param to_be_unified_2 The second term to be unified
+    /// @param substitution_1  The substitution for term1 formed so far
+    /// @param substitution_2  The substitution for term2 formed so far
+    /// @return Whether the unification is possible
+    ///
+    /// # 📄案例
+    ///
+    /// ## 1 from OpenNARS调试 @ 【2024-04-21 21:48:21】
+    ///
+    /// 传入
+    ///
+    /// - type: "$"
+    /// - to_be_unified_1: "<$1 --> B>"
+    /// - to_be_unified_2: "<C --> B>"
+    /// - substitution_1: HashMap{}
+    /// - substitution_2: HashMap{}
+    ///
+    /// 结果
+    ///
+    /// - 返回值 = true
+    /// - substitution_1: HashMap{ Term"$1" => Term"C" }
+    /// - substitution_2: HashMap{}
+    ///
+    /// ## 2 from OpenNARS调试 @ 【2024-04-21 22:05:46】
+    ///
+    /// 传入
+    ///
+    /// - type: "$"
+    /// - to_be_unified_1: "<<A --> $1> ==> <B --> $1>>"
+    /// - to_be_unified_2: "<B --> C>"
+    /// - substitution_1: HashMap{}
+    /// - substitution_2: HashMap{}
+    ///
+    /// 结果
+    ///
+    /// - 返回值 = true
+    /// - substitution_1: HashMap{ Term"$1" => Term"C" }
+    /// - substitution_2: HashMap{}
+    #[allow(unused_variables)]
+    pub fn find_substitute(
+        var_type: &str,
+        to_be_unified_1: &Term,
+        to_be_unified_2: &Term,
+        substitution_1: &mut VarSubstitution,
+        substitution_2: &mut VarSubstitution,
+    ) -> bool {
+        todo!("【2024-04-21 21:43:16】目前尚未能理解")
+    }
+
+    impl TermComponents {
+        /// 判断「是否包含变量（词项）」
+        /// * 🎯支持「词项」中的方法，递归判断「是否含有变量」
+        /// * 🚩【2024-04-21 20:35:23】目前直接基于迭代器
+        ///   * 📌牺牲一定性能，加快开发速度
+        pub fn contain_var(&self) -> bool {
+            self.iter().any(Term::contain_var)
+        }
+
+        /// 📄OpenNARS `CompoundTerm.applySubstitute` 方法
+        pub fn apply_substitute(&mut self, substitution: &VarSubstitution) {
+            // 遍历其中所有地方的可变引用
+            for term in self.iter_mut() {
+                // 寻找其「是否有替代」
+                match substitution.get_substitute(term) {
+                    // 有替代⇒直接赋值
+                    Some(new_term) => *term = new_term.clone(),
+                    // 没替代⇒继续递归替代
+                    None => term.apply_substitute(substitution),
+                }
+            }
+        }
+    }
+
+    /// 用于表示「变量替换」的字典
+    /// * 🎯NAL-6中的「变量替换」「变量代入」
+    #[derive(Debug, Default, Clone)]
+    #[doc(alias = "VariableSubstitution")]
+    pub struct VarSubstitution {
+        map: HashMap<Term, Term>,
+    }
+
+    impl VarSubstitution {
+        /// 构造函数
+        pub fn new() -> Self {
+            Self::default()
+        }
+
+        /// 从其它构造出「散列映射」的地方构造
+        pub fn from(map: impl Into<HashMap<Term, Term>>) -> Self {
+            Self { map: map.into() }
+        }
+
+        /// 从其它构造出「散列映射」的地方构造
+        pub fn from_pairs(pairs: impl IntoIterator<Item = (Term, Term)>) -> Self {
+            Self {
+                map: HashMap::from_iter(pairs),
+            }
+        }
+
+        /// 尝试获取「替代项」
+        /// * 🎯变量替换
+        pub fn get_substitute(&self, key: &Term) -> Option<&Term> {
+            self.map.get(key)
+        }
+    }
+}
 
 /// 单元测试
 #[cfg(test)]
 mod test {
     use super::*;
     use anyhow::Result;
+    use nar_dev_utils::asserts;
     use narsese::{
         conversion::{
             inter_type::lexical_fold::TryFoldInto,
@@ -1438,5 +1791,57 @@ mod test {
         }
 
         // TODO: 更多函数的测试
+    }
+
+    mod variable {
+        use super::*;
+        use crate::language::variable::VarSubstitution;
+
+        /// 测试/包含变量
+        /// * ✨同时包含对「是否常量」的测试
+        #[test]
+        fn contain_var() -> Result<()> {
+            asserts! {
+                term!("<A --> var_word>").contain_var() => false
+                term!("<A --> $var_word>").contain_var() => true
+                term!("<A --> #var_word>").contain_var() => true
+                term!("<A --> ?var_word>").contain_var() => true
+
+                term!("<A --> var_word>").is_constant() => true
+                term!("<A --> $var_word>").is_constant() => false
+                term!("<A --> #var_word>").is_constant() => false
+                term!("<A --> ?var_word>").is_constant() => false
+                term!("<<A --> $1> ==> <B --> $1>>").is_constant() => true // ! 变量作用域限定在词项之内，被视作「常量」
+            }
+            Ok(())
+        }
+
+        /// 测试/变量替换
+        #[test]
+        fn apply_substitute() -> Result<()> {
+            macro_rules! apply_substitute {
+                {
+                    $(
+                        $term_str:expr, $substitution:expr
+                        => $substituted_str:expr
+                    )*
+                } => {
+                    $(
+                        let mut term = term!($term_str);
+                        term.apply_substitute(&$substitution);
+                        assert_eq!(term, term!($substituted_str));
+                    )*
+                };
+            }
+            let substitution = VarSubstitution::from_pairs([
+                (term!("var_word"), term!("word")),
+                (term!("$1"), term!("1")),
+            ]);
+            apply_substitute! {
+                "<A --> var_word>", substitution => "<A --> word>"
+                "<<$1 --> A> ==> <B --> $1>>", substitution => "<<1 --> A> ==> <B --> 1>>"
+            }
+            Ok(())
+        }
     }
 }
