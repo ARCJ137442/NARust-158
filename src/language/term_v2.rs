@@ -376,8 +376,22 @@ mod property {
         pub fn id_comp_mut(&mut self) -> (&mut str, &mut TermComponents) {
             (&mut self.identifier, &mut *self.components)
         }
+
+        /// 判断「是否包含指定类型的词项」
+        /// * 🎯支持「词项」中的方法，递归判断「是否含有变量」
+        pub fn contain_type(&self, identifier: &str) -> bool {
+            self.identifier == identifier || self.components.contain_type(identifier)
+        }
+
+        /// 判断和另一词项是否「结构匹配」
+        /// * 🎯变量替换中的模式匹配
+        #[inline(always)]
+        pub fn structural_match(&self, other: &Self) -> bool {
+            self.components.structural_match(&other.components)
+        }
     }
 
+    /// 内建属性
     impl TermComponents {
         /// 获取「组分」的大小
         /// * ⚠️对于「带索引序列」不包括「索引」
@@ -566,6 +580,33 @@ mod property {
                     terms.sort_unstable();
                     terms.dedup();
                 }
+            }
+        }
+
+        /// 判断「是否包含指定类型的词项」
+        /// * 🎯支持「词项」中的方法，递归判断「是否含有变量」
+        /// * 🚩【2024-04-21 20:35:23】目前直接基于迭代器
+        ///   * 📌牺牲一定性能，加快开发速度
+        pub fn contain_type(&self, identifier: &str) -> bool {
+            self.iter().any(|term| term.contain_type(identifier))
+        }
+
+        /// 判断「结构模式上是否匹配」
+        /// * 🚩判断二者在「结构大小」与（可能有的）「结构索引」是否符合
+        /// * 🎯变量替换中的「相同结构之模式替换」
+        /// * 📄`variable::find_substitute`
+        pub fn structural_match(&self, other: &Self) -> bool {
+            use TermComponents::*;
+            match (self, other) {
+                // 同类型 / 空 | 同类型 / 二元
+                (Empty | Named(..), Empty | Named(..)) | (Binary(..), Binary(..)) => true,
+                // 同类型 / 多元
+                (Multi(terms1), Multi(terms2)) => terms1.len() == terms2.len(),
+                (MultiIndexed(i1, terms1), MultiIndexed(i2, terms2)) => {
+                    i1 == i2 && terms1.len() == terms2.len()
+                }
+                // 其它情形（类型相异）
+                _ => false,
             }
         }
     }
@@ -1040,6 +1081,26 @@ mod term {
             )
         }
 
+        /// 用于判断是否为「复合词项」
+        /// * 📄OpenNARS `instanceof CompoundTerm` 逻辑
+        pub fn instanceof_compound(&self) -> bool {
+            matches!(
+                self.identifier.as_str(),
+                SET_EXT_OPERATOR
+                    | SET_INT_OPERATOR
+                    | INTERSECTION_EXT_OPERATOR
+                    | INTERSECTION_INT_OPERATOR
+                    | DIFFERENCE_EXT_OPERATOR
+                    | DIFFERENCE_INT_OPERATOR
+                    | PRODUCT_OPERATOR
+                    | IMAGE_EXT_OPERATOR
+                    | IMAGE_INT_OPERATOR
+                    | CONJUNCTION_OPERATOR
+                    | DISJUNCTION_OPERATOR
+                    | NEGATION_OPERATOR
+            )
+        }
+
         /// 用于判断是否为「陈述词项」
         /// * 📄OpenNARS `instanceof Statement` 逻辑
         pub fn instanceof_statement(&self) -> bool {
@@ -1289,9 +1350,9 @@ mod compound {
 /// * `renameVariables`
 /// * `applySubstitute`
 /// * `getType` => `getVariableType`
-/// * `containVarI` => `containVar`
-/// * `containVarD` => `containVar`
-/// * `containVarQ` => `containVar`
+/// * `containVarI`
+/// * `containVarD`
+/// * `containVarQ`
 /// * `containVar`
 /// * `unify`
 /// * `makeCommonVariable` (内用)
@@ -1344,6 +1405,27 @@ pub mod variable {
         #[inline]
         pub fn contain_var(&self) -> bool {
             self.instanceof_variable() || self.components.contain_var()
+        }
+
+        /// 📄OpenNARS `Variable.containVarI` 方法
+        /// * 🎯判断「是否包含指定类型的变量」
+        /// * 🚩通过「判断是否包含指定标识符的词项」完成判断
+        pub fn contain_var_i(&self) -> bool {
+            self.contain_type(VAR_INDEPENDENT)
+        }
+
+        /// 📄OpenNARS `Variable.containVarD` 方法
+        /// * 🎯判断「是否包含指定类型的变量」
+        /// * 🚩通过「判断是否包含指定标识符的词项」完成判断
+        pub fn contain_var_d(&self) -> bool {
+            self.contain_type(VAR_DEPENDENT)
+        }
+
+        /// 📄OpenNARS `Variable.containVarQ` 方法
+        /// * 🎯判断「是否包含指定类型的变量」
+        /// * 🚩通过「判断是否包含指定标识符的词项」完成判断
+        pub fn contain_var_q(&self) -> bool {
+            self.contain_type(VAR_QUERY)
         }
 
         /// 📄OpenNARS `Term.renameVariables` 方法
@@ -1456,6 +1538,7 @@ pub mod variable {
     /// 📄OpenNARS `Variable.findSubstitute` 方法
     /// * 💫【2024-04-21 21:40:45】目前尚未能完全理解此处的逻辑
     /// * 📝【2024-04-21 21:50:42】递归查找一个「同位替代」的「变量→词项」映射
+    /// * 🚧缺少注释：逻辑基本照抄OpenNARS的代码
     ///
     /// # 📄OpenNARS
     ///
@@ -1501,7 +1584,6 @@ pub mod variable {
     /// - 返回值 = true
     /// - substitution_1: HashMap{ Term"$1" => Term"C" }
     /// - substitution_2: HashMap{}
-    #[allow(unused_variables)]
     pub fn find_substitute(
         var_type: &str,
         to_be_unified_1: &Term,
@@ -1509,7 +1591,135 @@ pub mod variable {
         substitution_1: &mut VarSubstitution,
         substitution_2: &mut VarSubstitution,
     ) -> bool {
-        todo!("【2024-04-21 21:43:16】目前尚未能理解")
+        //==== 内用函数 ====//
+
+        /// 特殊的「共有变量」标识符
+        /// * 📄迁移自OpenNARS
+        const COMMON_VARIABLE: &str = "COMMON_VARIABLE";
+
+        /// 📄OpenNARS `Variable.makeCommonVariable` 函数
+        /// * 🎯用于「变量统一」方法
+        fn make_common_variable(v1: &Term, v2: &Term) -> Term {
+            Term::new(
+                COMMON_VARIABLE,
+                TermComponents::Named(v1.get_name() + &v2.get_name()),
+            )
+        }
+
+        /// 📄OpenNARS `Variable.isCommonVariable` 函数
+        fn is_common_variable(v: &Term) -> bool {
+            v.identifier() == COMMON_VARIABLE
+        }
+
+        //==== 正式开始函数体 ====//
+        // 📄 `if ((term1 instanceof Variable) && (((Variable) term1).getType() == type)) {`
+        if to_be_unified_1.get_variable_type() == var_type {
+            match substitution_1.get(to_be_unified_1).cloned() {
+                // already mapped
+                Some(new_term) => {
+                    // 📄 `return findSubstitute(type, t, term2, map1, map2);`
+                    // 在新替换的变量中递归深入
+                    find_substitute(
+                        var_type,
+                        &new_term, // ! 必须复制：否则会存留不可变引用
+                        to_be_unified_2,
+                        substitution_1,
+                        substitution_2,
+                    )
+                }
+                // not mapped yet
+                None => {
+                    if to_be_unified_2.get_variable_type() == var_type {
+                        let common_var = make_common_variable(to_be_unified_1, to_be_unified_2);
+                        substitution_1.put(to_be_unified_1, common_var.clone()); // unify
+                        substitution_2.put(to_be_unified_2, common_var); // unify
+                    } else {
+                        substitution_1.put(to_be_unified_1, to_be_unified_2.clone()); // elimination
+                        if is_common_variable(to_be_unified_1) {
+                            substitution_2.put(to_be_unified_1, to_be_unified_2.clone());
+                        }
+                    }
+                    true
+                }
+            }
+        } else if to_be_unified_2.get_variable_type() == var_type {
+            // 📄 `else if ((term2 instanceof Variable) && (((Variable) term2).getType() == type)) {`
+            // 📄 `t = map2.get(var2); if (t != null) { .. }`
+            match substitution_2.get(to_be_unified_2).cloned() {
+                // already mapped
+                Some(new_term) => {
+                    find_substitute(
+                        var_type,
+                        to_be_unified_1,
+                        &new_term, // ! 必须复制：否则会存留不可变引用
+                        substitution_1,
+                        substitution_2,
+                    )
+                }
+                // not mapped yet
+                None => {
+                    /*
+                     * 📝【2024-04-22 00:13:19】发生在如下场景：
+                     * <(&&, <A-->C>, <B-->$2>) ==> <C-->$2>>.
+                     * <(&&, <A-->$1>, <B-->D>) ==> <$1-->D>>.
+                     * <(&&, <A-->C>, <B-->D>) ==> <C-->D>>?
+                     *
+                     * 系列调用：
+                     * * `$` `A` `$1`
+                     * * `$` `D` `$1`
+                     * * `$` `<C --> D>` `<$1 --> D>`
+                     * * `$` `<C --> D>` `<C --> $1>`
+                     *
+                     * 📌要点：可能两边各有「需要被替换」的地方
+                     */
+                    substitution_2.put(to_be_unified_2, to_be_unified_1.clone()); // elimination
+                    if is_common_variable(to_be_unified_2) {
+                        substitution_1.put(to_be_unified_2, to_be_unified_1.clone());
+                    }
+                    true
+                }
+            }
+        } else if to_be_unified_1.instanceof_compound()
+            && to_be_unified_1.get_class() == to_be_unified_2.get_class()
+            // 必须结构匹配
+            // 📄 `if (cTerm1.size() != ...... return false; }`
+            && to_be_unified_1.structural_match(to_be_unified_2)
+        {
+            // 📄 `else if ((term1 instanceof CompoundTerm) && term1.getClass().equals(term2.getClass())) {`
+            // ? ❓为何要打乱无序词项
+            // 📄 `if (cTerm1.isCommutative()) { Collections.shuffle(list, Memory.randomNumber); }`
+            // ! 🚩【2024-04-22 09:43:26】此处暂且不打乱无序词项：疑点重重
+            // 对位遍历
+            // for (t1, t2) in to_be_unified_1
+            //     .get_components()
+            //     .zip(to_be_unified_2.get_components())
+            // {
+            //     if !find_substitute(var_type, t1, t2, substitution_1, substitution_2) {
+            //         return false;
+            //     }
+            // }
+            // * 🚩【2024-04-22 09:45:55】采用接近等价的纯迭代器方案，可以直接返回
+            to_be_unified_1
+                .get_components()
+                .zip(to_be_unified_2.get_components())
+                .all(|(t1, t2)| find_substitute(var_type, t1, t2, substitution_1, substitution_2))
+        } else {
+            // for atomic constant terms
+            to_be_unified_1 == to_be_unified_2
+        }
+        // todo!("【2024-04-22 09:19:16】目前尚未能完全理解")
+    }
+
+    pub fn has_substitute(var_type: &str, to_be_unified_1: &Term, to_be_unified_2: &Term) -> bool {
+        // 📄 `return findSubstitute(type, term1, term2, new HashMap<Term, Term>(), new HashMap<Term, Term>());`
+        find_substitute(
+            var_type,
+            to_be_unified_1,
+            to_be_unified_2,
+            // 创建一个临时的「变量替换映射」
+            &mut VarSubstitution::new(),
+            &mut VarSubstitution::new(),
+        )
     }
 
     impl TermComponents {
@@ -1526,7 +1736,7 @@ pub mod variable {
             // 遍历其中所有地方的可变引用
             for term in self.iter_mut() {
                 // 寻找其「是否有替代」
-                match substitution.get_substitute(term) {
+                match substitution.get(term) {
                     // 有替代⇒直接赋值
                     Some(new_term) => *term = new_term.clone(),
                     // 没替代⇒继续递归替代
@@ -1564,8 +1774,20 @@ pub mod variable {
 
         /// 尝试获取「替代项」
         /// * 🎯变量替换
-        pub fn get_substitute(&self, key: &Term) -> Option<&Term> {
+        pub fn get(&self, key: &Term) -> Option<&Term> {
             self.map.get(key)
+        }
+
+        /// 设置「替代项」
+        /// * 🎯寻找可替换变量，并返回结果
+        /// * 🚩只在没有键时复制`key`，并且总是覆盖`value`值
+        pub fn put(&mut self, key: &Term, value: Term) {
+            match self.map.get_mut(key) {
+                Some(old_value) => *old_value = value,
+                None => {
+                    self.map.insert(key.clone(), value);
+                }
+            }
         }
     }
 }
