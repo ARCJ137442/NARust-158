@@ -21,6 +21,7 @@ use nar_dev_utils::manipulate;
 /// * 🎯OpenNARS中有关「词项顺序」的概念，目的是保证「无序不重复集合」的唯一性
 ///   * 🚩然而此实现的需求用「派生[`Ord`]」虽然造成逻辑不同，但可以满足需求
 ///   * 📌核心逻辑：实现需求就行，没必要（也很难）全盘照搬
+/// * ⚠️[`Hash`]特征不能在手动实现的[`PartialEq`]中实现，否则会破坏「散列一致性」
 ///
 /// # 📄OpenNARS
 ///
@@ -51,7 +52,7 @@ use nar_dev_utils::manipulate;
 /// The same as getName by default, used in display only.
 ///
 /// @return The name of the term as a String
-#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Debug, Clone, Eq, PartialOrd, Ord)]
 pub struct Term {
     /// 标识符
     /// * 🎯决定词项的「类型」
@@ -73,15 +74,49 @@ pub struct Term {
 
     /// 自由属性「是否为常量」
     /// * 🎯用于决定其在记忆区、NAL-6推理中的行为
-    /// * ❓为何要设置成「结构属性」：会在系统构造「语句」时概改变
+    /// * ❓为何要设置成「结构属性」：会在系统构造「语句」时改变
     ///   * 📝源自OpenNARS：构造语句时所直接涉及的词项均为「常量词项」，必须进入记忆区
     /// * 📄OpenNARS `isConstant` 属性
     /// * 📜默认为`true`
+    /// * 📌此属性影响到「语义判等」的行为
     is_constant: bool,
 }
 
+/// 手动实现「判等」逻辑
+/// * 📄OpenNARS `Term.equals` 方法
+/// * 🎯不让判等受各类「临时变量/词法无关的状态变量」的影响
+///   * 📄`is_constant`字段
+impl PartialEq for Term {
+    fn eq(&self, other: &Self) -> bool {
+        /// 宏：逐个字段比较相等
+        /// * 🎯方便表示、修改「要判等的字段」
+        macro_rules! eq_fields {
+            ($this:ident => $other:ident; $($field:ident)*) => {
+                $( $this.$field == $other.$field )&&*
+            };
+        }
+        // 判等逻辑
+        eq_fields! {
+            self => other;
+            identifier
+            components
+        }
+    }
+}
+
+/// 手动实现「散列」逻辑
+/// * 🎯在手动实现「判等」后，无法自动实现[`Hash`]（只能考虑到字段）
+/// * 📄OpenNARS `hashCode`：直接使用其（词法上）唯一的「名称」作为依据
+///   * ⚠️此处采取更本地化的做法：只散列化与之相关的字段，而无需调用字符串格式化函数
+impl std::hash::Hash for Term {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.identifier.hash(state);
+        self.components.hash(state);
+    }
+}
+
 /// 复合词项组分
-#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, PartialOrd, Ord)]
 pub enum TermComponents {
     /// 不包含任何组分
     /// * 📄占位符
@@ -236,19 +271,33 @@ mod construct {
         }
 
         /// NAL-4 / 外延像
-        pub fn new_image_ext(i_placeholder: usize, terms: impl Into<Vec<Term>>) -> Self {
-            Self::new(
+        pub fn new_image_ext(
+            i_placeholder: usize,
+            terms: impl Into<Vec<Term>>,
+        ) -> anyhow::Result<Self> {
+            let terms = terms.into();
+            if i_placeholder > terms.len() {
+                return Err(anyhow::anyhow!("占位符索引超出范围"));
+            }
+            Ok(Self::new(
                 IMAGE_EXT_OPERATOR,
-                TermComponents::MultiIndexed(i_placeholder, terms.into()),
-            )
+                TermComponents::MultiIndexed(i_placeholder, terms),
+            ))
         }
 
         /// NAL-4 / 内涵像
-        pub fn new_image_int(i_placeholder: usize, terms: impl Into<Vec<Term>>) -> Self {
-            Self::new(
+        pub fn new_image_int(
+            i_placeholder: usize,
+            terms: impl Into<Vec<Term>>,
+        ) -> anyhow::Result<Self> {
+            let terms = terms.into();
+            if i_placeholder > terms.len() {
+                return Err(anyhow::anyhow!("占位符索引超出范围"));
+            }
+            Ok(Self::new(
                 IMAGE_INT_OPERATOR,
-                TermComponents::MultiIndexed(i_placeholder, terms.into()),
-            )
+                TermComponents::MultiIndexed(i_placeholder, terms),
+            ))
         }
 
         /// NAL-5 / 合取
@@ -385,9 +434,21 @@ mod property {
 
         /// 判断和另一词项是否「结构匹配」
         /// * 🎯变量替换中的模式匹配
+        /// * 🚩类型匹配 & 组分匹配
+        /// * ⚠️非递归：不会递归比较「组分是否对应匹配」
         #[inline(always)]
         pub fn structural_match(&self, other: &Self) -> bool {
-            self.components.structural_match(&other.components)
+            self.get_class() == other.get_class()
+                && self.components.structural_match(&other.components)
+        }
+    }
+
+    /// 实现[`Display`]
+    /// * 🎯调试时便于展现内部结构
+    /// * ⚡性能友好
+    impl std::fmt::Display for Term {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "{}", self.format_name())
         }
     }
 
@@ -593,13 +654,16 @@ mod property {
 
         /// 判断「结构模式上是否匹配」
         /// * 🚩判断二者在「结构大小」与（可能有的）「结构索引」是否符合
+        /// * ⚠️非递归：不会递归比较「组分是否对应匹配」
         /// * 🎯变量替换中的「相同结构之模式替换」
         /// * 📄`variable::find_substitute`
         pub fn structural_match(&self, other: &Self) -> bool {
             use TermComponents::*;
             match (self, other) {
-                // 同类型 / 空 | 同类型 / 二元
-                (Empty | Named(..), Empty | Named(..)) | (Binary(..), Binary(..)) => true,
+                // 同类型 / 空 | 同类型 / 一元 | 同类型 / 二元
+                (Empty | Named(..), Empty | Named(..))
+                | (Unary(..), Unary(..))
+                | (Binary(..), Binary(..)) => true,
                 // 同类型 / 多元
                 (Multi(terms1), Multi(terms2)) => terms1.len() == terms2.len(),
                 (MultiIndexed(i1, terms1), MultiIndexed(i2, terms2)) => {
@@ -626,6 +690,11 @@ mod conversion {
     };
     use std::str::FromStr;
 
+    // 格式化所用常量
+    const COMPONENT_OPENER: &str = "(";
+    const COMPONENT_CLOSER: &str = ")";
+    const COMPONENT_SEPARATOR: &str = " ";
+
     /// 词项⇒字符串
     /// * 🎯用于更好地打印「词项」名称
     impl Term {
@@ -637,40 +706,73 @@ mod conversion {
                 // 名称 | 原子词项
                 TermComponents::Named(name) => id.clone() + name,
                 // 一元
-                TermComponents::Unary(term) => format!("({id} {})", term.format_name()),
+                TermComponents::Unary(term) => {
+                    // 📄 "(-- A)"
+                    manipulate!(
+                        String::new()
+                        => {+= COMPONENT_OPENER}#
+                        => {+= id}#
+                        => {+= COMPONENT_SEPARATOR}#
+                        => {+= &term.format_name()}#
+                        => {+= COMPONENT_CLOSER}#
+                    )
+                }
                 // 二元
                 TermComponents::Binary(term1, term2) => {
-                    format!("({} {id} {})", term1.format_name(), term2.format_name())
+                    // 📄 "(A --> B)"
+                    manipulate!(
+                        String::new()
+                        => {+= COMPONENT_OPENER}#
+                        => {+= &term1.format_name()}#
+                        => {+= COMPONENT_SEPARATOR}#
+                        => {+= id}#
+                        => {+= COMPONENT_SEPARATOR}#
+                        => {+= &term2.format_name()}#
+                        => {+= COMPONENT_CLOSER}#
+                    )
                 }
                 // 多元
                 TermComponents::Multi(terms) => {
-                    let mut s = id.to_string() + "(";
+                    let mut s = id.to_string() + COMPONENT_OPENER;
                     let mut terms = terms.iter();
                     if let Some(t) = terms.next() {
                         s += &t.format_name();
                     }
                     for t in terms {
-                        s += " ";
+                        s += COMPONENT_SEPARATOR;
                         s += &t.format_name();
                     }
-                    s + ")"
+                    s + COMPONENT_CLOSER
                 }
                 // 多元+索引
                 TermComponents::MultiIndexed(index, terms) => {
-                    let mut s = id.to_string() + "(";
-                    for (i, t) in terms.iter().enumerate() {
-                        if i == *index {
-                            if i > 0 {
-                                s += " ";
-                            }
-                            s += PLACEHOLDER;
+                    let mut s = id.to_string() + COMPONENT_OPENER;
+                    let mut terms = terms.iter();
+                    // 分「占位符在开头」与「占位符在后头」
+                    if *index == 0 {
+                        s += PLACEHOLDER;
+                        for term in terms {
+                            s += COMPONENT_SEPARATOR;
+                            s += &term.format_name();
                         }
-                        if i > 0 {
-                            s += " ";
+                    } else {
+                        // * ⚠️【2024-04-22 13:02:41】SAFETY: 经由「像」的构造函数保证，占位符必定在界内
+                        // 占位符前的词项
+                        s += &terms.next().unwrap().format_name();
+                        for _ in 1..*index {
+                            s += COMPONENT_SEPARATOR;
+                            s += &terms.next().unwrap().format_name();
                         }
-                        s += &t.format_name();
+                        // 占位符
+                        s += COMPONENT_SEPARATOR;
+                        s += PLACEHOLDER;
+                        // 占位符后的词项
+                        for term in terms {
+                            s += COMPONENT_SEPARATOR;
+                            s += &term.format_name();
+                        }
                     }
-                    s + ")"
+                    s + COMPONENT_CLOSER
                 }
             }
         }
@@ -739,13 +841,21 @@ mod conversion {
     /// 词法折叠 / 从「数组」中转换
     /// * 🎯将「词法Narsese词项数组」转换为「内部词项数组」
     /// * 📌在「无法同时`map`与`?`」时独立成函数
+    /// * ⚠️不允许构造空词项数组：参考NAL，不允许空集
     #[inline]
     fn fold_lexical_terms(terms: Vec<TermLexical>) -> Result<Vec<Term>> {
         let mut v = vec![];
         for term in terms {
             v.push(term.try_into()?);
         }
-        Ok(v)
+        check_folded_terms(v)
+    }
+
+    fn check_folded_terms(v: Vec<Term>) -> Result<Vec<Term>> {
+        match v.is_empty() {
+            true => Err(anyhow!("NAL不允许构造空集")),
+            false => Ok(v),
+        }
     }
 
     /// 词法折叠 / 从「数组」中转换成「像」
@@ -765,7 +875,7 @@ mod conversion {
                 false => v.push(term),
             }
         }
-        Ok((placeholder_index, v))
+        Ok((placeholder_index, check_folded_terms(v)?))
     }
 
     /// 词法折叠
@@ -817,11 +927,11 @@ mod conversion {
                 }
                 (IMAGE_EXT_OPERATOR, Compound { terms, .. }) => {
                     let (i, terms) = fold_lexical_terms_as_image(terms)?;
-                    Term::new_image_ext(i, terms)
+                    Term::new_image_ext(i, terms)?
                 }
                 (IMAGE_INT_OPERATOR, Compound { terms, .. }) => {
                     let (i, terms) = fold_lexical_terms_as_image(terms)?;
-                    Term::new_image_int(i, terms)
+                    Term::new_image_int(i, terms)?
                 }
                 (CONJUNCTION_OPERATOR, Compound { terms, .. }) => {
                     Term::new_conjunction(fold_lexical_terms(terms)?)
@@ -1082,23 +1192,25 @@ mod term {
         }
 
         /// 用于判断是否为「复合词项」
+        /// * ⚠️包括陈述
         /// * 📄OpenNARS `instanceof CompoundTerm` 逻辑
         pub fn instanceof_compound(&self) -> bool {
-            matches!(
-                self.identifier.as_str(),
-                SET_EXT_OPERATOR
-                    | SET_INT_OPERATOR
-                    | INTERSECTION_EXT_OPERATOR
-                    | INTERSECTION_INT_OPERATOR
-                    | DIFFERENCE_EXT_OPERATOR
-                    | DIFFERENCE_INT_OPERATOR
-                    | PRODUCT_OPERATOR
-                    | IMAGE_EXT_OPERATOR
-                    | IMAGE_INT_OPERATOR
-                    | CONJUNCTION_OPERATOR
-                    | DISJUNCTION_OPERATOR
-                    | NEGATION_OPERATOR
-            )
+            self.instanceof_statement()
+                || matches!(
+                    self.identifier.as_str(),
+                    SET_EXT_OPERATOR
+                        | SET_INT_OPERATOR
+                        | INTERSECTION_EXT_OPERATOR
+                        | INTERSECTION_INT_OPERATOR
+                        | DIFFERENCE_EXT_OPERATOR
+                        | DIFFERENCE_INT_OPERATOR
+                        | PRODUCT_OPERATOR
+                        | IMAGE_EXT_OPERATOR
+                        | IMAGE_INT_OPERATOR
+                        | CONJUNCTION_OPERATOR
+                        | DISJUNCTION_OPERATOR
+                        | NEGATION_OPERATOR
+                )
         }
 
         /// 用于判断是否为「陈述词项」
@@ -1359,8 +1471,6 @@ mod compound {
 /// * `isCommonVariable` (内用)
 /// * `hasSubstitute`
 ///
-/// TODO: 完成实际代码
-///
 /// # 📄OpenNARS
 ///
 /// A variable term, which does not correspond to a concept
@@ -1457,7 +1567,8 @@ pub mod variable {
         /// Recursively apply a substitute to the current CompoundTerm
         #[inline]
         pub fn apply_substitute(&mut self, substitution: &VarSubstitution) {
-            self.components.apply_substitute(substitution)
+            // 先对组分
+            self.components.apply_substitute(substitution);
         }
 
         /// 📄OpenNARS `Variable.getType` 方法
@@ -1475,9 +1586,10 @@ pub mod variable {
 
     /// 📄OpenNARS `Variable.unify` 方法
     /// * 🚩总体流程：找「可替换的变量」并（两头都）替换之
-    /// * 📝⚠️不对称性：从OpenNARS `findSubstitute`中所见，
+    /// * 📝❓不对称性：从OpenNARS `findSubstitute`中所见，
     ///   * `to_be_unified_1`是「包含变量，将要被消元」的那个（提供键），
     ///   * 而`to_be_unified_2`是「包含常量，将要用于消元」的那个（提供值）
+    /// * 📌对「在整体中替换部分」有效
     ///
     /// # 📄OpenNARS
     ///
@@ -1508,7 +1620,6 @@ pub mod variable {
     /// - unified_in_1: <<C --> A> ==> <C --> B>>
     /// - unified_in_2: <C --> B>
     ///
-    #[allow(unused_variables)]
     pub fn unify(
         var_type: &str,
         to_be_unified_1: &Term,
@@ -1516,8 +1627,40 @@ pub mod variable {
         unified_in_1: &mut Term,
         unified_in_2: &mut Term,
     ) -> bool {
-        // 构造并找出所有「变量替代模式」
-        // * 🚩递归找出其中所有「可被替代的变量」装载进「变量替换映射」中
+        //  寻找
+        let (has_substitute, substitution_1, substitution_2) =
+            unify_find(var_type, to_be_unified_1, to_be_unified_2);
+
+        // 替换（+更新）
+        unify_substitute(unified_in_1, unified_in_2, &substitution_1, &substitution_2);
+
+        // 返回「是否替换了变量」
+        has_substitute
+    }
+
+    /// 只在两个词项间「统一」
+    /// * 📌本质是`to_be_unified_x` == `unified_in_x`
+    /// * 🚩在自身处寻找替代
+    pub fn unify_two(var_type: &str, unified_in_1: &mut Term, unified_in_2: &mut Term) -> bool {
+        //  寻找
+        let (has_substitute, substitution_1, substitution_2) =
+            unify_find(var_type, unified_in_1, unified_in_2);
+
+        // 替换（+更新）
+        unify_substitute(unified_in_1, unified_in_2, &substitution_1, &substitution_2);
+
+        // 返回「是否替换了变量」
+        has_substitute
+    }
+
+    /// `unify`的前半部分
+    /// * 🎯复用「二词项」和「四词项」，兼容借用规则
+    /// * 🚩从「将要被统一的词项」中计算出「变量替换映射」
+    pub fn unify_find(
+        var_type: &str,
+        to_be_unified_1: &Term,
+        to_be_unified_2: &Term,
+    ) -> (bool, VarSubstitution, VarSubstitution) {
         let mut substitution_1 = VarSubstitution::new();
         let mut substitution_2 = VarSubstitution::new();
         let has_substitute = find_substitute(
@@ -1527,12 +1670,36 @@ pub mod variable {
             &mut substitution_1,
             &mut substitution_2,
         );
+        // 返回获取的映射，以及「是否有替换」
+        (has_substitute, substitution_1, substitution_2)
+    }
+
+    /// `unify`的前半部分
+    /// * 🎯复用「二词项」和「四词项」，兼容借用规则
+    /// * 🚩替换 & 更新
+    ///   * 替换：在「替换所发生在的词项」中根据「变量替换映射」替换词项
+    ///   * 更新：替换后更新词项的「是常量」属性（源自OpenNARS）
+    pub fn unify_substitute(
+        unified_in_1: &mut Term,
+        unified_in_2: &mut Term,
+        substitution_1: &VarSubstitution,
+        substitution_2: &VarSubstitution,
+    ) {
         // 根据「变量替换映射」在两头相应地替换变量
         // * 🚩若「变量替换映射」为空，本来就不会执行
-        unified_in_1.apply_substitute(&substitution_1);
-        unified_in_2.apply_substitute(&substitution_2);
-        // 返回「是否替换了变量」
-        has_substitute
+        unified_in_1.apply_substitute(substitution_1);
+        unified_in_2.apply_substitute(substitution_2);
+        // 替换后根据「是否已替换」设置词项
+        if !substitution_1.is_empty() {
+            // 📄 `((CompoundTerm) compound1).renameVariables();`
+            // 📄 `setConstant(true);` @ `CompoundTerm`
+            unified_in_1.is_constant = true;
+        }
+        if !substitution_2.is_empty() {
+            // 📄 `((CompoundTerm) compound2).renameVariables();`
+            // 📄 `setConstant(true);` @ `CompoundTerm`
+            unified_in_2.is_constant = true;
+        }
     }
 
     /// 📄OpenNARS `Variable.findSubstitute` 方法
@@ -1679,37 +1846,53 @@ pub mod variable {
                     true
                 }
             }
-        } else if to_be_unified_1.instanceof_compound()
-            && to_be_unified_1.get_class() == to_be_unified_2.get_class()
+        } else if to_be_unified_1.instanceof_compound() {
             // 必须结构匹配
             // 📄 `if (cTerm1.size() != ...... return false; }`
-            && to_be_unified_1.structural_match(to_be_unified_2)
-        {
-            // 📄 `else if ((term1 instanceof CompoundTerm) && term1.getClass().equals(term2.getClass())) {`
-            // ? ❓为何要打乱无序词项
-            // 📄 `if (cTerm1.isCommutative()) { Collections.shuffle(list, Memory.randomNumber); }`
-            // ! 🚩【2024-04-22 09:43:26】此处暂且不打乱无序词项：疑点重重
-            // 对位遍历
-            // for (t1, t2) in to_be_unified_1
-            //     .get_components()
-            //     .zip(to_be_unified_2.get_components())
-            // {
-            //     if !find_substitute(var_type, t1, t2, substitution_1, substitution_2) {
-            //         return false;
-            //     }
-            // }
-            // * 🚩【2024-04-22 09:45:55】采用接近等价的纯迭代器方案，可以直接返回
-            to_be_unified_1
-                .get_components()
-                .zip(to_be_unified_2.get_components())
-                .all(|(t1, t2)| find_substitute(var_type, t1, t2, substitution_1, substitution_2))
+            if to_be_unified_1.structural_match(to_be_unified_2) {
+                // 📄 `else if ((term1 instanceof CompoundTerm) && term1.getClass().equals(term2.getClass())) {`
+                // ? ❓为何要打乱无序词项——集合词项的替换过于复杂，只能用「随机打乱」间接尝试所有组合
+                // 📄 `if (cTerm1.isCommutative()) { Collections.shuffle(list, Memory.randomNumber); }`
+                // TODO: 🏗️有关无序复合词项的「变量统一」需要进一步处理——不希望采用「随机打乱」的方案，可能要逐个枚举匹配
+                // ! 🚩【2024-04-22 09:43:26】此处暂且不打乱无序词项：疑点重重
+                // 对位遍历
+                // for (t1, t2) in to_be_unified_1
+                //     .get_components()
+                //     .zip(to_be_unified_2.get_components())
+                // {
+                //     if !find_substitute(var_type, t1, t2, substitution_1, substitution_2) {
+                //         return false;
+                //     }
+                // }
+                // * 🚩【2024-04-22 09:45:55】采用接近等价的纯迭代器方案，可以直接返回
+                to_be_unified_1
+                    .get_components()
+                    .zip(to_be_unified_2.get_components())
+                    .all(|(t1, t2)| {
+                        find_substitute(var_type, t1, t2, substitution_1, substitution_2)
+                    })
+            } else {
+                // 复合词项结构不匹配，一定不能替代
+                false
+            }
         } else {
             // for atomic constant terms
             to_be_unified_1 == to_be_unified_2
         }
-        // todo!("【2024-04-22 09:19:16】目前尚未能完全理解")
     }
 
+    /// 📄OpenNARS `Variable.hasSubstitute` 方法
+    /// * 🚩判断「是否有可能被替换」
+    ///   * ⚠️反常情况：即便是「没有变量需要替换」，只要「模式有所匹配」就能发生替换
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// Check if two terms can be unified
+    ///
+    ///  @param type  The type of variable that can be substituted
+    ///  @param term1 The first term to be unified
+    ///  @param term2 The second term to be unified
+    ///  @return Whether there is a substitution
     pub fn has_substitute(var_type: &str, to_be_unified_1: &Term, to_be_unified_2: &Term) -> bool {
         // 📄 `return findSubstitute(type, term1, term2, new HashMap<Term, Term>(), new HashMap<Term, Term>());`
         find_substitute(
@@ -1772,6 +1955,12 @@ pub mod variable {
             }
         }
 
+        /// 判断「是否为空」
+        /// * 🎯变量替换后检查「是否已替换」
+        pub fn is_empty(&self) -> bool {
+            self.map.is_empty()
+        }
+
         /// 尝试获取「替代项」
         /// * 🎯变量替换
         pub fn get(&self, key: &Term) -> Option<&Term> {
@@ -1797,7 +1986,7 @@ pub mod variable {
 mod test {
     use super::*;
     use anyhow::Result;
-    use nar_dev_utils::asserts;
+    use nar_dev_utils::{asserts, fail_tests};
     use narsese::{
         conversion::{
             inter_type::lexical_fold::TryFoldInto,
@@ -1822,6 +2011,10 @@ mod test {
         ($s:expr) => {
             $s.parse::<Term>()?
         };
+        // 单个词项
+        (unwrap $s:expr) => {
+            $s.parse::<Term>().unwrap()
+        };
     }
 
     /// 测试/词项
@@ -1845,7 +2038,7 @@ mod test {
                 _ => println!("term {:?}: {}", term.identifier, term.format_name()),
             }
         }
-        // 构造一个词项
+        // 直接从内部构造函数中构造一个词项
         let im_ext = Term::new(
             IMAGE_EXT_OPERATOR,
             TermComponents::MultiIndexed(1, vec![Term::new_word("word")]),
@@ -1853,10 +2046,29 @@ mod test {
         detect(&im_ext);
         // 从「词法Narsese」中解析词项
         detect(&term!("<A --> B>"));
-        detect(&term!("(--, A)"));
-        detect(&term!("(--, (&&, <A --> B>, <B --> C>))"));
+        detect(&term!("(--, [C, B, A, 0, 1, 2])"));
+        detect(&term!(
+            "{<B <-> A>, <D <=> C>, (&&, <A --> B>, <B --> C>), $i, #d, ?q}"
+        ));
+        detect(&term!("(/, _, A, B)"));
+        detect(&term!("(/, A, _, B)"));
+        detect(&term!("(/, A, B, _)"));
+        detect(&term!(r"(\, _, A, B)"));
+        detect(&term!(r"(\, A, _, B)"));
+        detect(&term!(r"(\, A, B, _)"));
         // 返回成功
         Ok(())
+    }
+
+    // 失败测试
+    fail_tests! {
+        组分数不对_二元_外延差1 term!(unwrap "(-, A)");
+        组分数不对_二元_外延差3 term!(unwrap "(-, A, B, C)");
+        组分数不对_一元_否定 term!(unwrap "(--, A, B)");
+        空集_外延集 term!(unwrap "{}");
+        空集_内涵集 term!(unwrap "[]");
+        空集_外延像 term!(unwrap r"(/, _)");
+        空集_内涵像 term!(unwrap r"(\, _)");
     }
 
     /// 测试 / 词法折叠
@@ -2062,6 +2274,78 @@ mod test {
             apply_substitute! {
                 "<A --> var_word>", substitution => "<A --> word>"
                 "<<$1 --> A> ==> <B --> $1>>", substitution => "<<1 --> A> ==> <B --> 1>>"
+            }
+            Ok(())
+        }
+
+        /// 测试 / unify | unify_two
+        #[test]
+        fn unify() -> Result<()> {
+            use crate::language::variable::unify_two;
+            macro_rules! unify {
+                {
+                    $(
+                        $term_str1:expr, $term_str2:expr
+                        => $var_type:expr =>
+                        $substituted_str1:expr, $substituted_str2:expr
+                    )*
+                } => {
+                    $(
+                        let mut term1 = term!($term_str1);
+                        let mut term2 = term!($term_str2);
+                        let var_type = $var_type;
+                        print!("unify: {}, {} =={var_type}=> ", term1.format_name(), term2.format_name());
+                        unify_two($var_type, &mut term1, &mut term2);
+                        let expected_1 = term!($substituted_str1);
+                        let expected_2 = term!($substituted_str2);
+                        println!("{}, {}", term1.format_name(), term2.format_name());
+                        assert_eq!(term1, expected_1);
+                        assert_eq!(term2, expected_2);
+                    )*
+                };
+            }
+            unify! {
+                // ! 变量替换只会发生在复合词项之中：原子词项不会因此改变自身 //
+                "$1", "A" => "$" => "$1", "A"
+
+                // 各个位置、各个角度（双向）的替换 //
+                // 单侧偏替换
+                "<$1 --> B>", "<A --> B>" => "$" => "<A --> B>", "<A --> B>"
+                "<A --> $1>", "<A --> B>" => "$" => "<A --> B>", "<A --> B>"
+                "<A --> B>", "<$1 --> B>" => "$" => "<A --> B>", "<A --> B>"
+                "<A --> B>", "<A --> $1>" => "$" => "<A --> B>", "<A --> B>"
+                // 双侧偏替换
+                "<$a --> B>", "<A --> $b>" => "$" => "<A --> B>", "<A --> B>"
+                // 单侧全替换
+                "<A --> B>", "<$a --> $b>" => "$" => "<A --> B>", "<A --> B>"
+
+                // 三种变量正常运行 & 一元复合词项 //
+                "(--, $1)", "(--, 1)" => "$" => "(--, 1)", "(--, 1)"
+                "(--, #1)", "(--, 1)" => "#" => "(--, 1)", "(--, 1)"
+                "(--, ?1)", "(--, 1)" => "?" => "(--, 1)", "(--, 1)"
+                // ! ⚠️【2024-04-22 12:32:47】以下示例失效：第二个例子中，OpenNARS在「第一个失配」后，就无心再匹配第二个了
+                // "(*, $i, #d, ?q)", "(*, I, D, Q)" => "$" => "(*, I, #d, ?q)", "(*, I, D, Q)"
+                // "(*, $i, #d, ?q)", "(*, I, D, Q)" => "#" => "(*, $i, D, ?q)", "(*, I, D, Q)"
+                // "(*, $i, #d, ?q)", "(*, I, D, Q)" => "?" => "(*, $i, #d, Q)", "(*, I, D, Q)"
+
+                // 多元复合词项（有序）：按顺序匹配 //
+                "(*, $c, $b, $a)", "(*, (--, C), <B1 --> B2>, A)" => "$" => "(*, (--, C), <B1 --> B2>, A)", "(*, (--, C), <B1 --> B2>, A)"
+
+                // 无序词项 | ⚠️【2024-04-22 12:38:38】对于无序词项的「模式匹配」需要进一步商酌 //
+                "{$c}", "{中心点}" => "$" => "{中心点}", "{中心点}" // 平凡情况
+                "[$c]", "[中心点]" => "$" => "[中心点]", "[中心点]" // 平凡情况
+                // "<$a <-> Bb>", "<Aa <-> Bb>" => "$" => "<Aa <-> Bb>", "<Aa <-> Bb>" // 无需交换顺序，但会被自动排序导致「顺序不一致」
+                // "<Aa <-> $b>", "<Aa <-> Bb>" => "$" => "<Aa <-> Bb>", "<Aa <-> Bb>" // 无需交换顺序，但会被自动排序导致「顺序不一致」
+                // "<$a <-> $b>", "<Aa <-> Bb>" => "$" => "<Aa <-> Bb>", "<Aa <-> Bb>" // 无需交换顺序，但会被自动排序导致「顺序不一致」
+                // "<Bb <-> $a>", "<Aa <-> Bb>" => "$" => "<Aa <-> Bb>", "<Aa <-> Bb>" // 顺序不一致
+                // "<$b <-> Aa>", "<Aa <-> Bb>" => "$" => "<Aa <-> Bb>", "<Aa <-> Bb>" // 顺序不一致
+                // "<$b <-> $a>", "<Aa <-> Bb>" => "$" => "<Aa <-> Bb>", "<Aa <-> Bb>" // 顺序不一致
+                // 平凡情况
+                // "{$1,2,3}", "{0, 2, 3}" => "$" => "{0, 2, 3}", "{0, 2, 3}"
+                // "{1,$2,3}", "{1, 0, 3}" => "$" => "{1, 0, 3}", "{1, 0, 3}"
+                // "{1,2,$3}", "{1, 2, 0}" => "$" => "{1, 2, 0}", "{1, 2, 0}"
+                // 无序集合×复合
+                // "{1, (*, X), (*, $x)}", "{1, (*, Y), (*, X)}" => "$" => "{1, (*, Y), (*, X)}", "{1, (*, Y), (*, X)}"
             }
             Ok(())
         }
