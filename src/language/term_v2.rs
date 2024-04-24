@@ -23,6 +23,13 @@ use nar_dev_utils::manipulate;
 ///   * 📌核心逻辑：实现需求就行，没必要（也很难）全盘照搬
 /// * ⚠️[`Hash`]特征不能在手动实现的[`PartialEq`]中实现，否则会破坏「散列一致性」
 ///
+/// TODO: 🏗️【2024-04-24 15:43:32】`make`系列方法在推理规则中的实现
+///
+/// * 📝OpenNARS在「记忆区构造词项」时，就会进行各种预处理
+///   * 📄`<(-, {A, B}, {A}) --> x>` 会产生 `<{B} --> x>`（外延「差」规则）
+/// ? 📝OpenNARS中的词项基本只能通过`make`系列方法（从外部）构造
+///   * 💭这似乎意味着它是一种「记忆区专用」的封闭数据类型
+///
 /// # 📄OpenNARS
 ///
 /// Term is the basic component of Narsese, and the object of processing in NARS.
@@ -158,6 +165,8 @@ pub enum TermComponents {
 /// 实现 / 构造
 mod construct {
     use super::*;
+    use anyhow::Result;
+    use nar_dev_utils::if_return;
 
     impl Term {
         /// 构造函数
@@ -271,33 +280,46 @@ mod construct {
         }
 
         /// NAL-4 / 外延像
-        pub fn new_image_ext(
-            i_placeholder: usize,
-            terms: impl Into<Vec<Term>>,
-        ) -> anyhow::Result<Self> {
-            let terms = terms.into();
-            if i_placeholder > terms.len() {
-                return Err(anyhow::anyhow!("占位符索引超出范围"));
-            }
+        /// * 📝占位符索引≠关系词项索引（in OpenNARS）
+        ///   * ⚠️占位符索引=0 ⇒ 不被允许
+        pub fn new_image_ext(i_placeholder: usize, terms: impl Into<Vec<Term>>) -> Result<Self> {
             Ok(Self::new(
                 IMAGE_EXT_OPERATOR,
-                TermComponents::MultiIndexed(i_placeholder, terms),
+                Self::_process_image_terms(i_placeholder, terms)?,
             ))
         }
 
         /// NAL-4 / 内涵像
-        pub fn new_image_int(
-            i_placeholder: usize,
-            terms: impl Into<Vec<Term>>,
-        ) -> anyhow::Result<Self> {
-            let terms = terms.into();
-            if i_placeholder > terms.len() {
-                return Err(anyhow::anyhow!("占位符索引超出范围"));
-            }
+        /// * 📝占位符索引≠关系词项索引（in OpenNARS）
+        ///   * ⚠️占位符索引=0 ⇒ 不被允许
+        pub fn new_image_int(i_placeholder: usize, terms: impl Into<Vec<Term>>) -> Result<Self> {
             Ok(Self::new(
                 IMAGE_INT_OPERATOR,
-                TermComponents::MultiIndexed(i_placeholder, terms),
+                Self::_process_image_terms(i_placeholder, terms)?,
             ))
+        }
+
+        /// 代码复用之工具函数：处理像占位符和词项列表
+        /// * 🚩将词项列表转换为`Vec<Term>`
+        /// * 🚩检查占位符索引范围
+        /// * 🚩返回构造好的「词项组分」
+        /// * ⚠️会返回错误
+        #[inline(always)]
+        fn _process_image_terms(
+            i_placeholder: usize,
+            terms: impl Into<Vec<Term>>,
+        ) -> Result<TermComponents> {
+            // 转换词项列表
+            let terms = terms.into();
+            // 检查占位符索引范围
+            if_return! {
+                i_placeholder == 0
+                    => Err(anyhow::anyhow!("占位符不能压在「关系词项」的位置上"))
+                i_placeholder > terms.len()
+                    => Err(anyhow::anyhow!("占位符索引超出范围"))
+            }
+            // 构造 & 返回
+            Ok(TermComponents::MultiIndexed(i_placeholder, terms))
         }
 
         /// NAL-5 / 合取
@@ -927,11 +949,19 @@ mod conversion {
                 }
                 (IMAGE_EXT_OPERATOR, Compound { terms, .. }) => {
                     let (i, terms) = fold_lexical_terms_as_image(terms)?;
-                    Term::new_image_ext(i, terms)?
+                    match i {
+                        // 占位符在首位⇒视作「乘积」 | 📝NAL-4中保留「第0位」作「关系」词项
+                        0 => Term::new_product(terms),
+                        _ => Term::new_image_ext(i, terms)?,
+                    }
                 }
                 (IMAGE_INT_OPERATOR, Compound { terms, .. }) => {
                     let (i, terms) = fold_lexical_terms_as_image(terms)?;
-                    Term::new_image_int(i, terms)?
+                    match i {
+                        // 占位符在首位⇒视作「乘积」 | 📝NAL-4中保留「第0位」作「关系」词项
+                        0 => Term::new_product(terms),
+                        _ => Term::new_image_int(i, terms)?,
+                    }
                 }
                 (CONJUNCTION_OPERATOR, Compound { terms, .. }) => {
                     Term::new_conjunction(fold_lexical_terms(terms)?)
@@ -1181,66 +1211,6 @@ mod term {
 
     /// 📄OpenNARS `nars.language.Term`
     impl Term {
-        /// 用于判断是否为「变量词项」
-        /// * 📄OpenNARS `instanceof Variable` 逻辑
-        /// * 🎯判断「[是否内含变量](Self::contain_var)」
-        pub fn instanceof_variable(&self) -> bool {
-            matches!(
-                self.identifier.as_str(),
-                VAR_INDEPENDENT | VAR_DEPENDENT | VAR_QUERY
-            )
-        }
-
-        /// 用于判断是否为「复合词项」
-        /// * ⚠️包括陈述
-        /// * 📄OpenNARS `instanceof CompoundTerm` 逻辑
-        pub fn instanceof_compound(&self) -> bool {
-            self.instanceof_statement()
-                || matches!(
-                    self.identifier.as_str(),
-                    SET_EXT_OPERATOR
-                        | SET_INT_OPERATOR
-                        | INTERSECTION_EXT_OPERATOR
-                        | INTERSECTION_INT_OPERATOR
-                        | DIFFERENCE_EXT_OPERATOR
-                        | DIFFERENCE_INT_OPERATOR
-                        | PRODUCT_OPERATOR
-                        | IMAGE_EXT_OPERATOR
-                        | IMAGE_INT_OPERATOR
-                        | CONJUNCTION_OPERATOR
-                        | DISJUNCTION_OPERATOR
-                        | NEGATION_OPERATOR
-                )
-        }
-
-        /// 用于判断是否为「陈述词项」
-        /// * 📄OpenNARS `instanceof Statement` 逻辑
-        pub fn instanceof_statement(&self) -> bool {
-            matches!(
-                self.identifier.as_str(),
-                // 四大主要系词
-                INHERITANCE_RELATION
-                    | SIMILARITY_RELATION
-                    | IMPLICATION_RELATION
-                    | EQUIVALENCE_RELATION
-                    // ↓下边都是派生系词
-                    | INSTANCE_RELATION
-                    | PROPERTY_RELATION
-                    | INSTANCE_PROPERTY_RELATION
-            )
-        }
-
-        /// 用于判断词项是否为「外延像/内涵像」
-        /// * 📄OpenNARS `(com instanceof ImageExt) || (com instanceof ImageInt)` 逻辑
-        /// * 🎯首次用于陈述的`invalid_reflexive`方法
-        #[inline]
-        pub fn instanceof_image(&self) -> bool {
-            matches!(
-                self.identifier.as_str(),
-                IMAGE_EXT_OPERATOR | IMAGE_INT_OPERATOR
-            )
-        }
-
         /// 📄OpenNARS `Term.getName` 方法
         /// * 🆕使用自身内建的「获取名称」方法
         ///   * 相较OpenNARS更**短**
@@ -1319,6 +1289,28 @@ mod term {
 mod compound {
     use super::*;
     impl Term {
+        /// 用于判断是否为「复合词项」
+        /// * ⚠️包括陈述
+        /// * 📄OpenNARS `instanceof CompoundTerm` 逻辑
+        pub fn instanceof_compound(&self) -> bool {
+            self.instanceof_statement()
+                || matches!(
+                    self.identifier.as_str(),
+                    SET_EXT_OPERATOR
+                        | SET_INT_OPERATOR
+                        | INTERSECTION_EXT_OPERATOR
+                        | INTERSECTION_INT_OPERATOR
+                        | DIFFERENCE_EXT_OPERATOR
+                        | DIFFERENCE_INT_OPERATOR
+                        | PRODUCT_OPERATOR
+                        | IMAGE_EXT_OPERATOR
+                        | IMAGE_INT_OPERATOR
+                        | CONJUNCTION_OPERATOR
+                        | DISJUNCTION_OPERATOR
+                        | NEGATION_OPERATOR
+                )
+        }
+
         /// 📄OpenNARS `CompoundTerm.isCommutative` 属性
         ///
         /// # 📄OpenNARS
@@ -1490,6 +1482,16 @@ pub mod variable {
     use std::collections::HashMap;
 
     impl Term {
+        /// 用于判断是否为「变量词项」
+        /// * 📄OpenNARS `instanceof Variable` 逻辑
+        /// * 🎯判断「[是否内含变量](Self::contain_var)」
+        pub fn instanceof_variable(&self) -> bool {
+            matches!(
+                self.identifier.as_str(),
+                VAR_INDEPENDENT | VAR_DEPENDENT | VAR_QUERY
+            )
+        }
+
         /// 📄OpenNARS `Term.isConstant` 属性
         /// * 🚩检查其是否为「常量」：自身是否「不含变量」
         /// * 🎯决定其是否能**成为**一个「概念」（被作为「概念」存入记忆区）
@@ -2017,11 +2019,28 @@ pub mod variable {
 ///
 /// A statement is a compound term, consisting of a subject, a predicate, and a relation symbol in between.
 /// It can be of either first-order or higher-order.
-pub mod statement {
+mod statement {
     use super::*;
     use nar_dev_utils::if_return;
 
     impl Term {
+        /// 用于判断是否为「陈述词项」
+        /// * 📄OpenNARS `instanceof Statement` 逻辑
+        pub fn instanceof_statement(&self) -> bool {
+            matches!(
+                self.identifier.as_str(),
+                // 四大主要系词
+                INHERITANCE_RELATION
+                    | SIMILARITY_RELATION
+                    | IMPLICATION_RELATION
+                    | EQUIVALENCE_RELATION
+                    // ↓下边都是派生系词
+                    | INSTANCE_RELATION
+                    | PROPERTY_RELATION
+                    | INSTANCE_PROPERTY_RELATION
+            )
+        }
+
         /// 📄OpenNARS `Statement.makeSym` 方法
         /// * 🚩通过使用「标识符映射」将「非对称版本」映射到「对称版本」
         /// * ⚠️目前只支持「继承」和「蕴含」，其它均会`panic`
@@ -2168,6 +2187,134 @@ pub mod statement {
             match &*self.components {
                 TermComponents::Binary(_, predicate) => predicate,
                 _ => panic!("尝试向「非陈述词项」获取谓词"),
+            }
+        }
+    }
+}
+
+/// 📄OpenNARS `nars.language.ImageXXt`
+/// * 🎯复刻OpenNARS中有关「外延像/内涵像」的通用函数
+/// * 📌NAL底层的「像」逻辑，对应`ImageExt`与`ImageInt`
+/// * ⚠️不包括与记忆区有关的`make`系列方法
+///
+/// # 🆕差异点
+/// ! ⚠️因原先语法上实现的差异，此处对「像占位符位置」与「关系词项位置」的表述，和OpenNARS不一样
+/// * 📝NAL-4中，「像」作为一种「关系与参数中挖了空的词项」，
+///   * 将**第一位**固定为「关系词项」的位置
+/// * 📌范围：1~总词项数
+///   * ⚠️第一位为「关系词项」预留——若有占位符，则与「乘积」无异
+/// * 📌核心差异：自Narsese.rs以来，NARust更强调「占位符的词法位置」而非「关系词项之后的位置」
+///
+/// ## 例
+///
+/// 对`(*,A,B) --> P`
+/// * 在第1位
+///   * 📄OpenNARS: ⇔ `A --> (/,P,_,B)` ⇒ `(/,P,B)_0`
+///   * 📄NARust:   ⇔ `A --> (/,P,_,B)` ⇒ `(/,P,B)_1`
+///     * 📌`1`而非`0`的依据：占位符在「像」中的位置为`1`
+/// * 在第2位
+///   * 📄OpenNARS: ⇔ `B --> (/,P,A,_)` ⇒ `(/,A,P)_1`
+///   * 📄NARust:   ⇔ `B --> (/,P,A,_)` ⇒ `(/,P,A)_2`
+///     * 📌`2`而非`1`的依据：占位符在「像」中的位置为`2`
+/// * 在第0位（扩展）
+///   * 📄OpenNARS: 【不支持】（会自动转换到「第一位」去）
+///   * 📄NARust:   ⇔ `P --> (/,_,A,B)` ⇒ `(/,A,B)_0`
+///     * 📌`0`的依据：占位符在「像」中的位置为`0`
+///     * ❓PyNARS却又支持`(/,_,A)`，但又把`<P --> (/,_,A,B)>.`推导成`<(*, A, B)-->_>.`
+///
+/// # 方法列表
+/// 🕒最后更新：【2024-04-24 20:15:43】
+///
+/// * `ImageExt` / `ImageInt`
+///   * `getRelationIndex`
+///   * `getRelation`
+///   * `getTheOtherComponent`
+///
+/// # 📄OpenNARS
+///
+/// ## 外延像
+/// An extension image.
+///
+/// `B --> (/,P,A,_)` iff `(*,A,B) --> P`
+///
+/// Internally, it is actually `(/,A,P)_1`, with an index.
+///
+/// ## 内涵像
+/// An intension image.
+///
+/// `(\,P,A,_) --> B` iff `P --> (*,A,B)`
+///
+/// Internally, it is actually `(\,A,P)_1`, with an index.
+mod image {
+    use super::*;
+
+    impl Term {
+        /// 用于判断词项是否为「外延像/内涵像」
+        /// * 📄OpenNARS `(com instanceof ImageExt) || (com instanceof ImageInt)` 逻辑
+        /// * 🎯首次用于陈述的`invalid_reflexive`方法
+        #[inline]
+        pub fn instanceof_image(&self) -> bool {
+            matches!(
+                self.identifier.as_str(),
+                IMAGE_EXT_OPERATOR | IMAGE_INT_OPERATOR
+            )
+        }
+
+        /// 📄OpenNARS `getRelationIndex` 属性
+        /// * 🎯用于获取「像」的关系索引
+        /// * ⚠️若尝试获取「非『像』词项」的关系索引，则会panic
+        ///
+        /// # 📄OpenNARS
+        ///
+        /// get the index of the relation in the component list
+        ///
+        /// @return the index of relation
+        pub fn get_relation_index(&self) -> usize {
+            match &&*self.components {
+                TermComponents::MultiIndexed(index, _) => *index,
+                _ => panic!("尝试获取「非『像』词项」的关系索引"),
+            }
+        }
+
+        /// 📄OpenNARS `getRelation` 属性
+        /// * 🎯用于获取「像」的「关系词项」
+        /// * ⚠️若尝试获取「非『像』词项」的关系词项，则会panic
+        /// * 🆕按NARust「索引=占位符索引」的来：总是在索引`0`处
+        ///
+        /// # 📄OpenNARS
+        ///
+        /// Get the relation term in the Image
+        ///
+        /// @return The term representing a relation
+        pub fn get_relation(&self) -> &Term {
+            match &&*self.components {
+                TermComponents::MultiIndexed(_, terms) => &terms[0],
+                _ => panic!("尝试获取「非『像』词项」的关系词项"),
+            }
+        }
+
+        /// 📄OpenNARS `getTheOtherComponent` 属性
+        /// * 🎯用于获取「像」的「另一词项」
+        /// * ⚠️若尝试获取「非『像』词项」的词项，则会panic
+        /// * 🆕按NARust「索引=占位符索引」的来：总是在索引`1`处
+        ///
+        /// # 📄OpenNARS
+        ///
+        /// Get the other term in the Image
+        ///
+        /// @return The term related
+        pub fn get_the_other_component(&self) -> Option<&Term> {
+            /* 📄OpenNARS源码：
+            if (components.size() != 2) {
+                return null;
+            }
+            return (relationIndex == 0) ? components.get(1) : components.get(0); */
+            match &&*self.components {
+                TermComponents::MultiIndexed(_, terms) => match terms.len() {
+                    2 => Some(&terms[1]),
+                    _ => None,
+                },
+                _ => panic!("尝试获取「非『像』词项」的关系词项"),
             }
         }
     }
@@ -2605,6 +2752,61 @@ mod test {
                 term!("<S --> <a --> b>>").get_predicate() => &term!("<a --> b>")
                 term!("<S --> $1>").get_predicate() => &term!("$1")
                 term!("<S --> (*, 1, 2, 3)>").get_predicate() => &term!("(*, 1, 2, 3)")
+            }
+            Ok(())
+        }
+    }
+
+    mod image {
+        use super::*;
+
+        #[test]
+        fn instanceof_image() -> Result<()> {
+            asserts! {
+                // 像占位符在第一位的「像」会被解析为「乘积」
+                term!(r"(/, _, A, B)").identifier() => PRODUCT_OPERATOR
+                term!(r"(\, _, A, B)").identifier() => PRODUCT_OPERATOR,
+                // 其余正常情况
+                Term::new_image_ext(1, vec![term!("S"), term!("A"), term!("B")])?.instanceof_image()
+                term!(r"(/, A, _, B)").instanceof_image()
+                term!(r"(\, A, _, B)").instanceof_image()
+                term!(r"(/, A, B, _)").instanceof_image()
+                term!(r"(\, A, B, _)").instanceof_image()
+            }
+            Ok(())
+        }
+
+        #[test]
+        fn get_relation_index() -> Result<()> {
+            asserts! {
+                // term!(r"(/, _, A, B)").get_relation_index() => 0 // 会被解析为「乘积」
+                // term!(r"(\, _, A, B)").get_relation_index() => 0 // 会被解析为「乘积」
+                term!(r"(/, A, _, B)").get_relation_index() => 1
+                term!(r"(\, A, _, B)").get_relation_index() => 1
+                term!(r"(/, A, B, _)").get_relation_index() => 2
+                term!(r"(\, A, B, _)").get_relation_index() => 2
+            }
+            Ok(())
+        }
+
+        #[test]
+        fn get_relation() -> Result<()> {
+            asserts! {
+                term!(r"(/, R, _, B)").get_relation() => &term!("R")
+                term!(r"(\, R, _, B)").get_relation() => &term!("R")
+                term!(r"(/, R, A, _)").get_relation() => &term!("R")
+                term!(r"(\, R, A, _)").get_relation() => &term!("R")
+            }
+            Ok(())
+        }
+
+        #[test]
+        fn get_the_other_component() -> Result<()> {
+            asserts! {
+                term!(r"(/, R, _, B)").get_the_other_component() => Some(&term!("B"))
+                term!(r"(\, R, _, B)").get_the_other_component() => Some(&term!("B"))
+                term!(r"(/, R, A, _)").get_the_other_component() => Some(&term!("A"))
+                term!(r"(\, R, A, _)").get_the_other_component() => Some(&term!("A"))
             }
             Ok(())
         }
