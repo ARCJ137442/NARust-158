@@ -64,6 +64,23 @@ impl Term {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_term as term;
+    use anyhow::Result;
+    use nar_dev_utils::asserts;
 
-    // TODO: 添加测试内容
+    #[test]
+    fn get_name() -> Result<()> {
+        asserts! {
+            //
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn get_complexity() -> Result<()> {
+        asserts! {
+            //
+        }
+        Ok(())
+    }
 }

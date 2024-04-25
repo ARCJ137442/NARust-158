@@ -156,12 +156,10 @@ mod statement;
 mod image;
 
 /// 单元测试
-/// * 🎯对结构体本身进行测试
-/// * 提供通用的测试用函数
+/// * 🎯对结构体本身进行测试（仅结构字段、枚举变种）
+/// * 🎯提供通用的测试用函数
 #[cfg(test)]
 pub(super) mod test {
-    use super::*;
-    use anyhow::Result;
 
     /// 用于批量生成「解析后的词项」
     /// * 🚩使用`?`直接在解析处上抛错误
@@ -175,152 +173,21 @@ pub(super) mod test {
         ([$($s:expr $(,)?)*] &) => {
             [ $( &term!($s) ),* ]
         };
-        // 单个词项
-        ($s:expr) => {
+        // 单个词项（字符串），问号上抛
+        ($s:literal) => {
             $s.parse::<Term>()?
         };
-        // 单个词项
+        // 单个词项（字符串），问号上抛
+        (str $s:expr) => {
+            $s.parse::<Term>()?
+        };
+        // 单个词项，但unwrap
         (unwrap $s:expr) => {
             $s.parse::<Term>().unwrap()
         };
-    }
-    use crate::test_term as term;
-
-    /// 测试 / [`TermComponents`]
-    mod components {
-        use super::*;
-        use nar_dev_utils::asserts;
-
-        /// 测试/长度
-        #[test]
-        fn len() -> Result<()> {
-            macro_rules! len {
-                ($s:expr) => {
-                    term!($s).components.len()
-                };
-            }
-            asserts! {
-                // 平常情况
-                len!("B") => 0
-                len!("?quine") => 0
-                len!("<A --> B>") => 2
-                len!("(*, {SELF}, x, y)") => 3
-                len!("(--, [good])") => 1
-                // 像：占位符不算
-                len!("(/, A, _, B)") => 2
-                // 集合：缩并
-                len!("[2, 1, 0, 0, 1, 2]") => 3
-            }
-            Ok(())
-        }
-
-        /// 测试/判空
-        #[test]
-        fn is_empty() -> Result<()> {
-            macro_rules! is_empty {
-                ($s:expr) => {
-                    term!($s).components.is_empty()
-                };
-            }
-            asserts! {
-                is_empty!("B") => true
-                is_empty!("?quine") => true
-                is_empty!("<A --> B>") => false
-                is_empty!("(*, {SELF}, x, y)") => false
-                is_empty!("(--, [good])") => false
-                is_empty!("(/, A, _, B)") => false
-                is_empty!("[2, 1, 0, 0, 1, 2]") => false
-            }
-            Ok(())
-        }
-
-        /// 测试/获取
-        #[test]
-        fn get() -> Result<()> {
-            macro_rules! get {
-                ($s:expr, $i:expr) => {
-                    term!($s).components.get($i)
-                };
-            }
-            asserts! {
-                // 平常情况
-                get!("B", 0) => None
-                get!("?quine", 0) => None
-                get!("<A --> B>", 0) => Some(&"A".parse()?)
-                get!("<A --> B>", 1) => Some(&"B".parse()?)
-                get!("<A --> B>", 2) => None
-                get!("{SELF}", 0) => Some(&"SELF".parse()?)
-                get!("{SELF}", 1) => None
-                get!("(*, {SELF}, x, y)", 0) => Some(&"{SELF}".parse()?)
-                get!("(*, {SELF}, x, y)", 1) => Some(&"x".parse()?)
-                get!("(*, {SELF}, x, y)", 2) => Some(&"y".parse()?)
-                get!("(*, {SELF}, x, y)", 3) => None
-                get!("(--, [good])", 0) => Some(&"[good]".parse()?)
-                get!("(--, [good])", 1) => None
-                // 像：占位符不算
-                get!("(/, A, _, B)", 0) => Some(&"A".parse()?)
-                get!("(/, A, _, B)", 1) => Some(&"B".parse()?)
-                get!("(/, A, _, B)", 2) => None
-                // 集合：排序 & 缩并
-                get!("[2, 1, 0, 0, 1, 2]", 0) => Some(&"0".parse()?)
-                get!("[2, 1, 0, 0, 1, 2]", 1) => Some(&"1".parse()?)
-                get!("[2, 1, 0, 0, 1, 2]", 2) => Some(&"2".parse()?)
-                get!("[2, 1, 0, 0, 1, 2]", 3) => None
-            }
-            Ok(())
-        }
-
-        /// 测试/获取
-        #[test]
-        fn get_unchecked() -> Result<()> {
-            macro_rules! get_unchecked {
-                ($s:expr, $i:expr) => {
-                    unsafe { $s.parse::<Term>()?.components.get_unchecked($i) }
-                };
-            }
-            asserts! {
-                // 平常情况
-                get_unchecked!("<A --> B>", 0) => &term!("A")
-                get_unchecked!("<A --> B>", 1) => &term!("B")
-                get_unchecked!("{SELF}", 0) => &term!("SELF")
-                get_unchecked!("(*, {SELF}, x, y)", 0) => &term!("{SELF}")
-                get_unchecked!("(*, {SELF}, x, y)", 1) => &term!("x")
-                get_unchecked!("(*, {SELF}, x, y)", 2) => &term!("y")
-                get_unchecked!("(--, [good])", 0) => &term!("[good]")
-                // 像：占位符不算
-                get_unchecked!("(/, A, _, B)", 0) => &term!("A")
-                get_unchecked!("(/, A, _, B)", 1) => &term!("B")
-                // 集合：排序 & 缩并
-                get_unchecked!("[2, 1, 0, 0, 1, 2]", 0) => &term!("0")
-                get_unchecked!("[2, 1, 0, 0, 1, 2]", 1) => &term!("1")
-                get_unchecked!("[2, 1, 0, 0, 1, 2]", 2) => &term!("2")
-            }
-            Ok(())
-        }
-
-        /// 测试/迭代器
-        /// * 🚩转换为数组，然后跟数组比对
-        #[test]
-        fn iter() -> Result<()> {
-            macro_rules! iter {
-                ($s:expr) => {
-                    term!($s).components.iter().collect::<Vec<_>>()
-                };
-            }
-            asserts! {
-                iter!("<A --> B>") => term!(["A", "B"]&)
-                // 平常情况
-                iter!("{SELF}") => term!(["SELF"]&)
-                iter!("(*, {SELF}, x, y)") => term!(["{SELF}", "x", "y"]&)
-                iter!("(--, [good])") => term!(["[good]"]&)
-                // 像：占位符不算
-                iter!("(/, A, _, B)") => term!(["A", "B"]&)
-                // 集合：排序 & 缩并
-                iter!("[2, 1, 0, 0, 1, 2]") => term!(["0", "1", "2"]&)
-            }
-            Ok(())
-        }
-
-        // TODO: 更多函数的测试
+        // 单个词项，问号上抛
+        ($($t:tt)*) => {
+            $crate::test_term!(str stringify!($($t)*))
+        };
     }
 }

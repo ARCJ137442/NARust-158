@@ -504,7 +504,7 @@ mod tests {
         }
         fold(lexical_nse_term!(<A --> B>))?;
         fold(lexical_nse_term!((&&, C, B, A, (/, A, _, B))))?;
-        fold(lexical_nse_term!(<(*, {SELF}, x, y) --> ^left>))?;
+        // fold(lexical_nse_term!(<(*, {SELF}, x, y) --> ^left>))?; // ! ⚠️【2024-04-25 10:02:20】现在对「操作符」不再支持
         fold(lexical_nse_term!([2, 1, 0, $0, #1, ?2]))?;
         fold(lexical_nse_term!(<A <-> {A}>))?;
         fold(lexical_nse_term!(<{B} <=> B>))?;

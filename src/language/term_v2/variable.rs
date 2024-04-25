@@ -56,7 +56,7 @@ impl Term {
     /// - (for `CompoundTerm`) check if the term contains free variable
     #[inline(always)]
     pub fn is_constant(&self) -> bool {
-        !self.contain_var()
+        self.is_constant
     }
 
     /// 📄OpenNARS `Variable.containVar` 方法
@@ -562,7 +562,7 @@ mod tests {
             term!("<A --> $var_word>").is_constant() => false
             term!("<A --> #var_word>").is_constant() => false
             term!("<A --> ?var_word>").is_constant() => false
-            term!("<<A --> $1> ==> <B --> $1>>").is_constant() => true // ! 变量作用域限定在词项之内，被视作「常量」
+            term!("<<A --> $1> ==> <B --> $1>>").is_constant() => false // ! 参考自OpenNARS：最初是false，但在「作为语句输入」后，转变为true
         }
         Ok(())
     }

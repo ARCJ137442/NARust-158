@@ -194,6 +194,96 @@ impl Term {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_term as term;
+    use anyhow::Result;
+    use nar_dev_utils::asserts;
 
     // TODO: 添加测试内容
+    #[test]
+    fn instanceof_compound() -> Result<()> {
+        asserts! {
+            //
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn is_commutative() -> Result<()> {
+        asserts! {
+            //
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn size() -> Result<()> {
+        asserts! {
+            //
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn component_at() -> Result<()> {
+        asserts! {
+            //
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn component_at_unchecked() -> Result<()> {
+        asserts! {
+            //
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn get_components() -> Result<()> {
+        asserts! {
+            //
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn clone_components() -> Result<()> {
+        asserts! {
+            //
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn contain_component() -> Result<()> {
+        asserts! {
+            //
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn contain_term() -> Result<()> {
+        asserts! {
+            //
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn get_class() -> Result<()> {
+        asserts! {
+            //
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn contain_all_components() -> Result<()> {
+        asserts! {
+            //
+        }
+        Ok(())
+    }
 }

@@ -16,9 +16,9 @@ checksum = "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
 
 [[package]]
 name = "nar_dev_utils"
-version = "0.26.4"
+version = "0.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1662c34eaa2853e1342dc1bbedf0373dc4315d1b0b7637e2c25cf424c9642355"
+checksum = "72ffab8f795f73c0dc799c3d4b2f072d5b415dcadb07925fe498288a8ad4658d"
 
 [[package]]
 name = "narsese"
