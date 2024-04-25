@@ -58,6 +58,32 @@ impl Term {
         Self::new(VAR_QUERY, TermComponents::Named(name.into()))
     }
 
+    /// 从旧的原子词项构造，但使用新的名称
+    /// * 🎯重命名变量时，将变量「换名复制」
+    /// * 🚩使用旧词项的标识符，但产生新的变量
+    /// * ⚠️【2024-04-25 23:08:20】内部使用：会导致产生无效类型（改变了组分类型）
+    pub(super) fn from_var_clone(from: &Term, new_name: impl Into<String>) -> Self {
+        Self::new(
+            from.identifier.clone(),
+            TermComponents::Named(new_name.into()),
+        )
+    }
+
+    /// 从旧的原子词项构造，但使用新的名称
+    /// * 🎯重命名变量时，将变量「换名复制」
+    /// * 🚩使用旧词项的标识符，但产生新的变量
+    /// * ✅开放：会检查
+    pub fn from_rename(from: &Term, new_name: impl Into<String>) -> Option<Self> {
+        match from.components() {
+            // ! 只会在「组分类型相同」时复制
+            TermComponents::Named(..) => Some(Self::new(
+                from.identifier.clone(),
+                TermComponents::Named(new_name.into()),
+            )),
+            _ => None,
+        }
+    }
+
     // 复合词项 //
 
     /// NAL-3 / 外延集
@@ -251,7 +277,7 @@ mod tests {
     use super::super::*;
     use super::*;
     use crate::test_term as term;
-    use nar_dev_utils::fail_tests;
+    use nar_dev_utils::{asserts, fail_tests, macro_once};
 
     /// 测试/词项
     #[test]
@@ -305,5 +331,53 @@ mod tests {
         空集_内涵集 term!(unwrap "[]");
         空集_外延像 term!(unwrap r"(/, _)");
         空集_内涵像 term!(unwrap r"(\, _)");
+    }
+
+    #[test]
+    fn from_var_clone() -> Result<()> {
+        macro_once! {
+            // * 🚩模式：词项字符串 ⇒ 预期词项字符串
+            macro from_var_clone($($origin:literal x $new_name:expr => $expected:expr )*) {
+                asserts! {$(
+                    Term::from_var_clone(&term!($origin), $new_name) => term!($expected)
+                    // 比对
+                    // dbg!(&term);
+                    // assert_eq!(term, term!($expected));
+                )*}
+            }
+            // 原子词项
+            "A" x "B" => "B"
+            "$A" x "B" => "$B"
+            "#A" x "B" => "#B"
+            "?A" x "B" => "?B"
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn from_rename() -> Result<()> {
+        macro_once! {
+            // * 🚩模式：词项字符串 ⇒ 预期词项字符串
+            macro from_rename($($origin:literal x $new_name:expr => $expected:expr )*) {
+                asserts! {$(
+                    Term::from_rename(&term!($origin), $new_name) => $expected
+                    // 比对
+                    // dbg!(&term);
+                    // assert_eq!(term, term!($expected));
+                )*}
+            }
+            // 原子词项
+            "A" x "B" => Some(term!("B"))
+            "$A" x "B" => Some(term!("$B"))
+            "#A" x "B" => Some(term!("#B"))
+            "?A" x "B" => Some(term!("?B"))
+            // 其它
+            "_" x "B" => None // ! 占位符没有「名称」
+            "(*, $A)" x "B" => None
+            "{$A}" x "B" => None
+            "(--, #A)" x "B" => None
+            "<?A --> ?B>" x "B" => None
+        }
+        Ok(())
     }
 }

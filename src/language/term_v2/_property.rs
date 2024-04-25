@@ -2,9 +2,8 @@
 //! * 🎯非OpenNARS所定义之「属性」「方法」
 //!   * 📌至少并非OpenNARS原先所定义的
 
-use nar_dev_utils::macro_once;
-
 use super::*;
+use nar_dev_utils::macro_once;
 
 /// 手动实现「判等」逻辑
 /// * 📄OpenNARS `Term.equals` 方法
@@ -83,6 +82,33 @@ impl Term {
     #[inline(always)]
     pub fn structural_match(&self, other: &Self) -> bool {
         self.get_class() == other.get_class() && self.components.structural_match(&other.components)
+    }
+
+    /// 遍历其中所有原子词项
+    /// * 🎯找到其中所有的变量
+    /// * ⚠️外延像/内涵像 中的占位符
+    /// * ⚠️需要传入闭包的可变引用，而非闭包本身
+    ///   * 📌中间「递归深入」需要重复调用（传入）闭包
+    /// * 📄词语、变量
+    /// * 📄占位符
+    pub fn for_each_atom(&self, f: &mut impl FnMut(&Term)) {
+        use TermComponents::*;
+        match self.components() {
+            // 无组分⇒遍历自身
+            Empty | Named(..) => f(self),
+            // 内含词项⇒递归深入
+            Unary(term) => term.for_each_atom(f),
+            Binary(term1, term2) => {
+                // 不能直接用递归：无法重复使用`f`
+                term1.for_each_atom(f);
+                term2.for_each_atom(f);
+            }
+            Multi(terms) | MultiIndexed(_, terms) => {
+                for term in terms {
+                    term.for_each_atom(f);
+                }
+            }
+        }
     }
 }
 
@@ -755,6 +781,61 @@ mod tests {
                 "<A <-> B>" => "(A <-> B)"
                 "<A ==> B>" => "(A ==> B)"
                 "<A <=> B>" => "(A <=> B)"
+            }
+            Ok(())
+        }
+
+        #[test]
+        fn for_each_atom() -> Result<()> {
+            macro_once! {
+                // * 🚩模式：词项字符串 ⇒ 预期词项字符串序列
+                macro for_each_atom($($term:literal => [ $($expected:expr),* ] )*) {
+                    asserts! {$(
+                        {
+                            // 解析构造词项
+                            let term = term!($term);
+                            // 构造列表
+                            let mut v = vec![];
+                            // 遍历，复制，添加
+                            term.for_each_atom(&mut |t| v.push(t.clone()));
+                            // 返回
+                            v
+                        } => term!([ $($expected),* ])
+                    )*}
+                }
+                // 简单情况（一层） //
+                // 占位符
+                "_" => ["_"]
+                // 原子词项
+                "A" => ["A"]
+                "$A" => ["$A"]
+                "#A" => ["#A"]
+                "?A" => ["?A"]
+                // 复合词项
+                "{A, B}" => ["A", "B"]
+                "[A, B]" => ["A", "B"]
+                "(&, A, B)" => ["A", "B"]
+                "(|, A, B)" => ["A", "B"]
+                "(-, A, B)" => ["A", "B"]
+                "(~, A, B)" => ["A", "B"]
+                "(*, A, B)" => ["A", "B"]
+                r"(/, R, _)" => ["R"]
+                r"(\, R, _)" => ["R"]
+                r"(/, R, _, A)" => ["R", "A"]
+                r"(\, R, _, A)" => ["R", "A"]
+                r"(&&, A, B)" => ["A", "B"]
+                r"(||, A, B)" => ["A", "B"]
+                r"(--, A)" => ["A"]
+                // 陈述
+                "<A --> B>" => ["A", "B"]
+                "<A <-> B>" => ["A", "B"]
+                "<A ==> B>" => ["A", "B"]
+                "<A <=> B>" => ["A", "B"]
+                // 复杂情况 //
+                // 复合词项后置，同时递归深入
+                "(&&, A, B, [C, D])" => ["A", "B", "C", "D"]
+                "<(--, (--, (--, (--, (--, (--, (--, (--, A)))))))) --> (/, (-, B, C), _, (/, (/, (/, (/, (/, D, _), _), _), _), _))>" => ["A", "B", "C", "D"]
+                "<<A --> B> ==> <C --> D>>" => ["A", "B", "C", "D"]
             }
             Ok(())
         }
