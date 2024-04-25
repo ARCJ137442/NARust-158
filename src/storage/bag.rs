@@ -1,6 +1,6 @@
 use crate::entity::BagItem;
 
-/// # 📄OpenNARS
+/// # 📄OpenNARS `nars.storage.Bag`
 /// A Bag is a storage with a constant capacity and maintains an internal
 /// priority distribution for retrieval.
 ///

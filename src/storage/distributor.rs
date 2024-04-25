@@ -1,8 +1,7 @@
 //! # 分发器
+//! * 伪随机数生成器
 //!
-//! * 🎯复刻OpenNARS中的`nars.storage.Distributor`类
-//!
-//! # OpenNARS 原文
+//! # 📄OpenNARS `nars.storage.Distributor`
 //!
 //! A pseudo-random number generator, used in Bag.
 

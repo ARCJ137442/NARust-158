@@ -2,7 +2,7 @@
 
 use super::Budget;
 
-/// # 📄OpenNARS
+/// # 📄OpenNARS `nars.entity.Item`
 /// An item is an object that can be put into a Bag,
 /// to participate in the resource competition of the system.
 ///
