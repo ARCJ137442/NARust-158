@@ -546,7 +546,7 @@ mod tests {
     use super::*;
     use crate::test_term as term;
     use anyhow::Result;
-    use nar_dev_utils::asserts;
+    use nar_dev_utils::{asserts, macro_once};
 
     /// 测试/包含变量
     /// * ✨同时包含对「是否常量」的测试
@@ -570,25 +570,23 @@ mod tests {
     /// 测试/变量替换
     #[test]
     fn apply_substitute() -> Result<()> {
-        macro_rules! apply_substitute {
-            {
+        let substitution = VarSubstitution::from_pairs([
+            (term!("var_word"), term!("word")),
+            (term!("$1"), term!("1")),
+        ]);
+        macro_once! {
+            macro apply_substitute (
                 $(
                     $term_str:expr, $substitution:expr
                     => $substituted_str:expr
                 )*
-            } => {
+            ) {
                 $(
                     let mut term = term!($term_str);
                     term.apply_substitute(&$substitution);
                     assert_eq!(term, term!($substituted_str));
                 )*
-            };
-        }
-        let substitution = VarSubstitution::from_pairs([
-            (term!("var_word"), term!("word")),
-            (term!("$1"), term!("1")),
-        ]);
-        apply_substitute! {
+            }
             "<A --> var_word>", substitution => "<A --> word>"
             "<<$1 --> A> ==> <B --> $1>>", substitution => "<<1 --> A> ==> <B --> 1>>"
         }
@@ -599,14 +597,14 @@ mod tests {
     #[test]
     fn unify() -> Result<()> {
         use crate::language::variable::unify_two;
-        macro_rules! unify {
-            {
+        macro_once! {
+            macro unify(
                 $(
                     $term_str1:expr, $term_str2:expr
                     => $var_type:expr =>
                     $substituted_str1:expr, $substituted_str2:expr
                 )*
-            } => {
+            ) {
                 $(
                     let mut term1 = term!($term_str1);
                     let mut term2 = term!($term_str2);
@@ -619,9 +617,7 @@ mod tests {
                     assert_eq!(term1, expected_1);
                     assert_eq!(term2, expected_2);
                 )*
-            };
-        }
-        unify! {
+            }
             // ! 变量替换只会发生在复合词项之中：原子词项不会因此改变自身 //
             "$1", "A" => "$" => "$1", "A"
 

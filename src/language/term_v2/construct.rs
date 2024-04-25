@@ -224,11 +224,10 @@ impl TermComponents {
     /// * 📄外延集、内涵集
     /// * 📄外延交、内涵交
     pub fn new_multi_set(terms: Vec<Term>) -> Self {
-        Self::Multi(manipulate!(
-            terms
-          => .sort() // 先排序
-          => .dedup() // 再去重 | 📝`dedup`即`delete duplicated`，去除连续的重复元素
-        ))
+        manipulate!(
+            Self::Multi(terms)
+            => .sort_dedup() // 重排 & 去重
+        )
     }
 
     /// 二元无序组分
@@ -237,12 +236,12 @@ impl TermComponents {
     /// * 📄相似、等价
     /// * 🚩使用「临时数组切片」实现（较为简洁）
     pub fn new_binary_unordered(term1: Term, term2: Term) -> Self {
-        let [term1, term2] = manipulate!(
-            [term1, term2]
-          => .sort()
-        );
-        // 构造
-        TermComponents::Binary(term1, term2)
+        manipulate!(
+            // 构造
+            Self::Binary(term1, term2)
+            // 排序
+            => .sort_dedup()
+        )
     }
 }
 

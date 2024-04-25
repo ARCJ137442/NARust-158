@@ -66,20 +66,95 @@ mod tests {
     use super::*;
     use crate::test_term as term;
     use anyhow::Result;
-    use nar_dev_utils::asserts;
+    use nar_dev_utils::{asserts, macro_once};
 
     #[test]
     fn get_name() -> Result<()> {
-        asserts! {
-            //
+        macro_once! {
+            // * 🚩模式：词项字符串 ⇒ 预期
+            macro fmt($($term:literal => $expected:expr)*) {
+                asserts! {$(
+                    format!("{}", term!($term)) => $expected
+                )*}
+            }
+            // 占位符
+            "_" => "_"
+            // 原子词项
+            "A" => "A"
+            "$A" => "$A"
+            "#A" => "#A"
+            "?A" => "?A"
+            // 复合词项
+            "{A, B}" => "{}(A B)"
+            "[A, B]" => "[](A B)"
+            "(&, A, B)" => "&(A B)"
+            "(|, A, B)" => "|(A B)"
+            "(-, A, B)" => "(A - B)"
+            "(~, A, B)" => "(A ~ B)"
+            "(*, A, B)" => "*(A B)"
+            r"(/, R, _)" => r"/(R _)"
+            r"(\, R, _)" => r"\(R _)"
+            r"(/, R, _, A)" => r"/(R _ A)"
+            r"(\, R, _, A)" => r"\(R _ A)"
+            r"(&&, A, B)" => r"&&(A B)"
+            r"(||, A, B)" => r"||(A B)"
+            r"(--, A)" => r"(-- A)"
+            // 陈述
+            "<A --> B>" => "(A --> B)"
+            "<A <-> B>" => "(A <-> B)"
+            "<A ==> B>" => "(A ==> B)"
+            "<A <=> B>" => "(A <=> B)"
         }
         Ok(())
     }
 
     #[test]
     fn get_complexity() -> Result<()> {
-        asserts! {
-            //
+        macro_once! {
+            // * 🚩模式：词项字符串 ⇒ 预期
+            macro fmt($($term:literal => $expected:expr)*) {
+                asserts! {$(
+                    term!($term).get_complexity() => $expected
+                )*}
+            }
+            // 占位符
+            "_" => 0
+            // 词语
+            "A" => 1
+            // 变量
+            "$A" => 0
+            "#A" => 0
+            "?A" => 0
+            // 复合词项
+            "{A}" => 2
+            "[A]" => 2
+            "(-, A, B)" => 3
+            "(~, A, B)" => 3
+            "(&, A, B, C)" => 4
+            "(|, A, B, C)" => 4
+            "(*, A, B, C, D)" => 5
+            r"(/, R, _)" => 2
+            r"(\, R, _)" => 2
+            r"(/, R, _, A)" => 3
+            r"(\, R, _, A)" => 3
+            r"(&&, A, B)" => 3
+            r"(||, A, B)" => 3
+            r"(--, A)" => 2
+            r"(--, (--, A))" => 3
+            r"(--, (--, (--, A)))" => 4
+            // 陈述
+            "<A --> B>" => 3
+            "<A <-> B>" => 3
+            "<A ==> B>" => 3
+            "<A <=> B>" => 3
+            "<<A --> B> --> B>" => 5
+            "<<A <-> B> <-> B>" => 5
+            "<<A ==> B> ==> B>" => 5
+            "<<A <=> B> <=> B>" => 5
+            "<<A --> B> --> <A --> B>>" => 7
+            "<<A <-> B> <-> <A <-> B>>" => 7
+            "<<A ==> B> ==> <A ==> B>>" => 7
+            "<<A <=> B> <=> <A <=> B>>" => 7
         }
         Ok(())
     }

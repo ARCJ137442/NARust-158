@@ -50,6 +50,9 @@ impl Term {
     }
 
     /// 📄OpenNARS `CompoundTerm.isCommutative` 属性
+    /// * 📌对「零元/一元 词项」默认为「不可交换」
+    ///   * 📜返回`false`
+    ///   * 📄OpenNARS中`Negation`的定义（即默认「不可交换」）
     ///
     /// # 📄OpenNARS
     ///
@@ -154,15 +157,14 @@ impl Term {
 
     /// 📄OpenNARS `CompoundTerm.containTerm` 方法
     /// * 🎯检查其是否**递归**包含组分
-    /// * 🚩直接基于已有迭代器方法
+    /// * 🚩直接基于已有迭代器方法：词项 == 组分 || 词项 in 组分
     ///
     /// # 📄OpenNARS
     ///
     /// Recursively check if a compound contains a term
-    #[allow(clippy::only_used_in_recursion)]
     pub fn contain_term(&self, term: &Term) -> bool {
         self.get_components()
-            .any(|component| component.contain_term(term))
+            .any(|component| term == component || component.contain_term(term))
     }
 
     /// 🆕用于替代Java的`getClass`
@@ -188,6 +190,44 @@ impl Term {
             false => self.contain_component(other),
         }
     }
+
+    /// 尝试追加一个新词项
+    /// * 🎯尝试朝「组分列表」增加新词项，并根据「可交换性」重排去重
+    pub fn add(&mut self, term: Term) {
+        // 增加词项
+        self.components.add(term);
+        // 可交换⇒重排去重
+        if self.is_commutative() {
+            self.components.sort_dedup();
+        }
+    }
+
+    /// 尝试删除一个新词项
+    /// * 🎯尝试在「组分列表」移除词项，并根据「可交换性」重排去重
+    /// * ⚠️只会删除**最多一个**词项
+    /// * 🚩返回「是否删除成功」
+    pub fn remove(&mut self, term: &Term) -> bool {
+        // 增加词项
+        let result = self.components.remove(term);
+        // 可交换⇒重排去重
+        if self.is_commutative() {
+            self.components.sort_dedup();
+        }
+        result
+    }
+
+    /// 尝试删除一个新词项
+    /// * 🎯尝试在「组分列表」替换词项，并根据「可交换性」重排去重
+    /// * ⚠️
+    pub fn replace(&mut self, index: usize, new: Term) -> bool {
+        // 增加词项
+        let result = self.components.replace(index, new);
+        // 可交换⇒重排去重
+        if self.is_commutative() {
+            self.components.sort_dedup();
+        }
+        result
+    }
 }
 
 /// 单元测试
@@ -196,85 +236,371 @@ mod tests {
     use super::*;
     use crate::test_term as term;
     use anyhow::Result;
-    use nar_dev_utils::asserts;
+    use nar_dev_utils::{asserts, macro_once};
 
-    // TODO: 添加测试内容
     #[test]
     fn instanceof_compound() -> Result<()> {
-        asserts! {
-            //
+        macro_once! {
+            // * 🚩模式：词项字符串 ⇒ 预期
+            macro instanceof_compound($( $s:literal => $expected:expr )*) {
+                asserts! {$(
+                    term!($s).instanceof_compound() => $expected,
+                )*}
+            }
+            // 占位符
+            "_" => false
+            // 原子词项
+            "A" => false
+            "$A" => false
+            "#A" => false
+            "?A" => false
+            // 复合词项
+            "{A}" => true
+            "[A]" => true
+            "(&, A)" => true
+            "(|, A)" => true
+            "(-, A, B)" => true
+            "(~, A, B)" => true
+            "(*, A)" => true
+            r"(/, R, _)" => true
+            r"(\, R, _)" => true
+            r"(&&, A)" => true
+            r"(||, A)" => true
+            r"(--, A)" => true
+            // 陈述
+            "<A --> B>" => true
+            "<A <-> B>" => true
+            "<A ==> B>" => true
+            "<A <=> B>" => true
         }
         Ok(())
     }
 
     #[test]
     fn is_commutative() -> Result<()> {
-        asserts! {
-            //
+        macro_once! {
+            // * 🚩模式：词项字符串 ⇒ 预期
+            macro is_commutative($( $s:literal => $expected:expr )*) {
+                asserts! {$(
+                    term!($s).is_commutative() => $expected,
+                )*}
+            }
+            // 占位符
+            "_" => false
+            // 原子词项
+            "A" => false
+            "$A" => false
+            "#A" => false
+            "?A" => false
+            // 复合词项
+            "{A}" => true
+            "[A]" => true
+            "(&, A)" => true
+            "(|, A)" => true
+            "(-, A, B)" => false
+            "(~, A, B)" => false
+            "(*, A)" => false
+            r"(/, R, _)" => false
+            r"(\, R, _)" => false
+            r"(&&, A)" => true
+            r"(||, A)" => true
+            r"(--, A)" => false
+            // 陈述
+            "<A --> B>" => false
+            "<A <-> B>" => true
+            "<A ==> B>" => false
+            "<A <=> B>" => true
         }
         Ok(())
     }
 
     #[test]
     fn size() -> Result<()> {
-        asserts! {
-            //
+        macro_once! {
+            // * 🚩模式：词项字符串 ⇒ 预期
+            macro size($( $s:literal => $expected:expr )*) {
+                asserts! {$(
+                    term!($s).size() => $expected,
+                )*}
+            }
+            // 占位符
+            "_" => 0
+            // 原子词项
+            "A" => 0
+            "$A" => 0
+            "#A" => 0
+            "?A" => 0
+            // 复合词项
+            "{A}" => 1
+            "[A]" => 1
+            "(&, A)" => 1
+            "(|, A)" => 1
+            "(-, A, B)" => 2
+            "(~, A, B)" => 2
+            "(*, A, B, C)" => 3
+            r"(/, R, _)" => 1 // ! 不算占位符
+            r"(\, R, _)" => 1
+            r"(&&, A)" => 1
+            r"(||, A)" => 1
+            r"(--, A)" => 1
+            // 陈述
+            "<A --> B>" => 2
+            "<A <-> B>" => 2
+            "<A ==> B>" => 2
+            "<A <=> B>" => 2
         }
         Ok(())
     }
 
     #[test]
     fn component_at() -> Result<()> {
-        asserts! {
-            //
+        // 命中
+        macro_once! {
+            // * 🚩模式：词项字符串[索引] ⇒ 预期词项
+            macro component_at($( $s:literal [ $index:expr ] => $expected:expr )*) {
+                asserts! {$(
+                    term!($s).component_at($index) => Some(&term!($expected)),
+                )*}
+            }
+            // 复合词项
+            "{A}"[0] => "A"
+            "[A]"[0] => "A"
+            "(&, A)"[0] => "A"
+            "(|, A)"[0] => "A"
+            "(-, A, B)"[1] => "B"
+            "(~, A, B)"[1] => "B"
+            "(*, A, B, C)"[2] => "C"
+            r"(/, R, _)"[0] => "R" // ! 不算占位符
+            r"(\, R, _)"[0] => "R"
+            r"(&&, A)"[0] => "A"
+            r"(||, A)"[0] => "A"
+            r"(--, A)"[0] => "A"
+            // 陈述
+            "<A --> B>"[0] => "A"
+            "<A <-> B>"[0] => "A"
+            "<A ==> B>"[0] => "A"
+            "<A <=> B>"[0] => "A"
+        }
+        // 未命中
+        macro_once! {
+            // * 🚩模式：词项字符串[索引]
+            macro component_at($( $s:literal [ $index:expr ] )*) {
+                asserts! {$(
+                    term!($s).component_at($index) => None,
+                )*}
+            }
+            // 占位符
+            "_"[0]
+            // 原子词项
+            "A"[0]
+            "$A"[0]
+            "#A"[0]
+            "?A"[0]
+            // 复合词项
+            "{A}"[1]
+            "[A]"[1]
+            "(&, A)"[1]
+            "(|, A)"[1]
+            "(-, A, B)"[2]
+            "(~, A, B)"[2]
+            "(*, A, B, C)"[3]
+            r"(/, R, _)"[1] // ! 不算占位符
+            r"(\, R, _)"[1]
+            r"(&&, A)"[1]
+            r"(||, A)"[1]
+            r"(--, A)"[1]
+            // 陈述
+            "<A --> B>"[2]
+            "<A <-> B>"[2]
+            "<A ==> B>"[2]
+            "<A <=> B>"[2]
         }
         Ok(())
     }
 
     #[test]
     fn component_at_unchecked() -> Result<()> {
-        asserts! {
-            //
+        // 命中
+        macro_once! {
+            // * 🚩模式：词项字符串[索引] ⇒ 预期词项
+            macro component_at_unchecked($( $s:literal [ $index:expr ] => $expected:expr )*) {
+                unsafe {
+                    asserts! {$(
+                        term!($s).component_at_unchecked($index) => &term!($expected),
+                    )*}
+                }
+            }
+            // 复合词项
+            "{A}"[0] => "A"
+            "[A]"[0] => "A"
+            "(&, A)"[0] => "A"
+            "(|, A)"[0] => "A"
+            "(-, A, B)"[1] => "B"
+            "(~, A, B)"[1] => "B"
+            "(*, A, B, C)"[2] => "C"
+            r"(/, R, _)"[0] => "R" // ! 不算占位符
+            r"(\, R, _)"[0] => "R"
+            r"(&&, A)"[0] => "A"
+            r"(||, A)"[0] => "A"
+            r"(--, A)"[0] => "A"
+            // 陈述
+            "<A --> B>"[0] => "A"
+            "<A <-> B>"[0] => "A"
+            "<A ==> B>"[0] => "A"
+            "<A <=> B>"[0] => "A"
         }
         Ok(())
     }
 
-    #[test]
-    fn get_components() -> Result<()> {
-        asserts! {
-            //
-        }
-        Ok(())
-    }
+    // * ✅`get_components`已在[`TermComponents::iter`]中测试
 
     #[test]
     fn clone_components() -> Result<()> {
-        asserts! {
-            //
+        macro_once! {
+            // * 🚩模式：词项字符串 | 复制之后与新词项的「组分」相等
+            macro clone_components($($s:literal)*) {
+                asserts! {$(
+                    term!($s).clone_components() => *term!($s).components,
+                )*}
+            }
+            // 占位符
+            "_"
+            // 原子词项
+            "A"
+            "$A"
+            "#A"
+            "?A"
+            // 复合词项
+            "{A}"
+            "[A]"
+            "(&, A)"
+            "(|, A)"
+            "(-, A, B)"
+            "(~, A, B)"
+            "(*, A)"
+            r"(/, R, _)"
+            r"(\, R, _)"
+            r"(&&, A)"
+            r"(||, A)"
+            r"(--, A)"
+            // 陈述
+            "<A --> B>"
+            "<A <-> B>"
+            "<A ==> B>"
+            "<A <=> B>"
         }
         Ok(())
     }
 
     #[test]
     fn contain_component() -> Result<()> {
-        asserts! {
-            //
+        macro_once! {
+            // * 🚩模式：词项 in 容器词项
+            macro contain_component($($term:literal in $container:expr)*) {
+                asserts! {$(
+                    term!($container).contain_component(&term!($term))
+                )*}
+            }
+            // 复合词项
+            "A" in "{A}"
+            "A" in "[A]"
+            "A" in "(&, A)"
+            "A" in "(|, A)"
+            "A" in "(-, A, B)"
+            "A" in "(~, A, B)"
+            "B" in "(-, A, B)"
+            "B" in "(~, A, B)"
+            "A" in "(*, A)"
+            "R" in r"(/, R, _)"
+            "R" in r"(\, R, _)"
+            "A" in r"(&&, A)"
+            "A" in r"(||, A)"
+            "A" in r"(--, A)"
+            // 陈述
+            "A" in "<A --> B>"
+            "A" in "<A <-> B>"
+            "A" in "<A ==> B>"
+            "A" in "<A <=> B>"
+            "B" in "<A --> B>"
+            "B" in "<A <-> B>"
+            "B" in "<A ==> B>"
+            "B" in "<A <=> B>"
         }
         Ok(())
     }
 
     #[test]
     fn contain_term() -> Result<()> {
-        asserts! {
-            //
+        macro_once! {
+            // * 🚩模式：词项 in 容器词项
+            macro contain_term($($term:literal in $container:expr)*) {
+                asserts! {$(
+                    term!($container).contain_term(&term!($term))
+                )*}
+            }
+            // 复合词项
+            "A" in "{{{{{{A}}}}}}"
+            "A" in "[[[[[[A]]]]]]"
+            "A" in "(&, (&, (&, (&, (&, A)))))"
+            "A" in "(|, (|, (|, (|, (|, A)))))"
+            "A" in "(-, (-, A, a), (-, B, b))"
+            "A" in "(~, (~, A, a), (~, B, b))"
+            "B" in "(-, (-, A, a), (-, B, b))"
+            "B" in "(~, (~, A, a), (~, B, b))"
+            "A" in "(*, (*, (*, (*, (*, A)))))"
+            "R" in r"(/, (/, (/, (/, (/, R, _), _), _), _), _)"
+            "R" in r"(\, (\, (\, (\, (\, R, _), _), _), _), _)"
+            "A" in r"(&&, (&&, (&&, (&&, (&&, A)))))"
+            "A" in r"(||, (||, (||, (||, (||, A)))))"
+            "A" in r"(--, (--, (--, (--, (--, A)))))"
+            // 陈述
+            "A" in "<<A --> a> --> <B --> b>>"
+            "B" in "<<A --> a> --> <B --> b>>"
+            "A" in "<<A <-> a> <-> <B <-> b>>"
+            "B" in "<<A <-> a> <-> <B <-> b>>"
+            "A" in "<<A ==> a> ==> <B ==> b>>"
+            "B" in "<<A ==> a> ==> <B ==> b>>"
+            "A" in "<<A <=> a> <=> <B <=> b>>"
+            "B" in "<<A <=> a> <=> <B <=> b>>"
         }
         Ok(())
     }
 
+    /// * 【2024-04-25 16:17:17】📌直接参照的`identifier`
     #[test]
     fn get_class() -> Result<()> {
-        asserts! {
-            //
+        macro_once! {
+            // * 🚩模式：词项字符串 ⇒ 预期
+            macro get_class($( $s:literal => $expected:expr )*) {
+                asserts! {$(
+                    term!($s).get_class() => $expected,
+                )*}
+            }
+            // 占位符
+            "_" => PLACEHOLDER
+            // 原子词项
+            "A" => WORD
+            "$A" => VAR_INDEPENDENT
+            "#A" => VAR_DEPENDENT
+            "?A" => VAR_QUERY
+            // 复合词项
+            "{A}" => SET_EXT_OPERATOR
+            "[A]" => SET_INT_OPERATOR
+            "(&, A)" => INTERSECTION_EXT_OPERATOR
+            "(|, A)" => INTERSECTION_INT_OPERATOR
+            "(-, A, B)" => DIFFERENCE_EXT_OPERATOR
+            "(~, A, B)" => DIFFERENCE_INT_OPERATOR
+            "(*, A)" => PRODUCT_OPERATOR
+            r"(/, R, _)" => IMAGE_EXT_OPERATOR
+            r"(\, R, _)" => IMAGE_INT_OPERATOR
+            r"(&&, A)" => CONJUNCTION_OPERATOR
+            r"(||, A)" => DISJUNCTION_OPERATOR
+            r"(--, A)" => NEGATION_OPERATOR
+            // 陈述
+            "<A --> B>" => INHERITANCE_RELATION
+            "<A <-> B>" => SIMILARITY_RELATION
+            "<A ==> B>" => IMPLICATION_RELATION
+            "<A <=> B>" => EQUIVALENCE_RELATION
         }
         Ok(())
     }
@@ -283,6 +609,39 @@ mod tests {
     fn contain_all_components() -> Result<()> {
         asserts! {
             //
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn add() -> Result<()> {
+        macro_once! {
+            // * 🚩模式：词项字符串 (+ 附加词项字符串)... ⇒ 预期结果
+            macro add($($s:literal $(+ $new:literal)* => $expected:literal)*) {
+                $(
+                    // 构造词项
+                    let mut term = term!($s);
+                    print!("{term}");
+                    // 追加词项
+                    $(
+                        let new = term!($new);
+                        print!(" + {new}");
+                        term.add(new);
+                    )*
+                    // 验证结果
+                    let expected = term!($expected);
+                    println!(" => {term}");
+                    assert_eq!(term, expected);
+                )*
+            }
+            // 平常情况
+            "{SELF}" + "good" => "{SELF, good}"
+            "{あ}" + "い" + "う" + "え" + "お" => "{あ, い, う, え, お}"
+            "(&&, 你)" + "我" + "他" => "(&&, 你, 我, 他)"
+            "(*, x, y)" + "z" => "(*, x, y, z)"
+            // 像：占位符不算
+            r"(\, 甲, _, 乙)" + "{丙}" + "<丁 <=> 戊>" => r"(\, 甲, _, 乙, {丙}, <丁 <=> 戊>)"
+            r"(/, {(*, α, β)}, _)" + "[[[γ]]]" + "<(/, δ, _, ε) {-] (&, (--, ζ))>" => r"(/, {(*, α, β)}, _, [[[γ]]], <(/, δ, _, ε) {-] (&, (--, ζ))>)"
         }
         Ok(())
     }

@@ -2,6 +2,8 @@
 //! * 🎯非OpenNARS所定义之「属性」「方法」
 //!   * 📌至少并非OpenNARS原先所定义的
 
+use nar_dev_utils::macro_once;
+
 use super::*;
 
 /// 手动实现「判等」逻辑
@@ -10,15 +12,13 @@ use super::*;
 ///   * 📄`is_constant`字段
 impl PartialEq for Term {
     fn eq(&self, other: &Self) -> bool {
-        /// 宏：逐个字段比较相等
-        /// * 🎯方便表示、修改「要判等的字段」
-        macro_rules! eq_fields {
-            ($this:ident => $other:ident; $($field:ident)*) => {
+        macro_once! {
+            // 宏：逐个字段比较相等
+            // * 🎯方便表示、修改「要判等的字段」
+            macro eq_fields($this:ident => $other:ident; $($field:ident)*) {
                 $( $this.$field == $other.$field )&&*
-            };
-        }
-        // 判等逻辑
-        eq_fields! {
+            }
+            // 判等逻辑
             self => other;
             identifier
             components
@@ -185,7 +185,9 @@ impl TermComponents {
     /// * 🚩返回一个迭代器，迭代其中所有「元素」
     /// * 🎯词项的「变量代入」替换
     /// * ⚠️并非「深迭代」：仅迭代自身的下一级词项，不会递归深入
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Term> {
+    /// * ⚠️【2024-04-25 14:50:41】不打算开放：后续若经此改变内部元素，将致「顺序混乱」等问题
+    ///   * case: 对「可交换词项」，在更改后若未重排顺序，可能会破坏可交换性
+    pub(crate) fn iter_mut(&mut self) -> impl Iterator<Item = &mut Term> {
         use TermComponents::*;
         // * 📝必须添加类型注释，以便统一不同类型的`Box`，进而统一「迭代器」类型
         let b: Box<dyn Iterator<Item = &mut Term>> = match self {
@@ -200,11 +202,52 @@ impl TermComponents {
         b
     }
 
+    /// （作为无序不重复集合）排序内部词项并去重
+    /// * 🎯表征「可交换词项（无序不重复词项）」的「构造时整理」与「修改后整理」
+    /// * 🎯提供统一的方法，整理内部词项而不依赖外界
+    /// * 🎯用作「集合中替换元素后，重新排序（并去重）」
+    ///   * ⚠️不会在「固定数目词项」中去重
+    ///   * 📄NAL-6「变量替换」
+    /// * ⚠️暂且封闭：不让外界随意调用 破坏其内部结构
+    /// * ⚠️「像占位符」不参与排序：不会影响到「像占位符」的位置
+    pub(crate) fn sort_dedup(&mut self) {
+        use TermComponents::*;
+        match self {
+            // 零元 | 一元 ⇒ 不排序
+            Empty | Named(..) | Unary(..) => (),
+            // 二元 ⇒ 排序内部词项，但不去重
+            Binary(term1, term2) => {
+                if term1 > term2 {
+                    std::mem::swap(term1, term2);
+                }
+                // ❌【2024-04-25 15:00:34】使用临时数组进行重排，会导致引用失效
+                // // 使用临时数组进行重排
+                // let [new_term1, new_term2] = manipulate!(
+                //     [term1, term2]
+                //   => .sort()
+                // );
+                // // 重排后重新赋值
+                // *term1 = *new_term1;
+                // *term2 = *new_term2;
+            }
+            // 不定数目⇒直接对数组重排并去重
+            Multi(terms) | MultiIndexed(_, terms) => {
+                // 重排
+                terms.sort();
+                // 去重
+                terms.dedup()
+            }
+        }
+    }
+
     /// 尝试向其中添加元素
+    /// * ⚠️【2024-04-25 14:48:37】默认作为**有序**容器处理
+    ///   * 📌其「可交换性」交由「词项」处理
+    ///   * 📌对所谓「可交换词项」不会在此重新排序
     /// * 🚩始终作为其内的「组分」添加，没有「同类⇒组分合并」的逻辑
     /// * 🚩返回「是否添加成功」
     /// * ⚠️不涉及「记忆区」有关`make`的「词项缓存机制」
-    pub fn add(&mut self, term: Term) -> bool {
+    pub(super) fn add(&mut self, term: Term) -> bool {
         use TermComponents::*;
         match self {
             // 固定数目的词项⇒必然添加失败
@@ -220,15 +263,16 @@ impl TermComponents {
     /// 尝试向其中删除元素
     /// * 🚩始终作为其内的「组分」删除，没有「同类⇒删除其中所有组分」的逻辑
     /// * 🚩返回「是否删除成功」
+    /// * ⚠️只会移除一个
     /// * ⚠️不涉及「记忆区」有关`make`的「词项缓存机制」
-    pub fn remove(&mut self, term: &Term) -> bool {
+    pub(super) fn remove(&mut self, term: &Term) -> bool {
         use TermComponents::*;
         match self {
-            // 固定数目的词项⇒必然添加失败
+            // 固定数目的词项⇒必然删除失败
             Empty | Named(..) | Unary(..) | Binary(..) => false,
-            // 不定数目⇒尝试移除
+            // 不定数目⇒尝试删除
             Multi(terms) | MultiIndexed(_, terms) => match terms.iter().position(|t| t == term) {
-                // 找到⇒移除
+                // 找到⇒删除
                 Some(index) => {
                     terms.remove(index);
                     true
@@ -243,7 +287,7 @@ impl TermComponents {
     /// * 🚩始终作为其内的「组分」替换
     /// * 🚩返回「是否替换成功」
     /// * ⚠️不涉及「记忆区」有关`make`的「词项缓存机制」
-    pub fn replace(&mut self, index: usize, new: Term) -> bool {
+    pub(super) fn replace(&mut self, index: usize, new: Term) -> bool {
         use TermComponents::*;
         match (self, index) {
             // 无组分
@@ -260,29 +304,6 @@ impl TermComponents {
             }
             // 其它情况⇒无
             _ => false,
-        }
-    }
-
-    /// （作为无序不重复集合）重新排序
-    /// * 🎯用作「集合中替换元素后，重新排序（并去重）」
-    ///   * ⚠️不会在「固定数目词项」中去重
-    ///   * 📄NAL-6「变量替换」
-    pub fn reorder_unordered(&mut self) {
-        use TermComponents::*;
-        match self {
-            // 空 | 单个
-            Empty | Named(..) | Unary(..) => {}
-            // 二元 ⇒ 尝试交换 | ⚠️无法去重
-            Binary(term1, term2) => {
-                if term1 > term2 {
-                    std::mem::swap(term1, term2);
-                }
-            }
-            // 不定数目
-            Multi(terms) | MultiIndexed(_, terms) => {
-                terms.sort_unstable();
-                terms.dedup();
-            }
         }
     }
 
@@ -326,36 +347,41 @@ mod tests {
     use nar_dev_utils::asserts;
 
     /// 测试 / [`Term`]
-    // TODO: 添加测试内容
     mod term {
         use super::*;
         use nar_dev_utils::macro_once;
 
         #[test]
         fn eq() -> Result<()> {
-            asserts! {
+            macro_once! {
+                // * 🚩模式：左边词项 运算符 右边字符串
+                macro eq($( $left:literal $op:tt $right:expr )*) {
+                    asserts! {$(
+                        term!($left) $op term!($right),
+                    )*}
+                }
                 // 二次构造
-                term!("A") == term!("A")
-                term!("<A --> B>") == term!("<A-->B>")
-                term!("[A]") == term!("[A]")
+                "A" == "A"
+                "<A --> B>" == "<A-->B>"
+                "[A]" == "[A]"
                 // 可交换性
-                term!("<A <-> B>") == term!("<B <-> A>")
-                term!("(&, C, A, B)") == term!("(&, B, C, A)")
-                term!("{C, A, B}") == term!("{B, C, A}")
+                "<A <-> B>" == "<B <-> A>"
+                "(&, C, A, B)" == "(&, B, C, A)"
+                "{C, A, B}" == "{B, C, A}"
                 // 自动转换
-                term!(r"(/, _, A, B)") == term!("(*, A, B)")
-                term!(r"(\, _, A, B)") == term!("(*, A, B)")
+                r"(/, _, A, B)" == "(*, A, B)"
+                r"(\, _, A, B)" == "(*, A, B)"
                 // 不等 / 标识符
-                term!("$A") != term!("A")
-                term!("$A") != term!("#A")
-                term!(r"(\, A, _, B)") != term!(r"(/, A, _, B)")
-                term!("<A <-> B>") != term!("<A <=> B>")
+                "$A" != "A"
+                "$A" != "#A"
+                r"(\, A, _, B)" != r"(/, A, _, B)"
+                "<A <-> B>" != "<A <=> B>"
                 // 不等 / 元素
-                term!("A") != term!("a")
-                term!("(*, A, B, C)") != term!("(*, A, B)")
-                term!("(*, A, B, C)") != term!("(*, A, B, c)")
-                term!("(/, A, B, _)") != term!("(/, A, _, B)")
-                term!("{C, A, B}") != term!("{B, C}")
+                "A" != "a"
+                "(*, A, B, C)" != "(*, A, B)"
+                "(*, A, B, C)" != "(*, A, B, c)"
+                "(/, A, B, _)" != "(/, A, _, B)"
+                "{C, A, B}" != "{B, C}"
             }
             Ok(())
         }
@@ -393,32 +419,38 @@ mod tests {
 
         #[test]
         fn identifier() -> Result<()> {
-            asserts! {
+            macro_once! {
+                // * 🚩模式：词项字符串 ⇒ 预期
+                macro identifier($( $s:literal => $expected:expr )*) {
+                    asserts! {$(
+                        term!($s).identifier() => $expected,
+                    )*}
+                }
                 // 占位符
-                term!("_").identifier() => PLACEHOLDER
+                "_" => PLACEHOLDER
                 // 原子词项
-                term!("A").identifier() => WORD
-                term!("$A").identifier() => VAR_INDEPENDENT
-                term!("#A").identifier() => VAR_DEPENDENT
-                term!("?A").identifier() => VAR_QUERY
+                "A" => WORD
+                "$A" => VAR_INDEPENDENT
+                "#A" => VAR_DEPENDENT
+                "?A" => VAR_QUERY
                 // 复合词项
-                term!("{A}").identifier() => SET_EXT_OPERATOR
-                term!("[A]").identifier() => SET_INT_OPERATOR
-                term!("(&, A)").identifier() => INTERSECTION_EXT_OPERATOR
-                term!("(|, A)").identifier() => INTERSECTION_INT_OPERATOR
-                term!("(-, A, B)").identifier() => DIFFERENCE_EXT_OPERATOR
-                term!("(~, A, B)").identifier() => DIFFERENCE_INT_OPERATOR
-                term!("(*, A)").identifier() => PRODUCT_OPERATOR
-                term!(r"(/, R, _)").identifier() => IMAGE_EXT_OPERATOR
-                term!(r"(\, R, _)").identifier() => IMAGE_INT_OPERATOR
-                term!(r"(&&, A)").identifier() => CONJUNCTION_OPERATOR
-                term!(r"(||, A)").identifier() => DISJUNCTION_OPERATOR
-                term!(r"(--, A)").identifier() => NEGATION_OPERATOR
+                "{A}" => SET_EXT_OPERATOR
+                "[A]" => SET_INT_OPERATOR
+                "(&, A)" => INTERSECTION_EXT_OPERATOR
+                "(|, A)" => INTERSECTION_INT_OPERATOR
+                "(-, A, B)" => DIFFERENCE_EXT_OPERATOR
+                "(~, A, B)" => DIFFERENCE_INT_OPERATOR
+                "(*, A)" => PRODUCT_OPERATOR
+                r"(/, R, _)" => IMAGE_EXT_OPERATOR
+                r"(\, R, _)" => IMAGE_INT_OPERATOR
+                r"(&&, A)" => CONJUNCTION_OPERATOR
+                r"(||, A)" => DISJUNCTION_OPERATOR
+                r"(--, A)" => NEGATION_OPERATOR
                 // 陈述
-                term!("<A --> B>").identifier() => INHERITANCE_RELATION
-                term!("<A <-> B>").identifier() => SIMILARITY_RELATION
-                term!("<A ==> B>").identifier() => IMPLICATION_RELATION
-                term!("<A <=> B>").identifier() => EQUIVALENCE_RELATION
+                "<A --> B>" => INHERITANCE_RELATION
+                "<A <-> B>" => SIMILARITY_RELATION
+                "<A ==> B>" => IMPLICATION_RELATION
+                "<A <=> B>" => EQUIVALENCE_RELATION
             }
             Ok(())
         }
@@ -426,67 +458,78 @@ mod tests {
         #[test]
         fn components() -> Result<()> {
             use TermComponents::*;
-            asserts! {
+            macro_once! {
+                // * 🚩模式：词项字符串 ⇒ 预期模式
+                macro components($( $s:literal => $expected:pat )*) {
+                    asserts! {$(
+                        term!($s).components() => @$expected,
+                    )*}
+                }
                 // 空（一般不会在外部出现）
-                term!("_").components() => @Empty,
+                "_" => Empty
                 // 具名
-                term!("A").components() => @Named(..),
-                term!("$A").components() => @Named(..),
-                term!("#A").components() => @Named(..),
-                term!("?A").components() => @Named(..),
+                "A" => Named(..)
+                "$A" => Named(..)
+                "#A" => Named(..)
+                "?A" => Named(..)
                 // 一元
-                term!("(--, A)").components() => @Unary(..),
+                "(--, A)" => Unary(..)
                 // 二元
-                term!("(-, A, B)").components() => @Binary(..),
-                term!("(~, A, B)").components() => @Binary(..),
-                term!("<A --> B>").components() => @Binary(..),
-                term!("<A <-> B>").components() => @Binary(..),
-                term!("<A ==> B>").components() => @Binary(..),
-                term!("<A <=> B>").components() => @Binary(..),
+                "(-, A, B)" => Binary(..)
+                "(~, A, B)" => Binary(..)
+                "<A --> B>" => Binary(..)
+                "<A <-> B>" => Binary(..)
+                "<A ==> B>" => Binary(..)
+                "<A <=> B>" => Binary(..)
                 // 多元
-                term!("{A}").components() => @Multi(..),
-                term!("[A]").components() => @Multi(..),
-                term!("(&, A)").components() => @Multi(..),
-                term!("(|, A)").components() => @Multi(..),
-                term!("(*, A)").components() => @Multi(..),
-                term!(r"(&&, A)").components() => @Multi(..),
-                term!(r"(||, A)").components() => @Multi(..),
+                "{A}" => Multi(..)
+                "[A]" => Multi(..)
+                "(&, A)" => Multi(..)
+                "(|, A)" => Multi(..)
+                "(*, A)" => Multi(..)
+                r"(&&, A)" => Multi(..)
+                r"(||, A)" => Multi(..)
                 // 多元索引
-                term!(r"(/, R, _)").components() => @MultiIndexed(..),
-                term!(r"(\, R, _)").components() => @MultiIndexed(..),
+                r"(/, R, _)" => MultiIndexed(..)
+                r"(\, R, _)" => MultiIndexed(..)
             }
             Ok(())
         }
 
         #[test]
         fn is_placeholder() -> Result<()> {
-            asserts! {
+            macro_once! {
+                // * 🚩模式：词项字符串 ⇒ 预期
+                macro is_placeholder($( $s:literal => $expected:expr )*) {
+                    asserts! {$(
+                        term!($s).is_placeholder() => $expected,
+                    )*}
+                }
                 // 占位符
-                Term::new_placeholder().is_placeholder() => true
-                term!("_").is_placeholder() => true
+                "_" => true
                 // 原子词项
-                term!("A").is_placeholder() => false
-                term!("$A").is_placeholder() => false
-                term!("#A").is_placeholder() => false
-                term!("?A").is_placeholder() => false
+                "A" => false
+                "$A" => false
+                "#A" => false
+                "?A" => false
                 // 复合词项
-                term!("{A}").is_placeholder() => false
-                term!("[A]").is_placeholder() => false
-                term!("(&, A)").is_placeholder() => false
-                term!("(|, A)").is_placeholder() => false
-                term!("(-, A, B)").is_placeholder() => false
-                term!("(~, A, B)").is_placeholder() => false
-                term!("(*, A)").is_placeholder() => false
-                term!(r"(/, R, _)").is_placeholder() => false
-                term!(r"(\, R, _)").is_placeholder() => false
-                term!(r"(&&, A)").is_placeholder() => false
-                term!(r"(||, A)").is_placeholder() => false
-                term!(r"(--, A)").is_placeholder() => false
+                "{A}" => false
+                "[A]" => false
+                "(&, A)" => false
+                "(|, A)" => false
+                "(-, A, B)" => false
+                "(~, A, B)" => false
+                "(*, A)" => false
+                r"(/, R, _)" => false
+                r"(\, R, _)" => false
+                r"(&&, A)" => false
+                r"(||, A)" => false
+                r"(--, A)" => false
                 // 陈述
-                term!("<A --> B>").is_placeholder() => false
-                term!("<A <-> B>").is_placeholder() => false
-                term!("<A ==> B>").is_placeholder() => false
-                term!("<A <=> B>").is_placeholder() => false
+                "<A --> B>" => false
+                "<A <-> B>" => false
+                "<A ==> B>" => false
+                "<A <=> B>" => false
             }
             Ok(())
         }
@@ -494,32 +537,38 @@ mod tests {
         /// 🎯仅测试其返回值为二元组
         #[test]
         fn id_comp() -> Result<()> {
-            asserts! {
+            macro_once! {
+                // * 🚩模式：词项字符串
+                macro id_comp($($s:literal)*) {
+                    asserts! {$(
+                        term!($s).id_comp() => @(&_, &_),
+                    )*}
+                }
                 // 占位符
-                term!("_").id_comp() => @(&_, &_),
+                "_"
                 // 原子词项
-                term!("A").id_comp() => @(&_, &_),
-                term!("$A").id_comp() => @(&_, &_),
-                term!("#A").id_comp() => @(&_, &_),
-                term!("?A").id_comp() => @(&_, &_),
+                "A"
+                "$A"
+                "#A"
+                "?A"
                 // 复合词项
-                term!("{A}").id_comp() => @(&_, &_),
-                term!("[A]").id_comp() => @(&_, &_),
-                term!("(&, A)").id_comp() => @(&_, &_),
-                term!("(|, A)").id_comp() => @(&_, &_),
-                term!("(-, A, B)").id_comp() => @(&_, &_),
-                term!("(~, A, B)").id_comp() => @(&_, &_),
-                term!("(*, A)").id_comp() => @(&_, &_),
-                term!(r"(/, R, _)").id_comp() => @(&_, &_),
-                term!(r"(\, R, _)").id_comp() => @(&_, &_),
-                term!(r"(&&, A)").id_comp() => @(&_, &_),
-                term!(r"(||, A)").id_comp() => @(&_, &_),
-                term!(r"(--, A)").id_comp() => @(&_, &_),
+                "{A}"
+                "[A]"
+                "(&, A)"
+                "(|, A)"
+                "(-, A, B)"
+                "(~, A, B)"
+                "(*, A)"
+                r"(/, R, _)"
+                r"(\, R, _)"
+                r"(&&, A)"
+                r"(||, A)"
+                r"(--, A)"
                 // 陈述
-                term!("<A --> B>").id_comp() => @(&_, &_),
-                term!("<A <-> B>").id_comp() => @(&_, &_),
-                term!("<A ==> B>").id_comp() => @(&_, &_),
-                term!("<A <=> B>").id_comp() => @(&_, &_),
+                "<A --> B>"
+                "<A <-> B>"
+                "<A ==> B>"
+                "<A <=> B>"
             }
             Ok(())
         }
@@ -527,89 +576,101 @@ mod tests {
         /// 🎯仅测试其返回值为二元组
         #[test]
         fn id_comp_mut() -> Result<()> {
-            asserts! {
+            macro_once! {
+                // * 🚩模式：词项字符串
+                macro id_comp_mut($($s:literal)*) {
+                    asserts! {$(
+                        term!($s).id_comp_mut() => @(&mut _, &mut _),
+                    )*}
+                }
                 // 占位符
-                term!("_").id_comp_mut() => @(&mut _, &mut _),
+                "_"
                 // 原子词项
-                term!("A").id_comp_mut() => @(&mut _, &mut _),
-                term!("$A").id_comp_mut() => @(&mut _, &mut _),
-                term!("#A").id_comp_mut() => @(&mut _, &mut _),
-                term!("?A").id_comp_mut() => @(&mut _, &mut _),
+                "A"
+                "$A"
+                "#A"
+                "?A"
                 // 复合词项
-                term!("{A}").id_comp_mut() => @(&mut _, &mut _),
-                term!("[A]").id_comp_mut() => @(&mut _, &mut _),
-                term!("(&, A)").id_comp_mut() => @(&mut _, &mut _),
-                term!("(|, A)").id_comp_mut() => @(&mut _, &mut _),
-                term!("(-, A, B)").id_comp_mut() => @(&mut _, &mut _),
-                term!("(~, A, B)").id_comp_mut() => @(&mut _, &mut _),
-                term!("(*, A)").id_comp_mut() => @(&mut _, &mut _),
-                term!(r"(/, R, _)").id_comp_mut() => @(&mut _, &mut _),
-                term!(r"(\, R, _)").id_comp_mut() => @(&mut _, &mut _),
-                term!(r"(&&, A)").id_comp_mut() => @(&mut _, &mut _),
-                term!(r"(||, A)").id_comp_mut() => @(&mut _, &mut _),
-                term!(r"(--, A)").id_comp_mut() => @(&mut _, &mut _),
+                "{A}"
+                "[A]"
+                "(&, A)"
+                "(|, A)"
+                "(-, A, B)"
+                "(~, A, B)"
+                "(*, A)"
+                r"(/, R, _)"
+                r"(\, R, _)"
+                r"(&&, A)"
+                r"(||, A)"
+                r"(--, A)"
                 // 陈述
-                term!("<A --> B>").id_comp_mut() => @(&mut _, &mut _),
-                term!("<A <-> B>").id_comp_mut() => @(&mut _, &mut _),
-                term!("<A ==> B>").id_comp_mut() => @(&mut _, &mut _),
-                term!("<A <=> B>").id_comp_mut() => @(&mut _, &mut _),
+                "<A --> B>"
+                "<A <-> B>"
+                "<A ==> B>"
+                "<A <=> B>"
             }
             Ok(())
         }
 
         #[test]
         fn contain_type() -> Result<()> {
-            asserts! {
+            macro_once! {
+                // * 🚩模式：含有的类型 in 词项字符串
+                macro contain_type($($expected:ident in $s:literal)*) {
+                    asserts! {$(
+                        term!($s).contain_type($expected)
+                    )*}
+                }
                 // 复合词项
-                term!("{A}").contain_type(WORD)
-                term!("[A]").contain_type(WORD)
-                term!("(&, A)").contain_type(WORD)
-                term!("(|, A)").contain_type(WORD)
-                term!("(-, A, B)").contain_type(WORD)
-                term!("(~, A, B)").contain_type(WORD)
-                term!("(*, A)").contain_type(WORD)
-                term!(r"(/, R, _)").contain_type(WORD)
-                term!(r"(\, R, _)").contain_type(WORD)
-                term!(r"(&&, A)").contain_type(WORD)
-                term!(r"(||, A)").contain_type(WORD)
-                term!(r"(--, A)").contain_type(WORD)
+                WORD in "{A}"
+                WORD in "[A]"
+                WORD in "(&, A)"
+                WORD in "(|, A)"
+                WORD in "(-, A, B)"
+                WORD in "(~, A, B)"
+                WORD in "(*, A)"
+                WORD in r"(/, R, _)"
+                WORD in r"(\, R, _)"
+                WORD in r"(&&, A)"
+                WORD in r"(||, A)"
+                WORD in r"(--, A)"
 
-                term!("{$A}").contain_type(VAR_INDEPENDENT)
-                term!("[$A]").contain_type(VAR_INDEPENDENT)
-                term!("(&, $A)").contain_type(VAR_INDEPENDENT)
-                term!("(|, $A)").contain_type(VAR_INDEPENDENT)
-                term!("(-, $A, B)").contain_type(VAR_INDEPENDENT)
-                term!("(~, $A, B)").contain_type(VAR_INDEPENDENT)
-                term!("(*, $A)").contain_type(VAR_INDEPENDENT)
-                term!(r"(/, $R, _)").contain_type(VAR_INDEPENDENT)
-                term!(r"(\, $R, _)").contain_type(VAR_INDEPENDENT)
-                term!(r"(&&, $A)").contain_type(VAR_INDEPENDENT)
-                term!(r"(||, $A)").contain_type(VAR_INDEPENDENT)
-                term!(r"(--, $A)").contain_type(VAR_INDEPENDENT)
+                VAR_INDEPENDENT in "{$A}"
+                VAR_INDEPENDENT in "[$A]"
+                VAR_INDEPENDENT in "(&, $A)"
+                VAR_INDEPENDENT in "(|, $A)"
+                VAR_INDEPENDENT in "(-, $A, B)"
+                VAR_INDEPENDENT in "(~, $A, B)"
+                VAR_INDEPENDENT in "(*, $A)"
+                VAR_INDEPENDENT in r"(/, $R, _)"
+                VAR_INDEPENDENT in r"(\, $R, _)"
+                VAR_INDEPENDENT in r"(&&, $A)"
+                VAR_INDEPENDENT in r"(||, $A)"
+                VAR_INDEPENDENT in r"(--, $A)"
 
-                term!("{(*, A)}").contain_type(PRODUCT_OPERATOR)
-                term!("[(*, A)]").contain_type(PRODUCT_OPERATOR)
-                term!("(&, (*, A))").contain_type(PRODUCT_OPERATOR)
-                term!("(|, (*, A))").contain_type(PRODUCT_OPERATOR)
-                term!("(-, (*, A), B)").contain_type(PRODUCT_OPERATOR)
-                term!("(~, (*, A), B)").contain_type(PRODUCT_OPERATOR)
-                term!("(*, (*, A))").contain_type(PRODUCT_OPERATOR)
-                term!(r"(/, (*, R), _)").contain_type(PRODUCT_OPERATOR)
-                term!(r"(\, (*, R), _)").contain_type(PRODUCT_OPERATOR)
-                term!(r"(&&, (*, A))").contain_type(PRODUCT_OPERATOR)
-                term!(r"(||, (*, A))").contain_type(PRODUCT_OPERATOR)
-                term!(r"(--, (*, A))").contain_type(PRODUCT_OPERATOR)
+                PRODUCT_OPERATOR in "{(*, A)}"
+                PRODUCT_OPERATOR in "[(*, A)]"
+                PRODUCT_OPERATOR in "(&, (*, A))"
+                PRODUCT_OPERATOR in "(|, (*, A))"
+                PRODUCT_OPERATOR in "(-, (*, A), B)"
+                PRODUCT_OPERATOR in "(~, (*, A), B)"
+                PRODUCT_OPERATOR in "(*, (*, A))"
+                PRODUCT_OPERATOR in r"(/, (*, R), _)"
+                PRODUCT_OPERATOR in r"(\, (*, R), _)"
+                PRODUCT_OPERATOR in r"(&&, (*, A))"
+                PRODUCT_OPERATOR in r"(||, (*, A))"
+                PRODUCT_OPERATOR in r"(--, (*, A))"
 
                 // 陈述
-                term!("<A --> B>").contain_type(WORD)
-                term!("<A <-> B>").contain_type(WORD)
-                term!("<A ==> B>").contain_type(WORD)
-                term!("<A <=> B>").contain_type(WORD)
+                WORD in "<A --> B>"
+                WORD in "<A <-> B>"
+                WORD in "<A ==> B>"
+                WORD in "<A <=> B>"
 
-                term!("<<A --> B> --> <A --> B>>").contain_type(INHERITANCE_RELATION)
-                term!("<<A <-> B> <-> <A <-> B>>").contain_type(SIMILARITY_RELATION)
-                term!("<<A ==> B> ==> <A ==> B>>").contain_type(IMPLICATION_RELATION)
-                term!("<<A <=> B> <=> <A <=> B>>").contain_type(EQUIVALENCE_RELATION)
+                INHERITANCE_RELATION in "<<A --> B> --> <A --> B>>"
+                SIMILARITY_RELATION in "<<A <-> B> <-> <A <-> B>>"
+                IMPLICATION_RELATION in "<<A ==> B> ==> <A ==> B>>"
+                EQUIVALENCE_RELATION in "<<A <=> B> <=> <A <=> B>>"
             }
             Ok(())
         }
@@ -618,6 +679,7 @@ mod tests {
         #[test]
         fn structural_match() -> Result<()> {
             macro_once! {
+                // * 🚩模式：被匹配的 ⇒ 用于匹配的
                 macro assert_structural_match($($term1:literal => $term2:literal)*) {
                     asserts! {$(
                         term!($term1).structural_match(&term!($term2))
@@ -660,6 +722,7 @@ mod tests {
         #[test]
         fn fmt() -> Result<()> {
             macro_once! {
+                // * 🚩模式：词项字符串 ⇒ 预期
                 macro fmt($($term:literal => $expected:expr)*) {
                     asserts! {$(
                         format!("{}", term!($term)) => $expected
@@ -820,8 +883,8 @@ mod tests {
                         term!($s).components.iter().collect::<Vec<_>>() => $expected
                     )* }
                 }
-                "<A --> B>" => term!(["A", "B"]&)
                 // 平常情况
+                "<A --> B>" => term!(["A", "B"]&)
                 "{SELF}" => term!(["SELF"]&)
                 "(*, {SELF}, x, y)" => term!(["{SELF}", "x", "y"]&)
                 "(--, [good])" => term!(["[good]"]&)
@@ -833,12 +896,179 @@ mod tests {
             Ok(())
         }
 
-        // TODO: iter_mut
-        // TODO: add
-        // TODO: remove
-        // TODO: replace
-        // TODO: reorder_unordered
-        // TODO: contain_type
-        // TODO: structural_match
+        /// 测试/可变迭代器
+        /// * 🎯仅测试「可以修改」
+        #[test]
+        fn iter_mut() -> Result<()> {
+            fn mutate(term: &mut Term) {
+                // 改变词项标识符
+                term.identifier = "MUTATED".to_string();
+                // 检验是否改变
+                assert!(term.identifier == "MUTATED");
+            }
+            macro_once! {
+                // * 🚩模式：词项字符串
+                macro iter_mut($($s:literal)*) {
+                    $(
+                        // 构造词项
+                        let mut term = term!($s);
+                        print!("{term} => ");
+                        // 遍历修改
+                        term.components.iter_mut().for_each(mutate);
+                        println!("{term}");
+                    )*
+                }
+                // 平常情况
+                "<A --> B>"
+                "<<A --> B> --> <A --> B>>"
+                "{SELF}"
+                "(*, {SELF}, x, y)"
+                "(--, [good])"
+                // 像：占位符不算
+                "(/, A, _, B)"
+                // 集合：排序 & 缩并
+                "[2, 1, 0, 0, 1, 2]"
+            }
+            Ok(())
+        }
+
+        #[test]
+        fn sort_dedup() -> Result<()> {
+            macro_once! {
+                // * 🚩模式：词项字符串 ⇒ 预期结果
+                macro sort_dedup($($s:literal => $expected:literal)*) {
+                    $(
+                        // 构造词项
+                        let mut term = term!($s);
+                        print!("{term}");
+                        // 重排词项
+                        term.components.sort_dedup();
+                        // 验证结果
+                        let expected = term!($expected);
+                        println!(" => {term}");
+                        assert_eq!(term, expected);
+                    )*
+                }
+                // 重排
+                "(*, B, C, A)" => "(*, A, B, C)"
+                "(*, 2, 1, 3)" => "(*, 1, 2, 3)"
+                "(/, R, T, _, S)" => "(/, R, S, _, T)"
+                "(*, あ, え, い, お, う)" => "(*, あ, い, う, え, お)"
+                "(*, ア, エ, イ, オ, ウ)" => "(*, ア, イ, ウ, エ, オ)"
+                "(*, 一, 丄, 七, 丁, 丂)" => "(*, 一, 丁, 丂, 七, 丄)"
+                // 去重
+                "(*, F, A, D, E, D)" => "(*, A, D, E, F)"
+                "(*, 1, 1, 4, 5, 1, 4)" => "(*, 1, 4, 5)"
+            }
+            Ok(())
+        }
+
+        /// ! 不考虑「可交换性」这个「复合词项」`compound`才引入的概念
+        /// * ⚠️因此只对「不可交换的词项」进行测试
+        #[test]
+        fn add() -> Result<()> {
+            macro_once! {
+                // * 🚩模式：词项字符串 (+ 附加词项字符串)... ⇒ 预期结果
+                macro add($($s:literal $(+ $new:literal)* => $expected:literal)*) {
+                    $(
+                        // 构造词项
+                        let mut term = term!($s);
+                        print!("{term}");
+                        // 追加词项
+                        $(
+                            let new = term!($new);
+                            print!(" + {new}");
+                            term.add(new);
+                        )*
+                        // 验证结果
+                        let expected = term!($expected);
+                        println!(" => {term}");
+                        assert_eq!(term, expected);
+                    )*
+                }
+                // ! 此处不考虑「可交换词项」如「集合」「外延交」等
+                // 平常情况
+                "(*, SELF)" + "good" => "(*, SELF, good)"
+                "(*, あ)" + "い" + "う" + "え" + "お" => "(*, あ, い, う, え, お)"
+                "(*, x, y)" + "z" => "(*, x, y, z)"
+                "(*, 你)" + "我" + "他" => "(*, 你, 我, 他)"
+                "(*, 0, 1, 2)" + "3" => "(*, 0, 1, 2, 3)"
+                // 像：占位符不算
+                r"(/, A, _, B)" + "C" => r"(/, A, _, B, C)"
+                r"(\, A, _, B)" + "C" => r"(\, A, _, B, C)"
+                r"(\, 甲, _, 乙)" + "{丙}" + "<丁 ==> 戊>" => r"(\, 甲, _, 乙, {丙}, <丁 ==> 戊>)"
+            }
+            Ok(())
+        }
+
+        #[test]
+        fn remove() -> Result<()> {
+            macro_once! {
+                // * 🚩模式：词项字符串 (- 附加词项字符串)... ⇒ 预期结果
+                macro remove($($s:literal $(- $no:literal)* => $expected:literal)*) {
+                    $(
+                        // 构造词项
+                        let mut term = term!($s);
+                        print!("{term}");
+                        // 追加词项
+                        $(
+                            let no = term!($no);
+                            print!(" - {no}");
+                            term.remove(&no);
+                        )*
+                        // 验证结果
+                        let expected = term!($expected);
+                        println!(" => {term}");
+                        assert_eq!(term, expected);
+                    )*
+                }
+                // ! 此处不考虑「可交换词项」如「集合」「外延交」等
+                // 平常情况
+                "(*, SELF, good)" - "good" => "(*, SELF)"
+                "(*, あ, い, う, え, お)" - "い" - "う" - "え" - "お" => "(*, あ)"
+                "(*, x, y, z)" - "z" => "(*, x, y)"
+                "(*, 你, 我, 他)" - "我" - "他" => "(*, 你)"
+                "(*, 0, 1, 2, 3)" - "3" => "(*, 0, 1, 2)"
+                // 像：占位符不算
+                r"(/, A, _, B, C)" - "C" => r"(/, A, _, B)"
+                r"(\, A, _, B, C)" - "C" => r"(\, A, _, B)"
+                r"(\, 甲, _, 乙, {丙}, <丁 ==> 戊>)" - "{丙}" - "<丁 ==> 戊>" => r"(\, 甲, _, 乙)"
+            }
+            Ok(())
+        }
+
+        #[test]
+        fn replace() -> Result<()> {
+            macro_once! {
+                // * 🚩模式：词项字符串[索引] = 新词项 ⇒ 预期结果
+                macro replace($($s:literal [ $i:expr ] = $new:literal => $expected:literal)*) {
+                    $(
+                        // 构造词项
+                        let mut term = term!($s);
+                        print!("{term}");
+                        // 替换词项
+                        term.components.replace($i, term!($new));
+                        // 验证结果
+                        let expected = term!($expected);
+                        println!(" => {term}");
+                        assert_eq!(term, expected);
+                    )*
+                }
+                // ! 此处不考虑「可交换词项」如「集合」「外延交」等
+                // 平常情况
+                "(*, SELF, bad)"[1] = "good" => "(*, SELF, good)"
+                "(*, x, y, ζ)"[2] = "z" => "(*, x, y, z)"
+                "(*, 逆, 我, 他)"[0] = "你" => "(*, 你, 我, 他)"
+                // 像：占位符不算
+                r"(/, a, _, B, C)"[0] = "A" => r"(/, A, _, B, C)"
+                r"(\, A, _, β, C)"[1] = "B" => r"(\, A, _, B, C)"
+                r"(\, 甲, _, 乙, {饼}, <丁 ==> 戊>)"[2] = "{丙}" => r"(\, 甲, _, 乙, {丙}, <丁 ==> 戊>)"
+            }
+            Ok(())
+        }
+
+        // ! 以下函数已在 `Term` 中测试
+        // * contain_type
+        // * structural_match
     }
 }

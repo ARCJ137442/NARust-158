@@ -92,6 +92,7 @@ pub struct Term {
 }
 
 /// 复合词项组分
+/// * ⚠️
 #[derive(Debug, Clone, Hash, Eq, PartialEq, PartialOrd, Ord)]
 pub enum TermComponents {
     /// 不包含任何组分
