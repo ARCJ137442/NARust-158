@@ -135,11 +135,11 @@ pub enum TermComponents {
 // 实现 / 构造
 mod construct;
 
-// 与其它类型相互转换
-mod conversion;
+// 【内建】与其它类型相互转换
+mod _conversion;
 
-// 实现 / 属性（内建）
-mod property;
+// 【内建】实现 / 属性
+mod _property;
 
 // 📄OpenNARS `nars.language.Term`
 mod term;
