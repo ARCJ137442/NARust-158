@@ -9,3 +9,6 @@ pub mod entity;
 
 // 存储
 pub mod storage;
+
+// 虚拟机
+pub mod vm;

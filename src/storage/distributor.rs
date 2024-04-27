@@ -86,13 +86,13 @@ where
 ///   * ⚡性能
 ///   * ✨通用性
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Distributor {
+pub struct DistributorV1 {
     order: Vec<usize>,
     range: usize,
     capacity: usize,
 }
 
-impl Distributor {
+impl DistributorV1 {
     /// 构造函数
     pub fn new(range: usize) -> Self {
         // 推导容量与排序
@@ -137,7 +137,7 @@ impl Distributor {
 }
 
 /// 实现「分派」特征
-impl Distribute for Distributor {
+impl Distribute for DistributorV1 {
     fn pick(&self, index: usize) -> usize {
         self.order[index]
     }
@@ -238,7 +238,7 @@ mod tests {
     /// 测试分派器
     #[test]
     fn test_distributor() {
-        let d = Distributor::new(10);
+        let d = DistributorV1::new(10);
         println!("d = {d:?}");
         // 系列测试（总体权重）
         _test_weight(&_weights(d.take_n(0, d.capacity)));
@@ -249,7 +249,7 @@ mod tests {
     /// * 🎯分派器在各个索引之间，需要「整体权重与局部权重相似」
     ///   * 权重不能随「分派次数」的变更而变更
     /// * 🚩固定「扫描区间」的大小为整个capacity，在n×capacity的结果中扫描
-    fn _test_local_weights(d: &Distributor, n: usize) {
+    fn _test_local_weights(d: &DistributorV1, n: usize) {
         let c = d.capacity;
         let l = c * n;
         let results = d.iter_default().take(l).collect::<Vec<_>>();

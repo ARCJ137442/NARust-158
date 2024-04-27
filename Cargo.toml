@@ -19,3 +19,8 @@ features = [
     "enum_narsese",
     "lexical_narsese",
 ]
+
+# NAVM：统IO模型
+[dependencies.navm]
+version = "0"
+features = ["bundled"]
