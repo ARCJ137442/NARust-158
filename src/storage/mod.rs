@@ -29,5 +29,5 @@
 // 分派器
 pub mod distributor;
 
-// 包
+// 袋
 pub mod bag;

@@ -5,12 +5,15 @@
 //!
 //! A pseudo-random number generator, used in Bag.
 
-/// 伪随机数生成，用于`Bag`结构
+use nar_dev_utils::manipulate;
+
+/// 伪随机数分派器
+/// * 🎯用于`Bag`结构的伪随机加权分派
 /// * 🎯抽象出「分发」的基本特征
 /// * ⚙️其中
 ///   * `T`作为「分发出的对象」，默认为无符号整数
 ///   * `I`作为「分发之索引」，默认为无符号整数
-pub trait Distribute<T = usize, I = usize> {
+pub trait Distributor<T = usize, I = usize> {
     /// 基于当前索引，获取下一个随机数
     /// * 🚩返回一个随机数值
     fn pick(&self, index: I) -> T;
@@ -57,7 +60,7 @@ pub trait Distribute<T = usize, I = usize> {
 /// 迭代「分派者」的迭代器
 pub struct Iter<'a, T, I, D>
 where
-    D: Distribute<T, I>,
+    D: Distributor<T, I>,
 {
     distributor: &'a D,
     index: I,
@@ -69,7 +72,7 @@ impl<T, I, D> Iterator for Iter<'_, T, I, D>
 where
     T: Copy,
     I: Copy,
-    D: Distribute<T, I>,
+    D: Distributor<T, I>,
 {
     type Item = T;
 
@@ -80,34 +83,61 @@ where
     }
 }
 
-/// 伪随机数生成器
+/// 伪随机数生成器 第一代
 /// * 🎯实现一个[`Distribute<usize, usize>`](Distribute)
 /// * 🎯以更Rusty的方式复刻OpenNARS之Distributor
 ///   * ⚡性能
 ///   * ✨通用性
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct DistributorV1 {
-    order: Vec<usize>,
+    /// 🆕缓存的「随机范围」量
+    /// * 🚩表示随机数的样本空间大小
+    /// * 🎯用于迭代器
     range: usize,
-    capacity: usize,
+
+    /// 伪随机索引
+    ///
+    /// # 📄OpenNARS `Distributor.order`
+    ///
+    /// Shuffled sequence of index numbers
+    order: Vec<usize>,
+
+    /// 🆕伪随机索引
+    /// * 🎯用于`next`函数
+    /// * 🚩一个大小为[`Self::capacity`]的数组
+    /// * ✨直接通过「硬缓存」的方式，省掉一个变量
+    next: Vec<usize>,
 }
 
 impl DistributorV1 {
     /// 构造函数
     pub fn new(range: usize) -> Self {
         // 推导容量与排序
-        let (capacity, order) = Self::capacity_and_order_from_range(range);
+        let (capacity, order) = Self::range_to_capacity_and_order(range);
+        // 推导缓存`next`函数值
+        let next = Self::capacity_to_next(capacity);
         // 构造 & 返回
-        Self {
-            range,
-            order,
-            capacity,
-        }
+        Self { range, order, next }
+    }
+
+    /// 从「范围」推导出「下一个」映射
+    pub fn capacity_to_next(capacity: usize) -> Vec<usize> {
+        manipulate!(
+            // 从0到capacity-1
+            (1..capacity).collect::<Vec<_>>()
+            // 最后一个必是0
+            => .push(0)
+        )
+        // * 🚩等价代码
+        // list![
+        //     ((i + 1) % capacity)
+        //     for i in (0..capacity)
+        // ]
     }
 
     /// 从「范围」推导出「容量」与「排序」
     /// * 📄直接源自OpenNARS
-    pub fn capacity_and_order_from_range(range: usize) -> (usize, Vec<usize>) {
+    pub fn range_to_capacity_and_order(range: usize) -> (usize, Vec<usize>) {
         let capacity: usize = range * (range + 1) / 2;
         let mut order = vec![0; capacity];
         let mut index = capacity - 1;
@@ -134,100 +164,29 @@ impl DistributorV1 {
     pub fn range(&self) -> std::ops::Range<usize> {
         0..self.range
     }
+
+    /// 获取其内部「容量」
+    pub fn capacity(&self) -> usize {
+        self.order.len()
+    }
 }
 
 /// 实现「分派」特征
-impl Distribute for DistributorV1 {
+impl Distributor for DistributorV1 {
+    /// # Panics
+    ///
+    /// ⚠️数组越界可能会`panic`
     fn pick(&self, index: usize) -> usize {
         self.order[index]
     }
 
+    /// # Panics
+    ///
+    /// ⚠️数组越界可能会`panic`
     fn next(&self, index: usize) -> usize {
-        (index + 1) % self.capacity
+        self.next[index]
     }
 }
-// pub struct Distributor<const CAPACITY: usize> {
-//     /// 内部的排序
-//     /// * ⚠️只能直接上常量，不能走常量表达式
-//     order: [usize; CAPACITY],
-// }
-
-// impl<const CAPACITY: usize> Distributor<CAPACITY> {
-//     pub fn capacity(&self) -> usize {
-//         CAPACITY
-//     }
-
-//     pub fn range() -> usize {
-//         range_from_capacity::<CAPACITY>()
-//     }
-
-//     pub fn new() -> Self {
-//         let mut order = [0; CAPACITY];
-//         let range = Self::range();
-//         let mut index = CAPACITY - 1;
-//         for rank in ((range + 1)..1).rev() {
-//             for _ in 0..rank {
-//                 // 变换位置
-//                 index = ((CAPACITY / rank) + index) % CAPACITY;
-//                 while order[index] > 0 {
-//                     index = Self::next(index);
-//                 }
-//                 // 安插
-//                 order[index] = rank;
-//             }
-//         }
-//         for order_i in order.iter_mut() {
-//             *order_i -= 1;
-//         }
-//         // 构造 & 返回
-//         Self { order }
-//     }
-// }
-
-// fn sqrt_usize_floor(u: usize) -> usize {
-//     match u {
-//         0..=1 => u,
-//         2 => 1,
-//         _ => {
-//             for r in 0..u {
-//                 if r * r > u {
-//                     return r - 1;
-//                 }
-//             }
-//             0
-//         }
-//     }
-// }
-
-// pub fn range_from_capacity<const CAPACITY: usize>() -> usize {
-//     // r^2 + r - 2c = 0
-//     // delta = 1 + 4*c
-//     // r = (-1 + sqrt(1 + 4*c)) / 2
-//     sqrt_usize_floor(1 + 4 * CAPACITY).saturating_sub(1) / 2
-// }
-
-// pub fn capacity_from_range<const RANGE: usize>() -> usize {
-//     // r^2 + r - 2c = 0
-//     // delta = 1 + 4*c
-//     // r = (-1 + sqrt(1 + 4*c)) / 2
-//     RANGE * (RANGE + 1) / 2
-// }
-
-// impl<const CAPACITY: usize> Default for Distributor<CAPACITY> {
-//     fn default() -> Self {
-//         Self::new()
-//     }
-// }
-
-// impl<const CAPACITY: usize> Distribute for Distributor<CAPACITY> {
-//     fn pick(&self, index: usize) -> usize {
-//         self.order[index]
-//     }
-
-//     fn next(index: usize) -> usize {
-//         (index + 1) % CAPACITY
-//     }
-// }
 
 /// 单元测试
 #[cfg(test)]
@@ -238,11 +197,35 @@ mod tests {
     /// 测试分派器
     #[test]
     fn test_distributor() {
-        let d = DistributorV1::new(10);
+        // 测试范围
+        let range = 10..=20;
+        // 范围测试
+        for n in range {
+            _test_distributor(n);
+        }
+    }
+
+    /// 含参（大小）
+    fn _test_distributor(n: usize) {
+        let d = DistributorV1::new(n);
         println!("d = {d:?}");
-        // 系列测试（总体权重）
-        _test_weight(&_weights(d.take_n(0, d.capacity)));
+        // 系列测试 //
+        // next
+        _test_next(&d);
+        // 总体权重
+        _test_weight(&_weights(d.take_n(0, d.capacity())));
         _test_local_weights(&d, d.range);
+    }
+
+    /// next测试
+    fn _test_next(d: &DistributorV1) {
+        let c = d.capacity();
+        // 没有「取模约束」时
+        for i in 0..(c - 1) {
+            assert_eq!(d.next(i), i + 1);
+        }
+        // 取模约束
+        assert_eq!(d.next(c - 1), 0);
     }
 
     /// 局部权重测试
@@ -250,7 +233,7 @@ mod tests {
     ///   * 权重不能随「分派次数」的变更而变更
     /// * 🚩固定「扫描区间」的大小为整个capacity，在n×capacity的结果中扫描
     fn _test_local_weights(d: &DistributorV1, n: usize) {
-        let c = d.capacity;
+        let c = d.capacity();
         let l = c * n;
         let results = d.iter_default().take(l).collect::<Vec<_>>();
         for i in 0..(l - c) {

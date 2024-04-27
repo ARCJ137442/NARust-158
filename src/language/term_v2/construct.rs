@@ -43,12 +43,12 @@ impl Term {
         Self::new(PLACEHOLDER, TermComponents::Empty)
     }
 
-    /// NAL-6 / 自变量
+    /// NAL-6 / 独立变量
     pub fn new_var_i(name: impl Into<String>) -> Self {
         Self::new(VAR_INDEPENDENT, TermComponents::Named(name.into()))
     }
 
-    /// NAL-6 / 因变量
+    /// NAL-6 / 非独变量
     pub fn new_var_d(name: impl Into<String>) -> Self {
         Self::new(VAR_DEPENDENT, TermComponents::Named(name.into()))
     }
