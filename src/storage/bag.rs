@@ -1,6 +1,9 @@
-use crate::entity::{BagItem, Budget, BudgetValue};
-
 use super::distributor::{Distribute, DistributorV1};
+use crate::{
+    entity::{BagItem, Budget, BudgetValue},
+    global::Float,
+    nars::DEFAULT_PARAMETERS,
+};
 
 /// 对应OpenNARS的「包」
 /// * 📝【2024-04-26 23:12:15】核心逻辑：通过称作「预算」的机制，经济地分配内部元素
@@ -17,6 +20,10 @@ use super::distributor::{Distribute, DistributorV1};
 ///   * ❌【2024-04-27 10:14:41】尽可能全部用关联类型：加了泛型会导致无法使用「泛型实现」
 ///     * 📄"the type parameter `Item` is not constrained by the impl trait, self type, or predicates"
 ///     * 🔗<https://stackoverflow.com/questions/69238420/the-type-parameter-t-is-not-constrained-by-the-impl-trait-self-type-or-predi>
+///   * 🚩【2024-04-27 11:55:09】目前仍然全部使用关联类型
+/// * 📌OpenNARS复刻原则 类⇒特征
+///   * 🚩私有访问：对`private`/`protected`统一使用`_`作为前缀
+///   * TODO: 有待扩充
 ///
 /// # 📄OpenNARS `nars.storage.Bag`
 /// A Bag is a storage with a constant capacity and maintains an internal
@@ -49,16 +56,64 @@ pub trait Bag {
     /// * 🎯伪随机数生成
     type Distributor: Distribute;
 
-    /// 获取分发器
-    fn distributor(&self) -> &Self::Distributor;
+    /// 【只读常量】总层数
+    ///
+    /// # 📄OpenNARS `Bag.TOTAL_LEVEL`
+    ///
+    /// priority levels
+    #[inline(always)]
+    fn _total_level(&self) -> usize {
+        DEFAULT_PARAMETERS.bag_level
+    }
+
+    /// 【只读常量】触发阈值
+    /// * 📌触发の阈值
+    ///
+    /// # 📄OpenNARS `Bag.THRESHOLD`
+    ///
+    /// firing threshold
+    #[inline(always)]
+    fn _threshold(&self) -> usize {
+        DEFAULT_PARAMETERS.bag_threshold
+    }
+
+    /// 相对阈值
+    /// * 🚩由`触发阈值 / 总层数`计算得来
+    ///
+    /// # 📄OpenNARS `Bag.RELATIVE_THRESHOLD`
+    ///
+    /// relative threshold, only calculate once
+    #[inline(always)]
+    fn _relative_threshold(&self) -> Float {
+        self._threshold() as Float / self._total_level() as Float
+    }
+
+    /// 加载因子
+    /// * ❓尚不清楚其含义
+    ///
+    /// # 📄OpenNARS `Bag.LOAD_FACTOR`
+    ///
+    /// hash table load factor
+    #[inline(always)]
+    fn _load_factor(&self) -> Float {
+        DEFAULT_PARAMETERS.load_factor
+    }
+
+    /// 分发器（只读常量）
+    ///
+    /// # 📄OpenNARS `Bag.DISTRIBUTOR`
+    ///
+    /// shared DISTRIBUTOR that produce the probability distribution
+    fn _distributor(&self) -> &Self::Distributor;
+
+    // TODO: 继续研究OpenNARS，发现并复现更多功能（抽象的）
+    // * 🚩逐个字段复刻
 
     /// 「元素映射」：从元素id获取元素
     fn get_item_from_key(&self, key: &Self::Key) -> Option<&Self::Item>;
 
     /// 「预算映射」：从元素id获取预算
     fn get_budget_from_key(&self, key: &Self::Key) -> Option<&Self::Budget>;
-
-    // TODO: 继续研究OpenNARS，发现并复现更多功能（抽象的）
 }
 
 pub struct BagV1<Item: BagItem> {
@@ -77,7 +132,7 @@ where
 
     type Budget = Budget;
 
-    fn distributor(&self) -> &Self::Distributor {
+    fn _distributor(&self) -> &Self::Distributor {
         todo!()
     }
 
