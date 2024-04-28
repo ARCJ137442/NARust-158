@@ -15,6 +15,9 @@ use crate::{
 ///   * 🚩换句话说，即：元素在袋内才具有的预算，有「预算映射」`(&袋, &元素id) -> Option<&预算>`
 ///   * 📌另外，「元素索引」作为元素在「袋」中的唯一标识符，有「元素映射」`(&袋, &元素id) -> Option<&元素>`
 ///     * 📌用于反查，还有「反查映射」`(&袋, &元素) -> Option<&元素id>`
+///   * 🚩【2024-04-28 08:36:04】仍然需要：「元素」和「元素」之间，可能仍然需要访问各自的「预算」
+///     * 📄在作为「元素」的「概念」中，需要访问「任务」的「预算」——此举不依赖「袋」对象
+///     * 🎯减少迁移压力
 /// * 📌对于用「关联类型」还用「泛型参数」的问题
 ///   * 📝「泛型参数」可以用`'_`省掉生命周期，而「关联类型」不行
 ///   * 📍原则：长久存在、完全所有权的放在「关联类型」，反之放在「泛型参数」
@@ -24,8 +27,16 @@ use crate::{
 ///     * 🔗<https://stackoverflow.com/questions/69238420/the-type-parameter-t-is-not-constrained-by-the-impl-trait-self-type-or-predi>
 ///   * 🚩【2024-04-27 11:55:09】目前仍然全部使用关联类型
 /// * 📌OpenNARS复刻原则 类⇒特征
-///   * 🚩私有访问：对`private`/`protected`统一使用`_`作为前缀
-///   * TODO: 有待扩充
+///   * 🚩私有访问：使用下划线作前缀
+///     * 📄对`protected`统一使用`_`作为前缀
+///     * 📄对`private`统一使用`__`作为前缀
+///   * 🚩私有属性成员：使用`_(_)【属性名】_【成员名】_`模式
+///     * 📌双下划线为分隔
+///     * 🚩特殊/构造函数：`_(_)【属性名】_new_`（`new`不可能对应常规方法）
+///     * 🚩特殊/赋值：`_(_)【属性名】_mut_`（`mut`不可能对应Rust函数）
+///     * 🚩特殊/构造赋值：`_(_)【属性名】_mut_new_`
+///       * 💭某些时候不知道也难以表示「被构造值」的类型
+///       * 💭某些时候只有「构造赋值」的情形
 ///
 /// # 📄OpenNARS `nars.storage.Bag`
 /// A Bag is a storage with a constant capacity and maintains an internal
@@ -42,16 +53,18 @@ use crate::{
 ///
 /// 1. level selection vs. item selection
 /// 2. decay rate
-pub trait Bag {
-    // /// 元素id类型
-    // /// * ❓要是引用类型还是值类型
-    // ///   * 后续如何兼容`String`与`&str`
-    type Key;
-
-    /// 元素类型
-    type Item: BagItem;
+pub trait Bag<Item>
+where
+    // * ↑此处`Item`泛型仿OpenNARS`Bag`
+    Item: BagItem<Key = Self::Key, Budget = Self::Budget>,
+{
+    /// 元素id类型
+    /// * ❓要是引用类型还是值类型
+    ///   * 后续如何兼容`String`与`&str`
+    type Key: BagKey;
 
     /// 预算值类型
+    /// * 🎯一种「袋」只有一种对「预算」的表征方式
     type Budget: BudgetValue;
 
     /// 分发器类型
@@ -64,7 +77,7 @@ pub trait Bag {
     ///
     /// priority levels
     #[inline(always)]
-    fn _total_level(&self) -> usize {
+    fn __total_level(&self) -> usize {
         DEFAULT_PARAMETERS.bag_level
     }
 
@@ -75,7 +88,7 @@ pub trait Bag {
     ///
     /// firing threshold
     #[inline(always)]
-    fn _threshold(&self) -> usize {
+    fn __threshold(&self) -> usize {
         DEFAULT_PARAMETERS.bag_threshold
     }
 
@@ -86,8 +99,8 @@ pub trait Bag {
     ///
     /// relative threshold, only calculate once
     #[inline(always)]
-    fn _relative_threshold(&self) -> Float {
-        self._threshold() as Float / self._total_level() as Float
+    fn __relative_threshold(&self) -> Float {
+        self.__threshold() as Float / self.__total_level() as Float
     }
 
     /// 加载因子
@@ -97,7 +110,7 @@ pub trait Bag {
     ///
     /// hash table load factor
     #[inline(always)]
-    fn _load_factor(&self) -> Float {
+    fn __load_factor(&self) -> Float {
         DEFAULT_PARAMETERS.load_factor
     }
 
@@ -106,21 +119,192 @@ pub trait Bag {
     /// # 📄OpenNARS `Bag.DISTRIBUTOR`
     ///
     /// shared DISTRIBUTOR that produce the probability distribution
-    fn _distributor(&self) -> &Self::Distributor;
+    fn __distributor(&self) -> &Self::Distributor;
 
-    /// 「元素映射」：从元素id获取元素
-    fn get_item_from_key(&self, key: &Self::Key) -> Option<&Self::Item>;
+    /// 模拟`Bag.nameTable`属性
+    /// * 🚩【2024-04-28 08:43:25】目前不与任何「映射」类型绑定
+    ///   * ❌不打算直接返回[`HashMap`]
+    /// # 📄OpenNARS `Bag.nameTable`
+    ///
+    /// mapping from key to item
+    fn __name_table(&self) -> &impl BagNameTable<Self::Key, Item>;
+    fn __name_table_mut(&mut self) -> &mut impl BagNameTable<Self::Key, Item>;
 
-    /// 「预算映射」：从元素id获取预算
-    fn get_budget_from_key(&self, key: &Self::Key) -> Option<&Self::Budget>;
+    /// 模拟`Bag.nameTable`的「构造赋值」
+    /// * 🎯预期是「构造一个映射，并赋值给内部字段」
+    /// * 📄出现在`init`方法中
+    fn __name_table_mut_new_(&mut self);
+    // end `nameTable`
+
+    /// 模拟`Bag.itemTable`属性
+    /// * 📝OpenNARS中基于「优先级」的元素获取
+    ///
+    /// # 📄OpenNARS `Bag.itemTable`
+    ///
+    /// array of lists of items, for items on different level
+    fn __item_tale(&self) -> &impl BagItemTable<Item>;
+    fn __item_tale_mut(&mut self) -> &mut impl BagItemTable<Item>;
+
+    /// 模拟`Bag.itemTable`的「构造赋值」
+    /// * 🎯预期是「构造一个双层数组，并赋值给内部字段」
+    /// * 📄出现在`init`方法中
+    fn __item_table_mut_new_(&mut self);
+    // end `itemTable`
+
+    /// 模拟`Bag.get`
+    /// * 🚩转发内部`name_table`成员
+    #[inline(always)]
+    fn get(&self, key: &Self::Key) -> Option<&Item> {
+        self.__name_table().get(key)
+    }
+    /// [`Self::get`]的可变版本
+    /// * 🎯【2024-04-28 09:08:14】备用
+    /// * 🚩转发内部`name_table`成员
+    #[inline(always)]
+    fn get_mut(&self, key: &Self::Key) -> Option<&mut Item> {
+        self.__name_table().get_mut(key)
+    }
+
+    /// 模拟`Bag.size`
+    /// * 🎯从模拟`Bag.nameTable`派生
+    /// * 🚩转发内部`name_table`成员
+    #[inline(always)]
+    fn size(&self) -> usize {
+        self.__name_table().size()
+    }
+
+    /// 模拟`Bag.contains`
+    /// * 🎯从模拟`Bag.nameTable.containsValue`派生
+    /// * 📜默认使用[`Self::get`]
+    #[inline(always)]
+    fn contains(&self, item: &Item) -> bool {
+        self.get(item.key()).is_some()
+    }
 
     // TODO: 继续研究OpenNARS，发现并复现更多功能（抽象的）
     // * 🚩逐个字段复刻，从`capacity`继续
     // * ❓后续是要如何做？追溯到全部的使用地点吗
 }
 
+/// 用于袋的「索引」
+/// * 🎯方便后续安插方法
+pub trait BagKey {}
+
+/// 袋的「名称映射」
+/// * 📄OpenNARS`Bag.nameTable`
+/// * 🎯便于表示成员方法
+///   * ⚠️仍然不能表达「构造」「赋值」
+///     * 调用成员方法时只能返回`impl XXX`，若需「类型稳定」必须显示表示类型
+/// * 📝OpenNARS所用到的方法
+///   * 创建 `new` => 在`Bag`内部表示`mut_new`
+///   * 获取尺寸 `size`
+///   * 检查是否包含（值） `containsValue`
+///   * 从键获取值 `get`
+///   * 插入值 `put`
+///   * 从键移除值 `remove`
+///   * 判断是否为空 `isEmpty`
+/// * 🔦预计实现者：`HashMap<String, Item>`
+pub trait BagNameTable<Key: BagKey, Item: BagItem> {
+    /// 模拟`Bag.nameTable.size`方法
+    fn size(&self) -> usize;
+
+    /// 模拟`Bag.nameTable.containsValue`方法
+    /// * 📜默认复用`get`方法
+    #[inline(always)]
+    fn contains_value(&self, item: &Item) -> bool {
+        self.get(item.key()).is_some()
+    }
+
+    /// 模拟`Bag.nameTable.containsValue`方法
+    /// * 🎯预期是「在映射查找值；找到⇒Some，没找到⇒None」
+    fn get(&self, key: &Key) -> Option<&Item>;
+    /// [`Self::get`]的可变引用版本
+    /// * 🎯【2024-04-28 09:27:23】备用
+    fn get_mut(&mut self, key: &Key) -> Option<&mut Item>;
+
+    /// 模拟`Bag.nameTable.put`方法
+    /// * 🎯预期是「向映射插入值」
+    /// * 📄出现在`putIn`方法中
+    fn put(&mut self, key: &Key, item: Item);
+
+    /// 模拟`Bag.nameTable.remove`方法
+    /// * 🎯预期是「从映射移除值」
+    /// * 📄出现在`putIn`方法中
+    fn remove(&mut self, key: &Key);
+
+    /// 模拟`Bag.nameTable.isEmpty`方法
+    /// * 📜默认复用`size`方法
+    #[inline(always)]
+    fn is_empty(&self) -> bool {
+        self.size() == 0
+    }
+}
+
+/// 袋的「层级映射」：从层级获取（并修改）元素列表
+/// * 📝OpenNARS中基于「优先级」的元素获取
+/// * 🚩至于内部存储的是「元素id」还是「元素」，由实现者自行决定
+///   * 此处仅迁移OpenNARS的方法
+/// * 🎯对应`Bag.itemTable`
+/// * 📝OpenNARS所用到的方法
+///   * 创建 `new` => 在`Bag`内部表示`mut_new`
+///   * 新增空层级 `add(new ...)`
+///   * 获取某个层级 `get`（可变）
+///   * 遍历所有层级 `for (LinkedList<E> items : itemTable)`（仅呈现）
+/// * 🔦预计实现者：`Vec<VecDeque<Item>>`
+///
+/// # 📄OpenNARS `Bag.itemTable`
+///
+/// array of lists of items, for items on different level
+pub trait BagItemTable<Item: BagItem> {
+    /// 模拟`Bag.itemTable.add(new ...)`
+    /// * 📝OpenNARS目的：填充新的「一层」
+    ///   * 📄`itemTable.add(new LinkedList<E>());`
+    /// * 🆕此处细化重置为`add_new`以避免表示「层」的类型
+    fn add_new(&mut self);
+
+    /// 模拟`Bag.itemTable.get`
+    /// * 📝OpenNARS目的：多样
+    fn get(&self, level: usize) -> &impl BagItemLevel<Item>;
+    fn get_mut(&mut self, level: usize) -> &mut impl BagItemLevel<Item>;
+}
+
+/// 袋「层级映射」的一层
+/// * 🎯对标Java类型 `LinkedList<E>`
+/// * 🚩至于内部存储的是「元素id」还是「元素」，由实现者自行决定
+///   * 此处仅迁移OpenNARS的方法
+/// * 📝OpenNARS所用到的方法
+///   * 创建 `new`
+///   * 大小 `size`
+///   * 是否为空 `isEmpty`
+/// * 🔦预计实现者：`Vec<VecDeque<Item>>`
+pub trait BagItemLevel<Item: BagItem> {
+    /// 构造函数：创建一个空队列
+    /// * 📄OpenNARS `itemTable.add(new LinkedList<E>())`
+    fn new() -> Self
+    where
+        Self: Sized;
+
+    /// 模拟`LinkedList.size`
+    fn size(&self) -> usize;
+
+    /// 模拟`LinkedList.isEmpty`
+    /// * 📜默认使用[`Self::size`]
+    #[inline(always)]
+    fn is_empty(&self) -> bool {
+        self.size() == 0
+    }
+
+    /// 模拟`LinkedList.add`
+    /// * ❓不能引入一个新的元素，因为它所有权在「元素映射」里边
+    /// TODO: 可能需要将该函数内置在「袋」中
+    fn add(&mut self, item: Item);
+}
+
+// 一个实验级实现 //
+
 /// 袋的「元素id」类型
 pub type BagKeyV1 = String;
+impl BagKey for BagKeyV1 {}
 
 /// 第一版「袋」
 pub struct BagV1<Item: BagItem> {
@@ -233,15 +417,11 @@ where
     type Item = Item; // TODO: 占位符
     type Budget = Budget;
 
-    fn _distributor(&self) -> &Self::Distributor {
+    fn __distributor(&self) -> &Self::Distributor {
         &self.distributor
     }
 
-    fn get_item_from_key(&self, key: &String) -> Option<&Self::Item> {
+    fn get(&self, key: &String) -> Option<&Item> {
         self.item_map.get(key)
-    }
-
-    fn get_budget_from_key(&self, key: &String) -> Option<&Self::Budget> {
-        self.budget_map.get(key)
     }
 }
