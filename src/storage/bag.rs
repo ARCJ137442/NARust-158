@@ -242,8 +242,8 @@ pub trait BagNameTable<Key: BagKey, Item: BagItem> {
 
 /// 袋的「层级映射」：从层级获取（并修改）元素列表
 /// * 📝OpenNARS中基于「优先级」的元素获取
-/// * 🚩至于内部存储的是「元素id」还是「元素」，由实现者自行决定
-///   * 此处仅迁移OpenNARS的方法
+/// * 🆕🚩内部仅存储「元素id」而非「元素」值
+///   * 🎯避免复制值，亦避免循环引用
 /// * 🎯对应`Bag.itemTable`
 /// * 📝OpenNARS所用到的方法
 ///   * 创建 `new` => 在`Bag`内部表示`mut_new`
@@ -255,7 +255,7 @@ pub trait BagNameTable<Key: BagKey, Item: BagItem> {
 /// # 📄OpenNARS `Bag.itemTable`
 ///
 /// array of lists of items, for items on different level
-pub trait BagItemTable<Item: BagItem> {
+pub trait BagItemTable<Key: BagKey> {
     /// 模拟`Bag.itemTable.add(new ...)`
     /// * 📝OpenNARS目的：填充新的「一层」
     ///   * 📄`itemTable.add(new LinkedList<E>());`
@@ -264,20 +264,24 @@ pub trait BagItemTable<Item: BagItem> {
 
     /// 模拟`Bag.itemTable.get`
     /// * 📝OpenNARS目的：多样
-    fn get(&self, level: usize) -> &impl BagItemLevel<Item>;
-    fn get_mut(&mut self, level: usize) -> &mut impl BagItemLevel<Item>;
+    fn get(&self, level: usize) -> &impl BagItemLevel<Key>;
+    fn get_mut(&mut self, level: usize) -> &mut impl BagItemLevel<Key>;
 }
 
 /// 袋「层级映射」的一层
 /// * 🎯对标Java类型 `LinkedList<E>`
-/// * 🚩至于内部存储的是「元素id」还是「元素」，由实现者自行决定
-///   * 此处仅迁移OpenNARS的方法
+/// * 🚩内部仅存储「元素id」而非「元素」值
+///   * 🎯避免复制值，亦避免循环引用
 /// * 📝OpenNARS所用到的方法
 ///   * 创建 `new`
 ///   * 大小 `size`
-///   * 是否为空 `isEmpty`
+///   * 新增 `add`
+///   * 获取 `get`
+///   * 获取头部 `getFirst`
+///   * 移除头部 `removeFirst`
+///   * 移除（对某元素(id)） `remove`
 /// * 🔦预计实现者：`Vec<VecDeque<Item>>`
-pub trait BagItemLevel<Item: BagItem> {
+pub trait BagItemLevel<Key: BagKey> {
     /// 构造函数：创建一个空队列
     /// * 📄OpenNARS `itemTable.add(new LinkedList<E>())`
     fn new() -> Self
@@ -296,8 +300,27 @@ pub trait BagItemLevel<Item: BagItem> {
 
     /// 模拟`LinkedList.add`
     /// * ❓不能引入一个新的元素，因为它所有权在「元素映射」里边
-    /// TODO: 可能需要将该函数内置在「袋」中
-    fn add(&mut self, item: Item);
+    /// * 🚩【2024-04-28 10:38:45】目前直接索引「键」而非「值」
+    fn add(&mut self, key: Key);
+
+    /// 模拟`LinkedList.get`
+    /// * ❓不能引入一个新的元素，因为它所有权在「元素映射」里边
+    /// * 🚩【2024-04-28 10:38:45】目前直接索引「键」而非「值」
+    fn get(&self, index: usize) -> Option<&Key>;
+    fn get_mut(&mut self, index: usize) -> Option<&mut Key>;
+
+    /// 模拟`LinkedList.getFirst`
+    /// * 📜默认转发[`Self::get`]
+    #[inline(always)]
+    fn get_first(&self) -> Option<&Key> {
+        self.get(0)
+    }
+
+    /// 模拟`LinkedList.removeFirst`
+    fn remove_first(&mut self);
+
+    /// 模拟`LinkedList.remove`
+    fn remove(&mut self, key: &Key);
 }
 
 // 一个实验级实现 //
