@@ -1,8 +1,8 @@
 use std::collections::{HashMap, VecDeque};
 
-use super::distributor::{Distributor, DistributorV1};
+use super::distributor::Distributor;
 use crate::{
-    entity::{BagItem, Budget, BudgetValue},
+    entity::{BagItem, BudgetValue},
     global::Float,
     nars::DEFAULT_PARAMETERS,
 };
@@ -138,18 +138,24 @@ where
 
     /// 模拟`Bag.itemTable`属性
     /// * 📝OpenNARS中基于「优先级」的元素获取
+    /// * 🚩【2024-04-28 10:47:35】目前只获取「元素id」而非「元素」
+    ///   * ⚠️后续直接`unwrap`：通过`name_table`保证元素存在
     ///
     /// # 📄OpenNARS `Bag.itemTable`
     ///
     /// array of lists of items, for items on different level
-    fn __item_tale(&self) -> &impl BagItemTable<Item>;
-    fn __item_tale_mut(&mut self) -> &mut impl BagItemTable<Item>;
+    fn __item_tale(&self) -> &impl BagItemTable<Self::Key>;
+    fn __item_tale_mut(&mut self) -> &mut impl BagItemTable<Self::Key>;
 
     /// 模拟`Bag.itemTable`的「构造赋值」
     /// * 🎯预期是「构造一个双层数组，并赋值给内部字段」
     /// * 📄出现在`init`方法中
     fn __item_table_mut_new_(&mut self);
     // end `itemTable`
+
+    // TODO: 继续研究OpenNARS，发现并复现更多功能（抽象的）
+    // * 🚩逐个字段复刻，从`capacity`继续
+    // * ❓后续是要如何做？追溯到全部的使用地点吗
 
     /// 模拟`Bag.get`
     /// * 🚩转发内部`name_table`成员
@@ -161,8 +167,8 @@ where
     /// * 🎯【2024-04-28 09:08:14】备用
     /// * 🚩转发内部`name_table`成员
     #[inline(always)]
-    fn get_mut(&self, key: &Self::Key) -> Option<&mut Item> {
-        self.__name_table().get_mut(key)
+    fn get_mut(&mut self, key: &Self::Key) -> Option<&mut Item> {
+        self.__name_table_mut().get_mut(key)
     }
 
     /// 模拟`Bag.size`
@@ -180,10 +186,6 @@ where
     fn contains(&self, item: &Item) -> bool {
         self.get(item.key()).is_some()
     }
-
-    // TODO: 继续研究OpenNARS，发现并复现更多功能（抽象的）
-    // * 🚩逐个字段复刻，从`capacity`继续
-    // * ❓后续是要如何做？追溯到全部的使用地点吗
 }
 
 /// 用于袋的「索引」
@@ -204,7 +206,7 @@ pub trait BagKey {}
 ///   * 从键移除值 `remove`
 ///   * 判断是否为空 `isEmpty`
 /// * 🔦预计实现者：`HashMap<String, Item>`
-pub trait BagNameTable<Key: BagKey, Item: BagItem> {
+pub trait BagNameTable<Key: BagKey, Item: BagItem<Key = Key>> {
     /// 模拟`Bag.nameTable.size`方法
     fn size(&self) -> usize;
 
@@ -256,6 +258,10 @@ pub trait BagNameTable<Key: BagKey, Item: BagItem> {
 ///
 /// array of lists of items, for items on different level
 pub trait BagItemTable<Key: BagKey> {
+    /// 「层级」的类型
+    /// * 🎯一个类型只有一种「层级」
+    type Level: BagItemLevel<Key>;
+
     /// 模拟`Bag.itemTable.add(new ...)`
     /// * 📝OpenNARS目的：填充新的「一层」
     ///   * 📄`itemTable.add(new LinkedList<E>());`
@@ -264,8 +270,8 @@ pub trait BagItemTable<Key: BagKey> {
 
     /// 模拟`Bag.itemTable.get`
     /// * 📝OpenNARS目的：多样
-    fn get(&self, level: usize) -> &impl BagItemLevel<Key>;
-    fn get_mut(&mut self, level: usize) -> &mut impl BagItemLevel<Key>;
+    fn get(&self, level: usize) -> &Self::Level;
+    fn get_mut(&mut self, level: usize) -> &mut Self::Level;
 }
 
 /// 袋「层级映射」的一层
@@ -273,7 +279,7 @@ pub trait BagItemTable<Key: BagKey> {
 /// * 🚩内部仅存储「元素id」而非「元素」值
 ///   * 🎯避免复制值，亦避免循环引用
 /// * 📝OpenNARS所用到的方法
-///   * 创建 `new`
+///   * 创建 `new` => [`BagItemTable::add_new`]
 ///   * 大小 `size`
 ///   * 新增 `add`
 ///   * 获取 `get`
@@ -282,12 +288,6 @@ pub trait BagItemTable<Key: BagKey> {
 ///   * 移除（对某元素(id)） `remove`
 /// * 🔦预计实现者：`Vec<VecDeque<Item>>`
 pub trait BagItemLevel<Key: BagKey> {
-    /// 构造函数：创建一个空队列
-    /// * 📄OpenNARS `itemTable.add(new LinkedList<E>())`
-    fn new() -> Self
-    where
-        Self: Sized;
-
     /// 模拟`LinkedList.size`
     fn size(&self) -> usize;
 
@@ -323,12 +323,116 @@ pub trait BagItemLevel<Key: BagKey> {
     fn remove(&mut self, key: &Key);
 }
 
+// 默认实现 //
+
+/// 📜为「散列映射」[`HashMap`]实现「元素映射」
+/// * 📝同名方法冲突时，避免「循环调用」的方法：完全限定语法
+///   * 🔗<https://rustc-dev-guide.rust-lang.org/method-lookup.html>
+///   * ⚠️[`HashMap`]使用[`len`](HashMap::len)而非[`size`](BagNameTable::size)
+impl<Budget, Item> BagNameTable<String, Item> for HashMap<String, Item>
+where
+    Budget: BudgetValue,
+    Item: BagItem<Key = String, Budget = Budget>,
+{
+    #[inline(always)]
+    fn size(&self) -> usize {
+        self.len()
+    }
+
+    #[inline(always)]
+    fn get(&self, key: &String) -> Option<&Item> {
+        Self::get(self, key)
+    }
+
+    #[inline(always)]
+    fn get_mut(&mut self, key: &String) -> Option<&mut Item> {
+        Self::get_mut(self, key)
+    }
+
+    #[inline(always)]
+    fn put(&mut self, key: &String, item: Item) {
+        if !self.contains_key(key) {
+            self.insert(key.clone(), item);
+        }
+    }
+
+    #[inline(always)]
+    fn remove(&mut self, key: &String) {
+        Self::remove(self, key);
+    }
+}
+
+/// 📜为「队列列表」[`Vec<VecDeque>`](Vec)实现「层级映射」
+/// * 🚩基于「元素id」的索引：不存储元素值
+///   * 📝Java的情况可被视作`Arc`
+impl<Key> BagItemTable<Key> for Vec<VecDeque<Key>>
+where
+    Key: BagKey + Eq, // * 需要在「具体值匹配删除」时用到
+{
+    // 队列
+    type Level = VecDeque<Key>;
+
+    #[inline(always)]
+    fn add_new(&mut self) {
+        self.push(VecDeque::new())
+    }
+
+    #[inline(always)]
+    fn get(&self, level: usize) -> &Self::Level {
+        &self[level]
+    }
+
+    #[inline(always)]
+    fn get_mut(&mut self, level: usize) -> &mut Self::Level {
+        &mut self[level]
+    }
+}
+
+/// 📜为「队列」[`VecDeque`]实现「层级」
+impl<Key> BagItemLevel<Key> for VecDeque<Key>
+where
+    Key: BagKey + Eq, // * 需要在「具体值匹配删除」时用到
+{
+    #[inline(always)]
+    fn size(&self) -> usize {
+        self.len()
+    }
+
+    #[inline(always)]
+    fn add(&mut self, key: Key) {
+        self.push_back(key)
+    }
+
+    #[inline(always)]
+    fn get(&self, index: usize) -> Option<&Key> {
+        Self::get(self, index)
+    }
+
+    #[inline(always)]
+    fn get_mut(&mut self, index: usize) -> Option<&mut Key> {
+        Self::get_mut(self, index)
+    }
+
+    #[inline(always)]
+    fn remove_first(&mut self) {
+        self.pop_front();
+    }
+
+    #[inline(always)]
+    fn remove(&mut self, key: &Key) {
+        if let Some(index) = self.iter().position(|k| k == key) {
+            self.remove(index);
+        }
+    }
+}
+
 // 一个实验级实现 //
 
 /// 袋的「元素id」类型
 pub type BagKeyV1 = String;
 impl BagKey for BagKeyV1 {}
 
+/*
 /// 第一版「袋」
 pub struct BagV1<Item: BagItem> {
     /// 🆕分派器
@@ -431,20 +535,21 @@ pub struct BagV1<Item: BagItem> {
     // ! ❌不作`showLevel: usize`显示用变量：不用于显示
 }
 
-impl<Item> Bag for BagV1<Item>
-where
-    Item: BagItem,
-{
-    type Distributor = DistributorV1;
-    type Key = String;
-    type Item = Item; // TODO: 占位符
-    type Budget = Budget;
+// impl<Item> Bag for BagV1<Item>
+// where
+//     Item: BagItem,
+// {
+//     type Distributor = DistributorV1;
+//     type Key = String;
+//     type Item = Item; // TODO: 占位符
+//     type Budget = Budget;
 
-    fn __distributor(&self) -> &Self::Distributor {
-        &self.distributor
-    }
+//     fn __distributor(&self) -> &Self::Distributor {
+//         &self.distributor
+//     }
 
-    fn get(&self, key: &String) -> Option<&Item> {
-        self.item_map.get(key)
-    }
-}
+//     fn get(&self, key: &String) -> Option<&Item> {
+//         self.item_map.get(key)
+//     }
+// }
+ */
