@@ -1,8 +1,8 @@
-use std::collections::{HashMap, VecDeque};
+//! 🎯复刻OpenNARS `nars.entity.Bag`
 
 use super::distributor::Distributor;
 use crate::{
-    entity::{BagItem, BudgetValue},
+    entity::{BudgetValue, Item},
     global::Float,
     nars::DEFAULT_PARAMETERS,
 };
@@ -37,9 +37,10 @@ use crate::{
 ///     * 🚩特殊/构造赋值：`_(_)【属性名】_mut_new_`
 ///       * 💭某些时候不知道也难以表示「被构造值」的类型
 ///       * 💭某些时候只有「构造赋值」的情形
+/// * 🚩【2024-05-01 23:17:26】暂且按照OpenNARS的命名来：
+///   * 因为直接使用`Item`而非`BagItem`，故相应地改其中的`Item`为`E`
 ///
-/// # 📄OpenNARS `nars.storage.Bag`
-/// A Bag is a storage with a constant capacity and maintains an internal
+
 /// priority distribution for retrieval.
 ///
 /// Each entity in a bag must extend Item, which has a BudgetValue and a key.
@@ -53,10 +54,10 @@ use crate::{
 ///
 /// 1. level selection vs. item selection
 /// 2. decay rate
-pub trait Bag<Item>
+pub trait Bag<E>
 where
     // * ↑此处`Item`泛型仿OpenNARS`Bag`
-    Item: BagItem<Key = Self::Key, Budget = Self::Budget>,
+    E: Item<Key = Self::Key, Budget = Self::Budget>,
 {
     /// 元素id类型
     /// * ❓要是引用类型还是值类型
@@ -127,8 +128,8 @@ where
     /// # 📄OpenNARS `Bag.nameTable`
     ///
     /// mapping from key to item
-    fn __name_table(&self) -> &impl BagNameTable<Self::Key, Item>;
-    fn __name_table_mut(&mut self) -> &mut impl BagNameTable<Self::Key, Item>;
+    fn __name_table(&self) -> &impl BagNameTable<Self::Key, E>;
+    fn __name_table_mut(&mut self) -> &mut impl BagNameTable<Self::Key, E>;
 
     /// 模拟`Bag.nameTable`的「构造赋值」
     /// * 🎯预期是「构造一个映射，并赋值给内部字段」
@@ -140,6 +141,10 @@ where
     /// * 📝OpenNARS中基于「优先级」的元素获取
     /// * 🚩【2024-04-28 10:47:35】目前只获取「元素id」而非「元素」
     ///   * ⚠️后续直接`unwrap`：通过`name_table`保证元素存在
+    /// * 📝Rust中需要「本体」和「本体_mut」两种函数，以便分别实现属性的「读写」
+    ///   * ✅「本体」作为不可变者，允许在「不可变变量」中使用
+    ///   * ⚠️若全部将「可变成员」作为可变引用`&mut 成员类型`返回，则这样的成员无法在「不可变变量」中使用
+    ///     * 💭【2024-05-01 21:48:56】因此替换不等效
     ///
     /// # 📄OpenNARS `Bag.itemTable`
     ///
@@ -153,44 +158,303 @@ where
     fn __item_table_mut_new_(&mut self);
     // end `itemTable`
 
-    // TODO: 继续研究OpenNARS，发现并复现更多功能（抽象的）
-    // * 🚩逐个字段复刻，从`capacity`继续
-    // * ❓后续是要如何做？追溯到全部的使用地点吗
+    /// 一个「袋」的「容量」
+    /// * 🚩只读
+    ///   * 📄`private final int capacity;`
+    /// * 📝OpenNARS中作为「属性」定义，仅仅是为了「缓存数值」并「在子类中分派不同的『大小』作为常数返回值」用
+    ///   * 🚩因此无需附带`setter`
+    ///
+    /// # 📄OpenNARS `Bag.capacity`
+    ///
+    /// * 【作为属性】defined in different bags
+    /// * 【作为方法】To get the capacity of the concrete subclass
+    ///   * @return Bag capacity, in number of Items allowed
+    fn __capacity(&self) -> usize;
 
-    /// 模拟`Bag.get`
-    /// * 🚩转发内部`name_table`成员
-    #[inline(always)]
-    fn get(&self, key: &Self::Key) -> Option<&Item> {
-        self.__name_table().get(key)
+    /// 一个「袋」已有元素的层数
+    /// * 🚩会随着「增删元素」而变
+    ///   * 🚩故需要一个「可变」版本
+    ///   * 📝Rust允许`*self.__mass_mut() = XXX`的语法：左值可以是表达式
+    ///
+    /// # 📄OpenNARS `Bag.mass`
+    ///
+    /// current sum of occupied level
+    fn __mass(&self) -> usize;
+    fn __mass_mut(&mut self) -> &mut usize;
+
+    /// 一个「袋」中用于指示「用于获取下一层级的索引」的状态量
+    /// * 🎯用于在「分派器」中调用「下一层级」
+    /// * 📄`levelIndex = capacity % TOTAL_LEVEL; // so that different bags start at different point`
+    ///
+    /// # 📄OpenNARS `Bag.levelIndex`
+    ///
+    /// index to get next level, kept in individual objects
+    fn __level_index(&self) -> usize;
+    fn __level_index_mut(&mut self) -> &mut usize;
+
+    /// 一个「袋」中用于指示「当前层级」的状态量
+    /// * ❓和`levelIndex`区别何在
+    ///
+    /// # 📄OpenNARS `Bag.currentLevel`
+    ///
+    /// current take out level
+    fn __current_level(&self) -> usize;
+    fn __current_level_mut(&mut self) -> &mut usize;
+
+    /// 一个「袋」中用于指示「当前计数器」的状态量
+    /// * 📝【2024-05-01 21:50:09】在OpenNARS中与「层级」有关
+    ///
+    /// # 📄OpenNARS `Bag.currentCounter`
+    ///
+    /// maximum number of items to be taken out at current level
+    fn __current_counter(&self) -> usize;
+    fn __current_counter_mut(&mut self) -> &mut usize;
+
+    // ! ❌不对「记忆区」进行递归引用
+    // * 🚩【2024-05-01 21:51:05】相反，将这些函数移除「实例方法」中，作为独立的函数处理
+    //   * 🚧有待「记忆区」抽象接口实现
+    // 📄在OpenNARS中用于`forgetRate`属性的实现，如`ConceptBag`中：
+    // ```java
+    // protected int forgetRate() {
+    //     return memory.getConceptForgettingRate().get();
+    // }
+    // ```
+    // /// 📄OpenNARS `Bag.memory`
+    // ///
+    // /// reference to memory
+    // fn __memory(&self) -> impl Memory;
+
+    // ! ❌不迁移「袋观察者」模式
+    // * 📌【2024-05-01 21:52:26】不能完全照搬Java的设计模式
+    // * 💭【2024-05-01 21:54:29】这个变量甚至没有注释……
+    // fn __bag_observer(&self) -> impl BagObserver<Item>;
+
+    // ! ❌不迁移「显示用变量」
+    // /// 📄OpenNARS `Bag.showLevel`
+    // ///
+    // /// The display level; initialized at lowest
+    // fn __show_level(&self) -> usize;
+    // fn __show_level_mut(&mut self) -> &mut usize;
+
+    // ** 属性迁移完毕 ** //
+
+    // ! ❌不迁移「传承的构造函数」
+    // 📄OpenNARS源码：
+    // ```java
+    // /**
+    //  * constructor, called from subclasses
+    //  *
+    //  * @param memory The reference to memory
+    //  */
+    // protected Bag(Memory memory) {
+    //     this.memory = memory;
+    //     capacity = capacity();
+    //     init();
+    // }
+    // ```
+
+    /// 模拟`Bag.init`
+    ///
+    /// # 📄OpenNARS `Bag.init`
+    ///
+    /// 🈚
+    fn init(&mut self) {
+        /* itemTable = new ArrayList<>(TOTAL_LEVEL);
+        for (int i = 0; i < TOTAL_LEVEL; i++) {
+            itemTable.add(new LinkedList<E>());
+        }
+        nameTable = new HashMap<>((int) (capacity / LOAD_FACTOR), LOAD_FACTOR);
+        currentLevel = TOTAL_LEVEL - 1;
+        levelIndex = capacity % TOTAL_LEVEL; // so that different bags start at different point
+        mass = 0;
+        currentCounter = 0; */
+        self.__item_table_mut_new_(); // 🚩「添加新层级的代码」亦在其中，以实现功能解耦
+        self.__name_table_mut_new_();
+        *self.__current_level_mut() = self.__total_level() - 1;
+        *self.__level_index_mut() = self.__capacity() % self.__total_level(); // 不同的「袋」在分派器中有不同的起点
+        *self.__mass_mut() = 0;
+        *self.__current_counter_mut() = 0;
     }
-    /// [`Self::get`]的可变版本
-    /// * 🎯【2024-04-28 09:08:14】备用
-    /// * 🚩转发内部`name_table`成员
-    #[inline(always)]
-    fn get_mut(&mut self, key: &Self::Key) -> Option<&mut Item> {
-        self.__name_table_mut().get_mut(key)
-    }
+
+    // ! 🚩`Bag.capacity`已在`self.__capacity`中实现
+
+    /// 模拟`Bag.forgetRate`
+    /// * 📝用于并体现AIKR所衍生的「资源竞争」思想
+    /// * 🚩【2024-05-01 22:05:31】目前作为一个可变属性去模拟
+    ///
+    /// # 📄OpenNARS `Bag.forgetRate`
+    ///
+    /// Get the item decay rate,
+    /// which differs in difference subclass,
+    /// and **can be changed in run time by the user**, so not a constant.
+    ///
+    /// @return The number of times for a decay factor to be fully applied
+    fn forget_rate(&self) -> usize;
+    fn forget_rate_mut(&mut self) -> &mut usize;
 
     /// 模拟`Bag.size`
     /// * 🎯从模拟`Bag.nameTable`派生
     /// * 🚩转发内部`name_table`成员
+    ///
+    /// # 📄OpenNARS `Bag.size`
+    ///
+    /// The number of items in the bag
     #[inline(always)]
     fn size(&self) -> usize {
         self.__name_table().size()
     }
 
+    /// 模拟`Bag.averagePriority`
+    ///
+    /// # 📄OpenNARS `Bag.averagePriority`
+    ///
+    /// Get the average priority of Items
+    ///
+    /// @return The average priority of Items in the bag
+    fn average_priority(&self) -> Float {
+        /* if (size() == 0) {
+            return 0.01f;
+        }
+        float f = (float) mass / (size() * TOTAL_LEVEL);
+        if (f > 1) {
+            return 1.0f;
+        }
+        return f; */
+        if self.size() == 0 {
+            return 0.01;
+        }
+        Float::min(
+            // 复刻最后一个条件判断
+            (self.__mass() as Float) / (self.size() * self.__total_level()) as Float,
+            1.0,
+        )
+    }
+
     /// 模拟`Bag.contains`
     /// * 🎯从模拟`Bag.nameTable.containsValue`派生
     /// * 📜默认使用[`Self::get`]
+    ///
+    /// # 📄OpenNARS `Bag.contains`
+    ///
+    /// Check if the bag contains the item
+    ///
+    /// @param item The item to be checked
+    /// @return Whether the bag contains the item
     #[inline(always)]
-    fn contains(&self, item: &Item) -> bool {
+    fn contains(&self, item: &E) -> bool {
         self.get(item.key()).is_some()
+    }
+
+    /// 模拟`Bag.get`
+    /// * 🚩转发内部`name_table`成员
+    ///
+    /// # 📄OpenNARS `Bag.get`
+    ///
+    /// Get an Item by key
+    ///
+    /// @param key The key of the Item
+    /// @return The Item with the given key
+    #[inline(always)]
+    fn get(&self, key: &Self::Key) -> Option<&E> {
+        self.__name_table().get(key)
+    }
+
+    /// 模拟`Bag.putIn`
+    /// * 🆕不通过「返回布尔值」验证「是否添加成功」，而是通过「返回一个[`Option`]」表示「添加成功与否」
+    ///   * 📌此举虽总是「消耗」，但若需要复用「添加失败时的元素」仍可从返回值中拿取
+    /// * 🔗链接到的方法
+    ///   * [`intoBase`](Self::into_base)
+    ///   * [`outOfBase`](Self::out_of_base)
+    ///   * [`BudgetValue.merge`](BudgetValue::merge)
+    ///
+    /// 📄OpenNARS `Bag.putIn`
+    ///
+    /// Add a new Item into the Bag
+    ///
+    /// @param newItem The new Item
+    /// @return Whether the new Item is added into the Bag
+    fn put_in(&mut self, new_item: E) -> Option<E> {
+        /* String newKey = newItem.getKey();
+        E oldItem = nameTable.put(newKey, newItem);
+        if (oldItem != null) { // merge duplications
+            outOfBase(oldItem);
+            newItem.merge(oldItem);
+        }
+        E overflowItem = intoBase(newItem); // put the (new or merged) item into itemTable
+        if (overflowItem != null) { // remove overflow
+            String overflowKey = overflowItem.getKey();
+            nameTable.remove(overflowKey);
+            return (overflowItem != newItem);
+        } else {
+            return true;
+        } */
+
+        // 置入「元素映射」
+        // ! ❓【2024-05-01 22:44:45】此处内联`key_cloned`会出现莫名其妙的借用问题：`clone`了还说「已被借用」
+        /* 📝亦有一个使用`unsafe`的解决方案：
+        let new_key = unsafe {
+            let this: *const Item = &new_item;
+            this.as_ref().unwrap().key()
+        };
+        let old_item = self.__name_table_mut().put(new_key, new_item);
+        */
+        let new_key = new_item.____key_cloned();
+        let old_item = self.__name_table_mut().put(&new_key, new_item);
+        let new_item = self.get_mut(&new_key).unwrap(); // * 🚩Rusty：重新获取「置入后的新项」（⚠️一定有）
+
+        // 若在「元素映射」中重复了：有旧项⇒合并「重复了的新旧项」
+        if let Some(old_item) = old_item {
+            // 将旧项（的预算值）并入新项 | 🆕⚠️必须在前：`new_item`可变借用了`self`，而下一句中不能出现`new_item`
+            new_item.merge(&old_item); // TODO
+                                       // 在「层级映射」移除旧项 | 🆕实际上仅用「元素id」而非「元素」
+            self.out_of_base(old_item.key()); // TODO
+        }
+
+        // 置入「层级映射」
+        // 若在「层级映射」中溢出了：若有「溢出」则在「元素映射」中移除
+        if let Some(overflow_key) = self.into_base(&new_key) {
+            // 直接返回「根据『溢出的元素之id』在『元素映射』中移除」的结果
+            // * 🚩若与自身相同⇒返回`Some`，添加失败
+            // * 🚩若与自身不同⇒返回`None`，添加仍然成功
+            let overflow_item = self.__name_table_mut().remove(&overflow_key);
+            match overflow_key == new_key {
+                true => overflow_item,
+                false => None, // ! 此时将
+            }
+        } else {
+            None
+        }
+    }
+
+    /// TODO
+    /// 模拟`Bag.intoBase`
+    /// * 🚩以「元素id」代替「元素自身」在「层级映射」中添加元素
+    /// * 🚩若添加成功，将复制「元素id」
+    /// * 🚩返回「『溢出』的元素id」
+    /// * 🚩【2024-05-01 23:10:46】此处允许【在clippy中被警告】的情形：OpenNARS原装函数
+    #[allow(clippy::wrong_self_convention)]
+    fn into_base(&mut self, new_key: &Self::Key) -> Option<E::Key>;
+
+    /// TODO
+    /// 模拟`Bag.outOfBase`
+    fn out_of_base(&mut self, old_key: &Self::Key);
+
+    // TODO: 继续研究OpenNARS，发现并迁移有关的「方法」（抽象接口）
+    // * 🚩逐个字段复刻，从`capacity`继续
+    // * ❓后续是要如何做？追溯到全部的使用地点吗
+
+    /// [`Self::get`]的可变版本
+    /// * 🎯【2024-04-28 09:08:14】备用
+    /// * 🚩转发内部`name_table`成员
+    #[inline(always)]
+    fn get_mut(&mut self, key: &Self::Key) -> Option<&mut E> {
+        self.__name_table_mut().get_mut(key)
     }
 }
 
 /// 用于袋的「索引」
 /// * 🎯方便后续安插方法
-pub trait BagKey {}
+pub trait BagKey: Clone + Eq {}
 
 /// 袋的「名称映射」
 /// * 📄OpenNARS`Bag.nameTable`
@@ -205,34 +469,36 @@ pub trait BagKey {}
 ///   * 插入值 `put`
 ///   * 从键移除值 `remove`
 ///   * 判断是否为空 `isEmpty`
-/// * 🔦预计实现者：`HashMap<String, Item>`
-pub trait BagNameTable<Key: BagKey, Item: BagItem<Key = Key>> {
+/// * 🔦预计实现者：`HashMap<String, E>`
+pub trait BagNameTable<Key: BagKey, E: Item<Key = Key>> {
     /// 模拟`Bag.nameTable.size`方法
     fn size(&self) -> usize;
 
     /// 模拟`Bag.nameTable.containsValue`方法
     /// * 📜默认复用`get`方法
     #[inline(always)]
-    fn contains_value(&self, item: &Item) -> bool {
+    fn contains_value(&self, item: &E) -> bool {
         self.get(item.key()).is_some()
     }
 
     /// 模拟`Bag.nameTable.containsValue`方法
     /// * 🎯预期是「在映射查找值；找到⇒Some，没找到⇒None」
-    fn get(&self, key: &Key) -> Option<&Item>;
+    fn get(&self, key: &Key) -> Option<&E>;
     /// [`Self::get`]的可变引用版本
     /// * 🎯【2024-04-28 09:27:23】备用
-    fn get_mut(&mut self, key: &Key) -> Option<&mut Item>;
+    fn get_mut(&mut self, key: &Key) -> Option<&mut E>;
 
     /// 模拟`Bag.nameTable.put`方法
     /// * 🎯预期是「向映射插入值」
     /// * 📄出现在`putIn`方法中
-    fn put(&mut self, key: &Key, item: Item);
+    /// * 🚩需要返回「被替换出的旧有项」
+    fn put(&mut self, key: &Key, item: E) -> Option<E>;
 
     /// 模拟`Bag.nameTable.remove`方法
     /// * 🎯预期是「从映射移除值」
     /// * 📄出现在`putIn`方法中
-    fn remove(&mut self, key: &Key);
+    /// * 🚩【2024-05-01 23:03:15】现在需要返回「被移除的元素」作为[`Bag::put_in`]的返回值
+    fn remove(&mut self, key: &Key) -> Option<E>;
 
     /// 模拟`Bag.nameTable.isEmpty`方法
     /// * 📜默认复用`size`方法
@@ -324,15 +590,16 @@ pub trait BagItemLevel<Key: BagKey> {
 }
 
 // 默认实现 //
+use std::collections::{HashMap, VecDeque};
 
 /// 📜为「散列映射」[`HashMap`]实现「元素映射」
 /// * 📝同名方法冲突时，避免「循环调用」的方法：完全限定语法
 ///   * 🔗<https://rustc-dev-guide.rust-lang.org/method-lookup.html>
 ///   * ⚠️[`HashMap`]使用[`len`](HashMap::len)而非[`size`](BagNameTable::size)
-impl<Budget, Item> BagNameTable<String, Item> for HashMap<String, Item>
+impl<Budget, E> BagNameTable<String, E> for HashMap<String, E>
 where
     Budget: BudgetValue,
-    Item: BagItem<Key = String, Budget = Budget>,
+    E: Item<Key = String, Budget = Budget>,
 {
     #[inline(always)]
     fn size(&self) -> usize {
@@ -340,25 +607,26 @@ where
     }
 
     #[inline(always)]
-    fn get(&self, key: &String) -> Option<&Item> {
+    fn get(&self, key: &String) -> Option<&E> {
         Self::get(self, key)
     }
 
     #[inline(always)]
-    fn get_mut(&mut self, key: &String) -> Option<&mut Item> {
+    fn get_mut(&mut self, key: &String) -> Option<&mut E> {
         Self::get_mut(self, key)
     }
 
     #[inline(always)]
-    fn put(&mut self, key: &String, item: Item) {
-        if !self.contains_key(key) {
-            self.insert(key.clone(), item);
+    fn put(&mut self, key: &String, item: E) -> Option<E> {
+        match self.contains_key(key) {
+            true => self.insert(key.clone(), item),
+            false => None,
         }
     }
 
     #[inline(always)]
-    fn remove(&mut self, key: &String) {
-        Self::remove(self, key);
+    fn remove(&mut self, key: &String) -> Option<E> {
+        Self::remove(self, key)
     }
 }
 
@@ -367,7 +635,7 @@ where
 ///   * 📝Java的情况可被视作`Arc`
 impl<Key> BagItemTable<Key> for Vec<VecDeque<Key>>
 where
-    Key: BagKey + Eq, // * 需要在「具体值匹配删除」时用到
+    Key: BagKey, // * 需要在「具体值匹配删除」时用到
 {
     // 队列
     type Level = VecDeque<Key>;
@@ -391,7 +659,7 @@ where
 /// 📜为「队列」[`VecDeque`]实现「层级」
 impl<Key> BagItemLevel<Key> for VecDeque<Key>
 where
-    Key: BagKey + Eq, // * 需要在「具体值匹配删除」时用到
+    Key: BagKey, // * 需要在「具体值匹配删除」时用到
 {
     #[inline(always)]
     fn size(&self) -> usize {
