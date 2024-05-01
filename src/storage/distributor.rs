@@ -95,18 +95,26 @@ pub struct DistributorV1 {
     /// * 🎯用于迭代器
     range: usize,
 
-    /// 伪随机索引
+    /// 伪随机索引「顺序」
+    /// * 🚩现在使用直接对应「运行时定长数组」的`Box<[T]>`
+    ///   * ✅绕开原先`[T; N]`中「`N`只能在运行时确定」的问题
+    ///   * 📝Rust中[`Vec`]附带一个`capacity`以便实现「变长数组」，但实际上只需要一块恒定的内存（指针）
+    ///   * 🔗<https://johnbsmith.github.io/Informatik/Rust/Dateien/Rust-container-cheat-sheet.pdf>
     ///
     /// # 📄OpenNARS `Distributor.order`
     ///
     /// Shuffled sequence of index numbers
-    order: Vec<usize>,
+    order: Box<[usize]>,
 
-    /// 🆕伪随机索引
+    /// 🆕伪随机索引「下一个」
+    /// * 🚩现在使用直接对应「运行时定长数组」的`Box<[T]>`
+    ///   * ✅绕开原先`[T; N]`中「`N`只能在运行时确定」的问题
+    ///   * 📝Rust中[`Vec`]附带一个`capacity`以便实现「变长数组」，但实际上只需要一块恒定的内存（指针）
+    ///   * 🔗<https://johnbsmith.github.io/Informatik/Rust/Dateien/Rust-container-cheat-sheet.pdf>
     /// * 🎯用于`next`函数
     /// * 🚩一个大小为[`Self::capacity`]的数组
     /// * ✨直接通过「硬缓存」的方式，省掉一个变量
-    next: Vec<usize>,
+    next: Box<[usize]>,
 }
 
 impl DistributorV1 {
@@ -121,13 +129,15 @@ impl DistributorV1 {
     }
 
     /// 从「范围」推导出「下一个」映射
-    pub fn capacity_to_next(capacity: usize) -> Vec<usize> {
+    /// * 🚩【2024-05-01 21:12:46】现在使用固定的`Box<[usize]>`代表「运行时定长数组」
+    pub fn capacity_to_next(capacity: usize) -> Box<[usize]> {
         manipulate!(
             // 从0到capacity-1
             (1..capacity).collect::<Vec<_>>()
             // 最后一个必是0
             => .push(0)
         )
+        .into_boxed_slice()
         // * 🚩等价代码
         // list![
         //     ((i + 1) % capacity)
@@ -137,9 +147,12 @@ impl DistributorV1 {
 
     /// 从「范围」推导出「容量」与「排序」
     /// * 📄直接源自OpenNARS
-    pub fn range_to_capacity_and_order(range: usize) -> (usize, Vec<usize>) {
+    pub fn range_to_capacity_and_order(range: usize) -> (usize, Box<[usize]>) {
+        // 计算整体容量
         let capacity: usize = range * (range + 1) / 2;
-        let mut order = vec![0; capacity];
+        // * 🚩先创建指定容量的变长数组
+        let mut order = vec![0; capacity].into_boxed_slice();
+        // * 🚩开始填充内容
         let mut index = capacity - 1;
         for rank in (1..=range).rev() {
             for _ in 0..rank {
@@ -156,6 +169,7 @@ impl DistributorV1 {
         for order_i in order.iter_mut() {
             *order_i -= 1;
         }
+        // 最后转换成Box
         (capacity, order)
     }
 
@@ -198,7 +212,7 @@ mod tests {
     #[test]
     fn test_distributor() {
         // 测试范围
-        let range = 10..=20;
+        let range = 10..=26;
         // 范围测试
         for n in range {
             _test_distributor(n);
