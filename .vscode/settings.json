@@ -3,6 +3,7 @@
         "Cloneable",
         "Hasher",
         "infty",
+        "powf",
         "thiserror"
     ]
 }

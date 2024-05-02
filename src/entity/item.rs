@@ -1,7 +1,7 @@
 //! 🎯复刻OpenNARS `nars.entity.Item`
 //! * ✅【2024-05-02 00:54:15】所有方法基本复刻完毕
 
-use super::{BudgetNumber, BudgetValue};
+use super::BudgetValue;
 use crate::storage::bag::BagKey;
 
 /// 袋中的「物品」类型
@@ -54,19 +54,19 @@ pub trait Item {
 
     /// 模拟`Item.set_priority`
     #[inline(always)]
-    fn set_priority(&mut self, value: &impl BudgetNumber) {
+    fn set_priority(&mut self, value: &<Self::Budget as BudgetValue>::E) {
         self.budget_mut().set_priority(value)
     }
 
     /// 模拟`Item.inc_priority`
     #[inline(always)]
-    fn inc_priority(&mut self, value: &impl BudgetNumber) {
+    fn inc_priority(&mut self, value: &<Self::Budget as BudgetValue>::E) {
         self.budget_mut().inc_priority(value)
     }
 
     /// 模拟`Item.dec_priority`
     #[inline(always)]
-    fn dec_priority(&mut self, value: &impl BudgetNumber) {
+    fn dec_priority(&mut self, value: &<Self::Budget as BudgetValue>::E) {
         self.budget_mut().dec_priority(value)
     }
 
@@ -78,19 +78,19 @@ pub trait Item {
 
     /// 模拟`Item.set_durability`
     #[inline(always)]
-    fn set_durability(&mut self, value: &impl BudgetNumber) {
+    fn set_durability(&mut self, value: &<Self::Budget as BudgetValue>::E) {
         self.budget_mut().set_durability(value)
     }
 
     /// 模拟`Item.inc_durability`
     #[inline(always)]
-    fn inc_durability(&mut self, value: &impl BudgetNumber) {
+    fn inc_durability(&mut self, value: &<Self::Budget as BudgetValue>::E) {
         self.budget_mut().inc_durability(value)
     }
 
     /// 模拟`Item.dec_durability`
     #[inline(always)]
-    fn dec_durability(&mut self, value: &impl BudgetNumber) {
+    fn dec_durability(&mut self, value: &<Self::Budget as BudgetValue>::E) {
         self.budget_mut().dec_durability(value)
     }
 
@@ -102,19 +102,19 @@ pub trait Item {
 
     /// 模拟`Item.set_quality`
     #[inline(always)]
-    fn set_quality(&mut self, value: &impl BudgetNumber) {
+    fn set_quality(&mut self, value: &<Self::Budget as BudgetValue>::E) {
         self.budget_mut().set_quality(value)
     }
 
     /// 模拟`Item.inc_quality`
     #[inline(always)]
-    fn inc_quality(&mut self, value: &impl BudgetNumber) {
+    fn inc_quality(&mut self, value: &<Self::Budget as BudgetValue>::E) {
         self.budget_mut().inc_quality(value)
     }
 
     /// 模拟`Item.dec_quality`
     #[inline(always)]
-    fn dec_quality(&mut self, value: &impl BudgetNumber) {
+    fn dec_quality(&mut self, value: &<Self::Budget as BudgetValue>::E) {
         self.budget_mut().dec_quality(value)
     }
 
