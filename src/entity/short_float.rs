@@ -1,4 +1,5 @@
 //! 🎯复刻OpenNARS `nars.entity.ShortFloat`
+//! * ✅【2024-05-02 21:41:48】基本复刻完毕
 
 use crate::global::Float;
 use narsese::api::EvidentNumber;

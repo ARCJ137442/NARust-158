@@ -2,7 +2,10 @@
 //! * ✅【2024-05-02 00:52:34】所有方法基本复刻完毕
 
 use super::ShortFloat;
-use crate::inference::{EvidenceReal, UtilityFunctions};
+use crate::{
+    global::Float,
+    inference::{EvidenceReal, UtilityFunctions},
+};
 use narsese::api::EvidentNumber;
 
 /// 抽象的「预算」特征
@@ -89,13 +92,6 @@ pub trait BudgetValue {
         self.quality_mut().dec(value)
     }
 
-    /// 模拟`BudgetValue.merge`
-    ///
-    /// # 📄OpenNARS
-    ///
-    /// Merge one BudgetValue into another
-    fn merge(&mut self, other: &Self);
-
     /// 模拟`BudgetValue.summary`
     /// * 🚩📜统一采用「几何平均值」估计（默认）
     ///
@@ -129,15 +125,27 @@ pub trait BudgetValue {
 /// * 🔬仅作测试用
 pub type Budget = [ShortFloat; 3];
 
-/// 为「短浮点」实现「预算数值」
+/// 为「短浮点」实现「证据数值」
 impl EvidenceReal for ShortFloat {
     // type TryFromError = ShortFloatError;
 
-    // ! ❌【2024-05-02 18:22:22】不再需要：以`root`代替
-    // #[inline(always)]
-    // fn to_float(&self) -> Float {
-    //     self.value()
-    // }
+    /// 从浮点到自身转换（不检查，直接panic）
+    /// * ❌在实现[`TryFrom`]时，无法通过[`From`]实现：conflicting implementations of trait `std::convert::TryFrom<f64>` for type `entity::short_float::ShortFloat`
+    ///
+    /// ! ⚠️在「范围越界」时直接panic
+    /// * 🎯降低代码冗余量（减少过多的「错误处理」）
+    /// conflicting implementation in crate `core`:
+    /// - impl<T, U> std::convert::TryFrom<U> for T
+    /// where U: std::convert::Into<T>;
+    fn from_float(value: Float) -> Self {
+        // ! ⚠️【2024-05-02 20:41:19】直接unwrap
+        Self::try_from(value).unwrap()
+    }
+
+    #[inline(always)]
+    fn to_float(&self) -> Float {
+        self.value()
+    }
 
     // ! ❌【2024-05-02 18:22:22】不再需要：默认实现就好
     // fn set(&mut self, new_value: Self) {
@@ -181,17 +189,5 @@ impl BudgetValue for Budget {
 
     fn quality_mut(&mut self) -> &mut ShortFloat {
         &mut self[2]
-    }
-
-    fn merge(&mut self, other: &Self) {
-        // * 🚩【2024-05-02 00:16:50】仅作参考，后续要移动到「预算函数」中
-        /* OpenNARS源码 @ BudgetFunctions.java：
-        baseValue.setPriority(Math.max(baseValue.getPriority(), adjustValue.getPriority()));
-        baseValue.setDurability(Math.max(baseValue.getDurability(), adjustValue.getDurability()));
-        baseValue.setQuality(Math.max(baseValue.getQuality(), adjustValue.getQuality())); */
-        // 🆕此处直接分派到各个值中
-        self.priority_mut().merge(other.priority());
-        self.durability_mut().merge(other.durability());
-        self.quality_mut().merge(other.quality());
     }
 }

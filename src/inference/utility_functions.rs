@@ -1,7 +1,18 @@
 //! 🎯复刻OpenNARS `nars.inference.UtilityFunctions`
+//! * 🚩一些【与原OpenNARS不太相关，但的确通用】的函数，也放在这里
+//!   * 📄如[`UtilityFunctions::max_from`]对[`super::BudgetFunctions::merge`]的抽象
+//! * ✅【2024-05-02 21:17:31】基本实现所有OpenNARS原有功能
+//!   * `and`
+//!   * `or`
+//!   * `aveAri`
+//!   * `aveGeo`
+//!   * `w2c`
+//!   * `c2w`
 
 use super::EvidenceReal;
+use crate::global::Float;
 use nar_dev_utils::pipe;
+use std::ops::Div;
 
 /// 【派生】用于「证据数值」的实用方法
 ///
@@ -9,8 +20,8 @@ use nar_dev_utils::pipe;
 ///
 /// Common functions on real numbers, mostly in [0,1].
 pub trait UtilityFunctions: EvidenceReal {
-    /// 模拟`UtilityFunctions.not`
-    /// * 🚩扩展逻辑「非」
+    /// 🆕扩展逻辑「非」
+    /// * 📄这个在OpenNARS中直接用`1 - v`表示了，但此处仍然做出抽象
     /// * 📝在使用了`Copy`并且是「按值传参」的情况下，才可省略[`clone`](Clone::clone)
     ///   * ⚠️要分清是在「拷贝值」还是在「拷贝引用」
     #[inline(always)]
@@ -84,10 +95,51 @@ pub trait UtilityFunctions: EvidenceReal {
         }
     }
 
+    /// 复刻OpenNARS `nars.inference.UtilityFunctions.aveAri`
+    /// * 🚩求代数平均值
+    /// * ❌不能用`impl IntoIterator<Item = Self>`：要计算长度
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// A function where the output is the arithmetic average the inputs
+    ///
+    /// @param arr The inputs, each in [0, 1]
+    /// @return The arithmetic average the inputs
+    #[doc(alias = "ave_ari")]
+    fn arithmetical_average(values: &[Self]) -> Self {
+        // * 💭【2024-05-02 00:44:41】大概会长期存留，因为与「真值函数」无关而无需迁移
+        /* 📄OpenNARS源码：
+        float product = 1;
+        for (float f : arr) {
+            product *= f;
+        }
+        return (float) Math.pow(product, 1.00 / arr.length); */
+        pipe! {
+            values
+            // 逐个迭代值的迭代器
+            => .iter()
+            // ! 必须先转换为浮点数：连续加和会越界
+            => .map(Self::to_float)
+            // 所有值的和（从`1`开始）
+            => {.sum::<Float>()}#
+            // 除以值的个数
+            => .div(values.len() as Float)
+            // 转换回「证据数值」（保证不越界）
+            => Self::from_float
+        }
+    }
+
     /// 复刻OpenNARS `nars.inference.UtilityFunctions.aveGeo`
     /// * 🚩求几何平均值
-    /// * 🎯🔬实验用：直接以「统一的逻辑」要求，而非将「真值函数」的语义赋予此特征
     /// * ❌不能用`impl IntoIterator<Item = Self>`：要计算长度
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// A function where the output is the geometric average the inputs
+    ///
+    /// @param arr The inputs, each in [0, 1]
+    /// @return The geometric average the inputs
+    #[doc(alias = "ave_geo")]
     fn geometrical_average(values: &[Self]) -> Self {
         // * 💭【2024-05-02 00:44:41】大概会长期存留，因为与「真值函数」无关而无需迁移
         /* 📄OpenNARS源码：
@@ -106,7 +158,39 @@ pub trait UtilityFunctions: EvidenceReal {
             .root(values.len())
     }
 
-    /// 其它用途
+    /// 从真值的「w值」到「c值」
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// A function to convert weight to confidence
+    ///
+    /// @param w Weight of evidence, a non-negative real number
+    /// @return The corresponding confidence, in [0, 1)
+    fn w2c(w: Float, horizon: usize) -> Self {
+        /* 📄OpenNARS源码：
+        return w / (w + Parameters.HORIZON); */
+        Self::from_float(w / (w + horizon as Float))
+    }
+
+    /// 从真值的「c值」到「w值」
+    /// * 📌此处的`c`就是`self`
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// A function to convert confidence to weight
+    ///
+    /// @param c confidence, in [0, 1)
+    /// @return The corresponding weight of evidence, a non-negative real number
+    fn c2w(&self, horizon: usize) -> Float {
+        /* 📄OpenNARS源码：
+        return Parameters.HORIZON * c / (1 - c); */
+        let c = self.to_float();
+        horizon as Float * c / (1.0 - c)
+    }
+
+    // 其它用途 //
+    // ! 🆕这些都不是原OpenNARS「实用函数」中的，而是为了代码统一加上的
+    //   * 📄如：`merge`是为了在「预算函数」中减少重复而统一设计的
 
     /// 🆕「增长」值
     /// * 🎯用于（统一）OpenNARS`incPriority`系列方法
@@ -126,13 +210,10 @@ pub trait UtilityFunctions: EvidenceReal {
         self.set(self.and(value))
     }
 
-    /// 🆕「合并」值
+    /// 🆕「最大值合并」
     /// * 🎯用于（统一）OpenNARS`merge`的重复调用
-    /// * 🚩⚠️统一逻辑：`max(self, other)`
-    /// * ❓是否可转换为`max`或使用`Ord`约束
-    ///
-    /// TODO: 🏗️【2024-05-02 18:24:53】不是这里的，需要移到其它地方（💭预算函数？）
-    fn merge(&mut self, other: Self) {
+    /// * 🚩现在已经在[「证据数值」](EvidenceReal)中要求了[`Ord`]
+    fn max_from(&mut self, other: Self) {
         let max = (*self).max(other);
         self.set(max);
     }
