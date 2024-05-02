@@ -45,6 +45,10 @@ macro_once! {
         }
     }
     /// NARS运行的「超参数」
+    ///
+    /// # 📄OpenNARS `nars.main_nogui.Parameters`
+    ///
+    /// Collected system parameters. To be modified before compiling.
     #[derive(Debug, Clone, Copy, PartialEq)]
     pub struct Parameters {
 
@@ -197,8 +201,8 @@ pub const DEFAULT_PARAMETERS: Parameters = Parameters::default_const();
 /// 单元测试
 #[cfg(test)]
 mod tests {
-    use nar_dev_utils::asserts;
     use super::*;
+    use nar_dev_utils::asserts;
 
     /// 测试/对应性
     /// * 🎯默认值是否与OpenNARS一一对应

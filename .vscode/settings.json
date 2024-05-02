@@ -4,6 +4,7 @@
         "Cloneable",
         "Hasher",
         "infty",
+        "nogui",
         "powf",
         "thiserror"
     ]

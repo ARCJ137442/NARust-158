@@ -159,6 +159,7 @@ pub trait UtilityFunctions: EvidenceReal {
     }
 
     /// 从真值的「w值」到「c值」
+    /// * 📄超参数`Parameters.HORIZON`参见[`crate::nars::Parameters`]
     ///
     /// # 📄OpenNARS
     ///
