@@ -5,7 +5,6 @@
 //!     * 📝Rust允许「在外部调用『看似没有实现派生操作的结构』时，允许使用『自动实现了的派生操作』」
 //! * 🕒最后更新：【2024-05-02 16:15:14】
 
-use crate::global::Float;
 use narsese::api::EvidentNumber;
 /// 🆕【前提】抽象的「证据数值」特征
 /// * 🚩【2024-05-02 16:05:04】搬迁自[`crate::entity::BudgetValue`]
@@ -18,11 +17,12 @@ use narsese::api::EvidentNumber;
 ///   * 📌在实现了[`Copy`]之后，将值的复制看作是「随处可用」的
 pub trait EvidenceReal:
 // * 🚩【2024-05-02 18:33:19】将`Ord`作为在[`EvidentNumber`]之上的「附加要求」之一：需要在「预算值合并」使用「取最大」方法
-    EvidentNumber + Copy + Ord + TryFrom<Float, Error = Self::TryFromError>
+    EvidentNumber + Copy + Ord /* + TryFrom<Float, Error = Self::TryFromError> */
 {
-    /// * 📌此处对[`Error`](std::fmt::Error)的需求仅仅在于[`Result::unwrap`]需要`Error: Debug`
-    /// * 🎯【2024-05-02 12:17:19】引入以兼容[`TryFrom`]的[`try_from`](TryFrom::try_from)
-    type TryFromError: std::error::Error;
+    // * 🚩【2024-05-02 18:47:49】现在随着「无需支持`to_float`浮点转换」不再要求（↑`TryFrom`同理）
+    // /// * 📌此处对[`Error`](std::fmt::Error)的需求仅仅在于[`Result::unwrap`]需要`Error: Debug`
+    // /// * 🎯【2024-05-02 12:17:19】引入以兼容[`TryFrom`]的[`try_from`](TryFrom::try_from)
+    // type TryFromError: std::error::Error;
 
     // /// 转换为浮点数
     // /// * 🚩使用「全局浮点数类型」

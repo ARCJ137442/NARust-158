@@ -1,7 +1,7 @@
 //! 🎯复刻OpenNARS `nars.entity.BudgetValue`
 //! * ✅【2024-05-02 00:52:34】所有方法基本复刻完毕
 
-use super::{ShortFloat, ShortFloatError};
+use super::ShortFloat;
 use crate::inference::{EvidenceReal, UtilityFunctions};
 use narsese::api::EvidentNumber;
 
@@ -131,7 +131,7 @@ pub type Budget = [ShortFloat; 3];
 
 /// 为「短浮点」实现「预算数值」
 impl EvidenceReal for ShortFloat {
-    type TryFromError = ShortFloatError;
+    // type TryFromError = ShortFloatError;
 
     // ! ❌【2024-05-02 18:22:22】不再需要：以`root`代替
     // #[inline(always)]
