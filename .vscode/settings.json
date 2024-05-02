@@ -2,6 +2,7 @@
     "cSpell.words": [
         "Cloneable",
         "Hasher",
-        "infty"
+        "infty",
+        "thiserror"
     ]
 }
