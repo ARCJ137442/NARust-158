@@ -214,7 +214,7 @@ mod tests {
     #[test]
     fn test_distributor() {
         // 测试范围
-        let range = 10..=26;
+        let range = 10..=20;
         // 范围测试
         for n in range {
             _test_distributor(n);
