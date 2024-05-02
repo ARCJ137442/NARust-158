@@ -1,4 +1,4 @@
-//! 复刻OpenNARS `nars.entity.ShortFloat`
+//! 🎯复刻OpenNARS `nars.entity.ShortFloat`
 
 use crate::global::Float;
 use narsese::api::EvidentNumber;
@@ -172,6 +172,7 @@ impl ShortFloat {
     }
 }
 
+/// 模拟`ShortFloat.toString`
 impl std::fmt::Display for ShortFloat {
     #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -264,7 +265,22 @@ impl std::ops::Div for ShortFloat {
 
 // NAL相关 //
 // * 🚩【2024-05-02 11:44:12】有关「真值」「预算值」的函数，均在其它文件中
-impl EvidentNumber for ShortFloat {}
+impl EvidentNumber for ShortFloat {
+    #[inline(always)]
+    fn zero() -> Self {
+        Self::ZERO
+    }
+
+    #[inline(always)]
+    fn one() -> Self {
+        Self::ONE
+    }
+
+    fn root(self, n: usize) -> Self {
+        // * 📌【2024-05-02 18:23:31】开根不会越界，故直接`unwrap`
+        self.value().powf(1.0 / (n as Float)).try_into().unwrap()
+    }
+}
 
 /// 单元测试
 #[cfg(test)]
@@ -393,7 +409,7 @@ mod tests {
     fn set_value_unchecked() -> Result<()> {
         macro_once! {
             // * 🚩模式：短整数（构造用） -> 浮点数（赋值用）⇒预期值（短整数）
-            macro test($( $short:literal -> $float:expr => $expected:literal)*) {
+            macro test($( $short:literal -> $float:expr => $expected:expr)*) {
                 $(
                     let mut sf = ShortFloat::new_unchecked($short);
                     sf.set_value_unchecked($float);
@@ -418,7 +434,7 @@ mod tests {
             0     -> 1.00008             => 10001
             0     -> 1.00009             => 10001
             // 无穷值会被重置为 最大/最小 值：正无穷⇒最大，负无穷⇒最小
-            0     -> Float::INFINITY     => 65535
+            0     -> Float::INFINITY     => UShort::MAX
             10000 -> Float::NEG_INFINITY => 0
             // NaN会被重置为`0`
             10000 -> Float::NAN          => 0

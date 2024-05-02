@@ -48,73 +48,73 @@ pub trait Item {
 
     /// 模拟`Item.get_priority`
     #[inline(always)]
-    fn priority(&self) -> &<Self::Budget as BudgetValue>::E {
+    fn priority(&self) -> <Self::Budget as BudgetValue>::E {
         self.budget().priority()
     }
 
     /// 模拟`Item.set_priority`
     #[inline(always)]
-    fn set_priority(&mut self, value: &<Self::Budget as BudgetValue>::E) {
+    fn set_priority(&mut self, value: <Self::Budget as BudgetValue>::E) {
         self.budget_mut().set_priority(value)
     }
 
     /// 模拟`Item.inc_priority`
     #[inline(always)]
-    fn inc_priority(&mut self, value: &<Self::Budget as BudgetValue>::E) {
+    fn inc_priority(&mut self, value: <Self::Budget as BudgetValue>::E) {
         self.budget_mut().inc_priority(value)
     }
 
     /// 模拟`Item.dec_priority`
     #[inline(always)]
-    fn dec_priority(&mut self, value: &<Self::Budget as BudgetValue>::E) {
+    fn dec_priority(&mut self, value: <Self::Budget as BudgetValue>::E) {
         self.budget_mut().dec_priority(value)
     }
 
     /// 模拟`Item.get_durability`
     #[inline(always)]
-    fn durability(&self) -> &<Self::Budget as BudgetValue>::E {
+    fn durability(&self) -> <Self::Budget as BudgetValue>::E {
         self.budget().durability()
     }
 
     /// 模拟`Item.set_durability`
     #[inline(always)]
-    fn set_durability(&mut self, value: &<Self::Budget as BudgetValue>::E) {
+    fn set_durability(&mut self, value: <Self::Budget as BudgetValue>::E) {
         self.budget_mut().set_durability(value)
     }
 
     /// 模拟`Item.inc_durability`
     #[inline(always)]
-    fn inc_durability(&mut self, value: &<Self::Budget as BudgetValue>::E) {
+    fn inc_durability(&mut self, value: <Self::Budget as BudgetValue>::E) {
         self.budget_mut().inc_durability(value)
     }
 
     /// 模拟`Item.dec_durability`
     #[inline(always)]
-    fn dec_durability(&mut self, value: &<Self::Budget as BudgetValue>::E) {
+    fn dec_durability(&mut self, value: <Self::Budget as BudgetValue>::E) {
         self.budget_mut().dec_durability(value)
     }
 
     /// 模拟`Item.get_quality`
     #[inline(always)]
-    fn quality(&self) -> &<Self::Budget as BudgetValue>::E {
+    fn quality(&self) -> <Self::Budget as BudgetValue>::E {
         self.budget().quality()
     }
 
     /// 模拟`Item.set_quality`
     #[inline(always)]
-    fn set_quality(&mut self, value: &<Self::Budget as BudgetValue>::E) {
+    fn set_quality(&mut self, value: <Self::Budget as BudgetValue>::E) {
         self.budget_mut().set_quality(value)
     }
 
     /// 模拟`Item.inc_quality`
     #[inline(always)]
-    fn inc_quality(&mut self, value: &<Self::Budget as BudgetValue>::E) {
+    fn inc_quality(&mut self, value: <Self::Budget as BudgetValue>::E) {
         self.budget_mut().inc_quality(value)
     }
 
     /// 模拟`Item.dec_quality`
     #[inline(always)]
-    fn dec_quality(&mut self, value: &<Self::Budget as BudgetValue>::E) {
+    fn dec_quality(&mut self, value: <Self::Budget as BudgetValue>::E) {
         self.budget_mut().dec_quality(value)
     }
 

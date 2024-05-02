@@ -15,6 +15,9 @@ pub mod entity;
 // 存储
 pub mod storage;
 
+// 推理
+pub mod inference;
+
 // 虚拟机
 pub mod vm;
 

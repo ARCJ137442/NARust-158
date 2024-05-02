@@ -1,114 +1,9 @@
-//! 🎯复刻OpenNARS `nars.entity.Budget`
+//! 🎯复刻OpenNARS `nars.entity.BudgetValue`
 //! * ✅【2024-05-02 00:52:34】所有方法基本复刻完毕
 
 use super::{ShortFloat, ShortFloatError};
-use crate::global::Float;
+use crate::inference::{EvidenceReal, UtilityFunctions};
 use narsese::api::EvidentNumber;
-
-/// 抽象的「预算数值」特征
-/// * 🚩扩展自「证据值」，并（可）实验性地、敏捷开发地为之添加方法
-/// * 💭【2024-05-02 00:46:02】亦有可能替代OpenNARS的`nars.inference.UtilityFunctions`
-pub trait BudgetNumber:
-    EvidentNumber + Clone + PartialOrd<Self> + TryFrom<Float, Error = Self::TryFromError>
-{
-    /// * 📌此处对[`Error`](std::fmt::Error)的需求仅仅在于[`Result::unwrap`]需要`Error: Debug`
-    /// * 🎯【2024-05-02 12:17:19】引入以兼容[`TryFrom`]的[`try_from`](TryFrom::try_from)
-    type TryFromError: std::error::Error;
-
-    /// 转换为浮点数
-    /// * 🚩使用「全局浮点数类型」
-    /// * 🎯用于【预算数值与普通浮点数之间】【不同的预算数值之间】互相转换
-    ///   * 📄`w2c`函数需要从值域 $[0, 1]$ 扩展到 $[0, +\infty)$
-    fn to_float(&self) -> Float;
-
-    /// 设置值
-    /// * 类似「从其它地方拷贝值」的行为
-    fn set(&mut self, new_value: &Self) {
-        *self = new_value.clone();
-    }
-
-    /// 常数「0」
-    fn zero() -> Self;
-
-    /// 常数「1」
-    fn one() -> Self;
-
-    /// 扩展逻辑「非」
-    /// TODO: 🏗️后续可能需要迁移到别的地方
-    fn not(&self) -> Self {
-        // 需`clone` | ⚠️即便`Copy`也不能省
-        Self::one() - self.clone()
-    }
-
-    /// 扩展逻辑「与」
-    /// TODO: 🏗️后续可能需要迁移到别的地方
-    fn and(&self, value: &Self) -> Self {
-        // 均需`clone`
-        self.clone() * value.clone()
-    }
-
-    /// 扩展逻辑「或」
-    /// TODO: 🏗️后续可能需要迁移到别的地方
-    fn or(&self, value: &Self) -> Self {
-        // 均需`clone`
-        self.clone() + value.clone()
-    }
-
-    /// 🆕「增长」值
-    /// * 🎯用于（统一）OpenNARS`incPriority`系列方法
-    /// * 📝核心逻辑：自己的值和对面取「或」，越取越多
-    /// * ❓【2024-05-02 00:31:19】是否真的要放到这儿来，在「数据结构定义」中引入「真值函数」的概念
-    fn inc(&mut self, value: &Self) {
-        // self.set(UtilityFunctions.or(priority.getValue(), v));
-        self.set(&self.or(value))
-    }
-
-    /// 🆕「减少」值
-    /// * 🎯用于（统一）OpenNARS`incPriority`系列方法
-    /// * 📝核心逻辑：自己的值和对面取「与」，越取越少
-    /// * ❓【2024-05-02 00:31:19】是否真的要放到这儿来，在「数据结构定义」中引入「真值函数」的概念
-    fn dec(&mut self, value: &Self) {
-        // self.set(UtilityFunctions.and(priority.getValue(), v));
-        self.set(&self.and(value))
-    }
-
-    /// 🆕「合并」值
-    /// * 🎯用于（统一）OpenNARS`merge`的重复调用
-    /// * 🚩⚠️统一逻辑：`max(self, other)`
-    /// * ❓是否可转换为`max`或使用`Ord`约束
-    fn merge(&mut self, other: &Self) {
-        if let Some(ord) = (*self).partial_cmp(other) {
-            match ord {
-                // 若 "self < other" ⇒ 自赋值
-                std::cmp::Ordering::Less => *self = other.clone(),
-                std::cmp::Ordering::Equal => {}
-                std::cmp::Ordering::Greater => {}
-            }
-        }
-    }
-
-    /// 求几何平均值
-    /// * 🎯🔬实验用：直接以「统一的逻辑」要求，而非将「真值函数」的语义赋予此特征
-    fn geometrical_average(values: &[&Self]) -> Self {
-        // * 💭【2024-05-02 00:44:41】大概会长期存留，因为与「真值函数」无关而无需迁移
-        /* 📄OpenNARS源码：
-        float product = 1;
-        for (float f : arr) {
-            product *= f;
-        }
-        return (float) Math.pow(product, 1.00 / arr.length); */
-        let mut product: Float = 1.0;
-        for f in values {
-            // 变为浮点数再相乘
-            product *= f.to_float();
-        }
-        //
-        product
-            .powf(1.0 / values.len() as Float)
-            .try_into() // 尝试转换
-            .unwrap() // ! ⚠️一般平均值不会越界（全`ShortFloat`的情况下）
-    }
-}
 
 /// 抽象的「预算」特征
 /// * 🎯实现最大程度的抽象与通用
@@ -122,41 +17,39 @@ pub trait BudgetNumber:
 /// A triple of priority (current), durability (decay), and quality (long-term average).
 pub trait BudgetValue {
     /// 一种类型只可能有一种「证据值」
-    /// * 🎯模拟OpenNARS `ShortFloat`
-    ///
-    /// TODO: 🚧【2024-05-01 23:52:11】一些地方尚缺，或需复刻`ShortFloat`
-    type E: BudgetNumber;
+    /// * ✅兼容OpenNARS `ShortFloat`
+    type E: EvidenceReal;
 
     /// 获取优先级
-    /// * 🚩仅获取不可变引用：避免复杂结构体被复制
-    fn priority(&self) -> &Self::E;
+    /// * 🚩【2024-05-02 18:21:38】现在统一获取值：对「实现了[`Copy`]的类型」直接复制
+    fn priority(&self) -> Self::E;
     fn priority_mut(&mut self) -> &mut Self::E;
 
     /// 设置优先级
     /// * 🚩仅输入不可变引用：仅在必要时复制值
-    fn set_priority(&mut self, new_p: &Self::E) {
+    fn set_priority(&mut self, new_p: Self::E) {
         self.priority_mut().set(new_p)
     }
 
     /// 获取耐久度
-    /// * 🚩仅获取不可变引用：避免复杂结构体被复制
-    fn durability(&self) -> &Self::E;
+    /// * 🚩【2024-05-02 18:21:38】现在统一获取值：对「实现了[`Copy`]的类型」直接复制
+    fn durability(&self) -> Self::E;
     fn durability_mut(&mut self) -> &mut Self::E;
 
     /// 设置耐久度
     /// * 🚩仅输入不可变引用：仅在必要时复制值
-    fn set_durability(&mut self, new_d: &Self::E) {
+    fn set_durability(&mut self, new_d: Self::E) {
         self.durability_mut().set(new_d)
     }
 
     /// 获取质量
-    /// * 🚩仅获取不可变引用：避免复杂结构体被复制
-    fn quality(&self) -> &Self::E;
+    /// * 🚩【2024-05-02 18:21:38】现在统一获取值：对「实现了[`Copy`]的类型」直接复制
+    fn quality(&self) -> Self::E;
     fn quality_mut(&mut self) -> &mut Self::E;
 
     /// 设置质量
     /// * 🚩仅输入不可变引用：仅在必要时复制值
-    fn set_quality(&mut self, new_q: &Self::E) {
+    fn set_quality(&mut self, new_q: Self::E) {
         self.quality_mut().set(new_q)
     }
 
@@ -167,32 +60,32 @@ pub trait BudgetValue {
     }
 
     /// 模拟`BudgetValue.incPriority`
-    fn inc_priority(&mut self, value: &Self::E) {
+    fn inc_priority(&mut self, value: Self::E) {
         self.priority_mut().inc(value)
     }
 
     /// 模拟`BudgetValue.decPriority`
-    fn dec_priority(&mut self, value: &Self::E) {
+    fn dec_priority(&mut self, value: Self::E) {
         self.priority_mut().dec(value)
     }
 
     /// 模拟`BudgetValue.incDurability`
-    fn inc_durability(&mut self, value: &Self::E) {
+    fn inc_durability(&mut self, value: Self::E) {
         self.priority_mut().inc(value)
     }
 
     /// 模拟`BudgetValue.decDurability`
-    fn dec_durability(&mut self, value: &Self::E) {
+    fn dec_durability(&mut self, value: Self::E) {
         self.durability_mut().dec(value)
     }
 
     /// 模拟`BudgetValue.incQuality`
-    fn inc_quality(&mut self, value: &Self::E) {
+    fn inc_quality(&mut self, value: Self::E) {
         self.priority_mut().inc(value)
     }
 
     /// 模拟`BudgetValue.decQuality`
-    fn dec_quality(&mut self, value: &Self::E) {
+    fn dec_quality(&mut self, value: Self::E) {
         self.quality_mut().dec(value)
     }
 
@@ -225,8 +118,8 @@ pub trait BudgetValue {
     /// to be revised to depend on how busy the system is
     ///
     /// @return The decision on whether to process the Item
-    fn above_threshold(&self, threshold: &Self::E) -> bool {
-        self.summary() >= *threshold
+    fn above_threshold(&self, threshold: Self::E) -> bool {
+        self.summary() >= threshold
     }
 
     // * ❌【2024-05-02 00:52:02】不实现「仅用于 显示/呈现」的方法，包括所有的`toString` `toStringBrief`
@@ -237,51 +130,45 @@ pub trait BudgetValue {
 pub type Budget = [ShortFloat; 3];
 
 /// 为「短浮点」实现「预算数值」
-impl BudgetNumber for ShortFloat {
+impl EvidenceReal for ShortFloat {
     type TryFromError = ShortFloatError;
 
-    #[inline(always)]
-    fn zero() -> Self {
-        Self::ZERO
-    }
+    // ! ❌【2024-05-02 18:22:22】不再需要：以`root`代替
+    // #[inline(always)]
+    // fn to_float(&self) -> Float {
+    //     self.value()
+    // }
 
-    #[inline(always)]
-    fn one() -> Self {
-        Self::ONE
-    }
+    // ! ❌【2024-05-02 18:22:22】不再需要：默认实现就好
+    // fn set(&mut self, new_value: Self) {
+    //     // 直接将自身设置为「新值的浮点数」
+    //     // * ✅不可能panic：对方亦为合法
+    //     self.set_value(new_value).unwrap()
+    // }
 
-    #[inline(always)]
-    fn to_float(&self) -> Float {
-        self.value()
-    }
-
-    fn set(&mut self, new_value: &Self) {
-        // 直接将自身设置为「新值的浮点数」
-        // * ✅不可能panic：对方亦为合法
-        self.set_value(new_value.to_float()).unwrap()
-    }
-
-    fn merge(&mut self, other: &Self) {
-        // * 🚩【2024-05-02 12:05:13】覆盖默认的`PartialEq`方法
-        // * 🚩最大值不会越界，无需检查
-        *self = Self::new_unchecked(self.value_short().max(other.value_short()))
-    }
+    // ! ❌【2024-05-02 16:11:21】现在不允许覆盖
+    // * 📝Rust「自动实现的特征」不能再通过`impl`覆盖：避免「实现冲突」
+    // fn merge(&mut self, other: &Self) {
+    //     // * 🚩【2024-05-02 12:05:13】覆盖默认的`PartialEq`方法
+    //     // * 🚩最大值不会越界，无需检查
+    //     *self = Self::new_unchecked(self.value_short().max(other.value_short()))
+    // }
 }
 
 impl BudgetValue for Budget {
     // 指定为浮点数
     type E = ShortFloat;
 
-    fn priority(&self) -> &ShortFloat {
-        &self[0]
+    fn priority(&self) -> ShortFloat {
+        self[0] // * 🚩【2024-05-02 18:24:10】现在隐式`clone`
     }
 
-    fn durability(&self) -> &ShortFloat {
-        &self[1]
+    fn durability(&self) -> ShortFloat {
+        self[1] // * 🚩【2024-05-02 18:24:10】现在隐式`clone`
     }
 
-    fn quality(&self) -> &ShortFloat {
-        &self[2]
+    fn quality(&self) -> ShortFloat {
+        self[2] // * 🚩【2024-05-02 18:24:10】现在隐式`clone`
     }
 
     fn priority_mut(&mut self) -> &mut ShortFloat {
