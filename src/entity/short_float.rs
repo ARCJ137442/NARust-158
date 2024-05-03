@@ -152,7 +152,7 @@ mod impl_v1 {
     /// # 📄OpenNARS
     ///
     /// A float value in [0, 1], with 4 digits accuracy.
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct ShortFloatV1 {
         /// 0~4294967296的「实际值」
         ///

@@ -74,9 +74,9 @@ pub trait BudgetFunctions: BudgetValue {
         let priority = old_pri | budget.priority();
         let durability = Self::E::arithmetical_average([self.durability(), budget.durability()]);
         // let quality = self.quality(); // ! 这俩不变，可以抵消
-        *self.priority_mut() = priority;
-        *self.durability_mut() = durability;
-        // *self.quality_mut() = quality; // ! 这俩不变，可以抵消
+        self.set_priority(priority);
+        self.set_durability(durability);
+        // self.set_quality(quality) // ! 这俩不变，可以抵消
     }
 
     /* ---------------- Bag functions, on all Items ------------------- */
@@ -110,7 +110,7 @@ pub trait BudgetFunctions: BudgetValue {
         if p > 0.0 {
             quality += p * p.powf(1.0 / (forget_rate * p));
         } // priority Durability
-        *self.priority_mut() = Self::E::from_float(quality);
+        self.set_priority(Self::E::from_float(quality));
     }
 
     /// 模拟`BudgetValue.merge`，亦与`BudgetFunctions.merge`相同
@@ -137,9 +137,10 @@ pub trait BudgetFunctions: BudgetValue {
         baseValue.setDurability(Math.max(baseValue.getDurability(), adjustValue.getDurability()));
         baseValue.setQuality(Math.max(baseValue.getQuality(), adjustValue.getQuality())); */
         // 🆕此处就是三者的最大值，并且从右边合并到左边
-        self.priority_mut().max_from(other.priority());
-        self.durability_mut().max_from(other.durability());
-        self.quality_mut().max_from(other.quality());
+        // ! ❓是否要就此调用可变引用
+        self.__priority_mut().max_from(other.priority());
+        self.__durability_mut().max_from(other.durability());
+        self.__quality_mut().max_from(other.quality());
     }
 
     /* ----- Task derivation in LocalRules and SyllogisticRules ----- */

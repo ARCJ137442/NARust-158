@@ -12,10 +12,14 @@ use std::hash::Hash;
 
 /// 模拟OpenNARS `nars.entity.TruthValue`
 /// * 📌几个前置特征：
-///   * `Sized`：模拟构造函数
-///   * `Clone`：模拟OpenNARS `clone`
-///   * `Eq`：模拟OpenNARS `equals`
-///   * `Hash`：模拟OpenNARS `hashCode`
+///   * [`Sized`]：模拟构造函数
+///   * [`Clone`]：模拟OpenNARS `clone`
+///   * [`Eq`]：模拟OpenNARS `equals`
+///   * [`Hash`]：模拟OpenNARS `hashCode`
+///
+/// # 📄OpenNARS
+///
+/// Frequency and confidence.
 pub trait TruthValue: Sized + Clone + Eq + Hash {
     /// 一种类型只可能有一种「证据值」
     /// * ✅兼容OpenNARS `ShortFloat`
@@ -172,7 +176,8 @@ mod impl_v1 {
 
     /// [`TruthValue`]初代实现
     /// * 🎯测试特征的效果
-    #[derive(Debug, Clone, Copy)]
+    /// * 📌[`PartialEq`]、[`Eq`]、[`Hash`]均特别实现
+    #[derive(Debug, Clone, Copy, Default)]
     pub struct TruthV1 {
         /// frequency
         f: ShortFloatV1,
@@ -247,6 +252,7 @@ mod impl_v1 {
 }
 pub use impl_v1::*;
 
+/// 单元测试
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -272,6 +278,8 @@ mod tests {
     // * ✅测试/new已在「快捷构造宏」中实现
 
     // * ✅测试/from_fc已在「快捷构造宏」中实现
+
+    // * ✅测试/from_float已在「快捷构造宏」中实现
 
     /// 测试/frequency
     #[test]
