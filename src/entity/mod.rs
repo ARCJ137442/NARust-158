@@ -19,15 +19,14 @@
 //! 2. Indirect processing by reasoning, in related concepts and unlimited steps. It happens in each inference cycle.
 
 nar_dev_utils::mods! {
+    // 短浮点 `ShortFloat`
+    pub use short_float;
 
     // 预算值 `BudgetValue`
     pub use budget_value;
 
     // 真值 `TruthValue`
     pub use truth_value;
-
-    // 短浮点 `ShortFloat`
-    pub use short_float;
 
     // 时间戳 `Stamp`
     pub use stamp;

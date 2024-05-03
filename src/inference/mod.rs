@@ -23,9 +23,6 @@
 //! In each case, there may be multiple applicable rules, which will be applied in parallel. For each rule, each conclusion is formed in three stages, to determine (1) the content (as a Term), (2) the truth-value, and (3) the budget-value, roughly in that order.
 
 nar_dev_utils::mods! {
-    // 🆕「证据数值」
-    pub use evidence_real;
-
     // 规则表 `RuleTables`
     pub use rule_tables;
 

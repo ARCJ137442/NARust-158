@@ -1,11 +1,8 @@
 //! 🎯复刻OpenNARS `nars.entity.BudgetValue`
 //! * ✅【2024-05-02 00:52:34】所有方法基本复刻完毕
 
-use super::ShortFloat;
-use crate::{
-    global::Float,
-    inference::{EvidenceReal, UtilityFunctions},
-};
+use super::{ShortFloat, ShortFloatV1};
+use crate::{global::Float, inference::UtilityFunctions};
 use narsese::api::EvidentNumber;
 
 /// 抽象的「预算」特征
@@ -21,7 +18,7 @@ use narsese::api::EvidentNumber;
 pub trait BudgetValue {
     /// 一种类型只可能有一种「证据值」
     /// * ✅兼容OpenNARS `ShortFloat`
-    type E: EvidenceReal;
+    type E: ShortFloat;
 
     /// 获取优先级
     /// * 🚩【2024-05-02 18:21:38】现在统一获取值：对「实现了[`Copy`]的类型」直接复制
@@ -123,56 +120,33 @@ pub trait BudgetValue {
 
 /// 一个默认实现
 /// * 🔬仅作测试用
-pub type Budget = [ShortFloat; 3];
+pub type BudgetV1 = [ShortFloatV1; 3];
 
-/// 为「短浮点」实现「证据数值」
-impl EvidenceReal for ShortFloat {
-    // type TryFromError = ShortFloatError;
-
-    /// 从浮点到自身转换（不检查，直接panic）
-    /// * ❌在实现[`TryFrom`]时，无法通过[`From`]实现：conflicting implementations of trait `std::convert::TryFrom<f64>` for type `entity::short_float::ShortFloat`
-    ///
-    /// ! ⚠️在「范围越界」时直接panic
-    /// * 🎯降低代码冗余量（减少过多的「错误处理」）
-    /// conflicting implementation in crate `core`:
-    /// - impl<T, U> std::convert::TryFrom<U> for T
-    /// where U: std::convert::Into<T>;
-    fn from_float(value: Float) -> Self {
-        // ! ⚠️【2024-05-02 20:41:19】直接unwrap
-        Self::try_from(value).unwrap()
-    }
-
-    #[inline(always)]
-    fn to_float(&self) -> Float {
-        self.value_float()
-    }
-}
-
-impl BudgetValue for Budget {
+impl BudgetValue for BudgetV1 {
     // 指定为浮点数
-    type E = ShortFloat;
+    type E = ShortFloatV1;
 
-    fn priority(&self) -> ShortFloat {
+    fn priority(&self) -> ShortFloatV1 {
         self[0] // * 🚩【2024-05-02 18:24:10】现在隐式`clone`
     }
 
-    fn durability(&self) -> ShortFloat {
+    fn durability(&self) -> ShortFloatV1 {
         self[1] // * 🚩【2024-05-02 18:24:10】现在隐式`clone`
     }
 
-    fn quality(&self) -> ShortFloat {
+    fn quality(&self) -> ShortFloatV1 {
         self[2] // * 🚩【2024-05-02 18:24:10】现在隐式`clone`
     }
 
-    fn priority_mut(&mut self) -> &mut ShortFloat {
+    fn priority_mut(&mut self) -> &mut ShortFloatV1 {
         &mut self[0]
     }
 
-    fn durability_mut(&mut self) -> &mut ShortFloat {
+    fn durability_mut(&mut self) -> &mut ShortFloatV1 {
         &mut self[1]
     }
 
-    fn quality_mut(&mut self) -> &mut ShortFloat {
+    fn quality_mut(&mut self) -> &mut ShortFloatV1 {
         &mut self[2]
     }
 }

@@ -9,28 +9,31 @@
 //!   * `w2c`
 //!   * `c2w`
 
-use super::EvidenceReal;
+use crate::entity::ShortFloat;
 use crate::global::Float;
 use nar_dev_utils::pipe;
 use std::ops::Div;
 
-/// 【派生】用于「证据数值」的实用方法
+/// 【派生】用于「短浮点」的实用方法
 ///
 /// # 📄OpenNARS `nars.inference.UtilityFunctions`
 ///
 /// Common functions on real numbers, mostly in [0,1].
-pub trait UtilityFunctions: EvidenceReal {
-    /// 🆕扩展逻辑「非」
-    /// * 📄这个在OpenNARS中直接用`1 - v`表示了，但此处仍然做出抽象
-    /// * 📝在使用了`Copy`并且是「按值传参」的情况下，才可省略[`clone`](Clone::clone)
-    ///   * ⚠️要分清是在「拷贝值」还是在「拷贝引用」
-    #[inline(always)]
-    fn not(self) -> Self {
-        Self::one() - self
-    }
+pub trait UtilityFunctions: ShortFloat {
+    // * 🚩现在直接使用[`ShortFloat`]基于的[`std::ops::Not`]特征
+    // /// 🆕扩展逻辑「非」
+    // /// * 📄这个在OpenNARS中直接用`1 - v`表示了，但此处仍然做出抽象
+    // /// * 📝在使用了`Copy`并且是「按值传参」的情况下，才可省略[`clone`](Clone::clone)
+    // ///   * ⚠️要分清是在「拷贝值」还是在「拷贝引用」
+    // #[inline(always)]
+    // fn not(self) -> Self {
+    //     // Self::one() - self
+    //     !self
+    // }
 
     /// 模拟`UtilityFunctions.and`
     /// * 🚩扩展逻辑「与」
+    /// * 🚩现在直接使用[`ShortFloat`]基于的[`std::ops::BitAnd`]特征
     ///
     /// # 📄OpenNARS
     ///
@@ -40,7 +43,7 @@ pub trait UtilityFunctions: EvidenceReal {
     ///  @return The output that is no larger than each input
     #[inline(always)]
     fn and(self, value: Self) -> Self {
-        self * value
+        self & value
     }
 
     /// 🆕多个值相与
@@ -58,6 +61,7 @@ pub trait UtilityFunctions: EvidenceReal {
     /// * 🚩扩展逻辑「或」
     /// * 🚩【2024-05-02 17:53:22】利用德摩根律行事
     ///   * 💭可能会有性能损失
+    /// * 🚩现在直接使用[`ShortFloat`]基于的[`std::ops::BitOr`]特征
     ///
     /// # 📄OpenNARS
     ///
@@ -68,14 +72,15 @@ pub trait UtilityFunctions: EvidenceReal {
     fn or(self, value: Self) -> Self {
         // a ∨ b = ¬(¬a ∧ ¬b)
         // (self.not().and(value.not())).not()
-        pipe! {
-            // 非
-            self.not()
-            // 与
-            => .and(value.not())
-            // 非
-            => .not()
-        }
+        // pipe! {
+        //     // 非
+        //     self.not()
+        //     // 与
+        //     => .and(value.not())
+        //     // 非
+        //     => .not()
+        // }
+        self | value
     }
 
     /// 🆕多个值相或
@@ -124,7 +129,7 @@ pub trait UtilityFunctions: EvidenceReal {
             => {.sum::<Float>()}#
             // 除以值的个数
             => .div(values.len() as Float)
-            // 转换回「证据数值」（保证不越界）
+            // 转换回「短浮点」（保证不越界）
             => Self::from_float
         }
     }
@@ -213,7 +218,7 @@ pub trait UtilityFunctions: EvidenceReal {
 
     /// 🆕「最大值合并」
     /// * 🎯用于（统一）OpenNARS`merge`的重复调用
-    /// * 🚩现在已经在[「证据数值」](EvidenceReal)中要求了[`Ord`]
+    /// * 🚩现在已经在[「短浮点」](EvidenceReal)中要求了[`Ord`]
     fn max_from(&mut self, other: Self) {
         let max = (*self).max(other);
         self.set(max);
@@ -221,16 +226,9 @@ pub trait UtilityFunctions: EvidenceReal {
 }
 
 /// 直接自动实现，附带所有默认方法
-impl<T: EvidenceReal> UtilityFunctions for T {}
+impl<T: ShortFloat> UtilityFunctions for T {}
 
-// ! ❌type parameter `T` must be used as the type parameter for some local type (e.g., `MyStruct<T>`)
-// impl<T: EvidenceReal> std::ops::BitAnd for T {
-//     type Output;
-
-//     fn bitand(self, rhs: Self) -> Self::Output {
-//         unimplemented!()
-//     }
-// }
+// ! 对标准库方法的实现受到「孤儿规则」的阻碍
 
 /// TODO: 单元测试
 #[cfg(test)]

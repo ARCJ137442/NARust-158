@@ -1,7 +1,10 @@
 //! 🎯复刻OpenNARS `nars.inference.BudgetFunctions`
 
 use super::UtilityFunctions;
-use crate::{entity::BudgetValue, global::Float, inference::EvidenceReal};
+use crate::{
+    entity::{BudgetValue, ShortFloat},
+    global::Float,
+};
 
 /// 预算函数
 /// * 🚩【2024-05-02 20:46:50】不同于OpenNARS中「直接创建新值」，此处许多「预算函数」仅改变自身
@@ -35,7 +38,7 @@ pub trait BudgetFunctions: BudgetValue {
 
     /// 模拟`BudgetFunctions.activate`
     /// * 🚩【2024-05-02 20:55:40】虽然涉及「概念」，但实际上只用到了「概念作为预算值的部分」
-    /// * 📌【2024-05-02 20:56:11】目前要求「概念」一方使用同样的「证据数值」
+    /// * 📌【2024-05-02 20:56:11】目前要求「概念」一方使用同样的「短浮点」
     ///
     fn activate<B>(&mut self, concept: &impl BudgetValue<E = Self::E>) {
         /* 📄OpenNARS源码：

@@ -2,17 +2,23 @@
 //! * 📌【2024-05-02 21:30:40】从「预算函数」来：一些地方必须用到「真值」及其方法
 
 use super::ShortFloat;
+use super::ShortFloatV1;
 use crate::{
     global::Float,
-    inference::EvidenceReal,
     io::{TRUTH_VALUE_MARK, VALUE_SEPARATOR},
 };
 use std::hash::Hash;
 
-pub trait TruthValue: Sized + Clone /* ←构造函数需要，模拟OpenNARS `clone` */ + Eq /* 模拟OpenNARS `equals` */ + Hash /* 模拟OpenNARS `hashCode` */ {
+/// 模拟OpenNARS `nars.entity.TruthValue`
+/// * 📌几个前置特征：
+///   * `Sized`：模拟构造函数
+///   * `Clone`：模拟OpenNARS `clone`
+///   * `Eq`：模拟OpenNARS `equals`
+///   * `Hash`：模拟OpenNARS `hashCode`
+pub trait TruthValue: Sized + Clone + Eq + Hash {
     /// 一种类型只可能有一种「证据值」
     /// * ✅兼容OpenNARS `ShortFloat`
-    type E: EvidenceReal;
+    type E: ShortFloat;
 
     /// 🆕不使用「字符」而是用统一的「字符串」
     ///
@@ -127,15 +133,15 @@ pub trait TruthValue: Sized + Clone /* ←构造函数需要，模拟OpenNARS `c
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TruthV1 {
     /// frequency
-    f: ShortFloat,
+    f: ShortFloatV1,
     /// confidence
-    c: ShortFloat,
+    c: ShortFloatV1,
     /// analytic
     a: bool,
 }
 
 impl TruthValue for TruthV1 {
-    type E = ShortFloat;
+    type E = ShortFloatV1;
 
     #[inline(always)]
     fn frequency(&self) -> Self::E {
