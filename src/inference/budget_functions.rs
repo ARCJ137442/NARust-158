@@ -51,7 +51,7 @@ pub trait BudgetFunctions: BudgetValue {
         concept.setQuality(quality); */
         let old_pri = concept.priority();
         let priority = old_pri.or(concept.priority());
-        let durability = Self::E::arithmetical_average(&[concept.durability(), self.durability()]);
+        let durability = Self::E::arithmetical_average([concept.durability(), self.durability()]);
         // let quality = concept.quality(); // ! 这俩不变，可以抵消
         *self.priority_mut() = priority;
         *self.durability_mut() = durability;

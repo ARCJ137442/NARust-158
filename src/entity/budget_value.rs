@@ -97,7 +97,7 @@ pub trait BudgetValue {
     /// To summarize a BudgetValue into a single number in [0, 1]
     fn summary(&self) -> Self::E {
         // 🚩三者几何平均值
-        Self::E::geometrical_average(&[self.priority(), self.durability(), self.quality()])
+        Self::E::geometrical_average([self.priority(), self.durability(), self.quality()])
     }
 
     /// 模拟 `BudgetValue.aboveThreshold`

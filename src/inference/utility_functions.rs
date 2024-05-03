@@ -12,7 +12,6 @@
 use crate::entity::ShortFloat;
 use crate::global::Float;
 use nar_dev_utils::pipe;
-use std::ops::Div;
 
 /// 【派生】用于「短浮点」的实用方法
 ///
@@ -54,7 +53,7 @@ pub trait UtilityFunctions: ShortFloat {
             // 逐个迭代值的迭代器
             .into_iter()
             // 从「1」开始不断取「与」
-            .fold(Self::one(), Self::and)
+            .fold(Self::ONE, Self::and)
     }
 
     /// 模拟`UtilityFunctions.or`
@@ -103,6 +102,7 @@ pub trait UtilityFunctions: ShortFloat {
     /// 复刻OpenNARS `nars.inference.UtilityFunctions.aveAri`
     /// * 🚩求代数平均值
     /// * ❌不能用`impl IntoIterator<Item = Self>`：要计算长度
+    /// * ⚠️迭代器不能为空
     ///
     /// # 📄OpenNARS
     ///
@@ -111,7 +111,7 @@ pub trait UtilityFunctions: ShortFloat {
     /// @param arr The inputs, each in [0, 1]
     /// @return The arithmetic average the inputs
     #[doc(alias = "ave_ari")]
-    fn arithmetical_average(values: &[Self]) -> Self {
+    fn arithmetical_average(values: impl IntoIterator<Item = Self>) -> Self {
         // * 💭【2024-05-02 00:44:41】大概会长期存留，因为与「真值函数」无关而无需迁移
         /* 📄OpenNARS源码：
         float product = 1;
@@ -119,19 +119,27 @@ pub trait UtilityFunctions: ShortFloat {
             product *= f;
         }
         return (float) Math.pow(product, 1.00 / arr.length); */
-        pipe! {
-            values
-            // 逐个迭代值的迭代器
-            => .iter()
-            // ! 必须先转换为浮点数：连续加和会越界
-            => .map(Self::to_float)
-            // 所有值的和（从`1`开始）
-            => {.sum::<Float>()}#
-            // 除以值的个数
-            => .div(values.len() as Float)
-            // 转换回「短浮点」（保证不越界）
-            => Self::from_float
+        let mut sum: Float = 0.0;
+        let mut len: usize = 0;
+        for v in values.into_iter() {
+            sum += v.to_float(); // 转换为浮点并追加 | 因此不担心溢出
+            len += 1; // 与此同时，计数
         }
+        Self::from_float(sum / len as Float)
+        // * 🚩【2024-05-03 12:50:23】边遍历边计数，就能解决问题
+        // pipe! {
+        //     values
+        //     // 逐个迭代值的迭代器
+        //     => .iter()
+        //     // ! 必须先转换为浮点数：连续加和会越界
+        //     => .map(Self::to_float)
+        //     // 所有值的和（从`1`开始）
+        //     => {.sum::<Float>()}#
+        //     // 除以值的个数
+        //     => .div(values.len() as Float)
+        //     // 转换回「短浮点」（保证不越界）
+        //     => Self::from_float
+        // }
     }
 
     /// 复刻OpenNARS `nars.inference.UtilityFunctions.aveGeo`
@@ -145,7 +153,7 @@ pub trait UtilityFunctions: ShortFloat {
     /// @param arr The inputs, each in [0, 1]
     /// @return The geometric average the inputs
     #[doc(alias = "ave_geo")]
-    fn geometrical_average(values: &[Self]) -> Self {
+    fn geometrical_average(values: impl IntoIterator<Item = Self>) -> Self {
         // * 💭【2024-05-02 00:44:41】大概会长期存留，因为与「真值函数」无关而无需迁移
         /* 📄OpenNARS源码：
         float product = 1;
@@ -153,14 +161,35 @@ pub trait UtilityFunctions: ShortFloat {
             product *= f;
         }
         return (float) Math.pow(product, 1.00 / arr.length); */
-        values
-            // 逐个迭代值的迭代器
-            .iter()
-            .cloned()
-            // 所有值的乘积（从`1`开始）
-            .fold(Self::one(), Self::mul)
-            // 值个数次开根
-            .root(values.len())
+        let mut product: Float = 1.0;
+        let mut len: usize = 0;
+        for v in values.into_iter() {
+            product *= v.to_float(); // 转换为浮点并追加
+            len += 1; // 与此同时，计数
+        }
+        // 因为乘法在0~1封闭，故无需顾忌panic
+        Self::from_float(product.powf(1.0 / len as Float))
+        // * ❌【2024-05-03 12:51:44】弃用下述代码：在数值过小时会引发精度丢失
+        /* [src\inference\utility_functions.rs:446:52] [sf1, sf2] = [
+            ShortFloatV1 {
+                value: 3,
+            },
+            ShortFloatV1 {
+                value: 3,
+            },
+        ]
+        thread 'inference::utility_functions::tests::geometrical_average' panicked at src\inference\utility_functions.rs:448:13:
+        assertion `left == right` failed
+          left: ShortFloatV1 { value: 0 }
+         right: ShortFloatV1 { value: 3 } */
+        // values
+        //     // 逐个迭代值的迭代器
+        //     .iter()
+        //     .cloned()
+        //     // 所有值的乘积（从`1`开始）
+        //     .fold(Self::one(), Self::mul)
+        //     // 值个数次开根
+        //     .root(values.len())
     }
 
     /// 从真值的「w值」到「c值」
@@ -230,8 +259,258 @@ impl<T: ShortFloat> UtilityFunctions for T {}
 
 // ! 对标准库方法的实现受到「孤儿规则」的阻碍
 
-/// TODO: 单元测试
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::entity::ShortFloatV1;
+    use anyhow::Result;
+    use nar_dev_utils::{asserts, for_in_ifs, macro_once};
+
+    /// 定义要测试的「短浮点」类型
+    type SF = ShortFloatV1;
+
+    /// 健壮性测试所用到的「测试精度」
+    /// * 🎯尽可能多地遍历「短浮点」的所有可能情形
+    /// * 🚩测试的案例量
+    /// * 🕒2000不到0.5s，5000大约1s，10000要大约7s
+    const N: usize = 4000;
+    const N_FLOAT: Float = N as Float;
+
+    /// 快捷构造宏
+    macro_rules! sf {
+        // 0、1、0.5 特殊映射
+        (0) => {
+            SF::ZERO
+        };
+        (1) => {
+            SF::ONE
+        };
+        (HALF) => {
+            SF::HALF
+        };
+        (1/2) => {
+            SF::HALF
+        };
+        // 值映射
+        ($float:expr) => {
+            SF::from_float($float)
+        };
+    }
+
+    /// 以一定数目遍历从0到1的所有「短浮点」
+    /// * 🚩用到常量[`N`]与[`N_FLOAT`]
+    fn all_sf() -> impl Iterator<Item = SF> {
+        (0..=N).map(|v| sf!(v as Float / N_FLOAT))
+    }
+
+    /// 海测/快捷遍历所有「短浮点」（所有组合）
+    macro_rules! for_all_sf {
+        ( ( $($var_name:ident $(if $cond:expr)? $(,)?)* ) => $($code:tt)* ) => {
+            for_in_ifs! {
+                // 遍历时要执行的代码
+                { $($code)* }
+                // 遍历范围
+                $( for $var_name in (all_sf()) $(if $cond)? )*
+            }
+        };
+    }
+
+    /// 测试/and
+    #[test]
+    fn and() -> Result<()> {
+        // 海测（健壮性测试） | 🎯确保正常值不会panic
+        for_all_sf! {
+            (sf1, sf2) =>
+            // 直接计算
+            let _ = sf1 & sf2;
+        }
+        // 案例测试
+        macro_once! {
+            /// * 🚩模式：值1 & 值2 ⇒ 预期
+            macro test($($f1:tt & $f2:tt => $expected:tt)*) {
+                asserts! {
+                    $(
+                        sf!($f1) & sf!($f2) => sf!($expected)
+                    )*
+                }
+            }
+            // 0、1
+            0 & 0 => 0
+            0 & 1 => 0
+            1 & 0 => 0
+            1 & 1 => 1
+            // 1：幺元
+            1 & 0.1 => 0.1
+            1 & 0.2 => 0.2
+            1 & 0.3 => 0.3
+            1 & 0.4 => 0.4
+            1 & 0.5 => 0.5
+            1 & 0.6 => 0.6
+            1 & 0.7 => 0.7
+            1 & 0.8 => 0.8
+            1 & 0.9 => 0.9
+            // 0：零元
+            0 & 0.1 => 0
+            0 & 0.2 => 0
+            0 & 0.3 => 0
+            0 & 0.4 => 0
+            0 & 0.5 => 0
+            0 & 0.6 => 0
+            0 & 0.7 => 0
+            0 & 0.8 => 0
+            0 & 0.9 => 0
+            // 乘法语义
+            0.5 & 0.5 => 0.25
+        }
+        Ok(())
+    }
+
+    /// 测试/and_multi
+    #[test]
+    fn and_multi() -> Result<()> {
+        // * 🚩验证与二元运算的逻辑一致
+        for_all_sf! {
+            (sf1, sf2) =>
+            // 直接计算
+            assert_eq!(sf1 & sf2, SF::and_multi([sf1, sf2]));
+        }
+        // * 🚩验证多元运算的正常结果（乘方）
+        let mut sfs = Vec::new();
+        let v = 0.9;
+        for n in 1..=4 {
+            // ! ❌【2024-05-03 12:42:37】对零次幂处理不善：1.0🆚0.9，但OpenNARS中不会用到
+            // ! ⚠️【2024-05-03 12:39:56】目前对五次及以上会有微弱不一致：5904🆚5905
+            sfs.push(sf!(v));
+            let multi = SF::and_multi(sfs.iter().cloned());
+            let pow = sf!(v.powi(dbg!(n)));
+            assert_eq!(multi, pow);
+        }
+        Ok(())
+    }
+
+    /// 测试/or
+    #[test]
+    fn or() -> Result<()> {
+        // 海测（健壮性测试） | 🎯确保正常值不会panic
+        for_all_sf! {
+            (sf1, sf2) =>
+            // 直接计算
+            let _ = sf1 | sf2;
+        }
+        // 案例测试
+        macro_once! {
+            /// * 🚩模式：值1 | 值2 ⇒ 预期
+            macro test($($f1:tt | $f2:tt => $expected:tt)*) {
+                asserts! {
+                    $(
+                        sf!($f1) | sf!($f2) => sf!($expected)
+                    )*
+                }
+            }
+            // 0、1
+            0 | 0 => 0
+            0 | 1 => 1
+            1 | 0 => 1
+            1 | 1 => 1
+            // 1：零元
+            1 | 0.1 => 1
+            1 | 0.2 => 1
+            1 | 0.3 => 1
+            1 | 0.4 => 1
+            1 | 0.5 => 1
+            1 | 0.6 => 1
+            1 | 0.7 => 1
+            1 | 0.8 => 1
+            1 | 0.9 => 1
+            // 0：幺元
+            0 | 0.1 => 0.1
+            0 | 0.2 => 0.2
+            0 | 0.3 => 0.3
+            0 | 0.4 => 0.4
+            0 | 0.5 => 0.5
+            0 | 0.6 => 0.6
+            0 | 0.7 => 0.7
+            0 | 0.8 => 0.8
+            0 | 0.9 => 0.9
+            // 德摩根 乘法语义
+            0.5 | 0.5 => 0.75
+        }
+        Ok(())
+    }
+
+    /// 测试/or_multi
+    #[test]
+    fn or_multi() -> Result<()> {
+        // * 🚩验证与二元运算的逻辑一致
+        for_all_sf! {
+            (sf1, sf2) =>
+            // 直接计算
+            assert_eq!(sf1 | sf2, SF::or_multi([sf1, sf2]));
+        }
+        Ok(())
+    }
+
+    /// 测试/arithmetical_average
+    #[test]
+    fn arithmetical_average() -> Result<()> {
+        // * 🚩验证与浮点运算的逻辑一致
+        for_all_sf! {
+            (sf1, sf2) =>
+            // 直接计算
+            let ave_ari = SF::arithmetical_average([sf1 ,sf2]);
+            let float_ari = sf!((sf1.to_float() + sf2.to_float()) / 2.0);
+            assert_eq!(ave_ari, float_ari);
+        }
+        Ok(())
+    }
+
+    /// 测试/geometrical_average
+    /// TODO: 完成编写
+    #[test]
+    fn geometrical_average() -> Result<()> {
+        // * 🚩验证与浮点运算的逻辑一致
+        for_all_sf! {
+            (sf1, sf2) =>
+            // 直接计算
+            let ave_geo = SF::geometrical_average([sf1 ,sf2]);
+            let float_geo = sf!((sf1.to_float() * sf2.to_float()).sqrt());
+            assert_eq!(ave_geo, float_geo);
+        }
+        Ok(())
+    }
+
+    /// 测试/w2c
+    /// TODO: 完成编写
+    #[test]
+    fn w2c() -> Result<()> {
+        Ok(())
+    }
+
+    /// 测试/c2w
+    /// TODO: 完成编写
+    #[test]
+    fn c2w() -> Result<()> {
+        Ok(())
+    }
+
+    /// 测试/inc
+    /// TODO: 完成编写
+    #[test]
+    fn inc() -> Result<()> {
+        Ok(())
+    }
+
+    /// 测试/dec
+    /// TODO: 完成编写
+    #[test]
+    fn dec() -> Result<()> {
+        Ok(())
+    }
+
+    /// 测试/max_from
+    /// TODO: 完成编写
+    #[test]
+    fn max_from() -> Result<()> {
+        Ok(())
+    }
 }

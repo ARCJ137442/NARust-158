@@ -8,10 +8,9 @@
 //!
 //! * ✅【2024-05-02 21:41:48】（初代实现）基本复刻完毕
 
-use std::ops::{BitAnd, BitOr, Not};
-
 use crate::global::Float;
 use narsese::api::EvidentNumber;
+use std::ops::{BitAnd, BitOr, Not};
 use thiserror::Error;
 
 /// 🆕【前提】抽象的「短浮点」特征
@@ -24,12 +23,30 @@ use thiserror::Error;
 ///   * 📌在实现了[`Copy`]之后，将值的复制看作是「随处可用」的
 /// * 🚩【2024-05-03 11:11:48】现在将其概念与「短浮点」合并
 ///
-/// * 📌附加要求实现的特征：
-///   * [`Copy`]：允许直接复制，要求整个数据类型尽可能轻量级
-///   * [`Ord`]：实数的可比性
-///   * [`Not`]：NAL逻辑非
-///   * [`BitAnd`]：NAL逻辑与 模拟`UtilityFunctions.and`
-///   * [`BitOr`]：NAL逻辑或 模拟`UtilityFunctions.or`
+/// ## ⚠️与OpenNARS不同的一点：浮点舍入问题
+///
+/// !📝OpenNARS的实现是「四舍五入」，而NARust的实现是「向下截断」
+/// * ❗即便在构造时采用了[`Float::round`]，但实际效果仍然与OpenNARS不同
+///   * ⚡为性能考量，许多运算最后的舍入操作仍然是四舍五入（整数除法，避免转换为浮点）
+/// * 📄这导致`0.1 * 0.0005`在OpenNARS中等于`0.0001`而在NARust中为`0`
+///
+/// OpenNARS中可行的推理：
+///
+/// ```plaintext
+/// IN: <A --> B>. %1.00;0.10% {6 : 3}
+/// IN: <B --> C>. %1.00;0.01% {6 : 4}
+/// 1
+/// OUT: <A --> C>. %1.00;0.00% {7 : 4;3}
+/// OUT: <C --> A>. %1.00;0.00% {7 : 4;3}
+/// ```
+///
+/// ## 📌附加要求实现的特征：
+///
+/// * [`Copy`]：允许直接复制，要求整个数据类型尽可能轻量级
+/// * [`Ord`]：实数的可比性
+/// * [`Not`]：NAL逻辑非
+/// * [`BitAnd`]：NAL逻辑与 模拟`UtilityFunctions.and`
+/// * [`BitOr`]：NAL逻辑或 模拟`UtilityFunctions.or`
 pub trait ShortFloat:
     EvidentNumber
     + Copy
@@ -40,7 +57,15 @@ pub trait ShortFloat:
 // * 📝不要在特征冒号后边的类型之间加注释，会破坏格式化器工作
 // * 🚩【2024-05-02 18:33:19】将`Ord`作为在[`EvidentNumber`]之上的「附加要求」之一：需要在「预算值合并」使用「取最大」方法
 {
-    /// 有关「一半」的常量
+    /// 有关「0」的常量
+    /// * 🎯可用于`TruthValue.isNegative`
+    const ZERO: Self;
+
+    /// 有关「1」的常量
+    /// * 🎯可用于`TruthValue.isNegative`
+    const ONE: Self;
+
+    /// 有关「1/2」的常量
     /// * 🎯可用于`TruthValue.isNegative`
     const HALF: Self;
 
@@ -80,8 +105,6 @@ pub trait ShortFloat:
 
 /// 初代实现 + 单元测试
 mod impl_v1 {
-    use nar_dev_utils::pipe;
-
     use super::*;
 
     /// 用作「短浮点」的整数类型
@@ -412,13 +435,22 @@ mod impl_v1 {
             //     // 非
             //     => .not()
             // }
-            // * 💭↓下面这个比上面的简洁多了
-            !(!self & !rhs)
+            // !(!self & !rhs)
+            // * 🚩【2024-05-03 12:27:21】做如下代数简化，仍然能通过测试 并且结果一致
+            //   1 - (1 - a)(1 - b)
+            // = 1 - (1 - a - b + ab)
+            // = 1 - 1 + a + b - ab
+            // = a + b - ab
+            // ↑仅在`ab`引入小数，故最终舍入不会受其影响
+            Self::new_unchecked(self.value + rhs.value - ((self.value * rhs.value) / SHORT_MAX))
         }
     }
 
     /// 实现「短浮点」
     impl ShortFloat for ShortFloatV1 {
+        // 直接复用自身常量
+        const ZERO: Self = Self::ZERO;
+        const ONE: Self = Self::ONE;
         const HALF: Self = Self::HALF;
 
         /// 从浮点到自身转换（不检查，直接panic）

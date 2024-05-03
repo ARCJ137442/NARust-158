@@ -6,6 +6,7 @@
         "infty",
         "nogui",
         "powf",
+        "powi",
         "thiserror"
     ]
 }
