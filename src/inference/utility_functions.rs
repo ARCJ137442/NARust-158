@@ -201,10 +201,10 @@ pub trait UtilityFunctions: ShortFloat {
     ///
     /// @param w Weight of evidence, a non-negative real number
     /// @return The corresponding confidence, in [0, 1)
-    fn w2c(w: Float, horizon: usize) -> Self {
+    fn w2c(w: Float, horizon: Float) -> Self {
         /* 📄OpenNARS源码：
         return w / (w + Parameters.HORIZON); */
-        Self::from_float(w / (w + horizon as Float))
+        Self::from_float(w / (w + horizon))
     }
 
     /// 从真值的「c值」到「w值」
@@ -216,11 +216,11 @@ pub trait UtilityFunctions: ShortFloat {
     ///
     /// @param c confidence, in [0, 1)
     /// @return The corresponding weight of evidence, a non-negative real number
-    fn c2w(&self, horizon: usize) -> Float {
+    fn c2w(&self, horizon: Float) -> Float {
         /* 📄OpenNARS源码：
         return Parameters.HORIZON * c / (1 - c); */
         let c = self.to_float();
-        horizon as Float * c / (1.0 - c)
+        horizon * c / (1.0 - c)
     }
 
     // 其它用途 //
@@ -248,6 +248,8 @@ pub trait UtilityFunctions: ShortFloat {
     /// 🆕「最大值合并」
     /// * 🎯用于（统一）OpenNARS`merge`的重复调用
     /// * 🚩现在已经在[「短浮点」](EvidenceReal)中要求了[`Ord`]
+    /// * 📝【2024-05-03 14:55:29】虽然现在「预算函数」以「直接创建新值」为主范式，
+    ///   * 但在用到该函数的`merge`方法上，仍然是「修改」语义——需要可变引用
     fn max_from(&mut self, other: Self) {
         let max = (*self).max(other);
         self.set(max);

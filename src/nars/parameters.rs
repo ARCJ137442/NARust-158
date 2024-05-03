@@ -4,6 +4,10 @@
 use crate::global::Float;
 use nar_dev_utils::macro_once;
 
+/// 用于决定推理器诸多推理中的「k值」
+/// * 🚩🆕【2024-05-03 16:00:14】根据在「真值函数」中的实际用途，此处将其修改为「浮点数」[`Float`]类型
+pub type EvidentialHorizon = Float;
+
 macro_once! {
     // * 🚩模式：自动为「属性 = 值」生成[`Default`]实现
     macro parameters(
@@ -87,10 +91,12 @@ macro_once! {
         /// Maximum TermLinks used in reasoning for each Task in Concept
         pub max_reasoned_term_link: usize = 3,
 
+        /// * 📝亦即NAL推理中的「k值」
+        /// * 🚩🆕【2024-05-03 16:01:12】现在「k值」真正变成了浮点类型
         /// # 📄OpenNARS
         ///
         /// Evidential Horizon, the amount of future evidence to be considered.
-        pub horizon: usize = 1, // or 2, can be float
+        pub horizon: EvidentialHorizon = 1.0, // or 2, can be float
 
         /// # 📄OpenNARS
         ///
@@ -226,7 +232,7 @@ mod tests {
             new_task_forgetting_cycle => 1
             max_matched_term_link => 10
             max_reasoned_term_link => 3
-            horizon => 1
+            horizon => 1.0
             reliance => 0.9
             budget_threshold => 0.01
             default_confirmation_expectation => 0.8

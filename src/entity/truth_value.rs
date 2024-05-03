@@ -1,5 +1,6 @@
 //! 🎯复刻OpenNARS `nars.entity.TruthValue`
 //! * 📌【2024-05-02 21:30:40】从「预算函数」来：一些地方必须用到「真值」及其方法
+//! * ✅【2024-05-03 16:21:02】所有方法基本复刻完毕
 
 use super::ShortFloat;
 use super::ShortFloatV1;
@@ -34,13 +35,22 @@ pub trait TruthValue: Sized + Clone + Eq + Hash {
     /// The character that separates the factors in a truth value
     const SEPARATOR: char = VALUE_SEPARATOR;
 
-    /// 🆕最原始的构造函数
+    /// 🆕最原始的构造函数(f, c, a)
     /// * 🎯用于[`TruthValue::new_analytic_default`]
     /// * 用于接收「内部转换后的结果」
     fn new(frequency: Self::E, confidence: Self::E, is_analytic: bool) -> Self;
 
+    /// 🆕最原始的构造函数(f, c)
+    /// * 🎯用于[`TruthValue::new_analytic_default`]
+    /// * 用于接收「内部转换后的结果」
+    #[inline(always)]
+    fn new_fc(frequency: Self::E, confidence: Self::E) -> Self {
+        Self::new(frequency, confidence, false)
+    }
+
     /// 模拟OpenNARS 构造函数 (f, c, a)
     /// * ⚠️此处让「f」「c」为浮点数，内部实现时再转换
+    #[inline(always)]
     fn from_float(frequency: Float, confidence: Float, is_analytic: bool) -> Self {
         Self::new(
             Self::E::from_float(frequency),
@@ -57,13 +67,17 @@ pub trait TruthValue: Sized + Clone + Eq + Hash {
     /// Constructor with two ShortFloats
     #[inline(always)]
     fn from_fc(frequency: Float, confidence: Float) -> Self {
-        Self::from_float(frequency, confidence, false)
+        Self::new_fc(
+            Self::E::from_float(frequency),
+            Self::E::from_float(confidence),
+        )
     }
 
     /// 🆕集成OpenNARS`isAnalytic`产生的推理结果
     /// * 🎯消除硬编码 自`return new TruthValue(0.5f, 0f);`
     ///   * f、c、a分别为`0.5f`、`0f`、`false`
     /// * ❓【2024-05-03 13:51:37】到底`isAnalytic`意义何在
+    #[inline(always)]
     fn new_analytic_default() -> Self {
         /* 📄OpenNARS源码 @ TruthFunctions：
         new TruthValue(0.5f, 0f); */
@@ -81,7 +95,8 @@ pub trait TruthValue: Sized + Clone + Eq + Hash {
     fn confidence_mut(&mut self) -> &mut Self::E;
 
     /// 模拟OpenNARS `TruthValue.isAnalytic`、`getAnalytic`
-    /// * 📌此处仍然直接返回（新的）「证据值」而非浮点
+    /// * 📝OpenNARS将其用于「A + <A ==> B> = B」导出的真值中，然后在「下一次据此推导」中「排除结论」
+    ///   * 💭【2024-05-03 15:34:29】或许正是为了「只导出一遍」或者「由此导出的结论不能直接使用」
     ///
     /// # 📄OpenNARS
     ///
@@ -152,9 +167,8 @@ pub trait TruthValue: Sized + Clone + Eq + Hash {
 
 /// 初代实现
 mod impl_v1 {
-    use std::hash::Hasher;
-
     use super::*;
+    use std::hash::Hasher;
 
     /// [`TruthValue`]初代实现
     /// * 🎯测试特征的效果
@@ -233,7 +247,6 @@ mod impl_v1 {
 }
 pub use impl_v1::*;
 
-/// TODO: 单元测试
 #[cfg(test)]
 mod tests {
     use super::*;

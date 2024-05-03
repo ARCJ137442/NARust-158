@@ -7,18 +7,25 @@ use crate::{
 };
 
 /// 预算函数
-/// * 🚩【2024-05-02 20:46:50】不同于OpenNARS中「直接创建新值」，此处许多「预算函数」仅改变自身
-///   * ✅若需「创建新值」可以通过「事先`clone`」实现
+/// * 🚩【2024-05-03 14:48:13】现在仍依照OpenNARS原意「直接创建新值」
+///   * 📝本身复制值也没多大性能损耗
+///   * 📌「直接创建新值」会更方便后续调用
+///     * 📄减少无谓的`.clone()`
 pub trait BudgetFunctions: BudgetValue {
+    /* ----------------------- Belief evaluation ----------------------- */
     // TODO: truthToQuality | 涉及「真值」
 
     // TODO: rankBelief | 涉及「语句」
+
+    /* ----- Functions used both in direct and indirect processing of tasks ----- */
 
     // TODO: solutionEval | 涉及「语句」
 
     // TODO: revise | 涉及「真值」「记忆区（推理上下文）」
 
     // TODO: update | 涉及「任务」「真值」
+
+    /* ----------------------- Links ----------------------- */
 
     /// 模拟`BudgetFunctions.distributeAmongLinks`
     ///
@@ -28,19 +35,33 @@ pub trait BudgetFunctions: BudgetValue {
     /// @param b The original budget
     /// @param n Number of links
     /// @return Budget value for each link
-    fn distribute_among_links(&mut self, n: usize) {
+    fn distribute_among_links(&self, n: usize) -> Self {
         /* 📄OpenNARS源码：
         float priority = (float) (b.getPriority() / Math.sqrt(n));
         return new BudgetValue(priority, b.getDurability(), b.getQuality()); */
         let priority = self.priority().to_float() / (n as Float).sqrt();
-        *self.priority_mut() = Self::E::from_float(priority);
+        Self::new(
+            Self::E::from_float(priority),
+            self.durability(),
+            self.quality(),
+        )
     }
+
+    /* ----------------------- Concept ----------------------- */
 
     /// 模拟`BudgetFunctions.activate`
     /// * 🚩【2024-05-02 20:55:40】虽然涉及「概念」，但实际上只用到了「概念作为预算值的部分」
     /// * 📌【2024-05-02 20:56:11】目前要求「概念」一方使用同样的「短浮点」
+    /// * 🚩【2024-05-03 14:58:03】此处是「修改」语义
+    /// * ⚠️参数顺序和OpenNARS仍然保持相同：`self`指代其中的`concept`参数
     ///
-    fn activate<B>(&mut self, concept: &impl BudgetValue<E = Self::E>) {
+    /// # 📄OpenNARS
+    ///
+    /// Activate a concept by an incoming TaskLink
+    ///
+    /// @param concept The concept
+    /// @param budget  The budget for the new item
+    fn activate<B>(&mut self, budget: &impl BudgetValue<E = Self::E>) {
         /* 📄OpenNARS源码：
         float oldPri = concept.getPriority();
         float priority = or(oldPri, budget.getPriority());
@@ -49,16 +70,19 @@ pub trait BudgetFunctions: BudgetValue {
         concept.setPriority(priority);
         concept.setDurability(durability);
         concept.setQuality(quality); */
-        let old_pri = concept.priority();
-        let priority = old_pri.or(concept.priority());
-        let durability = Self::E::arithmetical_average([concept.durability(), self.durability()]);
-        // let quality = concept.quality(); // ! 这俩不变，可以抵消
+        let old_pri = self.priority();
+        let priority = old_pri | budget.priority();
+        let durability = Self::E::arithmetical_average([self.durability(), budget.durability()]);
+        // let quality = self.quality(); // ! 这俩不变，可以抵消
         *self.priority_mut() = priority;
         *self.durability_mut() = durability;
         // *self.quality_mut() = quality; // ! 这俩不变，可以抵消
     }
 
+    /* ---------------- Bag functions, on all Items ------------------- */
+
     /// 模拟`BudgetFunctions.forget`
+    /// * 🚩【2024-05-03 14:57:06】此处是「修改」语义，而非「创建新值」语义
     ///
     /// # 📄OpenNARS
     ///
@@ -90,6 +114,8 @@ pub trait BudgetFunctions: BudgetValue {
     }
 
     /// 模拟`BudgetValue.merge`，亦与`BudgetFunctions.merge`相同
+    /// * 📝【2024-05-03 14:55:29】虽然现在「预算函数」以「直接创建新值」为主范式，
+    ///   * 但在用到该函数的`merge`方法上，仍然是「修改」语义——需要可变引用
     ///
     /// # 📄OpenNARS
     ///
@@ -115,6 +141,8 @@ pub trait BudgetFunctions: BudgetValue {
         self.durability_mut().max_from(other.durability());
         self.quality_mut().max_from(other.quality());
     }
+
+    /* ----- Task derivation in LocalRules and SyllogisticRules ----- */
 
     // TODO: forward | 需要「记忆区」「真值」 `budgetInference`
     // TODO: backward | 需要「记忆区」「真值」 `budgetInference`

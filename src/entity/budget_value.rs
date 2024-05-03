@@ -11,14 +11,36 @@ use narsese::api::EvidentNumber;
 /// * 🚩不直接使用「获取可变引用」的方式
 ///   * 📌获取到的「证据值」可能另有一套「赋值」的方法：此时需要特殊定制
 ///   * 🚩【2024-05-02 00:11:20】目前二者并行，`set_`复用`_mut`的逻辑（`_mut().set(..)`）
+/// * 🚩【2024-05-03 14:46:52】要求[`Sized`]是为了使用构造函数
 ///
 /// # 📄OpenNARS `nars.entity.BudgetValue`
 ///
 /// A triple of priority (current), durability (decay), and quality (long-term average).
-pub trait BudgetValue {
+pub trait BudgetValue: Sized {
     /// 一种类型只可能有一种「证据值」
     /// * ✅兼容OpenNARS `ShortFloat`
     type E: ShortFloat;
+
+    /// 内置构造函数(p, d, q)
+    /// * 🚩直接从「短浮点」构造
+    fn new(p: Self::E, d: Self::E, q: Self::E) -> Self;
+    /// 模拟 `BudgetValue` 构造函数(p, d, q)
+    /// * 🚩将浮点数分别转换为「短浮点」
+    ///
+    /// # 📄OpenNARS `BudgetValue`
+    ///
+    /// Constructor with initialization
+    ///
+    /// @param p Initial priority
+    /// @param d Initial durability
+    /// @param q Initial quality
+    fn from_float(p: Float, d: Float, q: Float) -> Self {
+        Self::new(
+            <Self::E as ShortFloat>::from_float(p),
+            <Self::E as ShortFloat>::from_float(d),
+            <Self::E as ShortFloat>::from_float(q),
+        )
+    }
 
     /// 获取优先级
     /// * 🚩【2024-05-02 18:21:38】现在统一获取值：对「实现了[`Copy`]的类型」直接复制
@@ -126,26 +148,37 @@ impl BudgetValue for BudgetV1 {
     // 指定为浮点数
     type E = ShortFloatV1;
 
+    #[inline(always)]
+    fn new(p: Self::E, d: Self::E, q: Self::E) -> Self {
+        [p, d, q]
+    }
+
+    #[inline(always)]
     fn priority(&self) -> ShortFloatV1 {
         self[0] // * 🚩【2024-05-02 18:24:10】现在隐式`clone`
     }
 
+    #[inline(always)]
     fn durability(&self) -> ShortFloatV1 {
         self[1] // * 🚩【2024-05-02 18:24:10】现在隐式`clone`
     }
 
+    #[inline(always)]
     fn quality(&self) -> ShortFloatV1 {
         self[2] // * 🚩【2024-05-02 18:24:10】现在隐式`clone`
     }
 
+    #[inline(always)]
     fn priority_mut(&mut self) -> &mut ShortFloatV1 {
         &mut self[0]
     }
 
+    #[inline(always)]
     fn durability_mut(&mut self) -> &mut ShortFloatV1 {
         &mut self[1]
     }
 
+    #[inline(always)]
     fn quality_mut(&mut self) -> &mut ShortFloatV1 {
         &mut self[2]
     }

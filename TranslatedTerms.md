@@ -2,6 +2,8 @@
 
 该表中列举所有英文术语（个人化）的中文翻译：
 
+## 类名/模块名
+
 |英文|所用译名|其它译名|
 |:--|:--|:--|
 |Term|词项|词语，词|
@@ -64,3 +66,22 @@
 |Rule Tables|规则表||
 |Structural Rules|结构规则||
 |Syllogistic Rules|三段论规则||
+
+## 类方法/实例方法
+
+|英文|所用译名|其它译名|
+|:--|:--|:--|
+|conversion|转换||
+|negation|否定||
+|contraposition|逆否|对位|
+|revision|修正|修订|
+|deduction|演绎||
+|analogy|类比||
+|resemblance|相似||
+|abduction|溯因||
+|induction|归纳||
+|exemplification|例证||
+|comparison|比对||
+|desire|欲望||
+|union|并集||
+|intersection|交集||

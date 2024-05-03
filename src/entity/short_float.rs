@@ -69,6 +69,25 @@ pub trait ShortFloat:
     /// * 🎯可用于`TruthValue.isNegative`
     const HALF: Self;
 
+    /// 判断「是否为零」
+    /// * 📌【2024-05-03 15:51:33】在[`crate::inference::TruthFunctions::comparison`]中首次用到
+    #[inline(always)]
+    fn is_zero(&self) -> bool {
+        *self == Self::ZERO
+    }
+
+    /// 判断「是否为一」
+    #[inline(always)]
+    fn is_one(&self) -> bool {
+        *self == Self::ONE
+    }
+
+    /// 判断「是否为一半」
+    #[inline(always)]
+    fn is_half(&self) -> bool {
+        *self == Self::HALF
+    }
+
     /// 转换为浮点数
     /// * 🚩使用「全局浮点数类型」
     /// * 🎯用于【预算数值与普通浮点数之间】【不同的预算数值之间】互相转换
