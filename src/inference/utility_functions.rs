@@ -465,7 +465,6 @@ mod tests {
     }
 
     /// 测试/geometrical_average
-    /// TODO: 完成编写
     #[test]
     fn geometrical_average() -> Result<()> {
         // * 🚩验证与浮点运算的逻辑一致
