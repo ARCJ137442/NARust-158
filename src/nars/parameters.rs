@@ -202,6 +202,12 @@ macro_once! {
 
 /// 🆕全局、默认的「超参数」
 /// * 🎯用于各特征的默认实现
+/// * 🚩【2024-05-04 01:31:58】不如就利用这个「全局常量」暂且在代码逻辑中「做死编码」
+///   * ⚡通过「硬编码」的方式减少传参，提升开发效率
+///     * 📄无需在某些函数中浪费时间与精力「到处传参」，特别是[`w2c`](crate::inference::UtilityFunctions::w2c)、[`c2w`](crate::inference::UtilityFunctions::c2w)
+///   * ✅将「重构/整理 工作」交给后续进阶项目开发
+///     * 📌【2024-05-04 01:34:20】目前工作中心仍然是「复现/复刻」而非「探索」
+///     * 📌仍旧以「开发效率」为首要指标
 pub const DEFAULT_PARAMETERS: Parameters = Parameters::default_const();
 
 /// 单元测试

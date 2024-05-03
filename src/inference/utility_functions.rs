@@ -12,6 +12,7 @@
 
 use crate::entity::ShortFloat;
 use crate::global::Float;
+use crate::nars::DEFAULT_PARAMETERS;
 use nar_dev_utils::pipe;
 
 /// 【派生】用于「短浮点」的实用方法
@@ -202,10 +203,10 @@ pub trait UtilityFunctions: ShortFloat {
     ///
     /// @param w Weight of evidence, a non-negative real number
     /// @return The corresponding confidence, in [0, 1)
-    fn w2c(w: Float, horizon: Float) -> Self {
+    fn w2c(w: Float) -> Self {
         /* 📄OpenNARS源码：
         return w / (w + Parameters.HORIZON); */
-        Self::from_float(w / (w + horizon))
+        Self::from_float(w / (w + DEFAULT_PARAMETERS.horizon))
     }
 
     /// 从真值的「c值」到「w值」
@@ -217,11 +218,11 @@ pub trait UtilityFunctions: ShortFloat {
     ///
     /// @param c confidence, in [0, 1)
     /// @return The corresponding weight of evidence, a non-negative real number
-    fn c2w(&self, horizon: Float) -> Float {
+    fn c2w(&self) -> Float {
         /* 📄OpenNARS源码：
         return Parameters.HORIZON * c / (1 - c); */
         let c = self.to_float();
-        horizon * c / (1.0 - c)
+        DEFAULT_PARAMETERS.horizon * c / (1.0 - c)
     }
 
     // 其它用途 //
@@ -549,13 +550,11 @@ mod tests {
         // * 🚩验证与浮点运算的逻辑一致
         const N: usize = 1000;
         for w in 0..=N {
-            for horizon in 1..N {
-                let w = w as Float;
-                let k = horizon as Float;
-                let c = SF::w2c(w, k);
-                // ! ⚠️【2024-05-03 19:18:14】与`1 - k / (w + k)`有微小不一致：0.0063🆚0.0062
-                assert_eq!(c, sf!(w / (w + k)))
-            }
+            let w = w as Float;
+            let k = DEFAULT_PARAMETERS.horizon;
+            let c = SF::w2c(w);
+            // ! ⚠️【2024-05-03 19:18:14】与`1 - k / (w + k)`有微小不一致：0.0063🆚0.0062
+            assert_eq!(c, sf!(w / (w + k)))
         }
         Ok(())
     }
@@ -564,17 +563,14 @@ mod tests {
     #[test]
     fn c2w() -> Result<()> {
         // * 🚩验证与浮点运算的逻辑一致
-        const N: usize = 1000;
         for_all_sf! {
             // * 📌「1」会导致「除以零」溢出
             (c if !c.is_one()) =>
-            for horizon in 1..N {
-                let k = horizon as Float;
-                let w = c.c2w(k);
+                let k = DEFAULT_PARAMETERS.horizon;
+                let w = c.c2w();
                 let c = c.to_float();
                 // ! ⚠️【2024-05-03 19:18:14】与`1 - k / (w + k)`有微小不一致：0.0063🆚0.0062
                 assert_eq!(w, c * k / (1.0 - c))
-            }
         }
         Ok(())
     }

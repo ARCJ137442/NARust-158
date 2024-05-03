@@ -5,7 +5,6 @@ use crate::{
     entity::{BudgetValue, ShortFloat, TruthValue},
     global::Float,
     language::Term,
-    nars::EvidentialHorizon,
 };
 
 /// 预算函数
@@ -422,13 +421,11 @@ pub trait BudgetFunctions: BudgetValue {
             &mut impl BudgetValue<E = Self::E>,
             Self::E,
         )>,
-        // * 🚩↓来自`w2c`的需要
-        horizon: EvidentialHorizon,
     ) -> Self {
         /* 📄OpenNARS源码：
         return budgetInference(w2c(1) * truthToQuality(truth), 1, memory); */
         Self::__budget_inference(
-            Self::E::w2c(1.0, horizon) & Self::truth_to_quality(truth),
+            Self::E::w2c(1.0) & Self::truth_to_quality(truth),
             1,
             memory_t_budget,
             memory_current_belief_link_budget_and_target_activation,
@@ -509,13 +506,11 @@ pub trait BudgetFunctions: BudgetValue {
             &mut impl BudgetValue<E = Self::E>,
             Self::E,
         )>,
-        // * 🚩↓来自`w2c`的需要
-        horizon: EvidentialHorizon,
     ) -> Self {
         /* 📄OpenNARS源码：
         return budgetInference(w2c(1), content.getComplexity(), memory); */
         Self::__budget_inference(
-            Self::E::w2c(1.0, horizon),
+            Self::E::w2c(1.0),
             content.get_complexity(),
             memory_t_budget,
             memory_current_belief_link_budget_and_target_activation,

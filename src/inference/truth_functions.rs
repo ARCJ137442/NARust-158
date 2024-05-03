@@ -3,7 +3,6 @@
 use crate::entity::ShortFloat;
 use crate::entity::TruthValue;
 use crate::inference::utility_functions::UtilityFunctions;
-use crate::nars::EvidentialHorizon;
 
 /// 真值函数
 /// * 🚩【2024-05-02 20:46:50】不同于OpenNARS中「直接创建新值」，此处许多「真值函数」仅改变自身
@@ -20,7 +19,7 @@ pub trait TruthFunctions: TruthValue {
     ///
     /// @param v1 Truth value of the premise
     /// @return Truth value of the conclusion
-    fn conversion(&self, horizon: EvidentialHorizon) -> Self {
+    fn conversion(&self) -> Self {
         /* 📄OpenNARS源码：
         float f1 = v1.getFrequency();
         float c1 = v1.getConfidence();
@@ -30,7 +29,7 @@ pub trait TruthFunctions: TruthValue {
         let f1 = self.frequency();
         let c1 = self.confidence();
         let w = f1 & c1;
-        let c = Self::E::w2c(w.to_float(), horizon);
+        let c = Self::E::w2c(w.to_float());
         Self::new_fc(Self::E::ONE, c)
     }
 
@@ -64,7 +63,7 @@ pub trait TruthFunctions: TruthValue {
     ///
     /// @param v1 Truth value of the premise
     /// @return Truth value of the conclusion
-    fn contraposition(&self, horizon: EvidentialHorizon) -> Self {
+    fn contraposition(&self) -> Self {
         /* 📄OpenNARS源码：
         float f1 = v1.getFrequency();
         float c1 = v1.getConfidence();
@@ -74,7 +73,7 @@ pub trait TruthFunctions: TruthValue {
         let f1 = self.frequency();
         let c1 = self.confidence();
         let w = !f1 & c1;
-        let c = Self::E::w2c(w.to_float(), horizon);
+        let c = Self::E::w2c(w.to_float());
         Self::new_fc(Self::E::ZERO, c)
     }
 
@@ -90,7 +89,7 @@ pub trait TruthFunctions: TruthValue {
     /// @param v1 Truth value of the first premise
     /// @param v2 Truth value of the second premise
     /// @return Truth value of the conclusion
-    fn revision(&self, v2: &Self, horizon: EvidentialHorizon) -> Self {
+    fn revision(&self, v2: &Self) -> Self {
         /* 📄OpenNARS源码：
         float f1 = v1.getFrequency();
         float f2 = v2.getFrequency();
@@ -106,11 +105,11 @@ pub trait TruthFunctions: TruthValue {
         let f2 = v2.frequency().to_float();
         let c1 = self.confidence();
         let c2 = v2.confidence();
-        let w1 = Self::E::c2w(&c1, horizon);
-        let w2 = Self::E::c2w(&c2, horizon);
+        let w1 = Self::E::c2w(&c1);
+        let w2 = Self::E::c2w(&c2);
         let w = w1 + w2;
         let f = Self::E::from_float((w1 * f1 + w2 * f2) / w);
-        let c = Self::E::w2c(w, horizon);
+        let c = Self::E::w2c(w);
         Self::new_fc(f, c)
     }
 
@@ -232,7 +231,7 @@ pub trait TruthFunctions: TruthValue {
     /// @param v1 Truth value of the first premise
     /// @param v2 Truth value of the second premise
     /// @return Truth value of the conclusion
-    fn abduction(&self, v2: &Self, horizon: EvidentialHorizon) -> Self {
+    fn abduction(&self, v2: &Self) -> Self {
         /* 📄OpenNARS源码：
         if (v1.getAnalytic() || v2.getAnalytic()) {
             return new TruthValue(0.5f, 0f);
@@ -252,7 +251,7 @@ pub trait TruthFunctions: TruthValue {
         let c1 = self.confidence();
         let c2 = v2.confidence();
         let w = f2 & c1 & c2;
-        let c = Self::E::w2c(w.to_float(), horizon);
+        let c = Self::E::w2c(w.to_float());
         Self::new_fc(f1, c)
     }
 
@@ -266,7 +265,7 @@ pub trait TruthFunctions: TruthValue {
     /// @param v1       Truth value of the first premise
     /// @param reliance Confidence of the second (analytical) premise
     /// @return Truth value of the conclusion
-    fn abduction_reliance(&self, reliance: Self::E, horizon: EvidentialHorizon) -> Self {
+    fn abduction_reliance(&self, reliance: Self::E) -> Self {
         /* 📄OpenNARS源码：
         if (v1.getAnalytic()) {
             return new TruthValue(0.5f, 0f);
@@ -282,7 +281,7 @@ pub trait TruthFunctions: TruthValue {
         let f1 = self.frequency();
         let c1 = self.confidence();
         let w = c1 & reliance;
-        let c = Self::E::w2c(w.to_float(), horizon);
+        let c = Self::E::w2c(w.to_float());
         Self::new(f1, c, true)
     }
 
@@ -296,8 +295,8 @@ pub trait TruthFunctions: TruthValue {
     /// @param v1 Truth value of the first premise
     /// @param v2 Truth value of the second premise
     /// @return Truth value of the conclusion
-    fn induction(&self, v2: &Self, horizon: EvidentialHorizon) -> Self {
-        self.abduction(v2, horizon)
+    fn induction(&self, v2: &Self) -> Self {
+        self.abduction(v2)
     }
 
     /// 模拟`TruthFunctions.exemplification`
@@ -311,7 +310,7 @@ pub trait TruthFunctions: TruthValue {
     /// @param v1 Truth value of the first premise
     /// @param v2 Truth value of the second premise
     /// @return Truth value of the conclusion
-    fn exemplification(&self, v2: &Self, horizon: EvidentialHorizon) -> Self {
+    fn exemplification(&self, v2: &Self) -> Self {
         /* 📄OpenNARS源码：
         if (v1.getAnalytic() || v2.getAnalytic()) {
             return new TruthValue(0.5f, 0f);
@@ -331,7 +330,7 @@ pub trait TruthFunctions: TruthValue {
         let c1 = self.confidence();
         let c2 = v2.confidence();
         let w = f1 & f2 & c1 & c2;
-        let c = Self::E::w2c(w.to_float(), horizon);
+        let c = Self::E::w2c(w.to_float());
         Self::new_fc(Self::E::ONE, c)
     }
 
@@ -346,7 +345,7 @@ pub trait TruthFunctions: TruthValue {
     /// @param v1 Truth value of the first premise
     /// @param v2 Truth value of the second premise
     /// @return Truth value of the conclusion
-    fn comparison(&self, v2: &Self, horizon: EvidentialHorizon) -> Self {
+    fn comparison(&self, v2: &Self) -> Self {
         /* 📄OpenNARS源码：
         float f1 = v1.getFrequency();
         float f2 = v2.getFrequency();
@@ -367,7 +366,7 @@ pub trait TruthFunctions: TruthValue {
             false => (f1 & f2) / f0,
         };
         let w = f0 & c1 & c2;
-        let c = Self::E::w2c(w.to_float(), horizon);
+        let c = Self::E::w2c(w.to_float());
         Self::new_fc(f, c)
     }
 
@@ -411,7 +410,7 @@ pub trait TruthFunctions: TruthValue {
     /// @param v1 Truth value of the first premise
     /// @param v2 Truth value of the second premise
     /// @return Truth value of the conclusion
-    fn desire_weak(&self, v2: &Self, horizon: EvidentialHorizon) -> Self {
+    fn desire_weak(&self, v2: &Self) -> Self {
         /* 📄OpenNARS源码：
         float f1 = v1.getFrequency();
         float f2 = v2.getFrequency();
@@ -425,7 +424,7 @@ pub trait TruthFunctions: TruthValue {
         let c1 = self.confidence();
         let c2 = v2.confidence();
         let f = f1 & f2;
-        let c = c1 & c2 & f2 & Self::E::w2c(1.0, horizon);
+        let c = c1 & c2 & f2 & Self::E::w2c(1.0);
         Self::new_fc(f, c)
     }
 
@@ -467,7 +466,7 @@ pub trait TruthFunctions: TruthValue {
     /// @param v1 Truth value of the first premise
     /// @param v2 Truth value of the second premise
     /// @return Truth value of the conclusion
-    fn desire_ind(&self, v2: &Self, horizon: EvidentialHorizon) -> Self {
+    fn desire_ind(&self, v2: &Self) -> Self {
         /* 📄OpenNARS源码：
         float f1 = v1.getFrequency();
         float f2 = v2.getFrequency();
@@ -481,7 +480,7 @@ pub trait TruthFunctions: TruthValue {
         let c1 = self.confidence();
         let c2 = v2.confidence();
         let w = f2 & c1 & c2;
-        let c = Self::E::w2c(w.to_float(), horizon);
+        let c = Self::E::w2c(w.to_float());
         Self::new_fc(f1, c)
     }
 
@@ -605,7 +604,7 @@ pub trait TruthFunctions: TruthValue {
     /// @param v1 Truth value of the first premise
     /// @param v2 Truth value of the second premise
     /// @return Truth value of the conclusion
-    fn anonymous_analogy(&self, v2: &Self, horizon: EvidentialHorizon) -> Self {
+    fn anonymous_analogy(&self, v2: &Self) -> Self {
         /* 📄OpenNARS源码：
         float f1 = v1.getFrequency();
         float c1 = v1.getConfidence();
@@ -613,7 +612,7 @@ pub trait TruthFunctions: TruthValue {
         return analogy(v2, v0); */
         let f1 = self.frequency();
         let c1 = self.confidence();
-        let v0 = Self::new_fc(f1, Self::E::w2c(c1.to_float(), horizon));
+        let v0 = Self::new_fc(f1, Self::E::w2c(c1.to_float()));
         v2.analogy(&v0)
     }
 }
