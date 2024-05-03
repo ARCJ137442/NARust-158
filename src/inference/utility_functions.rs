@@ -8,6 +8,7 @@
 //!   * `aveGeo`
 //!   * `w2c`
 //!   * `c2w`
+//! * ✅【2024-05-03 19:28:13】基本完成所有单元测试
 
 use crate::entity::ShortFloat;
 use crate::global::Float;
@@ -307,12 +308,12 @@ mod tests {
 
     /// 海测/快捷遍历所有「短浮点」（所有组合）
     macro_rules! for_all_sf {
-        ( ( $($var_name:ident $(if $cond:expr)? $(,)?)* ) => $($code:tt)* ) => {
+        ( ( $($var:pat $(if $cond:expr)?),* $(,)? ) => $($code:tt)* ) => {
             for_in_ifs! {
                 // 遍历时要执行的代码
                 { $($code)* }
                 // 遍历范围
-                $( for $var_name in (all_sf()) $(if $cond)? )*
+                $( for $var in (all_sf()) $(if ($cond))? )*
             }
         };
     }
@@ -543,37 +544,77 @@ mod tests {
     }
 
     /// 测试/w2c
-    /// TODO: 完成编写
     #[test]
     fn w2c() -> Result<()> {
+        // * 🚩验证与浮点运算的逻辑一致
+        const N: usize = 1000;
+        for w in 0..=N {
+            for horizon in 1..N {
+                let w = w as Float;
+                let k = horizon as Float;
+                let c = SF::w2c(w, k);
+                // ! ⚠️【2024-05-03 19:18:14】与`1 - k / (w + k)`有微小不一致：0.0063🆚0.0062
+                assert_eq!(c, sf!(w / (w + k)))
+            }
+        }
         Ok(())
     }
 
     /// 测试/c2w
-    /// TODO: 完成编写
     #[test]
     fn c2w() -> Result<()> {
+        // * 🚩验证与浮点运算的逻辑一致
+        const N: usize = 1000;
+        for_all_sf! {
+            // * 📌「1」会导致「除以零」溢出
+            (c if !c.is_one()) =>
+            for horizon in 1..N {
+                let k = horizon as Float;
+                let w = c.c2w(k);
+                let c = c.to_float();
+                // ! ⚠️【2024-05-03 19:18:14】与`1 - k / (w + k)`有微小不一致：0.0063🆚0.0062
+                assert_eq!(w, c * k / (1.0 - c))
+            }
+        }
         Ok(())
     }
 
     /// 测试/inc
-    /// TODO: 完成编写
     #[test]
     fn inc() -> Result<()> {
+        // * 🚩验证与逻辑运算的结果一致
+        for_all_sf! {
+            (mut sf1, sf2) =>
+            let expected = sf1 | sf2;
+            sf1.inc(sf2);
+            assert_eq!(sf1, expected);
+        }
         Ok(())
     }
 
     /// 测试/dec
-    /// TODO: 完成编写
     #[test]
     fn dec() -> Result<()> {
+        // * 🚩验证与逻辑运算的结果一致
+        for_all_sf! {
+            (mut sf1, sf2) =>
+            let expected = sf1 & sf2;
+            sf1.dec(sf2);
+            assert_eq!(sf1, expected);
+        }
         Ok(())
     }
 
     /// 测试/max_from
-    /// TODO: 完成编写
     #[test]
     fn max_from() -> Result<()> {
+        // * 🚩验证与最大值运算的结果一致
+        for_all_sf! {
+            (mut sf1, sf2) =>
+            let expected = sf1.max(sf2);
+            sf1.max_from(sf2);
+            assert_eq!(sf1, expected);
+        }
         Ok(())
     }
 }
