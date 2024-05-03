@@ -30,7 +30,7 @@ const MULTIPLIER_TO_UINT: Float = 10000.0;
 /// # 📄OpenNARS
 ///
 /// A float value in [0, 1], with 4 digits accuracy.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ShortFloat {
     /// 0~4294967296的「实际值」
     ///
@@ -78,15 +78,16 @@ impl ShortFloat {
     }
 
     /// 模拟OpenNARS`getValue`
+    /// * 🚩获取浮点值
+    /// * 🚩【2024-05-03 10:51:09】更名为`value_float`以暂时避免与「证据数值」的`value`重名
     ///
     /// # 📄OpenNARS
     ///
     /// To access the value as float
     ///
     /// @return The current value in float
-    /// * 🚩获取浮点值
     #[inline(always)]
-    pub fn value(&self) -> Float {
+    pub fn value_float(&self) -> Float {
         self.value as Float * MULTIPLIER_TO_FLOAT
     }
 
@@ -158,7 +159,7 @@ impl ShortFloat {
     pub fn check_valid(&self) -> Result<(), ShortFloatError> {
         match self.is_valid() {
             true => Ok(()),
-            false => Err(ShortFloatError::OutOfRange(self.value())),
+            false => Err(ShortFloatError::OutOfRange(self.value_float())),
         }
     }
 
@@ -168,7 +169,7 @@ impl ShortFloat {
     pub fn validate(self) -> Result<Self, ShortFloatError> {
         match self.is_valid() {
             true => Ok(self),
-            false => Err(ShortFloatError::OutOfRange(self.value())),
+            false => Err(ShortFloatError::OutOfRange(self.value_float())),
         }
     }
 }
@@ -279,7 +280,10 @@ impl EvidentNumber for ShortFloat {
 
     fn root(self, n: usize) -> Self {
         // * 📌【2024-05-02 18:23:31】开根不会越界，故直接`unwrap`
-        self.value().powf(1.0 / (n as Float)).try_into().unwrap()
+        self.value_float()
+            .powf(1.0 / (n as Float))
+            .try_into()
+            .unwrap()
     }
 }
 
@@ -343,7 +347,7 @@ mod tests {
                 $(
                     let sf = ShortFloat::new_unchecked($short);
                     // ! ⚠️此处必须使用「约等」判断，否则会出现`0.009 != 0.009000000000000001`的情形
-                    assert_approx_eq!(sf.value(), $expected);
+                    assert_approx_eq!(sf.value_float(), $expected);
                 )*
             }
             0 => 0.0

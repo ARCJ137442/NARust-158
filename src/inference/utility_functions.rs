@@ -231,3 +231,9 @@ impl<T: EvidenceReal> UtilityFunctions for T {}
 //         unimplemented!()
 //     }
 // }
+
+/// TODO: 单元测试
+#[cfg(test)]
+mod tests {
+    use super::*;
+}

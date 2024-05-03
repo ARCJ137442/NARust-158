@@ -175,3 +175,9 @@ pub trait BudgetFunctions: BudgetValue {
 /// 自动实现「预算函数」
 /// * 🎯直接在「预算值」上加功能
 impl<B: BudgetValue> BudgetFunctions for B {}
+
+/// TODO: 单元测试
+#[cfg(test)]
+mod tests {
+    use super::*;
+}

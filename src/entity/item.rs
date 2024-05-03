@@ -152,3 +152,11 @@ pub trait Item {
     //     format!("{} {}", self.budget(), self.key())
     // }
 }
+
+// TODO: 初代实现
+
+/// TODO: 单元测试
+#[cfg(test)]
+mod tests {
+    use super::*;
+}

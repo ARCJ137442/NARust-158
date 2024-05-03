@@ -144,23 +144,8 @@ impl EvidenceReal for ShortFloat {
 
     #[inline(always)]
     fn to_float(&self) -> Float {
-        self.value()
+        self.value_float()
     }
-
-    // ! ❌【2024-05-02 18:22:22】不再需要：默认实现就好
-    // fn set(&mut self, new_value: Self) {
-    //     // 直接将自身设置为「新值的浮点数」
-    //     // * ✅不可能panic：对方亦为合法
-    //     self.set_value(new_value).unwrap()
-    // }
-
-    // ! ❌【2024-05-02 16:11:21】现在不允许覆盖
-    // * 📝Rust「自动实现的特征」不能再通过`impl`覆盖：避免「实现冲突」
-    // fn merge(&mut self, other: &Self) {
-    //     // * 🚩【2024-05-02 12:05:13】覆盖默认的`PartialEq`方法
-    //     // * 🚩最大值不会越界，无需检查
-    //     *self = Self::new_unchecked(self.value_short().max(other.value_short()))
-    // }
 }
 
 impl BudgetValue for Budget {
@@ -190,4 +175,10 @@ impl BudgetValue for Budget {
     fn quality_mut(&mut self) -> &mut ShortFloat {
         &mut self[2]
     }
+}
+
+/// TODO: 单元测试
+#[cfg(test)]
+mod tests {
+    use super::*;
 }

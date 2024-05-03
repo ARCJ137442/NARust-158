@@ -4,6 +4,7 @@
 //!   * 聚合：通过统一的「自动实现」得到「所有操作汇聚于一体」的静态功能增强（真值函数@数值）
 //!     * 📝Rust允许「在外部调用『看似没有实现派生操作的结构』时，允许使用『自动实现了的派生操作』」
 //! * 🕒最后更新：【2024-05-02 16:15:14】
+//! TODO: 有待与`ShortFloat`合并
 
 use crate::global::Float;
 use narsese::api::EvidentNumber;
@@ -33,6 +34,14 @@ pub trait EvidenceReal:
     ///   * 📄`w2c`函数需要从值域 $[0, 1]$ 扩展到 $[0, +\infty)$
     ///   * 📄在`BudgetFunctions.distributeAmongLinks`中又需要用到「浮点值运算」
     fn to_float(&self) -> Float;
+
+    /// 模拟OpenNARS `ShortFloat.getValue`
+    /// * 🎯获取「浮点值」
+    /// * 🚩直接重定向到[`Self::to_float`]
+    #[inline(always)]
+    fn value(&self) -> Float {
+        self.to_float()
+    }
 
     /// 从浮点到自身转换
     /// * ❌在实现[`TryFrom`]时，无法通过[`From`]实现：conflicting implementations of trait `std::convert::TryFrom<f64>` for type `entity::short_float::ShortFloat`
