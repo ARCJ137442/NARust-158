@@ -287,6 +287,9 @@ where
         mass = 0;
         currentCounter = 0; */
         self.__item_table_mut_new_(); // 🚩「添加新层级的代码」亦在其中，以实现功能解耦
+        for level in 0..Self::__TOTAL_LEVEL {
+            self.__item_tale_mut().add_new(level);
+        }
         self.__name_table_mut_new_();
         *self.__current_level_mut() = Self::__TOTAL_LEVEL - 1;
         *self.__level_index_mut() = self.__capacity() % Self::__TOTAL_LEVEL; // 不同的「袋」在分派器中有不同的起点
@@ -640,14 +643,15 @@ where
         mass += (inLevel + 1); // increase total mass
         refresh(); // refresh the window
         return oldItem; // TODO return null is a bad smell */
+        *self.__mass_mut() += Self::__TOTAL_LEVEL; // ! 🆕避免在下方调用中usize向下溢出——「临时-1」现象
         let new_item = self.get(new_key).expect("不能没有所要获取的值"); // * 🚩🆕（在调用方处）重新获取「置入后的新项」（⚠️一定有）
         let mut old_item = None;
         let in_level = self.__get_level(new_item);
         if self.size() > self.__capacity() {
-            let mut out_level = 0;
-            while self._empty_level(out_level) {
-                out_level += 1;
-            }
+            // * 🚩【2024-05-04 13:14:02】实际上与Java代码等同；但若直接按源码来做就会越界
+            let out_level = (0..Self::__TOTAL_LEVEL)
+                .find(|level| self._empty_level(*level))
+                .unwrap_or(Self::__TOTAL_LEVEL);
             if out_level > in_level {
                 return Some(new_item.____key_cloned());
             } else {
@@ -659,6 +663,7 @@ where
             .add(new_key.clone());
         *self.__mass_mut() += in_level + 1;
         // self.refresh(); // ! ❌【2024-05-04 11:16:55】不复刻这个有关「观察者」的方法
+        *self.__mass_mut() -= Self::__TOTAL_LEVEL; // ! 🆕恢复
         old_item
     }
 
@@ -792,7 +797,8 @@ pub trait BagItemTable<Key: BagKey> {
     /// * 📝OpenNARS目的：填充新的「一层」
     ///   * 📄`itemTable.add(new LinkedList<E>());`
     /// * 🆕此处细化重置为`add_new`以避免表示「层」的类型
-    fn add_new(&mut self);
+    /// * 🆕添加「要新增的层级（范围：`0..层数`）」以允许「散列映射」
+    fn add_new(&mut self, level: usize);
 
     /// 模拟`Bag.itemTable.get`
     /// * 📝OpenNARS目的：多样
@@ -885,10 +891,8 @@ mod impl_v1 {
 
         #[inline(always)]
         fn put(&mut self, key: &String, item: E) -> Option<E> {
-            match self.contains_key(key) {
-                true => self.insert(key.clone(), item),
-                false => None,
-            }
+            // * 🚩【2024-05-04 13:06:22】始终尝试插入（在「从无到有」的时候需要）
+            self.insert(key.clone(), item)
         }
 
         #[inline(always)]
@@ -900,7 +904,7 @@ mod impl_v1 {
     /// 📜为「队列列表」[`Vec<VecDeque>`](Vec)实现「层级映射」
     /// * 🚩基于「元素id」的索引：不存储元素值
     ///   * 📝Java的情况可被视作`Arc`
-    impl<Key> BagItemTable<Key> for Vec<VecDeque<Key>>
+    impl<Key> BagItemTable<Key> for Box<[VecDeque<Key>]>
     where
         Key: BagKey, // * 需要在「具体值匹配删除」时用到
     {
@@ -908,8 +912,8 @@ mod impl_v1 {
         type Level = VecDeque<Key>;
 
         #[inline(always)]
-        fn add_new(&mut self) {
-            self.push(VecDeque::new())
+        fn add_new(&mut self, level: usize) {
+            self[level] = VecDeque::new()
         }
 
         #[inline(always)]
@@ -1007,7 +1011,7 @@ mod impl_v1 {
         /// # 📄OpenNARS `Bag.itemTable`
         ///
         /// array of lists of items, for items on different level
-        level_map: Vec<VecDeque<E::Key>>,
+        level_map: Box<[VecDeque<E::Key>]>,
 
         /// 袋容量
         /// * 📌在不同地方有不同的定义
@@ -1080,7 +1084,7 @@ mod impl_v1 {
                 // * 💭以及，这个`new`究竟要不要照抄OpenNARS的「先创建全空属性⇒再全部init初始化」特性
                 //   * 毕竟Rust没有`null`要担心
                 item_map: HashMap::default(),
-                level_map: Vec::default(),
+                level_map: Box::new([]),
                 capacity: usize::default(),
                 forget_rate: usize::default(),
                 mass: usize::default(),
@@ -1126,7 +1130,11 @@ mod impl_v1 {
         }
 
         fn __item_table_mut_new_(&mut self) {
-            self.level_map = Vec::new();
+            // * 🚩只在这里初始化
+            self.level_map = (0..Self::__TOTAL_LEVEL)
+                .map(|_| VecDeque::default())
+                .collect::<Vec<_>>()
+                .into_boxed_slice();
         }
 
         fn __capacity(&self) -> usize {
@@ -1176,13 +1184,44 @@ pub use impl_v1::*;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{entity::BudgetV1, global::tests::AResult, ok};
+    use crate::{
+        entity::{BudgetV1, ShortFloatV1},
+        global::tests::AResult,
+        ok,
+    };
 
     /// [`Item`]的测试用初代实现
     #[derive(Debug, Clone, Default, Hash)]
     pub struct ItemV1<K: BagKey> {
         key: K,
         budget: BudgetV1,
+    }
+
+    impl<K: BagKey> ItemV1<K> {
+        /// 构造函数
+        pub fn new(key: impl Into<K>) -> Self {
+            // ! ❌【2024-05-04 13:44:54】莫用全零值：会出现「层级下溢」panic
+            // * 📝OpenNARS主要采用「对『预算值特低的元素』直接忽略」的方法
+            // * ❓【2024-05-04 13:46:04】然而实际上并不好解决——其它地方可能还是有「0层溢出」的问题
+            Self::from_floats(key, 0.5, 0.5, 0.5)
+        }
+
+        /// 和预算值一同构造
+        pub fn from_floats(
+            key: impl Into<K>,
+            priority: Float,
+            durability: Float,
+            quality: Float,
+        ) -> Self {
+            Self {
+                key: key.into(),
+                budget: [
+                    ShortFloatV1::from_float(priority),
+                    ShortFloatV1::from_float(durability),
+                    ShortFloatV1::from_float(quality),
+                ],
+            }
+        }
     }
 
     impl<K: BagKey> Item for ItemV1<K> {
@@ -1206,8 +1245,24 @@ mod tests {
     #[test]
     fn test_bag() -> AResult {
         // 构造测试用『袋』
-        let bag: BagV1<ItemV1<String>> = BagV1::new();
+        let mut bag: BagV1<ItemV1<String>> = BagV1::new();
         dbg!(&bag);
+        // 初始化
+        bag.init();
+        dbg!(&bag);
+        // 添加元素
+        let key1 = "item001";
+        let item1 = ItemV1::new(key1);
+        bag.put_in(dbg!(item1));
+        dbg!(&bag);
+        // 移除元素
+        let item1 = bag.pick_out(&key1.into()).unwrap();
+        // 放回元素
+        bag.put_back(item1);
+        // 获取元素
+        let item1 = bag.take_out().unwrap();
+        // 放回元素
+        bag.put_back(item1);
         ok!()
     }
 }
