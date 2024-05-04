@@ -32,4 +32,13 @@ nar_dev_utils::mods! {
 
     // 袋
     pub use bag;
+
+    // 概念袋
+    pub use concept_bag;
+
+    // 任务链袋
+    pub use task_link_bag;
+
+    // 词项链袋
+    pub use term_link_bag;
 }

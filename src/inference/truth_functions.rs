@@ -1,13 +1,14 @@
 //! 🎯复刻OpenNARS `nars.inference.TruthFunctions`
 
 use crate::entity::ShortFloat;
-use crate::entity::TruthValue;
+use crate::entity::TruthValueConcrete;
 use crate::inference::utility_functions::UtilityFunctions;
 
 /// 真值函数
 /// * 🚩【2024-05-02 20:46:50】不同于OpenNARS中「直接创建新值」，此处许多「真值函数」仅改变自身
 ///   * ✅若需「创建新值」可以通过「事先`clone`」实现
-pub trait TruthFunctions: TruthValue {
+/// * 🚩现在只为「具体的值」（带有「构造/转换」函数的类型）实现
+pub trait TruthFunctions: TruthValueConcrete {
     /* ----- Single argument functions, called in MatchingRules ----- */
 
     /// 模拟`TruthFunctions.conversion`
@@ -397,7 +398,7 @@ pub trait TruthFunctions: TruthValue {
         let c2 = v2.confidence();
         let f = f1 & f2;
         let c = c1 & c2 & f2;
-        TruthValue::new_fc(f, c)
+        Self::new_fc(f, c)
     }
 
     /// 模拟`TruthFunctions.desireWeak`
@@ -618,7 +619,7 @@ pub trait TruthFunctions: TruthValue {
 }
 
 /// 为「真值」自动实现「真值函数」
-impl<T: TruthValue> TruthFunctions for T {}
+impl<T: TruthValueConcrete> TruthFunctions for T {}
 
 /// TODO: 单元测试
 #[cfg(test)]

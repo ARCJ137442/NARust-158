@@ -2,7 +2,7 @@
 
 use super::UtilityFunctions;
 use crate::{
-    entity::{BudgetValue, ShortFloat, TruthValue},
+    entity::{BudgetValue, BudgetValueConcrete, ShortFloat, TruthValue},
     global::Float,
     language::Term,
 };
@@ -12,7 +12,7 @@ use crate::{
 ///   * 📝本身复制值也没多大性能损耗
 ///   * 📌「直接创建新值」会更方便后续调用
 ///     * 📄减少无谓的`.clone()`
-pub trait BudgetFunctions: BudgetValue {
+pub trait BudgetFunctions: BudgetValueConcrete {
     /* ----------------------- Belief evaluation ----------------------- */
 
     /// 模拟`BudgetFunctions.truthToQuality`
@@ -578,7 +578,8 @@ pub trait BudgetFunctions: BudgetValue {
 
 /// 自动实现「预算函数」
 /// * 🎯直接在「预算值」上加功能
-impl<B: BudgetValue> BudgetFunctions for B {}
+/// * 🚩现在只为「具体的值」（带有「构造/转换」函数的类型）实现
+impl<B: BudgetValueConcrete> BudgetFunctions for B {}
 
 /// TODO: 单元测试
 #[cfg(test)]

@@ -20,29 +20,6 @@ pub trait BudgetValue: Sized {
     /// * ✅兼容OpenNARS `ShortFloat`
     type E: ShortFloat;
 
-    /// 内置构造函数(p, d, q)
-    /// * 🚩直接从「短浮点」构造
-    fn new(p: Self::E, d: Self::E, q: Self::E) -> Self;
-
-    /// 模拟 `BudgetValue` 构造函数(p, d, q)
-    /// * 🚩将浮点数分别转换为「短浮点」
-    ///
-    /// # 📄OpenNARS `BudgetValue`
-    ///
-    /// Constructor with initialization
-    ///
-    /// @param p Initial priority
-    /// @param d Initial durability
-    /// @param q Initial quality
-    #[inline(always)]
-    fn from_float(p: Float, d: Float, q: Float) -> Self {
-        Self::new(
-            <Self::E as ShortFloat>::from_float(p),
-            <Self::E as ShortFloat>::from_float(d),
-            <Self::E as ShortFloat>::from_float(q),
-        )
-    }
-
     /// 模拟`BudgetValue.getPriority`
     /// * 🚩获取优先级
     /// * 🚩【2024-05-02 18:21:38】现在统一获取值：对「实现了[`Copy`]的类型」直接复制
@@ -208,6 +185,43 @@ pub trait BudgetValue: Sized {
     // * ❌【2024-05-02 00:52:02】不实现「仅用于 显示/呈现」的方法，包括所有的`toString` `toStringBrief`
 }
 
+/// 预算值的「具体类型」
+/// * 🎯有选择地支持「限定的构造函数」
+///   * 📄需要构造函数：预算函数中「创建新值的函数」
+///   * 📄不要构造函数：具有「预算值属性」但【不可从预算值参数构造】的类型
+///     * 📄概念[`super::Concept`]
+///     * 📄任务[`super::Task`]
+/// * 📌整个特征建立在「预算值就是预算值」，即「实现者本身**只有**p、d、q三元组」的基础上
+/// * 🚩包括「构造函数」与「转换函数」
+pub trait BudgetValueConcrete: Sized + BudgetValue {
+    /// 内置构造函数(p, d, q)
+    /// * 🚩直接从「短浮点」构造
+    fn new(
+        p: <Self as BudgetValue>::E,
+        d: <Self as BudgetValue>::E,
+        q: <Self as BudgetValue>::E,
+    ) -> Self;
+
+    /// 模拟 `BudgetValue` 构造函数(p, d, q)
+    /// * 🚩将浮点数分别转换为「短浮点」
+    ///
+    /// # 📄OpenNARS `BudgetValue`
+    ///
+    /// Constructor with initialization
+    ///
+    /// @param p Initial priority
+    /// @param d Initial durability
+    /// @param q Initial quality
+    #[inline(always)]
+    fn from_float(p: Float, d: Float, q: Float) -> Self {
+        Self::new(
+            <Self as BudgetValue>::E::from_float(p),
+            <Self as BudgetValue>::E::from_float(d),
+            <Self as BudgetValue>::E::from_float(q),
+        )
+    }
+}
+
 /// 初代实现
 mod impl_v1 {
     use super::*;
@@ -220,11 +234,6 @@ mod impl_v1 {
     impl BudgetValue for BudgetV1 {
         // 指定为浮点数
         type E = ShortFloatV1;
-
-        #[inline(always)]
-        fn new(p: Self::E, d: Self::E, q: Self::E) -> Self {
-            Self(p, d, q)
-        }
 
         #[inline(always)]
         fn priority(&self) -> ShortFloatV1 {
@@ -254,6 +263,13 @@ mod impl_v1 {
         #[inline(always)]
         fn __quality_mut(&mut self) -> &mut ShortFloatV1 {
             &mut self.2
+        }
+    }
+
+    impl BudgetValueConcrete for BudgetV1 {
+        #[inline(always)]
+        fn new(p: Self::E, d: Self::E, q: Self::E) -> Self {
+            Self(p, d, q)
         }
     }
 

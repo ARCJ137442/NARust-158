@@ -39,54 +39,7 @@ pub trait TruthValue: Sized + Clone + Eq + Hash {
     /// The character that separates the factors in a truth value
     const SEPARATOR: char = VALUE_SEPARATOR;
 
-    /// 🆕最原始的构造函数(f, c, a)
-    /// * 🎯用于[`TruthValue::new_analytic_default`]
-    /// * 用于接收「内部转换后的结果」
-    fn new(frequency: Self::E, confidence: Self::E, is_analytic: bool) -> Self;
-
-    /// 🆕最原始的构造函数(f, c)
-    /// * 🎯用于[`TruthValue::new_analytic_default`]
-    /// * 用于接收「内部转换后的结果」
-    #[inline(always)]
-    fn new_fc(frequency: Self::E, confidence: Self::E) -> Self {
-        Self::new(frequency, confidence, false)
-    }
-
-    /// 模拟OpenNARS 构造函数 (f, c, a)
-    /// * ⚠️此处让「f」「c」为浮点数，内部实现时再转换
-    #[inline(always)]
-    fn from_float(frequency: Float, confidence: Float, is_analytic: bool) -> Self {
-        Self::new(
-            Self::E::from_float(frequency),
-            Self::E::from_float(confidence),
-            is_analytic,
-        )
-    }
-
-    /// 模拟OpenNARS 构造函数 (f, c)
-    /// * 🚩默认让参数`is_analytic`为`false`
-    ///
-    /// # 📄OpenNARS
-    ///
-    /// Constructor with two ShortFloats
-    #[inline(always)]
-    fn from_fc(frequency: Float, confidence: Float) -> Self {
-        Self::new_fc(
-            Self::E::from_float(frequency),
-            Self::E::from_float(confidence),
-        )
-    }
-
-    /// 🆕集成OpenNARS`isAnalytic`产生的推理结果
-    /// * 🎯消除硬编码 自`return new TruthValue(0.5f, 0f);`
-    ///   * f、c、a分别为`0.5f`、`0f`、`false`
-    /// * ❓【2024-05-03 13:51:37】到底`isAnalytic`意义何在
-    #[inline(always)]
-    fn new_analytic_default() -> Self {
-        /* 📄OpenNARS源码 @ TruthFunctions：
-        new TruthValue(0.5f, 0f); */
-        Self::new(Self::E::HALF, Self::E::ZERO, false)
-    }
+    // ! 🚩【2024-05-04 17:12:30】现在有关「构造」「转换」的方法，均被迁移至[`TruthValueConcrete`]特征中
 
     /// 模拟OpenNARS `TruthValue.frequency`、`getFrequency`
     /// * 📌此处仍然直接返回（新的）「证据值」而非浮点
@@ -169,6 +122,66 @@ pub trait TruthValue: Sized + Clone + Eq + Hash {
     // ! ⚠️孤儿规则：implementing a foreign trait is only possible if at least one of the types for which it is implemented is local
 }
 
+/// 真值的「具体类型」
+/// * 🎯有选择地支持「限定的构造函数」
+///   * 📄需要构造函数：真值函数中「创建新值的函数」
+///   * 📄不要构造函数：具有「真值属性」但【不可从真值参数构造】的类型
+///     * 📄语句[`super::Concept`]
+///     * 📄任务[`super::Task`]
+/// * 📌整个特征建立在「真值就是真值」，即「实现者本身**只有**f、c、a三元组」的基础上
+/// * 🚩包括「构造函数」与「转换函数」
+/// * 💭【2024-05-04 17:14:08】这是否有些像Julia中「抽象类型🆚具体类型」的关系
+pub trait TruthValueConcrete: Sized + TruthValue {
+    /// 🆕最原始的构造函数(f, c, a)
+    /// * 🎯用于[`TruthValue::new_analytic_default`]
+    /// * 用于接收「内部转换后的结果」
+    fn new(frequency: Self::E, confidence: Self::E, is_analytic: bool) -> Self;
+
+    /// 🆕最原始的构造函数(f, c)
+    /// * 🎯用于[`TruthValue::new_analytic_default`]
+    /// * 用于接收「内部转换后的结果」
+    #[inline(always)]
+    fn new_fc(frequency: Self::E, confidence: Self::E) -> Self {
+        Self::new(frequency, confidence, false)
+    }
+
+    /// 模拟OpenNARS 构造函数 (f, c, a)
+    /// * ⚠️此处让「f」「c」为浮点数，内部实现时再转换
+    #[inline(always)]
+    fn from_float(frequency: Float, confidence: Float, is_analytic: bool) -> Self {
+        Self::new(
+            Self::E::from_float(frequency),
+            Self::E::from_float(confidence),
+            is_analytic,
+        )
+    }
+
+    /// 模拟OpenNARS 构造函数 (f, c)
+    /// * 🚩默认让参数`is_analytic`为`false`
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// Constructor with two ShortFloats
+    #[inline(always)]
+    fn from_fc(frequency: Float, confidence: Float) -> Self {
+        Self::new_fc(
+            Self::E::from_float(frequency),
+            Self::E::from_float(confidence),
+        )
+    }
+
+    /// 🆕集成OpenNARS`isAnalytic`产生的推理结果
+    /// * 🎯消除硬编码 自`return new TruthValue(0.5f, 0f);`
+    ///   * f、c、a分别为`0.5f`、`0f`、`false`
+    /// * ❓【2024-05-03 13:51:37】到底`isAnalytic`意义何在
+    #[inline(always)]
+    fn new_analytic_default() -> Self {
+        /* 📄OpenNARS源码 @ TruthFunctions：
+        new TruthValue(0.5f, 0f); */
+        Self::new(Self::E::HALF, Self::E::ZERO, false)
+    }
+}
+
 /// 初代实现
 mod impl_v1 {
     use super::*;
@@ -239,7 +252,9 @@ mod impl_v1 {
         fn set_analytic(&mut self) {
             self.a = true;
         }
+    }
 
+    impl TruthValueConcrete for TruthV1 {
         #[inline(always)]
         fn new(frequency: Self::E, confidence: Self::E, is_analytic: bool) -> Self {
             Self {

@@ -2,7 +2,7 @@
 
 use super::distributor::Distributor;
 use crate::{
-    entity::{Item, ShortFloat},
+    entity::{BudgetValue, Item, ShortFloat},
     global::Float,
     inference::BudgetFunctions,
     nars::DEFAULT_PARAMETERS,
@@ -377,6 +377,7 @@ where
     }
 
     /// 模拟`Bag.putIn`
+    /// * 🚩过程「放入」
     /// * 🆕不通过「返回布尔值」验证「是否添加成功」，而是通过「返回一个[`Option`]」表示「添加成功与否」
     ///   * 📌此举虽总是「消耗」，但若需要复用「添加失败时的元素」仍可从返回值中拿取
     /// * 🔗链接到的方法
@@ -445,6 +446,7 @@ where
     }
 
     /// 模拟`Bag.putBack`
+    /// * 🚩过程「放回」
     // * 📝【2024-05-04 02:07:06】把「预算函数」的「基建」做好了，这里的事就好办了
     ///
     /// # 📄OpenNARS
@@ -466,6 +468,7 @@ where
     }
 
     /// 模拟`Bag.takeOut`
+    /// * 🚩过程「取出」
     /// * 📝实际上需要这些函数作为前置功能：
     ///   * [`_empty_level`](Bag::_empty_level)
     ///   * [`take_out_first`](Bag::take_out_first)
@@ -532,6 +535,7 @@ where
     }
 
     /// 模拟`Bag.pickOut`
+    /// * 🚩过程「挑出」
     ///
     /// # 📄OpenNARS
     ///
@@ -1216,14 +1220,13 @@ pub use impl_v1::*;
 
 #[cfg(test)]
 mod tests {
-    use nar_dev_utils::{asserts, list};
-
     use super::*;
     use crate::{
-        entity::{BudgetV1, BudgetValue, ShortFloatV1},
+        entity::{BudgetV1, BudgetValue, BudgetValueConcrete, ShortFloat, ShortFloatV1},
         global::tests::AResult,
         ok,
     };
+    use nar_dev_utils::{asserts, list};
 
     /// [`Item`]的测试用初代实现
     #[derive(Debug, Clone, Default, Hash, PartialEq)]
@@ -1292,9 +1295,9 @@ mod tests {
     /// * 🎯获取层级 [`Bag::__get_level`]
     /// * 🎯判空层级 [`Bag::_empty_level`]
     /// * 🎯放入 [`Bag::put_in`]
-    /// * 🎯取出 [`Bag::pick_out`]
+    /// * 🎯挑出 [`Bag::pick_out`]
     /// * 🎯放回 [`Bag::put_back`]
-    /// * 🎯拿出 [`Bag::take_out`]
+    /// * 🎯取出 [`Bag::take_out`]
     #[test]
     fn single_item() -> AResult {
         // 构造测试用「袋」
@@ -1324,10 +1327,10 @@ mod tests {
         }
         dbg!(&bag);
 
-        // 取出元素
+        // 挑出元素
         let picked = bag.pick_out(&key1.into()).unwrap();
         asserts! {
-            picked == item1, // 取出的就是所置入的
+            picked == item1, // 挑出的就是所置入的
             bag.size() == 0, // 取走了
             bag.__mass() == 0, // 取走了
             bag._empty_level(0) => true, // 取走的是第0层
@@ -1341,10 +1344,10 @@ mod tests {
             bag.__mass() == 1, // 放进第0层，获得(0+1)的重量
         }
 
-        // 拿出元素
+        // 取出元素
         let mut taken = bag.take_out().unwrap();
         asserts! {
-            taken == item1, // 拿出的就是放回了的
+            taken == item1, // 取出的就是放回了的
             bag.size() == 0, // 取走了
             bag.__mass() == 0, // 取走了
             bag._empty_level(0) => true, // 取走的是第0层
@@ -1377,9 +1380,9 @@ mod tests {
     /// * 🎯获取层级 [`Bag::__get_level`]
     /// * 🎯判空层级 [`Bag::_empty_level`]
     /// * 🎯放入 [`Bag::put_in`]
-    /// * 🎯取出 [`Bag::pick_out`]
+    /// * 🎯挑出 [`Bag::pick_out`]
     /// * 🎯放回 [`Bag::put_back`]
-    /// * 🎯拿出 [`Bag::take_out`]
+    /// * 🎯取出 [`Bag::take_out`]
     #[test]
     fn multi_item() -> AResult {
         // 构造测试用「袋」并初始化
@@ -1434,14 +1437,14 @@ mod tests {
         }
         println!("初次放入后：{bag:#?}");
 
-        // 取出元素
+        // 挑出元素
         let mut picked_items = vec![];
         for (i, (key, item)) in items.iter().enumerate() {
-            let picked = bag.pick_out(key).unwrap(); // 一定能取出
+            let picked = bag.pick_out(key).unwrap(); // 一定能挑出
 
             // 计算预期层数
             asserts! {
-                picked == *item, // 取出的就是所置入的
+                picked == *item, // 挑出的就是所置入的
                 bag.size() == N - i, // 取走了
                 bag._empty_level(expected_level(i)) => true, // 取走的是指定层
             }
@@ -1458,7 +1461,7 @@ mod tests {
         }
         println!("第一次放回后：{bag:#?}");
 
-        // 拿出元素
+        // 取出元素
         let mut taken_items = vec![];
         for i in 0..=N {
             let taken = bag.take_out().unwrap(); // 一定拿得出来
@@ -1486,10 +1489,10 @@ mod tests {
     }
 
     /// 测试/长期
-    /// * 🎯放入→多次「拿出→放回→拿出→放回→……」的结果
+    /// * 🎯放入→多次「取出→放回→取出→放回→……」的结果
     #[test]
     fn long_term() -> AResult {
-        // 测试规模（重复「拿出→放回→」的次数）
+        // 测试规模（重复「取出→放回→」的次数）
         const N: usize = 100;
 
         // 构造测试用「袋」并初始化
@@ -1518,14 +1521,14 @@ mod tests {
         }
         dbg!(&bag);
 
-        // 多次拿出放回 | // * 📝根据[`BudgetFunctions::forget`]，实际上只有「优先级」会变化
+        // 多次取出放回 | // * 📝根据[`BudgetFunctions::forget`]，实际上只有「优先级」会变化
         println!("budget trending from {budget_initial}:");
         for _ in 0..N {
             let taken = bag.take_out().unwrap(); // 一定拿得出来
 
             // 检查、展示
             asserts! {
-                bag.size() == 0, // 拿出了
+                bag.size() == 0, // 取出了
                 bag.__mass() == 0, // 失去所有重量
             };
             println!("\t{}", taken.budget);
