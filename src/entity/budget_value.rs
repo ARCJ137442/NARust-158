@@ -15,7 +15,7 @@ use crate::{global::Float, inference::UtilityFunctions};
 /// # 📄OpenNARS
 ///
 /// A triple of priority (current), durability (decay), and quality (long-term average).
-pub trait BudgetValue: Sized + Default {
+pub trait BudgetValue: Sized {
     /// 一种类型只可能有一种「证据值」
     /// * ✅兼容OpenNARS `ShortFloat`
     type E: ShortFloat;
@@ -214,7 +214,8 @@ mod impl_v1 {
 
     /// 一个默认实现
     /// * 🔬仅作测试用
-    pub type BudgetV1 = [ShortFloatV1; 3];
+    #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
+    pub struct BudgetV1(ShortFloatV1, ShortFloatV1, ShortFloatV1);
 
     impl BudgetValue for BudgetV1 {
         // 指定为浮点数
@@ -222,37 +223,43 @@ mod impl_v1 {
 
         #[inline(always)]
         fn new(p: Self::E, d: Self::E, q: Self::E) -> Self {
-            [p, d, q]
+            Self(p, d, q)
         }
 
         #[inline(always)]
         fn priority(&self) -> ShortFloatV1 {
-            self[0] // * 🚩【2024-05-02 18:24:10】现在隐式`clone`
+            self.0 // * 🚩【2024-05-02 18:24:10】现在隐式`clone`
         }
 
         #[inline(always)]
         fn durability(&self) -> ShortFloatV1 {
-            self[1] // * 🚩【2024-05-02 18:24:10】现在隐式`clone`
+            self.1 // * 🚩【2024-05-02 18:24:10】现在隐式`clone`
         }
 
         #[inline(always)]
         fn quality(&self) -> ShortFloatV1 {
-            self[2] // * 🚩【2024-05-02 18:24:10】现在隐式`clone`
+            self.2 // * 🚩【2024-05-02 18:24:10】现在隐式`clone`
         }
 
         #[inline(always)]
         fn __priority_mut(&mut self) -> &mut ShortFloatV1 {
-            &mut self[0]
+            &mut self.0
         }
 
         #[inline(always)]
         fn __durability_mut(&mut self) -> &mut ShortFloatV1 {
-            &mut self[1]
+            &mut self.1
         }
 
         #[inline(always)]
         fn __quality_mut(&mut self) -> &mut ShortFloatV1 {
-            &mut self[2]
+            &mut self.2
+        }
+    }
+
+    impl std::fmt::Display for BudgetV1 {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "${}; {}; {}$", self.0, self.1, self.2)
         }
     }
 }

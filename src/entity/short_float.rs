@@ -309,12 +309,9 @@ mod impl_v1 {
             if self.value == SHORT_MAX {
                 return write!(f, "1.0000");
             }
-            // 自身值转换为字符串
-            let value_s = self.value.to_string();
-            // 左边补0到四位
-            let pad_0_s = "0".repeat(4 - value_s.len());
+            // 否则：右对齐，左边补零到四位，前缀添加`0.`
             // 格式化
-            write!(f, "0.{pad_0_s}{value_s}")
+            write!(f, "0.{:0>4}", self.value)
         }
     }
 

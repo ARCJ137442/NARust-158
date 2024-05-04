@@ -58,7 +58,6 @@ pub trait BudgetFunctions: BudgetValue {
 
     /* ----- Functions used both in direct and indirect processing of tasks ----- */
 
-    // TODO: solutionEval | 涉及「语句」
     /// 模拟`BudgetFunctions.solutionEval`
     /// * 🚩🆕【2024-05-04 00:21:53】仍然是脱离有关「记忆区」「词项链」「任务」等「附加点」的
     ///   * ❓后续是不是又要做一次「参数预装填」
@@ -306,8 +305,8 @@ pub trait BudgetFunctions: BudgetValue {
         let mut quality = self.quality().to_float() * relative_threshold; // 重新缩放「质量」
         let p = self.priority().to_float() - quality; // 「质量」之上的「优先级」
         if p > 0.0 {
-            quality += p * p.powf(1.0 / (forget_rate * p));
-        } // priority Durability
+            quality += p * self.durability().to_float().powf(1.0 / (forget_rate * p));
+        } // 优先级耐久 | q' = q * relativeThreshold + p * d^(1 / forgetRate*p)
         self.set_priority(Self::E::from_float(quality));
     }
 
