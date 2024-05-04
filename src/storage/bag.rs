@@ -2,8 +2,9 @@
 
 use super::distributor::Distributor;
 use crate::{
-    entity::{BudgetValue, Item},
+    entity::{BudgetValue, Item, ShortFloat},
     global::Float,
+    inference::BudgetFunctions,
     nars::DEFAULT_PARAMETERS,
 };
 
@@ -400,18 +401,19 @@ where
         */
         let new_key = new_item.____key_cloned();
         let old_item = self.__name_table_mut().put(&new_key, new_item);
-        let new_item = self.get_mut(&new_key).unwrap(); // * 🚩Rusty：重新获取「置入后的新项」（⚠️一定有）
+        let new_item = self.get_mut(&new_key).unwrap(); // * 🚩🆕重新获取「置入后的新项」（⚠️一定有）
 
         // 若在「元素映射」中重复了：有旧项⇒合并「重复了的新旧项」
         if let Some(old_item) = old_item {
             // 将旧项（的预算值）并入新项 | 🆕⚠️必须在前：`new_item`可变借用了`self`，而下一句中不能出现`new_item`
             new_item.merge(&old_item);
-            // 在「层级映射」移除旧项 | 🆕实际上仅用「元素id」而非「元素」
-            self._out_of_base(old_item.key());
+            // 在「层级映射」移除旧项 | 🚩【2024-05-04 11:45:02】现在仍需使用「元素」，因为下层调用需要访问元素本身（预算值），并需避免过多的「按键取值」过程
+            self._out_of_base(&old_item);
         }
 
         // 置入「层级映射」
         // 若在「层级映射」中溢出了：若有「溢出」则在「元素映射」中移除
+        // ! 📌【2024-05-04 11:35:45】↓此处`__into_base`仅传入「元素id」是为了规避借用问题（此时`new_item`已失效）
         if let Some(overflow_key) = self.__into_base(&new_key) {
             // 直接返回「根据『溢出的元素之id』在『元素映射』中移除」的结果
             // * 🚩若与自身相同⇒返回`Some`，添加失败
@@ -426,32 +428,264 @@ where
         }
     }
 
-    // TODO: putBack
+    /// 模拟`Bag.putBack`
+    // * 📝【2024-05-04 02:07:06】把「预算函数」的「基建」做好了，这里的事就好办了
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// Put an item back into the itemTable
+    ///
+    /// The only place where the forgetting rate is applied
+    ///
+    /// @param oldItem The Item to put back
+    /// @return Whether the new Item is added into the Bag
+    fn put_back(&mut self, mut old_item: E) -> Option<E> {
+        /* 📄OpenNARS源码：
+        BudgetFunctions.forget(oldItem.getBudget(), forgetRate(), RELATIVE_THRESHOLD);
+        return putIn(oldItem); */
+        old_item
+            .budget_mut()
+            .forget(self._forget_rate() as Float, Self::__RELATIVE_THRESHOLD);
+        self.put_in(old_item)
+    }
 
-    // TODO: takeOut
+    /// 模拟`Bag.takeOut`
+    /// * 📝实际上需要这些函数作为前置功能：
+    ///   * [`_empty_level`](Bag::_empty_level)
+    ///   * [`take_out_first`](Bag::take_out_first)
+    ///   * [`refresh`](Bag::refresh)
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// Choose an Item according to priority distribution and take it out of the
+    /// Bag
+    ///
+    /// @return The selected Item
+    fn take_out(&mut self) -> Option<E> {
+        /* 📄OpenNARS源码：
+        if (nameTable.isEmpty()) { // empty bag
+            return null;
+        }
+        if (emptyLevel(currentLevel) || (currentCounter == 0)) { // done with the current level
+            currentLevel = DISTRIBUTOR.pick(levelIndex);
+            levelIndex = DISTRIBUTOR.next(levelIndex);
+            while (emptyLevel(currentLevel)) { // look for a non-empty level
+                currentLevel = DISTRIBUTOR.pick(levelIndex);
+                levelIndex = DISTRIBUTOR.next(levelIndex);
+            }
+            if (currentLevel < THRESHOLD) { // for dormant levels, take one item
+                currentCounter = 1;
+            } else { // for active levels, take all current items
+                currentCounter = itemTable.get(currentLevel).size();
+            }
+        }
+        E selected = takeOutFirst(currentLevel); // take out the first item in the level
+        currentCounter--;
+        nameTable.remove(selected.getKey());
+        refresh();
+        return selected; */
+        if self.__name_table().is_empty() {
+            return None;
+        }
+        if self._empty_level(self.__current_level()) || self.__current_counter() == 0 {
+            *self.__current_level_mut() = self.__distributor().pick(self.__level_index());
+            *self.__level_index_mut() = self.__distributor().next(self.__level_index());
+            while self._empty_level(self.__current_level()) {
+                // * 📝这里实际上就是一个do-while
+                *self.__current_level_mut() = self.__distributor().pick(self.__level_index());
+                *self.__level_index_mut() = self.__distributor().next(self.__level_index());
+            }
+            if self.__current_level() < Self::__THRESHOLD {
+                *self.__current_counter_mut() = 1;
+            } else {
+                *self.__current_counter_mut() =
+                    self.__item_tale().get(self.__current_level()).size();
+            }
+        }
+        let selected_key = self.__take_out_first(self.__current_level());
+        *self.__current_counter_mut() -= 1;
+        // * 此处需要对内部可能有的「元素id」进行转换
+        let selected;
+        if let Some(key) = selected_key {
+            selected = self.__name_table_mut().remove(&key)
+        } else {
+            selected = None
+        }
+        // self.refresh(); // ! ❌【2024-05-04 11:16:55】不复刻这个有关「观察者」的方法
+        selected
+    }
 
-    // TODO: pickOut
+    /// 模拟`Bag.pickOut`
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// Pick an item by key, then remove it from the bag
+    ///
+    /// @param key The given key
+    /// @return The Item with the key
+    fn pick_out(&mut self, key: &Self::Key) -> Option<E> {
+        /* 📄OpenNARS源码：
+        E picked = nameTable.get(key);
+        if (picked != null) {
+            outOfBase(picked);
+            nameTable.remove(key);
+        }
+        return picked; */
+        let picked_key = self.__name_table().get(key).map(E::key).cloned();
+        let picked;
+        if let Some(key) = picked_key {
+            let item = self.__name_table_mut().remove(&key).unwrap(); // 此时一定有
+            self._out_of_base(&item);
+            picked = Some(item);
+        } else {
+            picked = None
+        }
+        picked
+    }
 
-    // TODO: _emptyLevel
+    /// 模拟`Bag.emptyLevel`
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// Check whether a level is empty
+    ///
+    /// @param n The level index
+    /// @return Whether that level is empty
+    fn _empty_level(&self, level: usize) -> bool {
+        /* 📄OpenNARS源码：
+        return (itemTable.get(n).isEmpty()); */
+        self.__item_tale().get(level).is_empty()
+    }
 
-    // TODO: __getLevel
+    /// 模拟`Bag.getLevel`
+    /// * 📝Rust中[`usize`]无需考虑负值问题
+    /// *
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// Decide the put-in level according to priority
+    ///
+    /// @param item The Item to put in
+    /// @return The put-in level
+    fn __get_level(&self, item: &E) -> usize {
+        /* 📄OpenNARS源码：
+        float fl = item.getPriority() * TOTAL_LEVEL;
+        int level = (int) Math.ceil(fl) - 1;
+        return (level < 0) ? 0 : level; // cannot be -1 */
+        let fl = item.priority().to_float() * Self::__TOTAL_LEVEL as Float;
+        let level = (fl.ceil()) as usize; // ! 此处不提前-1，避免溢出
+        level.saturating_sub(1) // * 🚩↓相当于如下代码
+                                /* if level < 1 {
+                                    0
+                                } else {
+                                    level - 1
+                                } */
+    }
 
-    /// TODO
     /// 模拟`Bag.intoBase`
     /// * 🚩以「元素id」代替「元素自身」在「层级映射」中添加元素
     /// * 🚩若添加成功，将复制「元素id」
     /// * 🚩返回「『溢出』的元素id」
     /// * 🚩【2024-05-01 23:10:46】此处允许【在clippy中被警告】的情形：OpenNARS原装函数
-    #[allow(clippy::wrong_self_convention)]
-    fn __into_base(&mut self, new_key: &Self::Key) -> Option<E::Key>;
+    ///   * ✅【2024-05-04 11:09:39】现在因为「前缀下划线」不再会被警告
+    /// * 🚩【2024-05-04 11:13:04】现在仍然使用「元素引用」，因为[`Bag::__get_level`]需要元素的预算值
+    /// * 📝【2024-05-04 11:34:43】OpenNARS中只会被[`Bag::put_in`]调用
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// Insert an item into the itemTable, and return the overflow
+    ///
+    /// @param newItem The Item to put in
+    /// @return The overflow Item
+    fn __into_base(&mut self, new_key: &Self::Key) -> Option<Self::Key> {
+        /* 📄OpenNARS源码：
+        E oldItem = null;
+        int inLevel = getLevel(newItem);
+        if (size() > capacity) { // the bag is full
+            int outLevel = 0;
+            while (emptyLevel(outLevel)) {
+                outLevel++;
+            }
+            if (outLevel > inLevel) { // ignore the item and exit
+                return newItem;
+            } else { // remove an old item in the lowest non-empty level
+                oldItem = takeOutFirst(outLevel);
+            }
+        }
+        itemTable.get(inLevel).add(newItem); // FIFO
+        mass += (inLevel + 1); // increase total mass
+        refresh(); // refresh the window
+        return oldItem; // TODO return null is a bad smell */
+        let new_item = self.get(new_key).expect("不能没有所要获取的值"); // * 🚩🆕（在调用方处）重新获取「置入后的新项」（⚠️一定有）
+        let mut old_item = None;
+        let in_level = self.__get_level(new_item);
+        if self.size() > self.__capacity() {
+            let mut out_level = 0;
+            while self._empty_level(out_level) {
+                out_level += 1;
+            }
+            if out_level > in_level {
+                return Some(new_item.____key_cloned());
+            } else {
+                old_item = self.__take_out_first(out_level);
+            }
+        }
+        self.__item_tale_mut()
+            .get_mut(in_level)
+            .add(new_key.clone());
+        *self.__mass_mut() += in_level + 1;
+        // self.refresh(); // ! ❌【2024-05-04 11:16:55】不复刻这个有关「观察者」的方法
+        old_item
+    }
 
-    // TODO: __takeOutFirst
+    /// 模拟`Bag.takeOutFirst`
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// Take out the first or last E in a level from the itemTable
+    ///
+    /// @param level The current level
+    /// @return The first Item
+    fn __take_out_first(&mut self, level: usize) -> Option<Self::Key> {
+        /* 📄OpenNARS源码：
+        E selected = itemTable.get(level).getFirst();
+        itemTable.get(level).removeFirst();
+        mass -= (level + 1);
+        refresh();
+        return selected; */
+        let selected = self.__item_tale().get(level).get_first().cloned();
+        self.__item_tale_mut().get_mut(level).remove_first();
+        *self.__mass_mut() -= level + 1;
+        selected
+    }
 
-    /// TODO
     /// 模拟`Bag.outOfBase`
-    fn _out_of_base(&mut self, old_key: &Self::Key);
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// Remove an item from itemTable, then adjust mass
+    ///
+    /// @param oldItem The Item to be removed
+    fn _out_of_base(&mut self, old_item: &E) {
+        /* 📄OpenNARS源码：
+        int level = getLevel(oldItem);
+        itemTable.get(level).remove(oldItem);
+        mass -= (level + 1);
+        refresh(); */
+        let level = self.__get_level(old_item);
+        self.__item_tale_mut().get_mut(level).remove(old_item.key());
+        *self.__mass_mut() -= level + 1;
+        // self.refresh() // ! ❌【2024-05-04 11:46:09】不复刻这个有关「观察者」的方法
+    }
 
     // ! ❌【2024-05-04 01:57:00】有关「观察者」「呈现用」的方法，此处暂且不进行复刻
+
+    // ! ❌addBagObserver
+    // ! ❌play
+    // ! ❌stop
+    // ! ❌refresh
+    // ! ❌toString
+    // ! ❌toStringLong
 }
 
 /// 用于袋的「索引」
