@@ -1,6 +1,6 @@
 //! 🎯复刻OpenNARS `nars.storage.Distributor`
 //!
-//! # 分发器
+//! # 分派器
 //! * 伪随机数生成器
 //!
 //! # 📄OpenNARS `nars.storage.Distributor`

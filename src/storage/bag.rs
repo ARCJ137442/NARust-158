@@ -39,7 +39,8 @@ use crate::{
 ///       * 💭某些时候不知道也难以表示「被构造值」的类型
 ///       * 💭某些时候只有「构造赋值」的情形
 /// * 🚩【2024-05-01 23:17:26】暂且按照OpenNARS的命名来：
-///   * 因为直接使用`Item`而非`BagItem`，故相应地改其中的`Item`为`E`
+///   * 📌因为直接使用`Item`而非`BagItem`，故相应地改其中的`Item`为`E`
+///   * 📝此中之`E`其实亦代表「Entity」（首字母）
 ///
 
 /// priority distribution for retrieval.
@@ -58,20 +59,22 @@ use crate::{
 pub trait Bag<E>
 where
     // * ↑此处`Item`泛型仿OpenNARS`Bag`
-    E: Item<Key = Self::Key, Budget = Self::Budget>,
+    E: Item,
 {
-    /// 元素id类型
-    /// * ❓要是引用类型还是值类型
-    ///   * 后续如何兼容`String`与`&str`
-    type Key: BagKey;
+    // ! 🚩【2024-05-04 11:49:53】现在「元素id类型」与「预算值」都包括在「元素」的类型之中
+    // /// 元素id类型
+    // /// * ❓要是引用类型还是值类型
+    // ///   * 后续如何兼容`String`与`&str`
+    // type Key: BagKey;
 
-    /// 预算值类型
-    /// * 🎯一种「袋」只有一种对「预算」的表征方式
-    type Budget: BudgetValue;
+    // /// 预算值类型
+    // /// * 🎯一种「袋」只有一种对「预算」的表征方式
+    // type Budget: BudgetValue;
 
-    /// 分发器类型
-    /// * 🎯伪随机数生成
-    type Distributor: Distributor;
+    // ! 🚩【2024-05-04 12:02:17】现在「分派器」无需被绑定作为关联类型（只要实现者返回一个就行，使用静态分派）
+    // /// 分派器类型
+    // /// * 🎯伪随机数生成
+    // type Distributor: Distributor;
 
     /// 总层数
     /// * 🚩【2024-05-04 01:44:29】根据OpenNARS中「常量」的定义，在此将其全局化
@@ -106,13 +109,14 @@ where
     /// hash table load factor
     const __LOAD_FACTOR: Float = DEFAULT_PARAMETERS.load_factor;
 
-    /// 【只读常量】分发器
+    /// 【只读常量】分派器
     /// * ❌【2024-05-04 01:46:06】这个「静态常量」因为`Self::Distributor`没有「常量构造函数」而暂且还是以「特征方法」的形式存在
+    /// * 🚩【2024-05-04 12:01:42】实际上并不需要强行把「分派器」绑定在「袋」上作为关联类型
     ///
     /// # 📄OpenNARS `Bag.DISTRIBUTOR`
     ///
     /// shared DISTRIBUTOR that produce the probability distribution
-    fn __distributor(&self) -> &Self::Distributor;
+    fn __distributor(&self) -> &impl Distributor;
 
     /// 模拟`Bag.nameTable`属性
     /// * 🚩【2024-04-28 08:43:25】目前不与任何「映射」类型绑定
@@ -120,8 +124,8 @@ where
     /// # 📄OpenNARS `Bag.nameTable`
     ///
     /// mapping from key to item
-    fn __name_table(&self) -> &impl BagNameTable<Self::Key, E>;
-    fn __name_table_mut(&mut self) -> &mut impl BagNameTable<Self::Key, E>;
+    fn __name_table(&self) -> &impl BagNameTable<E>;
+    fn __name_table_mut(&mut self) -> &mut impl BagNameTable<E>;
 
     /// 模拟`Bag.nameTable`的「构造赋值」
     /// * 🎯预期是「构造一个映射，并赋值给内部字段」
@@ -141,8 +145,8 @@ where
     /// # 📄OpenNARS `Bag.itemTable`
     ///
     /// array of lists of items, for items on different level
-    fn __item_tale(&self) -> &impl BagItemTable<Self::Key>;
-    fn __item_tale_mut(&mut self) -> &mut impl BagItemTable<Self::Key>;
+    fn __item_tale(&self) -> &impl BagItemTable<E::Key>;
+    fn __item_tale_mut(&mut self) -> &mut impl BagItemTable<E::Key>;
 
     /// 模拟`Bag.itemTable`的「构造赋值」
     /// * 🎯预期是「构造一个双层数组，并赋值给内部字段」
@@ -273,7 +277,7 @@ where
 
     /// 模拟`Bag.forgetRate`
     /// * 📝用于并体现AIKR所衍生的「资源竞争」思想
-    /// * 🚩【2024-05-01 22:05:31】目前作为一个可变属性去模拟
+    /// * 🚩【2024-05-04 12:00:04】OpenNARS中该值不可变，且多为常量（任务链袋中还与「记忆区」相关）
     ///
     /// # 📄OpenNARS `Bag.forgetRate`
     ///
@@ -283,7 +287,6 @@ where
     ///
     /// @return The number of times for a decay factor to be fully applied
     fn _forget_rate(&self) -> usize;
-    fn _forget_rate_mut(&mut self) -> &mut usize;
 
     /// 模拟`Bag.size`
     /// * 🎯从模拟`Bag.nameTable`派生
@@ -349,14 +352,14 @@ where
     /// @param key The key of the Item
     /// @return The Item with the given key
     #[inline(always)]
-    fn get(&self, key: &Self::Key) -> Option<&E> {
+    fn get(&self, key: &E::Key) -> Option<&E> {
         self.__name_table().get(key)
     }
     /// [`Self::get`]的可变版本
     /// * 🎯【2024-04-28 09:08:14】备用
     /// * 🚩转发内部`name_table`成员
     #[inline(always)]
-    fn get_mut(&mut self, key: &Self::Key) -> Option<&mut E> {
+    fn get_mut(&mut self, key: &E::Key) -> Option<&mut E> {
         self.__name_table_mut().get_mut(key)
     }
 
@@ -523,7 +526,7 @@ where
     ///
     /// @param key The given key
     /// @return The Item with the key
-    fn pick_out(&mut self, key: &Self::Key) -> Option<E> {
+    fn pick_out(&mut self, key: &E::Key) -> Option<E> {
         /* 📄OpenNARS源码：
         E picked = nameTable.get(key);
         if (picked != null) {
@@ -597,7 +600,7 @@ where
     ///
     /// @param newItem The Item to put in
     /// @return The overflow Item
-    fn __into_base(&mut self, new_key: &Self::Key) -> Option<Self::Key> {
+    fn __into_base(&mut self, new_key: &E::Key) -> Option<E::Key> {
         /* 📄OpenNARS源码：
         E oldItem = null;
         int inLevel = getLevel(newItem);
@@ -646,7 +649,7 @@ where
     ///
     /// @param level The current level
     /// @return The first Item
-    fn __take_out_first(&mut self, level: usize) -> Option<Self::Key> {
+    fn __take_out_first(&mut self, level: usize) -> Option<E::Key> {
         /* 📄OpenNARS源码：
         E selected = itemTable.get(level).getFirst();
         itemTable.get(level).removeFirst();
@@ -706,7 +709,7 @@ pub trait BagKey: Clone + Eq {}
 ///   * 从键移除值 `remove`
 ///   * 判断是否为空 `isEmpty`
 /// * 🔦预计实现者：`HashMap<String, E>`
-pub trait BagNameTable<Key: BagKey, E: Item<Key = Key>> {
+pub trait BagNameTable<E: Item> {
     /// 模拟`Bag.nameTable.size`方法
     fn size(&self) -> usize;
 
@@ -719,22 +722,22 @@ pub trait BagNameTable<Key: BagKey, E: Item<Key = Key>> {
 
     /// 模拟`Bag.nameTable.containsValue`方法
     /// * 🎯预期是「在映射查找值；找到⇒Some，没找到⇒None」
-    fn get(&self, key: &Key) -> Option<&E>;
+    fn get(&self, key: &E::Key) -> Option<&E>;
     /// [`Self::get`]的可变引用版本
     /// * 🎯【2024-04-28 09:27:23】备用
-    fn get_mut(&mut self, key: &Key) -> Option<&mut E>;
+    fn get_mut(&mut self, key: &E::Key) -> Option<&mut E>;
 
     /// 模拟`Bag.nameTable.put`方法
     /// * 🎯预期是「向映射插入值」
     /// * 📄出现在`putIn`方法中
     /// * 🚩需要返回「被替换出的旧有项」
-    fn put(&mut self, key: &Key, item: E) -> Option<E>;
+    fn put(&mut self, key: &E::Key, item: E) -> Option<E>;
 
     /// 模拟`Bag.nameTable.remove`方法
     /// * 🎯预期是「从映射移除值」
     /// * 📄出现在`putIn`方法中
     /// * 🚩【2024-05-01 23:03:15】现在需要返回「被移除的元素」作为[`Bag::put_in`]的返回值
-    fn remove(&mut self, key: &Key) -> Option<E>;
+    fn remove(&mut self, key: &E::Key) -> Option<E>;
 
     /// 模拟`Bag.nameTable.isEmpty`方法
     /// * 📜默认复用`size`方法
@@ -828,18 +831,21 @@ pub trait BagItemLevel<Key: BagKey> {
 /// 初代实现
 mod impl_v1 {
     use super::*;
+    use crate::storage::DistributorV1;
 
     // 默认实现 //
     use std::collections::{HashMap, VecDeque};
+
+    /// 📜为字符串实现「元素id」
+    impl BagKey for String {}
 
     /// 📜为「散列映射」[`HashMap`]实现「元素映射」
     /// * 📝同名方法冲突时，避免「循环调用」的方法：完全限定语法
     ///   * 🔗<https://rustc-dev-guide.rust-lang.org/method-lookup.html>
     ///   * ⚠️[`HashMap`]使用[`len`](HashMap::len)而非[`size`](BagNameTable::size)
-    impl<Budget, E> BagNameTable<String, E> for HashMap<String, E>
+    impl<E> BagNameTable<E> for HashMap<String, E>
     where
-        Budget: BudgetValue,
-        E: Item<Key = String, Budget = Budget>,
+        E: Item<Key = String>,
     {
         #[inline(always)]
         fn size(&self) -> usize {
@@ -934,13 +940,8 @@ mod impl_v1 {
         }
     }
 
-    /// 袋的「元素id」类型
-    pub type BagKeyV1 = String;
-    impl BagKey for BagKeyV1 {}
-
-    /*
     /// 第一版「袋」
-    pub struct BagV1<Item: BagItem> {
+    pub struct BagV1<E: Item> {
         /// 🆕分派器
         /// * 🚩不再作为全局变量，而是在构造函数中附带
         /// * 📝OpenNARS中主要用到的操作
@@ -966,12 +967,7 @@ mod impl_v1 {
         /// # 📄OpenNARS `Bag.nameTable`
         ///
         /// `mapping from key to item`
-        item_map: HashMap<BagKeyV1, Item>,
-
-        /// 🆕预算映射
-        /// * 🎯用于脱离「元素」的「预算值」属性
-        ///   * 📌元素只有在「袋」中才具有预算
-        budget_map: HashMap<BagKeyV1, Budget>,
+        item_map: HashMap<E::Key, E>,
 
         /// 层级映射
         /// * 📝OpenNARS中主要用到的操作
@@ -989,7 +985,7 @@ mod impl_v1 {
         /// # 📄OpenNARS `Bag.itemTable`
         ///
         /// array of lists of items, for items on different level
-        level_map: Vec<VecDeque<BagKeyV1>>,
+        level_map: Vec<VecDeque<E::Key>>,
 
         /// 袋容量
         /// * 📌在不同地方有不同的定义
@@ -1002,6 +998,19 @@ mod impl_v1 {
         ///
         /// @return Bag capacity, in number of Items allowed
         capacity: usize,
+
+        /// 遗忘速率
+        /// * 📌在不同地方有不同的定义
+        /// * 📝是一个「构造时固定」的属性
+        /// * 📝OpenNARS用于[`Bag::put_back`]的「放回时遗忘」中
+        ///
+        /// # 📄OpenNARS `Bag.forgetRate`
+        ///
+        /// Get the item decay rate, which differs in difference subclass, and can be
+        /// changed in run time by the user, so not a constant.
+        ///
+        /// @return The number of times for a decay factor to be fully applied
+        forget_rate: usize,
 
         /// 质量
         /// * ❓暂且不能完全明白其含义
@@ -1041,24 +1050,78 @@ mod impl_v1 {
         // ! ❌不作`showLevel: usize`显示用变量：不用于显示
     }
 
-    // impl<Item> Bag for BagV1<Item>
-    // where
-    //     Item: BagItem,
-    // {
-    //     type Distributor = DistributorV1;
-    //     type Key = String;
-    //     type Item = Item; // TODO: 占位符
-    //     type Budget = Budget;
+    /// 对「以字符串为索引的袋」实现特征
+    /// * 🚩【2024-05-04 12:01:15】下面这些就是给出自己的属性，即「属性映射」
+    impl<E: Item<Key = String>> Bag<E> for BagV1<E> {
+        fn __distributor(&self) -> &impl Distributor {
+            &self.distributor
+        }
 
-    //     fn __distributor(&self) -> &Self::Distributor {
-    //         &self.distributor
-    //     }
+        fn __name_table(&self) -> &impl BagNameTable<E> {
+            // * ⚠️【2024-05-04 11:54:07】目前只有「字符串key」的「散列映射」实现了「名称表」
+            &self.item_map
+        }
 
-    //     fn get(&self, key: &String) -> Option<&Item> {
-    //         self.item_map.get(key)
-    //     }
-    // }
-     */
+        fn __name_table_mut(&mut self) -> &mut impl BagNameTable<E> {
+            &mut self.item_map
+        }
+
+        fn __name_table_mut_new_(&mut self) {
+            self.item_map = HashMap::new();
+        }
+
+        fn __item_tale(&self) -> &impl BagItemTable<<E as Item>::Key> {
+            &self.level_map
+        }
+
+        fn __item_tale_mut(&mut self) -> &mut impl BagItemTable<<E as Item>::Key> {
+            &mut self.level_map
+        }
+
+        fn __item_table_mut_new_(&mut self) {
+            self.level_map = Vec::new();
+        }
+
+        fn __capacity(&self) -> usize {
+            self.capacity
+        }
+
+        fn __mass(&self) -> usize {
+            self.mass
+        }
+
+        fn __mass_mut(&mut self) -> &mut usize {
+            &mut self.mass
+        }
+
+        fn __level_index(&self) -> usize {
+            self.level_index
+        }
+
+        fn __level_index_mut(&mut self) -> &mut usize {
+            &mut self.level_index
+        }
+
+        fn __current_level(&self) -> usize {
+            self.current_level
+        }
+
+        fn __current_level_mut(&mut self) -> &mut usize {
+            &mut self.current_level
+        }
+
+        fn __current_counter(&self) -> usize {
+            self.current_counter
+        }
+
+        fn __current_counter_mut(&mut self) -> &mut usize {
+            &mut self.current_counter
+        }
+
+        fn _forget_rate(&self) -> usize {
+            self.forget_rate
+        }
+    }
 }
 pub use impl_v1::*;
 
