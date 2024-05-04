@@ -7,6 +7,8 @@
 //!
 //! A pseudo-random number generator, used in Bag.
 
+use std::fmt::Debug;
+
 use nar_dev_utils::manipulate;
 
 /// 伪随机数分派器
@@ -90,7 +92,7 @@ where
 /// * 🎯以更Rusty的方式复刻OpenNARS之Distributor
 ///   * ⚡性能
 ///   * ✨通用性
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub struct DistributorV1 {
     /// 🆕缓存的「随机范围」量
     /// * 🚩表示随机数的样本空间大小
@@ -185,6 +187,53 @@ impl DistributorV1 {
     pub fn capacity(&self) -> usize {
         self.order.len()
     }
+
+    // ! ❌【2024-05-04 12:54:08】无法实现「完全的格式化」
+    // * 📄`std::fmt::Formatter::new(&b);`
+    // * 📄"use of unstable library feature 'fmt_internals': internal to standard library"
+    // fn fmt_full(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    //     let b = String::new();
+    //     let f = std::fmt::Formatter::new(&b);
+    //     f.debug_struct("DistributorV1")
+    //         .field("range", &self.range)
+    //         .field("order", &self.order)
+    //         .field("next", &self.next)
+    //         .finish()
+    // }
+}
+
+/// 用于在[`Debug`]打印时能简要显示信息，但又能复用Rust的格式化器
+#[derive(Clone)]
+struct RawDebug(String);
+
+impl Debug for RawDebug {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl Debug for DistributorV1 {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DistributorV1")
+            .field("range", &self.range)
+            .field("order", &RawDebug(debug_truncated_arr(&self.order, 50)))
+            .field(
+                "next",
+                &RawDebug(format!("[Array with len = {}]", self.next.len())),
+            )
+            .finish()
+    }
+}
+
+fn debug_truncated_arr<T: Debug>(arr: &[T], max_len: usize) -> String {
+    if arr.len() <= max_len {
+        format!("{:?}", arr)
+    } else {
+        let mut s = format!("{:?}", &arr[..max_len]);
+        s.pop(); // * 🚩换掉
+        s.push_str(&format!(", ... (len = {})]", arr.len()));
+        s
+    }
 }
 
 /// 实现「分派」特征
@@ -209,6 +258,15 @@ impl Distributor for DistributorV1 {
 mod tests {
     use super::*;
     use std::collections::HashMap;
+
+    /// 测试「截断的数组展示」
+    #[test]
+    fn test_debug_truncated_arr() {
+        assert_eq!(
+            debug_truncated_arr(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 5),
+            "[1, 2, 3, 4, 5, ...]"
+        );
+    }
 
     /// 测试分派器
     #[test]
