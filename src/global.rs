@@ -10,7 +10,7 @@ pub mod tests {
     /// 测试用类型，增强[`anyhow::Result`]
     pub type AResult<T = ()> = anyhow::Result<T>;
 
-    /// 测试用宏，简化`ok!()`
+    /// 测试用宏，简化`Ok(())`
     #[macro_export]
     macro_rules! ok {
         () => {

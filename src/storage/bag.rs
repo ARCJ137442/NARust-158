@@ -2,7 +2,7 @@
 
 use super::distributor::Distributor;
 use crate::{
-    entity::{BudgetValue, Item, ShortFloat},
+    entity::{Item, ShortFloat},
     global::Float,
     inference::BudgetFunctions,
     nars::DEFAULT_PARAMETERS,
@@ -235,20 +235,41 @@ where
 
     // ** 属性迁移完毕 ** //
 
-    // ! ❌不迁移「传承的构造函数」
-    // 📄OpenNARS源码：
-    // ```java
-    // /**
-    //  * constructor, called from subclasses
-    //  *
-    //  * @param memory The reference to memory
-    //  */
-    // protected Bag(Memory memory) {
+    // ! ❌【2024-05-04 12:36:21】暂时还是不迁移「构造方法」，而是留给实现者自行决定
+    // * 📝乃至OpenNARS中整个`memory`的引用，只是「在初始化时，根据记忆区属性决定自身容量」而已
+    //    * 💭这个引用如果对参数及早求值，根本就无需长期存在
+    // TODO: 🏗️实现方式有待商酌
+    // /// 🆕实际上的「构造方法」
+    // /// * 🎯用于创造一个「白板」对象
+    // /// * 🎯结合[`Bag::new`]实现「有预设方法的构造」逻辑
+    // ///
+    // fn new_struct() -> Self;
+
+    // /// 模拟 `Bag`构造函数
+    // /// * 📝OpenNARS中一直都是传承一个参数
+    // /// * 🚩创建一个空袋（不论是何种实现者）
+    // /// * 🚩🆕目前不创建对「记忆区」的引用
+    // ///   * 💭虽然即便可以使用[`Rc`]/[`Arc`]
+    // /// * 🎯创建一个已经[「初始化」](Bag::init)的新袋
+    // ///   * 📝OpenNARS中，后续实现者（词项链袋 等）均只会通过一个`super`调用它
+    // ///
+    // /// # 📄OpenNARS
+    // ///
+    // /// constructor, called from subclasses
+    // ///
+    // /// @param memory The reference to memory
+    // fn new() -> Self
+    // where
+    //     Self: Sized,
+    // {
+    //     /* 📄OpenNARS源码：
     //     this.memory = memory;
     //     capacity = capacity();
-    //     init();
+    //     init(); */
+    //     let mut this = Self::new_struct();
+    //     this.init();
+    //     this
     // }
-    // ```
 
     /// 模拟`Bag.init`
     ///
@@ -941,6 +962,7 @@ mod impl_v1 {
     }
 
     /// 第一版「袋」
+    #[derive(Debug, Clone)]
     pub struct BagV1<E: Item> {
         /// 🆕分派器
         /// * 🚩不再作为全局变量，而是在构造函数中附带
@@ -1050,6 +1072,31 @@ mod impl_v1 {
         // ! ❌不作`showLevel: usize`显示用变量：不用于显示
     }
 
+    impl<E: Item<Key = String>> BagV1<E> {
+        pub fn new() -> Self {
+            Self {
+                distributor: DistributorV1::new(Self::__TOTAL_LEVEL),
+                // ? ❓【2024-05-04 12:32:58】因为上边这个不支持[`Default`]，所以就要写这些模板代码吗？
+                // * 💭以及，这个`new`究竟要不要照抄OpenNARS的「先创建全空属性⇒再全部init初始化」特性
+                //   * 毕竟Rust没有`null`要担心
+                item_map: HashMap::default(),
+                level_map: Vec::default(),
+                capacity: usize::default(),
+                forget_rate: usize::default(),
+                mass: usize::default(),
+                level_index: usize::default(),
+                current_level: usize::default(),
+                current_counter: usize::default(),
+            }
+        }
+    }
+
+    impl<E: Item<Key = String>> Default for BagV1<E> {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+
     /// 对「以字符串为索引的袋」实现特征
     /// * 🚩【2024-05-04 12:01:15】下面这些就是给出自己的属性，即「属性映射」
     impl<E: Item<Key = String>> Bag<E> for BagV1<E> {
@@ -1129,10 +1176,38 @@ pub use impl_v1::*;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{global::tests::AResult, ok};
+    use crate::{entity::BudgetV1, global::tests::AResult, ok};
+
+    /// [`Item`]的测试用初代实现
+    #[derive(Debug, Clone, Default, Hash)]
+    pub struct ItemV1<K: BagKey> {
+        key: K,
+        budget: BudgetV1,
+    }
+
+    impl<K: BagKey> Item for ItemV1<K> {
+        type Key = K;
+
+        type Budget = BudgetV1;
+
+        fn key(&self) -> &Self::Key {
+            &self.key
+        }
+
+        fn budget(&self) -> &Self::Budget {
+            &self.budget
+        }
+
+        fn budget_mut(&mut self) -> &mut Self::Budget {
+            &mut self.budget
+        }
+    }
 
     #[test]
     fn test_bag() -> AResult {
+        // 构造测试用『袋』
+        let bag: BagV1<ItemV1<String>> = BagV1::new();
+        dbg!(&bag);
         ok!()
     }
 }
