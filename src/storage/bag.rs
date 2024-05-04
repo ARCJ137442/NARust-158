@@ -683,8 +683,11 @@ where
         refresh();
         return selected; */
         let selected = self.__item_tale().get(level).get_first().cloned();
-        self.__item_tale_mut().get_mut(level).remove_first();
-        *self.__mass_mut() -= level + 1;
+        if selected.is_some() {
+            // * 🚩仅在「有选择到」时移除 | ✅【2024-05-04 14:31:30】此举修复了「mass溢出」的bug！
+            self.__item_tale_mut().get_mut(level).remove_first();
+            *self.__mass_mut() -= level + 1;
+        }
         selected
     }
 
@@ -1183,15 +1186,17 @@ pub use impl_v1::*;
 /// TODO: 单元测试
 #[cfg(test)]
 mod tests {
+    use nar_dev_utils::asserts;
+
     use super::*;
     use crate::{
-        entity::{BudgetV1, ShortFloatV1},
+        entity::{BudgetV1, BudgetValue, ShortFloatV1},
         global::tests::AResult,
         ok,
     };
 
     /// [`Item`]的测试用初代实现
-    #[derive(Debug, Clone, Default, Hash)]
+    #[derive(Debug, Clone, Default, Hash, PartialEq)]
     pub struct ItemV1<K: BagKey> {
         key: K,
         budget: BudgetV1,
@@ -1199,11 +1204,15 @@ mod tests {
 
     impl<K: BagKey> ItemV1<K> {
         /// 构造函数
-        pub fn new(key: impl Into<K>) -> Self {
+        pub fn new(key: impl Into<K>, budget: BudgetV1) -> Self {
             // ! ❌【2024-05-04 13:44:54】莫用全零值：会出现「层级下溢」panic
             // * 📝OpenNARS主要采用「对『预算值特低的元素』直接忽略」的方法
             // * ❓【2024-05-04 13:46:04】然而实际上并不好解决——其它地方可能还是有「0层溢出」的问题
-            Self::from_floats(key, 0.5, 0.5, 0.5)
+            // Self::from_floats(key, 0.5, 0.5, 0.5)
+            Self {
+                key: key.into(),
+                budget,
+            }
         }
 
         /// 和预算值一同构造
@@ -1213,20 +1222,19 @@ mod tests {
             durability: Float,
             quality: Float,
         ) -> Self {
-            Self {
-                key: key.into(),
-                budget: [
+            Self::new(
+                key.into(),
+                [
                     ShortFloatV1::from_float(priority),
                     ShortFloatV1::from_float(durability),
                     ShortFloatV1::from_float(quality),
                 ],
-            }
+            )
         }
     }
 
     impl<K: BagKey> Item for ItemV1<K> {
         type Key = K;
-
         type Budget = BudgetV1;
 
         fn key(&self) -> &Self::Key {
@@ -1242,27 +1250,77 @@ mod tests {
         }
     }
 
+    /// 测试/单个物品
+    /// * 🎯放入 [`Bag::put_in`]
+    /// * 🎯取出 [`Bag::pick_out`]
+    /// * 🎯放回 [`Bag::put_back`]
+    /// * 🎯拿出 [`Bag::take_out`]
     #[test]
-    fn test_bag() -> AResult {
+    fn single_item() -> AResult {
         // 构造测试用『袋』
         let mut bag: BagV1<ItemV1<String>> = BagV1::new();
         dbg!(&bag);
-        // 初始化
+
+        // 初始化 // ? 是否应该自带
         bag.init();
         dbg!(&bag);
-        // 添加元素
+        asserts! {
+            bag.size() == 0, // 空的
+            bag._empty_level(0) => true, // 第0层也是空的
+        }
+
+        // 放入元素
         let key1 = "item001";
-        let item1 = ItemV1::new(key1);
-        bag.put_in(dbg!(item1));
+        let item1 = ItemV1::from_floats(key1, 0.0, 0.0, 0.0); // * 🚩固定为「全零预算」
+        let overflowed = bag.put_in(dbg!(item1.clone()));
+        asserts! {
+            overflowed.is_none(), // 没有溢出
+            bag.get(&key1.into()) == Some(&item1), // 放进「对应id位置」的就是原来的元素
+            bag.size() == 1, // 放进了一个
+            bag.__get_level(&item1) => 0, // 放进的是第0层（优先级为0.0）
+            bag._empty_level(0) => false, // 放进的是第0层
+        }
         dbg!(&bag);
-        // 移除元素
-        let item1 = bag.pick_out(&key1.into()).unwrap();
+
+        // 取出元素
+        let picked = bag.pick_out(&key1.into()).unwrap();
+        asserts! {
+            picked == item1, // 取出的就是所置入的
+            bag.size() == 0, // 取走了
+            bag._empty_level(0) => true, // 取走的是第0层
+        }
+
         // 放回元素
-        bag.put_back(item1);
-        // 获取元素
-        let item1 = bag.take_out().unwrap();
+        bag.put_back(picked);
+        asserts! {
+            bag.size() == 1, // 放回了
+            bag._empty_level(0) => false, // 放入的是第0层
+        }
+
+        // 拿出元素
+        let mut taken = bag.take_out().unwrap();
+        asserts! {
+            taken == item1, // 拿出的就是放回了的
+            bag.size() == 0, // 取走了
+            bag._empty_level(0) => true, // 取走的是第0层
+        }
+
+        // 修改预算值：优先级"0 => 1"
+        taken.budget.inc_priority(ShortFloatV1::ONE);
+        asserts! {
+            // 最终增长到 1.0
+            taken.budget.priority() == ShortFloatV1::ONE,
+        }
+
         // 放回元素
-        bag.put_back(item1);
+        bag.put_back(taken);
+        asserts! {
+            bag.size() == 1, // 放回了
+            bag._empty_level(0) => true, // 放入的不再是第0层
+            bag._empty_level(BagV1::<ItemV1<String>>::__TOTAL_LEVEL-1) => false, // 放入的是最高层
+        }
+
+        // 最后完成
         ok!()
     }
 }

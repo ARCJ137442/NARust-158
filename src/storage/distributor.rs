@@ -219,7 +219,11 @@ impl Debug for DistributorV1 {
             .field("order", &RawDebug(debug_truncated_arr(&self.order, 50)))
             .field(
                 "next",
-                &RawDebug(format!("[Array with len = {}]", self.next.len())),
+                &RawDebug(format!(
+                    "[Array `next[i] = i + 1 % {}` with len = {}]",
+                    self.capacity(),
+                    self.next.len()
+                )),
             )
             .finish()
     }
@@ -262,9 +266,11 @@ mod tests {
     /// 测试「截断的数组展示」
     #[test]
     fn test_debug_truncated_arr() {
+        let arr = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
         assert_eq!(
-            debug_truncated_arr(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 5),
-            "[1, 2, 3, 4, 5, ...]"
+            debug_truncated_arr(&arr, 5),
+            // 前五个元素……长度为10
+            "[1, 2, 3, 4, 5, ... (len = 10)]"
         );
     }
 
