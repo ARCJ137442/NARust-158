@@ -276,12 +276,12 @@ impl TermComponents {
 mod tests {
     use super::super::*;
     use super::*;
-    use crate::test_term as term;
+    use crate::{global::tests::AResult, ok, test_term as term};
     use nar_dev_utils::{asserts, fail_tests, macro_once};
 
     /// 测试/词项
     #[test]
-    fn test_term() -> Result<()> {
+    fn test_term() -> AResult {
         // 测试一个词项
         fn detect(term: &Term) {
             use TermComponents::*;
@@ -319,7 +319,7 @@ mod tests {
         detect(&term!(r"(\, A, _, B)"));
         detect(&term!(r"(\, A, B, _)"));
         // 返回成功
-        Ok(())
+        ok!()
     }
 
     // 失败测试
@@ -334,7 +334,7 @@ mod tests {
     }
 
     #[test]
-    fn from_var_clone() -> Result<()> {
+    fn from_var_clone() -> AResult {
         macro_once! {
             // * 🚩模式：词项字符串 ⇒ 预期词项字符串
             macro from_var_clone($($origin:literal x $new_name:expr => $expected:expr )*) {
@@ -351,11 +351,11 @@ mod tests {
             "#A" x "B" => "#B"
             "?A" x "B" => "?B"
         }
-        Ok(())
+        ok!()
     }
 
     #[test]
-    fn from_rename() -> Result<()> {
+    fn from_rename() -> AResult {
         macro_once! {
             // * 🚩模式：词项字符串 ⇒ 预期词项字符串
             macro from_rename($($origin:literal x $new_name:expr => $expected:expr )*) {
@@ -378,6 +378,6 @@ mod tests {
             "(--, #A)" x "B" => None
             "<?A --> ?B>" x "B" => None
         }
-        Ok(())
+        ok!()
     }
 }

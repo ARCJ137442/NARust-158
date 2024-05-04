@@ -256,7 +256,7 @@ pub use impl_v1::*;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use anyhow::Result;
+    use crate::{global::tests::AResult, ok};
     use nar_dev_utils::macro_once;
 
     /// 定义要测试的「真值」类型
@@ -283,7 +283,7 @@ mod tests {
 
     /// 测试/frequency
     #[test]
-    fn frequency() -> Result<()> {
+    fn frequency() -> AResult {
         macro_once! {
             /// * 🚩模式：[真值的构造方法] ⇒ 预期「短浮点」浮点值
             macro test($( [ $($truth:tt)* ] => $expected:tt)*) {
@@ -300,12 +300,12 @@ mod tests {
             [0.1024; 0.0] => 0.1024
             [0.2; 0.1] => 0.2
         }
-        Ok(())
+        ok!()
     }
 
     /// 测试/frequency_mut
     #[test]
-    fn frequency_mut() -> Result<()> {
+    fn frequency_mut() -> AResult {
         macro_once! {
             /// * 🚩模式：[真值的构造方法] → 要被赋的值 ⇒ 预期「短浮点」浮点值
             macro test($( [ $($truth:tt)* ] -> $new_float:tt => $expected:tt)*) {
@@ -324,12 +324,12 @@ mod tests {
             [0.1024; 0.0] -> 0.0 => 0.0
             [0.2; 0.1] -> 1.0 => 1.0
         }
-        Ok(())
+        ok!()
     }
 
     /// 测试/confidence
     #[test]
-    fn confidence() -> Result<()> {
+    fn confidence() -> AResult {
         macro_once! {
             /// * 🚩模式：[真值的构造方法] ⇒ 预期「短浮点」浮点值
             macro test($( [ $($truth:tt)* ] => $expected:tt)*) {
@@ -346,12 +346,12 @@ mod tests {
             [0.1024; 0.0] => 0.0
             [0.2; 0.1] => 0.1
         }
-        Ok(())
+        ok!()
     }
 
     /// 测试/confidence_mut
     #[test]
-    fn confidence_mut() -> Result<()> {
+    fn confidence_mut() -> AResult {
         macro_once! {
             /// * 🚩模式：[真值的构造方法] → 要被赋的值 ⇒ 预期「短浮点」浮点值
             macro test($( [ $($truth:tt)* ] -> $new_float:tt => $expected:tt)*) {
@@ -370,12 +370,12 @@ mod tests {
             [0.1024; 0.0] -> 0.0 => 0.0
             [0.2; 0.1] -> 1.0 => 1.0
         }
-        Ok(())
+        ok!()
     }
 
     /// 测试/is_analytic
     #[test]
-    fn is_analytic() -> Result<()> {
+    fn is_analytic() -> AResult {
         macro_once! {
             /// * 🚩模式：[真值的构造方法] ⇒ 预期
             macro test($( [ $($truth:tt)* ] => $expected:tt)*) {
@@ -392,12 +392,12 @@ mod tests {
             [1.0; 0.9; false] => false
             [1.0; 0.9; true] => true
         }
-        Ok(())
+        ok!()
     }
 
     /// 测试/set_analytic
     #[test]
-    fn set_analytic() -> Result<()> {
+    fn set_analytic() -> AResult {
         macro_once! {
             /// * 🚩模式：[真值的构造方法]
             macro test($( [ $($truth:tt)* ])*) {
@@ -412,12 +412,12 @@ mod tests {
             [1.0; 0.9; false]
             [1.0; 0.9; true]
         }
-        Ok(())
+        ok!()
     }
 
     /// 测试/expectation
     #[test]
-    fn expectation() -> Result<()> {
+    fn expectation() -> AResult {
         macro_once! {
             /// * 🚩模式：[真值的构造方法] ⇒ 预期
             macro test($( [ $($truth:tt)* ] => $expected:tt)*) {
@@ -435,12 +435,12 @@ mod tests {
             // * 📝公式：$c * (f - 0.5) + 0.5$
             [1.0; 0.9] => ((0.9 * (1.0 - 0.5)) + 0.5)
         }
-        Ok(())
+        ok!()
     }
 
     /// 测试/expectation_abs_dif
     #[test]
-    fn expectation_abs_dif() -> Result<()> {
+    fn expectation_abs_dif() -> AResult {
         macro_once! {
             /// * 🚩模式：| [真值的构造方法] - [真值的构造方法] | ⇒ 预期
             macro test($( | [ $($truth1:tt)* ] - [ $($truth2:tt)* ] | => $expected:tt)*) {
@@ -463,12 +463,12 @@ mod tests {
             // * = |  c1 f1 - c2 f2 - 0.5(c1 - c2) |
             |[1.0; 0.9] - [0.8; 0.3]| => ((1.0*0.9 - 0.8*0.3 - 0.5*(0.9 - 0.3) as Float).abs())
         }
-        Ok(())
+        ok!()
     }
 
     /// 测试/is_negative
     #[test]
-    fn is_negative() -> Result<()> {
+    fn is_negative() -> AResult {
         macro_once! {
             /// * 🚩模式：[真值的构造方法] ⇒ 预期
             macro test($( [ $($truth:tt)* ] => $expected:tt)*) {
@@ -494,6 +494,6 @@ mod tests {
             [0.1; 0.9] => true
             [0.0; 0.9] => true
         }
-        Ok(())
+        ok!()
     }
 }

@@ -2,7 +2,7 @@
 //! * 🎯接入NAVM，在源码层实现统一输入输出
 // TODO: 有待整理（泛型化、参数化，脱实现化）
 /*
-use anyhow::Result;
+    use crate::{global::tests::AResult, ok};
 use navm::{
     cmd::Cmd,
     output::Output,
@@ -46,7 +46,7 @@ use crate::{
 //     Memory: Bag<Key = String, Item = Todo, Budget = Budget>,
 //     Budget: BudgetValue,
 // {
-//     fn input_cmd(&mut self, cmd: Cmd) -> Result<()> {
+//     fn input_cmd(&mut self, cmd: Cmd) -> AResult {
 //         todo!()
 //     }
 
@@ -62,7 +62,7 @@ use crate::{
 //         todo!()
 //     }
 
-//     fn terminate(&mut self) -> Result<()> {
+//     fn terminate(&mut self) -> AResult {
 //         todo!()
 //     }
 // }

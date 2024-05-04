@@ -235,11 +235,11 @@ impl Term {
 mod tests {
     use super::*;
     use crate::test_term as term;
-    use anyhow::Result;
+    use crate::{global::tests::AResult, ok};
     use nar_dev_utils::{asserts, macro_once};
 
     #[test]
-    fn instanceof_compound() -> Result<()> {
+    fn instanceof_compound() -> AResult {
         macro_once! {
             // * 🚩模式：词项字符串 ⇒ 预期
             macro instanceof_compound($( $s:literal => $expected:expr )*) {
@@ -273,11 +273,11 @@ mod tests {
             "<A ==> B>" => true
             "<A <=> B>" => true
         }
-        Ok(())
+        ok!()
     }
 
     #[test]
-    fn is_commutative() -> Result<()> {
+    fn is_commutative() -> AResult {
         macro_once! {
             // * 🚩模式：词项字符串 ⇒ 预期
             macro is_commutative($( $s:literal => $expected:expr )*) {
@@ -311,11 +311,11 @@ mod tests {
             "<A ==> B>" => false
             "<A <=> B>" => true
         }
-        Ok(())
+        ok!()
     }
 
     #[test]
-    fn size() -> Result<()> {
+    fn size() -> AResult {
         macro_once! {
             // * 🚩模式：词项字符串 ⇒ 预期
             macro size($( $s:literal => $expected:expr )*) {
@@ -349,11 +349,11 @@ mod tests {
             "<A ==> B>" => 2
             "<A <=> B>" => 2
         }
-        Ok(())
+        ok!()
     }
 
     #[test]
-    fn component_at() -> Result<()> {
+    fn component_at() -> AResult {
         // 命中
         macro_once! {
             // * 🚩模式：词项字符串[索引] ⇒ 预期词项
@@ -415,11 +415,11 @@ mod tests {
             "<A ==> B>"[2]
             "<A <=> B>"[2]
         }
-        Ok(())
+        ok!()
     }
 
     #[test]
-    fn component_at_unchecked() -> Result<()> {
+    fn component_at_unchecked() -> AResult {
         // 命中
         macro_once! {
             // * 🚩模式：词项字符串[索引] ⇒ 预期词项
@@ -449,13 +449,13 @@ mod tests {
             "<A ==> B>"[0] => "A"
             "<A <=> B>"[0] => "A"
         }
-        Ok(())
+        ok!()
     }
 
     // * ✅`get_components`已在[`TermComponents::iter`]中测试
 
     #[test]
-    fn clone_components() -> Result<()> {
+    fn clone_components() -> AResult {
         macro_once! {
             // * 🚩模式：词项字符串 | 复制之后与新词项的「组分」相等
             macro clone_components($($s:literal)*) {
@@ -489,11 +489,11 @@ mod tests {
             "<A ==> B>"
             "<A <=> B>"
         }
-        Ok(())
+        ok!()
     }
 
     #[test]
-    fn contain_component() -> Result<()> {
+    fn contain_component() -> AResult {
         macro_once! {
             // * 🚩模式：词项 in 容器词项
             macro contain_component($($term:literal in $container:expr)*) {
@@ -526,11 +526,11 @@ mod tests {
             "B" in "<A ==> B>"
             "B" in "<A <=> B>"
         }
-        Ok(())
+        ok!()
     }
 
     #[test]
-    fn contain_term() -> Result<()> {
+    fn contain_term() -> AResult {
         macro_once! {
             // * 🚩模式：词项 in 容器词项
             macro contain_term($($term:literal in $container:expr)*) {
@@ -563,12 +563,12 @@ mod tests {
             "A" in "<<A <=> a> <=> <B <=> b>>"
             "B" in "<<A <=> a> <=> <B <=> b>>"
         }
-        Ok(())
+        ok!()
     }
 
     /// * 【2024-04-25 16:17:17】📌直接参照的`identifier`
     #[test]
-    fn get_class() -> Result<()> {
+    fn get_class() -> AResult {
         macro_once! {
             // * 🚩模式：词项字符串 ⇒ 预期
             macro get_class($( $s:literal => $expected:expr )*) {
@@ -602,19 +602,19 @@ mod tests {
             "<A ==> B>" => IMPLICATION_RELATION
             "<A <=> B>" => EQUIVALENCE_RELATION
         }
-        Ok(())
+        ok!()
     }
 
     #[test]
-    fn contain_all_components() -> Result<()> {
+    fn contain_all_components() -> AResult {
         asserts! {
             //
         }
-        Ok(())
+        ok!()
     }
 
     #[test]
-    fn add() -> Result<()> {
+    fn add() -> AResult {
         macro_once! {
             // * 🚩模式：词项字符串 (+ 附加词项字符串)... ⇒ 预期结果
             macro add($($s:literal $(+ $new:literal)* => $expected:literal)*) {
@@ -643,6 +643,6 @@ mod tests {
             r"(\, 甲, _, 乙)" + "{丙}" + "<丁 <=> 戊>" => r"(\, 甲, _, 乙, {丙}, <丁 <=> 戊>)"
             r"(/, {(*, α, β)}, _)" + "[[[γ]]]" + "<(/, δ, _, ε) {-] (&, (--, ζ))>" => r"(/, {(*, α, β)}, _, [[[γ]]], <(/, δ, _, ε) {-] (&, (--, ζ))>)"
         }
-        Ok(())
+        ok!()
     }
 }

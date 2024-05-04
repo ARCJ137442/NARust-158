@@ -1129,4 +1129,10 @@ pub use impl_v1::*;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{global::tests::AResult, ok};
+
+    #[test]
+    fn test_bag() -> AResult {
+        ok!()
+    }
 }

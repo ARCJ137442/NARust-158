@@ -500,7 +500,7 @@ mod impl_v1 {
     #[cfg(test)]
     mod tests {
         use super::*;
-        use anyhow::Result;
+        use crate::{global::tests::AResult, ok};
         use nar_dev_utils::macro_once;
 
         // 基本功能 //
@@ -529,7 +529,7 @@ mod impl_v1 {
 
         /// 测试/new
         #[test]
-        fn new() -> Result<()> {
+        fn new() -> AResult {
             macro_once! {
                 // * 🚩模式：短整数（作为构造函数参数）
                 macro test($( $short:expr )*) {
@@ -544,12 +544,12 @@ mod impl_v1 {
                 1024
                 8192
             }
-            Ok(())
+            ok!()
         }
 
         /// 测试/value
         #[test]
-        fn value() -> Result<()> {
+        fn value() -> AResult {
             macro_once! {
                 // * 🚩模式：短整数（构造用）⇒预期值
                 macro test($( $short:expr => $expected:expr )*) {
@@ -566,18 +566,18 @@ mod impl_v1 {
                 1024 => 0.1024
                 8192 => 0.8192
             }
-            Ok(())
+            ok!()
         }
 
         /// 测试/is_in_range
         #[test]
-        fn is_in_range() -> Result<()> {
-            Ok(())
+        fn is_in_range() -> AResult {
+            ok!()
         }
 
         /// 测试/set_value
         #[test]
-        fn set_value() -> Result<()> {
+        fn set_value() -> AResult {
             use ShortFloatError::*;
             macro_once! {
                 // * 🚩模式：短整数（构造用） -> 浮点数（赋值用）⇒预期值（短整数） @ 返回的模式
@@ -615,12 +615,12 @@ mod impl_v1 {
                 // 异常赋值：无效值
                 10000 -> Float::NAN          => 10000 @ Err(..)
             }
-            Ok(())
+            ok!()
         }
 
         /// 测试/set_value_unchecked
         #[test]
-        fn set_value_unchecked() -> Result<()> {
+        fn set_value_unchecked() -> AResult {
             macro_once! {
                 // * 🚩模式：短整数（构造用） -> 浮点数（赋值用）⇒预期值（短整数）
                 macro test($( $short:literal -> $float:expr => $expected:expr)*) {
@@ -653,7 +653,7 @@ mod impl_v1 {
                 // NaN会被重置为`0`
                 10000 -> Float::NAN          => 0
             }
-            Ok(())
+            ok!()
         }
 
         // 测试/float_to_short_value
@@ -664,7 +664,7 @@ mod impl_v1 {
 
         /// 测试/fmt
         #[test]
-        fn fmt() -> Result<()> {
+        fn fmt() -> AResult {
             macro_once! {
                 // * 🚩模式：短整数（构造用） => 预期值（字符串）
                 macro test($( $short:expr => $expected:expr)*) {
@@ -685,12 +685,12 @@ mod impl_v1 {
                 90    => "0.0090"
                 900   => "0.0900"
             }
-            Ok(())
+            ok!()
         }
 
         /// 测试/try_from
         #[test]
-        fn try_from() -> Result<()> {
+        fn try_from() -> AResult {
             use ShortFloatError::*;
             macro_once! {
                 // * 🚩模式：浮点数（转换用） ⇒ 返回的模式
@@ -727,12 +727,12 @@ mod impl_v1 {
                 // 异常转换：无效值
                 Float::NAN          => Err(..)
             }
-            Ok(())
+            ok!()
         }
 
         /// 测试/check_valid
         #[test]
-        fn check_valid() -> Result<()> {
+        fn check_valid() -> AResult {
             use ShortFloatError::*;
             macro_once! {
                 // * 🚩模式：短整数（构造用） ⇒ 返回的模式
@@ -757,12 +757,12 @@ mod impl_v1 {
                 20000       => Err(OutOfRange(..))
                 65535       => Err(OutOfRange(..))
             }
-            Ok(())
+            ok!()
         }
 
         /// 测试/四则运算
         #[test]
-        fn ops() -> Result<()> {
+        fn ops() -> AResult {
             /// 快捷构造
             macro_rules! sf {
                 ($short:expr) => {
@@ -798,7 +798,7 @@ mod impl_v1 {
                     assert_eq!(sf!(a) / sf!(b), sf!((a * SHORT_MAX) / b))
                 }
             }
-            Ok(())
+            ok!()
         }
 
         // NAL相关 //

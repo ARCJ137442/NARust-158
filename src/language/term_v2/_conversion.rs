@@ -484,6 +484,7 @@ impl FromStr for Term {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{global::tests::AResult, ok};
     use narsese::{
         conversion::{
             inter_type::lexical_fold::TryFoldInto,
@@ -495,7 +496,7 @@ mod tests {
 
     /// 测试 / 词法折叠
     #[test]
-    fn test_lexical_fold() -> Result<()> {
+    fn test_lexical_fold() -> AResult {
         fn fold(t: LexicalTerm) -> Result<Term> {
             print!("{:?} => ", FORMAT_ASCII.format(&t));
             let term: Term = t.try_fold_into(&())?;
@@ -509,6 +510,6 @@ mod tests {
         fold(lexical_nse_term!(<A <-> {A}>))?;
         fold(lexical_nse_term!(<{B} <=> B>))?;
         fold(lexical_nse_term!(<{SELF} ==> (--, [good])>))?;
-        Ok(())
+        ok!()
     }
 }

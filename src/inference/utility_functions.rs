@@ -267,7 +267,7 @@ impl<T: ShortFloat> UtilityFunctions for T {}
 mod tests {
     use super::*;
     use crate::entity::ShortFloatV1;
-    use anyhow::Result;
+    use crate::{global::tests::AResult, ok};
     use nar_dev_utils::{asserts, for_in_ifs, macro_once};
 
     /// 定义要测试的「短浮点」类型
@@ -321,7 +321,7 @@ mod tests {
 
     /// 测试/and
     #[test]
-    fn and() -> Result<()> {
+    fn and() -> AResult {
         // 海测（健壮性测试） | 🎯确保正常值不会panic
         for_all_sf! {
             (sf1, sf2) =>
@@ -366,12 +366,12 @@ mod tests {
             // 乘法语义
             0.5 & 0.5 => 0.25
         }
-        Ok(())
+        ok!()
     }
 
     /// 测试/and_multi
     #[test]
-    fn and_multi() -> Result<()> {
+    fn and_multi() -> AResult {
         // 海测（健壮性测试） // * 🚩验证与二元运算的逻辑一致
         for_all_sf! {
             (sf1, sf2) =>
@@ -420,12 +420,12 @@ mod tests {
             0.5 & 0.5 & 0.5 & 0.5 & 0.5;
             0.5 & 0.5 & 0.5 & 0.5 & 0.5 & 0.5;
         }
-        Ok(())
+        ok!()
     }
 
     /// 测试/or
     #[test]
-    fn or() -> Result<()> {
+    fn or() -> AResult {
         // 海测（健壮性测试） | 🎯确保正常值不会panic
         for_all_sf! {
             (sf1, sf2) =>
@@ -470,12 +470,12 @@ mod tests {
             // 德摩根 乘法语义
             0.5 | 0.5 => 0.75
         }
-        Ok(())
+        ok!()
     }
 
     /// 测试/or_multi
     #[test]
-    fn or_multi() -> Result<()> {
+    fn or_multi() -> AResult {
         // 海测（健壮性测试） // * 🚩验证与二元运算的逻辑一致
         for_all_sf! {
             (sf1, sf2) =>
@@ -513,12 +513,12 @@ mod tests {
             0.5 | 0.5 | 0.5 | 0.5 | 0.5;
             0.5 | 0.5 | 0.5 | 0.5 | 0.5 | 0.5;
         }
-        Ok(())
+        ok!()
     }
 
     /// 测试/arithmetical_average
     #[test]
-    fn arithmetical_average() -> Result<()> {
+    fn arithmetical_average() -> AResult {
         // * 🚩验证与浮点运算的逻辑一致
         for_all_sf! {
             (sf1, sf2) =>
@@ -527,12 +527,12 @@ mod tests {
             let float_ari = sf!((sf1.to_float() + sf2.to_float()) / 2.0);
             assert_eq!(ave_ari, float_ari);
         }
-        Ok(())
+        ok!()
     }
 
     /// 测试/geometrical_average
     #[test]
-    fn geometrical_average() -> Result<()> {
+    fn geometrical_average() -> AResult {
         // * 🚩验证与浮点运算的逻辑一致
         for_all_sf! {
             (sf1, sf2) =>
@@ -541,12 +541,12 @@ mod tests {
             let float_geo = sf!((sf1.to_float() * sf2.to_float()).sqrt());
             assert_eq!(ave_geo, float_geo);
         }
-        Ok(())
+        ok!()
     }
 
     /// 测试/w2c
     #[test]
-    fn w2c() -> Result<()> {
+    fn w2c() -> AResult {
         // * 🚩验证与浮点运算的逻辑一致
         const N: usize = 1000;
         for w in 0..=N {
@@ -556,12 +556,12 @@ mod tests {
             // ! ⚠️【2024-05-03 19:18:14】与`1 - k / (w + k)`有微小不一致：0.0063🆚0.0062
             assert_eq!(c, sf!(w / (w + k)))
         }
-        Ok(())
+        ok!()
     }
 
     /// 测试/c2w
     #[test]
-    fn c2w() -> Result<()> {
+    fn c2w() -> AResult {
         // * 🚩验证与浮点运算的逻辑一致
         for_all_sf! {
             // * 📌「1」会导致「除以零」溢出
@@ -572,12 +572,12 @@ mod tests {
                 // ! ⚠️【2024-05-03 19:18:14】与`1 - k / (w + k)`有微小不一致：0.0063🆚0.0062
                 assert_eq!(w, c * k / (1.0 - c))
         }
-        Ok(())
+        ok!()
     }
 
     /// 测试/inc
     #[test]
-    fn inc() -> Result<()> {
+    fn inc() -> AResult {
         // * 🚩验证与逻辑运算的结果一致
         for_all_sf! {
             (mut sf1, sf2) =>
@@ -585,12 +585,12 @@ mod tests {
             sf1.inc(sf2);
             assert_eq!(sf1, expected);
         }
-        Ok(())
+        ok!()
     }
 
     /// 测试/dec
     #[test]
-    fn dec() -> Result<()> {
+    fn dec() -> AResult {
         // * 🚩验证与逻辑运算的结果一致
         for_all_sf! {
             (mut sf1, sf2) =>
@@ -598,12 +598,12 @@ mod tests {
             sf1.dec(sf2);
             assert_eq!(sf1, expected);
         }
-        Ok(())
+        ok!()
     }
 
     /// 测试/max_from
     #[test]
-    fn max_from() -> Result<()> {
+    fn max_from() -> AResult {
         // * 🚩验证与最大值运算的结果一致
         for_all_sf! {
             (mut sf1, sf2) =>
@@ -611,6 +611,6 @@ mod tests {
             sf1.max_from(sf2);
             assert_eq!(sf1, expected);
         }
-        Ok(())
+        ok!()
     }
 }

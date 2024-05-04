@@ -369,7 +369,7 @@ impl TermComponents {
 mod tests {
     use super::*;
     use crate::test_term as term;
-    use anyhow::Result;
+    use crate::{global::tests::AResult, ok};
     use nar_dev_utils::asserts;
 
     /// 测试 / [`Term`]
@@ -378,7 +378,7 @@ mod tests {
         use nar_dev_utils::macro_once;
 
         #[test]
-        fn eq() -> Result<()> {
+        fn eq() -> AResult {
             macro_once! {
                 // * 🚩模式：左边词项 运算符 右边字符串
                 macro eq($( $left:literal $op:tt $right:expr )*) {
@@ -409,13 +409,13 @@ mod tests {
                 "(/, A, B, _)" != "(/, A, _, B)"
                 "{C, A, B}" != "{B, C}"
             }
-            Ok(())
+            ok!()
         }
 
         /// 测试 / 散列
         /// * 🚩【2024-04-25 09:24:58】仅测试其「可散列化」
         #[test]
-        fn hash() -> Result<()> {
+        fn hash() -> AResult {
             use std::collections::{HashMap, HashSet};
             use std::hash::RandomState;
             // 创建
@@ -440,11 +440,11 @@ mod tests {
             }
             // 结束
             dbg!(&map, &set);
-            Ok(())
+            ok!()
         }
 
         #[test]
-        fn identifier() -> Result<()> {
+        fn identifier() -> AResult {
             macro_once! {
                 // * 🚩模式：词项字符串 ⇒ 预期
                 macro identifier($( $s:literal => $expected:expr )*) {
@@ -478,11 +478,11 @@ mod tests {
                 "<A ==> B>" => IMPLICATION_RELATION
                 "<A <=> B>" => EQUIVALENCE_RELATION
             }
-            Ok(())
+            ok!()
         }
 
         #[test]
-        fn components() -> Result<()> {
+        fn components() -> AResult {
             use TermComponents::*;
             macro_once! {
                 // * 🚩模式：词项字符串 ⇒ 预期模式
@@ -519,11 +519,11 @@ mod tests {
                 r"(/, R, _)" => MultiIndexed(..)
                 r"(\, R, _)" => MultiIndexed(..)
             }
-            Ok(())
+            ok!()
         }
 
         #[test]
-        fn is_placeholder() -> Result<()> {
+        fn is_placeholder() -> AResult {
             macro_once! {
                 // * 🚩模式：词项字符串 ⇒ 预期
                 macro is_placeholder($( $s:literal => $expected:expr )*) {
@@ -557,12 +557,12 @@ mod tests {
                 "<A ==> B>" => false
                 "<A <=> B>" => false
             }
-            Ok(())
+            ok!()
         }
 
         /// 🎯仅测试其返回值为二元组
         #[test]
-        fn id_comp() -> Result<()> {
+        fn id_comp() -> AResult {
             macro_once! {
                 // * 🚩模式：词项字符串
                 macro id_comp($($s:literal)*) {
@@ -596,12 +596,12 @@ mod tests {
                 "<A ==> B>"
                 "<A <=> B>"
             }
-            Ok(())
+            ok!()
         }
 
         /// 🎯仅测试其返回值为二元组
         #[test]
-        fn id_comp_mut() -> Result<()> {
+        fn id_comp_mut() -> AResult {
             macro_once! {
                 // * 🚩模式：词项字符串
                 macro id_comp_mut($($s:literal)*) {
@@ -635,11 +635,11 @@ mod tests {
                 "<A ==> B>"
                 "<A <=> B>"
             }
-            Ok(())
+            ok!()
         }
 
         #[test]
-        fn contain_type() -> Result<()> {
+        fn contain_type() -> AResult {
             macro_once! {
                 // * 🚩模式：含有的类型 in 词项字符串
                 macro contain_type($($expected:ident in $s:literal)*) {
@@ -698,12 +698,12 @@ mod tests {
                 IMPLICATION_RELATION in "<<A ==> B> ==> <A ==> B>>"
                 EQUIVALENCE_RELATION in "<<A <=> B> <=> <A <=> B>>"
             }
-            Ok(())
+            ok!()
         }
 
         /// 🎯类型相等，组分相配
         #[test]
-        fn structural_match() -> Result<()> {
+        fn structural_match() -> AResult {
             macro_once! {
                 // * 🚩模式：被匹配的 ⇒ 用于匹配的
                 macro assert_structural_match($($term1:literal => $term2:literal)*) {
@@ -742,11 +742,11 @@ mod tests {
                 "{A, B, [C]}" => "{0, 1, [2]}"
                 "{A, {B, C, D}, [E]}" => "{{0, 1, 2}, 1, [2]}"
             }
-            Ok(())
+            ok!()
         }
 
         #[test]
-        fn fmt() -> Result<()> {
+        fn fmt() -> AResult {
             macro_once! {
                 // * 🚩模式：词项字符串 ⇒ 预期
                 macro fmt($($term:literal => $expected:expr)*) {
@@ -782,11 +782,11 @@ mod tests {
                 "<A ==> B>" => "(A ==> B)"
                 "<A <=> B>" => "(A <=> B)"
             }
-            Ok(())
+            ok!()
         }
 
         #[test]
-        fn for_each_atom() -> Result<()> {
+        fn for_each_atom() -> AResult {
             macro_once! {
                 // * 🚩模式：词项字符串 ⇒ 预期词项字符串序列
                 macro for_each_atom($($term:literal => [ $($expected:expr),* ] )*) {
@@ -837,7 +837,7 @@ mod tests {
                 "<(--, (--, (--, (--, (--, (--, (--, (--, A)))))))) --> (/, (-, B, C), _, (/, (/, (/, (/, (/, D, _), _), _), _), _))>" => ["A", "B", "C", "D"]
                 "<<A --> B> ==> <C --> D>>" => ["A", "B", "C", "D"]
             }
-            Ok(())
+            ok!()
         }
     }
 
@@ -848,7 +848,7 @@ mod tests {
 
         /// 测试/长度
         #[test]
-        fn len() -> Result<()> {
+        fn len() -> AResult {
             macro_once! {
                 // * 🚩模式：词项字符串 ⇒ 预期结果
                 macro asserts_len($( $term:literal => $s:expr )*) {
@@ -865,12 +865,12 @@ mod tests {
                 // 集合：缩并
                 "[2, 1, 0, 0, 1, 2]" => 3
             }
-            Ok(())
+            ok!()
         }
 
         /// 测试/判空
         #[test]
-        fn is_empty() -> Result<()> {
+        fn is_empty() -> AResult {
             macro_once! {
                 // * 🚩模式：词项字符串 ⇒ 预期结果
                 macro is_empty($($term:literal => $expected:expr)*) {
@@ -884,12 +884,12 @@ mod tests {
                 "(/, A, _, B)" => false
                 "[2, 1, 0, 0, 1, 2]" => false
             }
-            Ok(())
+            ok!()
         }
 
         /// 测试/获取
         #[test]
-        fn get() -> Result<()> {
+        fn get() -> AResult {
             macro_once! {
                 // * 🚩模式：词项字符串.索引 ⇒ 预期结果
                 macro get($($s:literal . $i:expr => $expected:expr)*) {
@@ -921,12 +921,12 @@ mod tests {
                 "[2, 1, 0, 0, 1, 2]".2 => Some(&term!("2"))
                 "[2, 1, 0, 0, 1, 2]".3 => None
             }
-            Ok(())
+            ok!()
         }
 
         /// 测试/获取
         #[test]
-        fn get_unchecked() -> Result<()> {
+        fn get_unchecked() -> AResult {
             macro_once! {
                 // * 🚩模式：词项字符串.索引 ⇒ 预期结果
                 macro get_unchecked($($s:literal . $i:expr => $expected:expr)*) {
@@ -950,13 +950,13 @@ mod tests {
                 "[2, 1, 0, 0, 1, 2]".1 => &term!("1")
                 "[2, 1, 0, 0, 1, 2]".2 => &term!("2")
             }
-            Ok(())
+            ok!()
         }
 
         /// 测试/迭代器
         /// * 🚩转换为数组，然后跟数组比对
         #[test]
-        fn iter() -> Result<()> {
+        fn iter() -> AResult {
             macro_once! {
                 // * 🚩模式：词项字符串 ⇒ 预期结果
                 macro iter($($s:literal => $expected:expr)*) {
@@ -974,13 +974,13 @@ mod tests {
                 // 集合：排序 & 缩并
                 "[2, 1, 0, 0, 1, 2]" => term!(["0", "1", "2"]&)
             }
-            Ok(())
+            ok!()
         }
 
         /// 测试/可变迭代器
         /// * 🎯仅测试「可以修改」
         #[test]
-        fn iter_mut() -> Result<()> {
+        fn iter_mut() -> AResult {
             fn mutate(term: &mut Term) {
                 // 改变词项标识符
                 term.identifier = "MUTATED".to_string();
@@ -1010,11 +1010,11 @@ mod tests {
                 // 集合：排序 & 缩并
                 "[2, 1, 0, 0, 1, 2]"
             }
-            Ok(())
+            ok!()
         }
 
         #[test]
-        fn sort_dedup() -> Result<()> {
+        fn sort_dedup() -> AResult {
             macro_once! {
                 // * 🚩模式：词项字符串 ⇒ 预期结果
                 macro sort_dedup($($s:literal => $expected:literal)*) {
@@ -1041,13 +1041,13 @@ mod tests {
                 "(*, F, A, D, E, D)" => "(*, A, D, E, F)"
                 "(*, 1, 1, 4, 5, 1, 4)" => "(*, 1, 4, 5)"
             }
-            Ok(())
+            ok!()
         }
 
         /// ! 不考虑「可交换性」这个「复合词项」`compound`才引入的概念
         /// * ⚠️因此只对「不可交换的词项」进行测试
         #[test]
-        fn add() -> Result<()> {
+        fn add() -> AResult {
             macro_once! {
                 // * 🚩模式：词项字符串 (+ 附加词项字符串)... ⇒ 预期结果
                 macro add($($s:literal $(+ $new:literal)* => $expected:literal)*) {
@@ -1079,11 +1079,11 @@ mod tests {
                 r"(\, A, _, B)" + "C" => r"(\, A, _, B, C)"
                 r"(\, 甲, _, 乙)" + "{丙}" + "<丁 ==> 戊>" => r"(\, 甲, _, 乙, {丙}, <丁 ==> 戊>)"
             }
-            Ok(())
+            ok!()
         }
 
         #[test]
-        fn remove() -> Result<()> {
+        fn remove() -> AResult {
             macro_once! {
                 // * 🚩模式：词项字符串 (- 附加词项字符串)... ⇒ 预期结果
                 macro remove($($s:literal $(- $no:literal)* => $expected:literal)*) {
@@ -1115,11 +1115,11 @@ mod tests {
                 r"(\, A, _, B, C)" - "C" => r"(\, A, _, B)"
                 r"(\, 甲, _, 乙, {丙}, <丁 ==> 戊>)" - "{丙}" - "<丁 ==> 戊>" => r"(\, 甲, _, 乙)"
             }
-            Ok(())
+            ok!()
         }
 
         #[test]
-        fn replace() -> Result<()> {
+        fn replace() -> AResult {
             macro_once! {
                 // * 🚩模式：词项字符串[索引] = 新词项 ⇒ 预期结果
                 macro replace($($s:literal [ $i:expr ] = $new:literal => $expected:literal)*) {
@@ -1145,7 +1145,7 @@ mod tests {
                 r"(\, A, _, β, C)"[1] = "B" => r"(\, A, _, B, C)"
                 r"(\, 甲, _, 乙, {饼}, <丁 ==> 戊>)"[2] = "{丙}" => r"(\, 甲, _, 乙, {丙}, <丁 ==> 戊>)"
             }
-            Ok(())
+            ok!()
         }
 
         // ! 以下函数已在 `Term` 中测试

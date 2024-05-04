@@ -130,11 +130,11 @@ impl Term {
 mod tests {
     use super::*;
     use crate::test_term as term;
-    use anyhow::Result;
+    use crate::{global::tests::AResult, ok};
     use nar_dev_utils::asserts;
 
     #[test]
-    fn instanceof_image() -> Result<()> {
+    fn instanceof_image() -> AResult {
         asserts! {
             // 像占位符在第一位的「像」会被解析为「乘积」
             term!(r"(/, _, A, B)").identifier() => PRODUCT_OPERATOR
@@ -146,11 +146,11 @@ mod tests {
             term!(r"(/, A, B, _)").instanceof_image()
             term!(r"(\, A, B, _)").instanceof_image()
         }
-        Ok(())
+        ok!()
     }
 
     #[test]
-    fn get_relation_index() -> Result<()> {
+    fn get_relation_index() -> AResult {
         asserts! {
             // term!(r"(/, _, A, B)").get_relation_index() => 0 // 会被解析为「乘积」
             // term!(r"(\, _, A, B)").get_relation_index() => 0 // 会被解析为「乘积」
@@ -159,28 +159,28 @@ mod tests {
             term!(r"(/, A, B, _)").get_relation_index() => 2
             term!(r"(\, A, B, _)").get_relation_index() => 2
         }
-        Ok(())
+        ok!()
     }
 
     #[test]
-    fn get_relation() -> Result<()> {
+    fn get_relation() -> AResult {
         asserts! {
             term!(r"(/, R, _, B)").get_relation() => &term!("R")
             term!(r"(\, R, _, B)").get_relation() => &term!("R")
             term!(r"(/, R, A, _)").get_relation() => &term!("R")
             term!(r"(\, R, A, _)").get_relation() => &term!("R")
         }
-        Ok(())
+        ok!()
     }
 
     #[test]
-    fn get_the_other_component() -> Result<()> {
+    fn get_the_other_component() -> AResult {
         asserts! {
             term!(r"(/, R, _, B)").get_the_other_component() => Some(&term!("B"))
             term!(r"(\, R, _, B)").get_the_other_component() => Some(&term!("B"))
             term!(r"(/, R, A, _)").get_the_other_component() => Some(&term!("A"))
             term!(r"(\, R, A, _)").get_the_other_component() => Some(&term!("A"))
         }
-        Ok(())
+        ok!()
     }
 }

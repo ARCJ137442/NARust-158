@@ -576,13 +576,13 @@ impl VarSubstitution {
 mod tests {
     use super::*;
     use crate::test_term as term;
-    use anyhow::Result;
+    use crate::{global::tests::AResult, ok};
     use nar_dev_utils::{asserts, macro_once};
 
     /// 测试/包含变量
     /// * ✨同时包含对「是否常量」的测试
     #[test]
-    fn contain_var() -> Result<()> {
+    fn contain_var() -> AResult {
         asserts! {
             term!("<A --> var_word>").contain_var() => false
             term!("<A --> $var_word>").contain_var() => true
@@ -595,12 +595,12 @@ mod tests {
             term!("<A --> ?var_word>").is_constant() => false
             term!("<<A --> $1> ==> <B --> $1>>").is_constant() => false // ! 参考自OpenNARS：最初是false，但在「作为语句输入」后，转变为true
         }
-        Ok(())
+        ok!()
     }
 
     /// 测试/变量替换
     #[test]
-    fn apply_substitute() -> Result<()> {
+    fn apply_substitute() -> AResult {
         let substitution = VarSubstitution::from_pairs([
             (term!("var_word"), term!("word")),
             (term!("$1"), term!("1")),
@@ -621,12 +621,12 @@ mod tests {
             "<A --> var_word>", substitution => "<A --> word>"
             "<<$1 --> A> ==> <B --> $1>>", substitution => "<<1 --> A> ==> <B --> 1>>"
         }
-        Ok(())
+        ok!()
     }
 
     /// 测试 / unify | unify_two
     #[test]
-    fn unify() -> Result<()> {
+    fn unify() -> AResult {
         use crate::language::variable::unify_two;
         macro_once! {
             macro unify(
@@ -691,11 +691,11 @@ mod tests {
             // 无序集合×复合
             // "{1, (*, X), (*, $x)}", "{1, (*, Y), (*, X)}" => "$" => "{1, (*, Y), (*, X)}", "{1, (*, Y), (*, X)}"
         }
-        Ok(())
+        ok!()
     }
 
     #[test]
-    fn rename_variables() -> Result<()> {
+    fn rename_variables() -> AResult {
         macro_once! {
             // * 🚩模式：词项字符串 ⇒ 预期词项字符串
             macro rename_variables($($term:literal => $expected:expr )*) {
@@ -752,6 +752,6 @@ mod tests {
             "(*, $A, $A, $A)" => "(*, $1, $1, $1)"
             "(*, (*, $A, $A, $A), (*, $A, $A, $A), (*, $A, $A, $A))" => "(*, (*, $1, $1, $1), (*, $1, $1, $1), (*, $1, $1, $1))"
         }
-        Ok(())
+        ok!()
     }
 }

@@ -65,11 +65,11 @@ impl Term {
 mod tests {
     use super::*;
     use crate::test_term as term;
-    use anyhow::Result;
+    use crate::{global::tests::AResult, ok};
     use nar_dev_utils::{asserts, macro_once};
 
     #[test]
-    fn get_name() -> Result<()> {
+    fn get_name() -> AResult {
         macro_once! {
             // * 🚩模式：词项字符串 ⇒ 预期
             macro fmt($($term:literal => $expected:expr)*) {
@@ -105,11 +105,11 @@ mod tests {
             "<A ==> B>" => "(A ==> B)"
             "<A <=> B>" => "(A <=> B)"
         }
-        Ok(())
+        ok!()
     }
 
     #[test]
-    fn get_complexity() -> Result<()> {
+    fn get_complexity() -> AResult {
         macro_once! {
             // * 🚩模式：词项字符串 ⇒ 预期
             macro fmt($($term:literal => $expected:expr)*) {
@@ -156,6 +156,6 @@ mod tests {
             "<<A ==> B> ==> <A ==> B>>" => 7
             "<<A <=> B> <=> <A <=> B>>" => 7
         }
-        Ok(())
+        ok!()
     }
 }

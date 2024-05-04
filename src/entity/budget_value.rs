@@ -261,7 +261,7 @@ pub use impl_v1::*;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use anyhow::Result;
+    use crate::{global::tests::AResult, ok};
     use nar_dev_utils::macro_once;
 
     /// 定义要测试的「预算值」类型
@@ -282,7 +282,7 @@ mod tests {
 
     /// 测试/priority
     #[test]
-    fn priority() -> Result<()> {
+    fn priority() -> AResult {
         macro_once! {
             /// * 🚩模式：[预算值的构造方法] ⇒ 预期「短浮点」浮点值
             macro test($( [ $($budget:tt)* ] => $expected:tt)*) {
@@ -299,14 +299,14 @@ mod tests {
             [0.1024; 0.0; 0.5] => 0.1024
             [0.2; 0.1; 0.5] => 0.2
         }
-        Ok(())
+        ok!()
     }
 
     // * ✅测试/__priority_mut已经在`set_priority`中实现
 
     /// 测试/set_priority
     #[test]
-    fn set_priority() -> Result<()> {
+    fn set_priority() -> AResult {
         macro_once! {
             /// * 🚩模式：[预算值的构造方法] → 要被赋的值 ⇒ 预期「短浮点」浮点值
             macro test($( [ $($budget:tt)* ] -> $new_float:tt => $expected:tt)*) {
@@ -325,12 +325,12 @@ mod tests {
             [0.1024; 0.0; 0.5] -> 0.0 => 0.0
             [0.2; 0.1; 0.5] -> 1.0 => 1.0
         }
-        Ok(())
+        ok!()
     }
 
     /// 测试/durability
     #[test]
-    fn durability() -> Result<()> {
+    fn durability() -> AResult {
         macro_once! {
             /// * 🚩模式：[预算值的构造方法] ⇒ 预期「短浮点」浮点值
             macro test($( [ $($budget:tt)* ] => $expected:tt)*) {
@@ -347,14 +347,14 @@ mod tests {
             [0.0; 0.1024; 0.5] => 0.1024
             [0.1; 0.2; 0.5] => 0.2
         }
-        Ok(())
+        ok!()
     }
 
     // * ✅测试/__durability_mut已经在`set_durability`中实现
 
     /// 测试/set_durability
     #[test]
-    fn set_durability() -> Result<()> {
+    fn set_durability() -> AResult {
         macro_once! {
             /// * 🚩模式：[预算值的构造方法] → 要被赋的值 ⇒ 预期「短浮点」浮点值
             macro test($( [ $($budget:tt)* ] -> $new_float:tt => $expected:tt)*) {
@@ -373,12 +373,12 @@ mod tests {
             [0.1024; 0.1; 0.5] -> 0.0 => 0.0
             [0.2; 0.1; 0.5] -> 1.0 => 1.0
         }
-        Ok(())
+        ok!()
     }
 
     /// 测试/quality
     #[test]
-    fn quality() -> Result<()> {
+    fn quality() -> AResult {
         macro_once! {
             /// * 🚩模式：[预算值的构造方法] ⇒ 预期「短浮点」浮点值
             macro test($( [ $($budget:tt)* ] => $expected:tt)*) {
@@ -395,14 +395,14 @@ mod tests {
             [0.0; 0.5; 0.1024] => 0.1024
             [0.1; 0.2; 0.5] => 0.5
         }
-        Ok(())
+        ok!()
     }
 
     // * ✅测试/__quality_mut已经在`set_quality`中实现
 
     /// 测试/set_quality
     #[test]
-    fn set_quality() -> Result<()> {
+    fn set_quality() -> AResult {
         macro_once! {
             /// * 🚩模式：[预算值的构造方法] → 要被赋的值 ⇒ 预期「短浮点」浮点值
             macro test($( [ $($budget:tt)* ] -> $new_float:tt => $expected:tt)*) {
@@ -421,12 +421,12 @@ mod tests {
             [0.1024; 0.1; 0.75] -> 0.0 => 0.0
             [0.2; 0.1; 0.15] -> 1.0 => 1.0
         }
-        Ok(())
+        ok!()
     }
 
     /// 测试/inc_priority
     #[test]
-    fn inc_priority() -> Result<()> {
+    fn inc_priority() -> AResult {
         macro_once! {
             /// * 🚩模式：[预算值的构造方法] + 参数 ⇒ 预期「短浮点」浮点值
             macro test($( [ $($budget:tt)* ] + $delta:tt => $expected:tt)*) {
@@ -443,12 +443,12 @@ mod tests {
             [0.1024; 0.1; 0.75] + 0.0 => 0.1024
             [0.2; 0.1; 0.15] + 1.0 => 1.0
         }
-        Ok(())
+        ok!()
     }
 
     /// 测试/dec_priority
     #[test]
-    fn dec_priority() -> Result<()> {
+    fn dec_priority() -> AResult {
         macro_once! {
             /// * 🚩模式：[预算值的构造方法] - 参数 ⇒ 预期「短浮点」浮点值
             macro test($( [ $($budget:tt)* ] - $delta:tt => $expected:tt)*) {
@@ -465,12 +465,12 @@ mod tests {
             [0.1024; 0.1; 0.75] - 0.0 => 0.0
             [0.2; 0.1; 0.15] - 1.0 => 0.2
         }
-        Ok(())
+        ok!()
     }
 
     /// 测试/inc_durability
     #[test]
-    fn inc_durability() -> Result<()> {
+    fn inc_durability() -> AResult {
         macro_once! {
             /// * 🚩模式：[预算值的构造方法] + 参数 ⇒ 预期「短浮点」浮点值
             macro test($( [ $($budget:tt)* ] + $delta:tt => $expected:tt)*) {
@@ -487,12 +487,12 @@ mod tests {
             [0.1; 0.1024; 0.75] + 0.0 => 0.1024
             [0.1; 0.2; 0.15] + 1.0 => 1.0
         }
-        Ok(())
+        ok!()
     }
 
     /// 测试/dec_durability
     #[test]
-    fn dec_durability() -> Result<()> {
+    fn dec_durability() -> AResult {
         macro_once! {
             /// * 🚩模式：[预算值的构造方法] - 参数 ⇒ 预期「短浮点」浮点值
             macro test($( [ $($budget:tt)* ] - $delta:tt => $expected:tt)*) {
@@ -509,12 +509,12 @@ mod tests {
             [0.1; 0.1024; 0.75] - 0.0 => 0.0
             [0.1; 0.2; 0.15] - 1.0 => 0.2
         }
-        Ok(())
+        ok!()
     }
 
     /// 测试/inc_quality
     #[test]
-    fn inc_quality() -> Result<()> {
+    fn inc_quality() -> AResult {
         macro_once! {
             /// * 🚩模式：[预算值的构造方法] + 参数 ⇒ 预期「短浮点」浮点值
             macro test($( [ $($budget:tt)* ] + $delta:tt => $expected:tt)*) {
@@ -531,12 +531,12 @@ mod tests {
             [0.1; 0.75; 0.1024] + 0.0 => 0.1024
             [0.1; 0.15; 0.2] + 1.0 => 1.0
         }
-        Ok(())
+        ok!()
     }
 
     /// 测试/dec_quality
     #[test]
-    fn dec_quality() -> Result<()> {
+    fn dec_quality() -> AResult {
         macro_once! {
             /// * 🚩模式：[预算值的构造方法] - 参数 ⇒ 预期「短浮点」浮点值
             macro test($( [ $($budget:tt)* ] - $delta:tt => $expected:tt)*) {
@@ -553,12 +553,12 @@ mod tests {
             [0.1; 0.75; 0.1024] - 0.0 => 0.0
             [0.1; 0.15; 0.2] - 1.0 => 0.2
         }
-        Ok(())
+        ok!()
     }
 
     /// 测试/summary
     #[test]
-    fn summary() -> Result<()> {
+    fn summary() -> AResult {
         macro_once! {
             /// * 🚩模式：[预算值的构造方法] ⇒ 预期「短浮点」浮点值
             macro test($( [ $($budget:tt)* ] => $expected:tt)*) {
@@ -577,12 +577,12 @@ mod tests {
             [0.01; 0.1; 1.0] => 0.1
             [0.2; 0.04; 0.008] => 0.04
         }
-        Ok(())
+        ok!()
     }
 
     /// 测试/above_threshold
     #[test]
-    fn above_threshold() -> Result<()> {
+    fn above_threshold() -> AResult {
         macro_once! {
             /// * 🚩模式：[预算值的构造方法] @ 阈值 ⇒ 预期
             macro test($( [ $($budget:tt)* ] @ $threshold:expr => $expected:tt)*) {
@@ -612,6 +612,6 @@ mod tests {
             [0.01; 0.1; 1.0] @ 0.101 => false
             [0.2; 0.04; 0.008] @ 0.041 => false
         }
-        Ok(())
+        ok!()
     }
 }

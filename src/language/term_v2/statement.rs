@@ -196,11 +196,11 @@ impl Term {
 mod tests {
     use super::*;
     use crate::test_term as term;
-    use anyhow::Result;
+    use crate::{global::tests::AResult, ok};
     use nar_dev_utils::asserts;
 
     #[test]
-    fn new_sym_statement() -> Result<()> {
+    fn new_sym_statement() -> AResult {
         asserts! {
             // 继承⇒相似
             Term::new_sym_statement(INHERITANCE_RELATION, term!("A"), term!("B"))
@@ -209,7 +209,7 @@ mod tests {
             Term::new_sym_statement(IMPLICATION_RELATION, term!("A"), term!("B"))
                 => term!("<A <=> B>")
         }
-        Ok(())
+        ok!()
     }
 
     /// 陈述有效性
@@ -219,7 +219,7 @@ mod tests {
     ///   * `invalid_reflexive`
     ///   * `invalid_pair`
     #[test]
-    fn invalid_statement() -> Result<()> {
+    fn invalid_statement() -> AResult {
         asserts! {
             // 非法
             term!("<A --> A>").invalid_statement()
@@ -234,11 +234,11 @@ mod tests {
             !term!("<<A --> B> ==> <C --> A>>").invalid_statement()
             !term!("<<A --> B> ==> <C --> D>>").invalid_statement()
         }
-        Ok(())
+        ok!()
     }
 
     #[test]
-    fn get_subject() -> Result<()> {
+    fn get_subject() -> AResult {
         asserts! {
             term!("<A --> B>").get_subject() => &term!("A")
             term!("<あ --> B>").get_subject() => &term!("あ")
@@ -247,11 +247,11 @@ mod tests {
             term!("<$1 --> B>").get_subject() => &term!("$1")
             term!("<(*, 1, 2, 3) --> B>").get_subject() => &term!("(*, 1, 2, 3)")
         }
-        Ok(())
+        ok!()
     }
 
     #[test]
-    fn get_predicate() -> Result<()> {
+    fn get_predicate() -> AResult {
         asserts! {
             term!("<S --> A>").get_predicate() => &term!("A")
             term!("<S --> あ>").get_predicate() => &term!("あ")
@@ -260,6 +260,6 @@ mod tests {
             term!("<S --> $1>").get_predicate() => &term!("$1")
             term!("<S --> (*, 1, 2, 3)>").get_predicate() => &term!("(*, 1, 2, 3)")
         }
-        Ok(())
+        ok!()
     }
 }
