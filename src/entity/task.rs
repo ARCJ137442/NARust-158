@@ -1,4 +1,5 @@
 //! 🎯复刻OpenNARS `nars.entity.Task`
+//! * ✅【2024-05-05 21:38:53】基本方法复刻完毕
 
 use super::{BudgetValueConcrete, Item, Sentence, SentenceConcrete};
 use crate::{global::RC, storage::BagKey};
@@ -79,6 +80,24 @@ pub trait Task {
     /// [`Task::best_solution`]的可变版本
     /// * 📌只能修改「指向哪个[`Sentence`]」，不能修改所指向[`Sentence`]内部的数据
     fn best_solution_mut(&mut self) -> &mut Option<RC<Self::Sentence>>;
+
+    // * ✅`getContent`、`getCreationTime`均已通过「自动实现」被自动模拟
+
+    /// 模拟`Task.isInput`
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// Check if a Task is a direct input
+    ///
+    /// @return Whether the Task is derived from another task
+    #[inline(always)]
+    fn is_input(&self) -> bool {
+        /* 📄OpenNARS源码：
+        return parentTask == null; */
+        self.parent_task().is_none()
+    }
+
+    // * ✅`merge`已通过「自动实现」被自动模拟
 }
 
 pub trait TaskConcrete: Task + Sized {

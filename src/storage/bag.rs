@@ -1110,7 +1110,7 @@ mod impl_v1 {
         ///
         /// maximum number of items to be taken out at current level
         current_counter: usize,
-        // ! ❌不作`memory: Memory`循环引用：所有涉及memory的方法，均移动到Memory中解决
+        // ! ❌不作`memory: Memory`循环引用：所有涉及memory的方法，均移动到Memory中解决（另外，OpenNARS中也没多少地方用到这个引用）
         // memory: Memory,
 
         // ! ❌不作`bagObserver: BagObserver<Item>`观察者：不引入Java的「观察者模式」
