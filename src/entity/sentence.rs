@@ -53,14 +53,29 @@ pub trait Sentence {
     /// 绑定的「时间戳」类型
     type Stamp: StampConcrete;
 
-    /// 模拟`Sentence.content`、`Sentence.setContent`、`Sentence.getContent`
+    /// 模拟`Sentence.content`、`Sentence.getContent`
     /// * 🚩读写：出现了两个方法
     ///
     /// # 📄OpenNARS
     ///
+    /// ## `content`
+    ///
     /// The content of a Sentence is a Term
+    ///
+    /// ## `getContent`
+    ///
+    /// Get the content of the sentence
+    ///
+    /// @return The content Term
     fn content(&self) -> &Term;
-    /// [`Sentence::content`]的可变版本
+    /// 模拟`Sentence.setContent`
+    /// * 📌[`Sentence::content`]的可变版本
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// Set the content Term of the Sentence
+    ///
+    /// @param t The new content
     fn content_mut(&mut self) -> &mut Term;
 
     /// 模拟
@@ -141,7 +156,7 @@ pub trait Sentence {
     /// [`Sentence::stamp`]的可变版本
     fn stamp_mut(&mut self) -> &mut Self::Stamp;
 
-    /// 模拟`Sentence.revisable`、`Sentence.getRevisable`、`Sentence.setRevisable`
+    /// 模拟`Sentence.revisable`、`Sentence.getRevisable`
     /// * ⚠️读写：需要设置其中的值
     ///
     /// # 📄OpenNARS
@@ -153,12 +168,13 @@ pub trait Sentence {
     /// ## `getRevisable`
     ///
     /// 🈚
+    fn revisable(&self) -> bool;
+    /// 模拟`Sentence.setRevisable`
+    /// * 📌[`Sentence::revisable`]的可变版本
     ///
-    /// ## `setRevisable`
+    /// # 📄OpenNARS
     ///
     /// 🈚
-    fn revisable(&self) -> bool;
-    /// [`Sentence::revisable`]的可变版本
     fn revisable_mut(&mut self) -> &mut bool;
 
     /// 模拟`Sentence.cloneContent`
@@ -421,17 +437,120 @@ pub trait SentenceConcrete: Sentence + Clone + Hash + PartialEq {
         /* 📄OpenNARS源码：
         assert content.equals(that.getContent()) && punctuation == that.getPunctuation();
         return (truth.equals(that.getTruth()) && stamp.equals(that.getStamp())); */
-        // TODO: 【2024-05-05 17:57:21】应该把「判等」「散列化」都迁移到「具体类型」的特征中去
         self.equals(other)
     }
 }
 
-// TODO: 初代实现
-mod impl_v1 {}
-use impl_v1::*;
+/// 初代实现
+/// * 📌需要作为一个**独立对象**使用
+///   * 📄[「概念」](super::Concept)中的「信念表」
+mod impl_v1 {
+    use super::*;
 
-// TODO: 单元测试
-/// 单元测试
+    #[derive(Debug, Clone)]
+    pub struct SentenceV1<T: TruthValueConcrete, S: StampConcrete> {
+        /// 内部词项
+        content: Term,
+        /// 内部「标点」（语句类型）
+        /// * 🚩标点+真值
+        punctuation: SentenceType<T>,
+        /// 内部「时间戳」字段
+        stamp: S,
+        /// 内部「可修订」字段
+        revisable: bool,
+    }
+
+    // * 【2024-05-05 19:38:47】📌后边都是非常简单的「字段对字段」实现 //
+
+    impl<T, S> PartialEq for SentenceV1<T, S>
+    where
+        T: TruthValueConcrete,
+        S: StampConcrete,
+    {
+        #[inline(always)]
+        fn eq(&self, other: &Self) -> bool {
+            self.equals(other)
+        }
+    }
+
+    impl<T, S> Hash for SentenceV1<T, S>
+    where
+        T: TruthValueConcrete,
+        S: StampConcrete,
+    {
+        #[inline(always)]
+        fn hash<H: Hasher>(&self, state: &mut H) {
+            self.__hash(state);
+        }
+    }
+
+    impl<T, S> Sentence for SentenceV1<T, S>
+    where
+        T: TruthValueConcrete,
+        S: StampConcrete,
+    {
+        type Truth = T;
+
+        type Stamp = S;
+
+        fn content(&self) -> &Term {
+            &self.content
+        }
+
+        fn content_mut(&mut self) -> &mut Term {
+            &mut self.content
+        }
+
+        fn punctuation(&self) -> &SentenceType<Self::Truth> {
+            &self.punctuation
+        }
+
+        fn punctuation_mut(&mut self) -> &mut SentenceType<Self::Truth> {
+            &mut self.punctuation
+        }
+
+        fn stamp(&self) -> &Self::Stamp {
+            &self.stamp
+        }
+
+        fn stamp_mut(&mut self) -> &mut Self::Stamp {
+            &mut self.stamp
+        }
+
+        fn revisable(&self) -> bool {
+            self.revisable
+        }
+
+        fn revisable_mut(&mut self) -> &mut bool {
+            &mut self.revisable
+        }
+    }
+
+    impl<T, S> SentenceConcrete for SentenceV1<T, S>
+    where
+        T: TruthValueConcrete,
+        S: StampConcrete,
+    {
+        fn new(
+            content: Term,
+            // punctuation: Punctuation,
+            // truth: Self::Truth,
+            sentence_type: SentenceType<Self::Truth>,
+            stamp: Self::Stamp,
+            revisable: bool,
+        ) -> Self {
+            Self {
+                content,
+                punctuation: sentence_type,
+                stamp,
+                revisable,
+            }
+        }
+    }
+}
+pub use impl_v1::*;
+
+/// TODO: 单元测试
 #[cfg(test)]
 mod tests {
     use super::*;
