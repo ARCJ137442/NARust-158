@@ -869,16 +869,21 @@ mod impl_v1 {
         fmt::Debug,
     };
 
-    /// 📜为字符串实现「元素id」
-    impl BagKey for String {}
+    /// 初代[`BagKey`]实现
+    /// * 🚩【2024-05-05 21:16:25】目前直接使用字符串[`String`]
+    /// * 🎯主要是为了与标准库类型区分，后续方便分离升级
+    pub type BagKeyV1 = String;
+
+    /// 📜为[`BagKeyV1`]实现「元素id」
+    impl BagKey for BagKeyV1 {}
 
     /// 📜为「散列映射」[`HashMap`]实现「元素映射」
     /// * 📝同名方法冲突时，避免「循环调用」的方法：完全限定语法
     ///   * 🔗<https://rustc-dev-guide.rust-lang.org/method-lookup.html>
     ///   * ⚠️[`HashMap`]使用[`len`](HashMap::len)而非[`size`](BagNameTable::size)
-    impl<E> BagNameTable<E> for HashMap<String, E>
+    impl<E> BagNameTable<E> for HashMap<BagKeyV1, E>
     where
-        E: Item<Key = String>,
+        E: Item<Key = BagKeyV1>,
     {
         #[inline(always)]
         fn size(&self) -> usize {
@@ -886,27 +891,28 @@ mod impl_v1 {
         }
 
         #[inline(always)]
-        fn get(&self, key: &String) -> Option<&E> {
+        fn get(&self, key: &BagKeyV1) -> Option<&E> {
             Self::get(self, key)
         }
 
         #[inline(always)]
-        fn get_mut(&mut self, key: &String) -> Option<&mut E> {
+        fn get_mut(&mut self, key: &BagKeyV1) -> Option<&mut E> {
             Self::get_mut(self, key)
         }
 
         #[inline(always)]
-        fn put(&mut self, key: &String, item: E) -> Option<E> {
+        fn put(&mut self, key: &BagKeyV1, item: E) -> Option<E> {
             // * 🚩【2024-05-04 13:06:22】始终尝试插入（在「从无到有」的时候需要）
             self.insert(key.clone(), item)
         }
 
         #[inline(always)]
-        fn remove(&mut self, key: &String) -> Option<E> {
+        fn remove(&mut self, key: &BagKeyV1) -> Option<E> {
             Self::remove(self, key)
         }
     }
 
+    /// 初代「层级映射」实现
     #[derive(Clone, Default, PartialEq)]
     struct BagItemTableV1<Key>(Box<[VecDeque<Key>]>);
 
@@ -1111,7 +1117,7 @@ mod impl_v1 {
         // ! ❌不作`showLevel: usize`显示用变量：不用于显示
     }
 
-    impl<E: Item<Key = String>> BagV1<E> {
+    impl<E: Item<Key = BagKeyV1>> BagV1<E> {
         pub fn new(capacity: usize, forget_rate: usize) -> Self {
             Self {
                 // 这两个是「超参数」要因使用者而异
@@ -1132,7 +1138,7 @@ mod impl_v1 {
         }
     }
 
-    impl<E: Item<Key = String>> Default for BagV1<E> {
+    impl<E: Item<Key = BagKeyV1>> Default for BagV1<E> {
         /// * 🚩【2024-05-04 16:26:53】默认当「概念袋」使
         fn default() -> Self {
             Self::new(
@@ -1144,7 +1150,7 @@ mod impl_v1 {
 
     /// 对「以字符串为索引的袋」实现特征
     /// * 🚩【2024-05-04 12:01:15】下面这些就是给出自己的属性，即「属性映射」
-    impl<E: Item<Key = String>> Bag<E> for BagV1<E> {
+    impl<E: Item<Key = BagKeyV1>> Bag<E> for BagV1<E> {
         fn __distributor(&self) -> &impl Distributor {
             &self.distributor
         }
@@ -1284,7 +1290,7 @@ mod tests {
     }
 
     /// 测试用「袋」的类型
-    type Item1 = ItemV1<String>;
+    type Item1 = ItemV1<BagKeyV1>;
     type Bag1 = BagV1<Item1>;
 
     /// 测试/单个元素

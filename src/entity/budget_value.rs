@@ -226,8 +226,8 @@ pub trait BudgetValueConcrete: BudgetValue + Sized {
 mod impl_v1 {
     use super::*;
 
-    /// 一个默认实现
-    /// * 🔬仅作测试用
+    /// [预算值](BudgetValue)的初步实现
+    /// * 🚩直接表示为一个三元组（但并非直接对元组实现）
     #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
     pub struct BudgetV1(ShortFloatV1, ShortFloatV1, ShortFloatV1);
 

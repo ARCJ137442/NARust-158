@@ -94,9 +94,9 @@ pub trait TaskConcrete: Task + Sized {
     /// @param parentTask   The task from which this new task is derived
     /// @param parentBelief The belief from which this new task is derived
     /// @param solution     The belief to be used in future inference
-    fn __new(
-        s: Self::Sentence,
-        b: Self::Budget,
+    fn new(
+        sentence: Self::Sentence,
+        budget: Self::Budget,
         parent_task: Option<RC<Self>>,
         parent_belief: Option<RC<Self::Sentence>>,
         solution: Option<RC<Self::Sentence>>,
@@ -111,8 +111,8 @@ pub trait TaskConcrete: Task + Sized {
     /// @param s The sentence
     /// @param b The budget
     #[inline(always)]
-    fn from_input(s: Self::Sentence, b: Self::Budget) -> Self {
-        Self::__new(s, b, None, None, None)
+    fn from_input(sentence: Self::Sentence, budget: Self::Budget) -> Self {
+        Self::new(sentence, budget, None, None, None)
     }
 
     /// 模拟`new Task(Sentence s, BudgetValue b, Task parentTask, Sentence parentBelief)`
@@ -127,12 +127,12 @@ pub trait TaskConcrete: Task + Sized {
     /// @param parentBelief The belief from which this new task is derived
     #[inline(always)]
     fn from_derive(
-        s: Self::Sentence,
-        b: Self::Budget,
+        sentence: Self::Sentence,
+        budget: Self::Budget,
         parent_task: Option<RC<Self>>,
         parent_belief: Option<RC<Self::Sentence>>,
     ) -> Self {
-        Self::__new(s, b, parent_task, parent_belief, None)
+        Self::new(sentence, budget, parent_task, parent_belief, None)
     }
 }
 
@@ -207,9 +207,9 @@ impl<T: Task> Item for T {
 
 /// 初代实现
 mod impl_v1 {
-    use std::fmt::Debug;
-
     use super::*;
+    use crate::storage::BagKeyV1;
+    use std::fmt::Debug;
 
     /// [`Task`]的初代实现
     #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -295,23 +295,23 @@ mod impl_v1 {
     }
 
     /// 直接实现
-    impl<S, B> TaskConcrete for TaskV1<S, String, B>
+    impl<S, B> TaskConcrete for TaskV1<S, BagKeyV1, B>
     where
         S: SentenceConcrete,
         B: BudgetValueConcrete,
         S::Truth: Debug,
     {
-        fn __new(
+        #[inline(always)]
+        fn new(
             s: Self::Sentence,
             b: Self::Budget,
             parent_task: Option<RC<Self>>,
             parent_belief: Option<RC<Self::Sentence>>,
             solution: Option<RC<Self::Sentence>>,
         ) -> Self {
-            let key = s.to_key();
             Self {
+                key: s.to_key(),
                 sentence: s,
-                key,
                 budget: b,
                 parent_task,
                 parent_belief,
@@ -321,8 +321,41 @@ mod impl_v1 {
     }
 }
 pub use impl_v1::*;
+
 /// 单元测试
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{
+        entity::{
+            BudgetV1, SentenceType, SentenceV1, StampConcrete, StampV1, TruthV1, TruthValueConcrete,
+        },
+        global::tests::AResult,
+        language::Term,
+        ok,
+        storage::BagKeyV1,
+        test_term,
+    };
+
+    /// 测试用具体类型
+    type T = TaskV1<SentenceV1<TruthV1, StampV1>, BagKeyV1, BudgetV1>;
+
+    // * ✅测试/new 已在后续函数中测试
+
+    /// 测试/from_input
+    #[test]
+    fn from_input() -> AResult {
+        // 构造
+        let content = test_term!("A");
+        let truth = TruthV1::from_float(1.0, 0.9, false);
+        let budget = BudgetV1::from_float(0.5, 0.5, 0.5);
+        let stamp = StampV1::with_time(0, 0);
+        let revisable = false;
+        let sentence = SentenceV1::new(content, SentenceType::Judgement(truth), stamp, revisable);
+        let task = T::from_input(sentence, budget);
+        // 展示
+        dbg!(task);
+        // 完成
+        ok!()
+    }
 }
