@@ -1,8 +1,8 @@
 //! 🎯复刻OpenNARS `nars.entity.Task`
-//! TODO: 着手开始复刻
 
 use super::{BudgetValueConcrete, Item, Sentence, SentenceConcrete};
-use crate::storage::BagKey;
+use crate::{global::RC, storage::BagKey};
+use std::hash::Hash;
 
 /// 模拟OpenNARS `nars.entity.Task`
 ///
@@ -30,16 +30,110 @@ pub trait Task {
     fn __key(&self) -> &Self::Key;
 
     /// 模拟`Task.sentence`、`Task.getSentence`
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// The sentence of the Task
     fn sentence(&self) -> &Self::Sentence;
     /// 🆕[`Task::sentence`]的可变版本
     /// * 🎯用于自动实现[`Sentence`]
     fn sentence_mut(&mut self) -> &mut Self::Sentence;
 
     /// 模拟`Task.budget`、`Task.getBudget`
-    fn budget(&self) -> &Self::Budget;
+    /// * 📝OpenNARS中的`Task`直接从`Item`中拿到了`Budget`字段
+    ///   * 此处为避免与[`Item::budget`]命名冲突，采用内部化命名
+    fn __budget(&self) -> &Self::Budget;
     /// 🆕[`Task::budget`]的可变版本
     /// * 🎯用于自动实现[`super::BudgetValue`]
-    fn budget_mut(&mut self) -> &mut Self::Budget;
+    fn __budget_mut(&mut self) -> &mut Self::Budget;
+
+    /// 模拟`Task.parentTask`、`Task.getParentTask`
+    /// * 🚩【2024-05-05 20:51:48】目前对「共享引用」使用「引用计数」处理
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// Task from which the Task is derived, or null if input
+    fn parent_task(&self) -> &Option<RC<Self>>;
+    /// [`Task::parent_task`]的可变版本
+    /// * 📌只能修改「指向哪个[`Task`]」，不能修改所指向[`Task`]内部的数据
+    fn parent_task_mut(&mut self) -> &mut Option<RC<Self>>;
+
+    /// 模拟`Task.parentBelief`、`Task.getParentBelief`
+    /// * 🚩【2024-05-05 20:51:48】目前对「共享引用」使用「引用计数」处理
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// Belief from which the Task is derived, or null if derived from a theorem
+    fn parent_belief(&self) -> &Option<RC<Self::Sentence>>;
+    /// [`Task::parent_belief`]的可变版本
+    /// * 📌只能修改「指向哪个[`Sentence`]」，不能修改所指向[`Sentence`]内部的数据
+    fn parent_belief_mut(&mut self) -> &mut Option<RC<Self::Sentence>>;
+
+    /// 模拟`Task.bestSolution`
+    /// * 🚩【2024-05-05 20:51:48】目前对「共享引用」使用「引用计数」处理
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// For Question and Goal: best solution found so far
+    fn best_solution(&self) -> &Option<RC<Self::Sentence>>;
+    /// [`Task::best_solution`]的可变版本
+    /// * 📌只能修改「指向哪个[`Sentence`]」，不能修改所指向[`Sentence`]内部的数据
+    fn best_solution_mut(&mut self) -> &mut Option<RC<Self::Sentence>>;
+}
+
+pub trait TaskConcrete: Task + Sized {
+    /// 模拟`new Task(Sentence s, BudgetValue b, Task parentTask, Sentence parentBelief, Sentence solution)`
+    /// * 🚩完全参数的构造函数
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// Constructor for an activated task
+    ///
+    /// @param s            The sentence
+    /// @param b            The budget
+    /// @param parentTask   The task from which this new task is derived
+    /// @param parentBelief The belief from which this new task is derived
+    /// @param solution     The belief to be used in future inference
+    fn __new(
+        s: Self::Sentence,
+        b: Self::Budget,
+        parent_task: Option<RC<Self>>,
+        parent_belief: Option<RC<Self::Sentence>>,
+        solution: Option<RC<Self::Sentence>>,
+    ) -> Self;
+
+    /// 模拟`new Task(Sentence s, BudgetValue b)`
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// Constructor for input task
+    ///
+    /// @param s The sentence
+    /// @param b The budget
+    #[inline(always)]
+    fn from_input(s: Self::Sentence, b: Self::Budget) -> Self {
+        Self::__new(s, b, None, None, None)
+    }
+
+    /// 模拟`new Task(Sentence s, BudgetValue b, Task parentTask, Sentence parentBelief)`
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// Constructor for a derived task
+    ///
+    /// @param s            The sentence
+    /// @param b            The budget
+    /// @param parentTask   The task from which this new task is derived
+    /// @param parentBelief The belief from which this new task is derived
+    #[inline(always)]
+    fn from_derive(
+        s: Self::Sentence,
+        b: Self::Budget,
+        parent_task: Option<RC<Self>>,
+        parent_belief: Option<RC<Self::Sentence>>,
+    ) -> Self {
+        Self::__new(s, b, parent_task, parent_belief, None)
+    }
 }
 
 /// 自动实现「语句」
@@ -102,17 +196,19 @@ impl<T: Task> Item for T {
 
     #[inline(always)]
     fn budget(&self) -> &Self::Budget {
-        self.budget()
+        self.__budget()
     }
 
     #[inline(always)]
     fn budget_mut(&mut self) -> &mut Self::Budget {
-        self.budget_mut()
+        self.__budget_mut()
     }
 }
 
 /// 初代实现
 mod impl_v1 {
+    use std::fmt::Debug;
+
     use super::*;
 
     /// [`Task`]的初代实现
@@ -126,9 +222,12 @@ mod impl_v1 {
         sentence: S,
         key: K,
         budget: B,
+        parent_task: Option<RC<Self>>,
+        parent_belief: Option<RC<S>>,
+        best_solution: Option<RC<S>>,
     }
 
-    /// 直接实现
+    /// 逐个字段实现
     impl<S, K, B> Task for TaskV1<S, K, B>
     where
         S: SentenceConcrete,
@@ -155,13 +254,69 @@ mod impl_v1 {
         }
 
         #[inline(always)]
-        fn budget(&self) -> &Self::Budget {
+        fn __budget(&self) -> &Self::Budget {
             &self.budget
         }
 
         #[inline(always)]
-        fn budget_mut(&mut self) -> &mut Self::Budget {
+        fn __budget_mut(&mut self) -> &mut Self::Budget {
             &mut self.budget
+        }
+
+        #[inline(always)]
+        fn parent_task(&self) -> &Option<RC<Self>> {
+            &self.parent_task
+        }
+
+        #[inline(always)]
+        fn parent_task_mut(&mut self) -> &mut Option<RC<Self>> {
+            &mut self.parent_task
+        }
+
+        #[inline(always)]
+        fn parent_belief(&self) -> &Option<RC<Self::Sentence>> {
+            &self.parent_belief
+        }
+
+        #[inline(always)]
+        fn parent_belief_mut(&mut self) -> &mut Option<RC<Self::Sentence>> {
+            &mut self.parent_belief
+        }
+
+        #[inline(always)]
+        fn best_solution(&self) -> &Option<RC<Self::Sentence>> {
+            &self.best_solution
+        }
+
+        #[inline(always)]
+        fn best_solution_mut(&mut self) -> &mut Option<RC<Self::Sentence>> {
+            &mut self.best_solution
+        }
+    }
+
+    /// 直接实现
+    impl<S, B> TaskConcrete for TaskV1<S, String, B>
+    where
+        S: SentenceConcrete,
+        B: BudgetValueConcrete,
+        S::Truth: Debug,
+    {
+        fn __new(
+            s: Self::Sentence,
+            b: Self::Budget,
+            parent_task: Option<RC<Self>>,
+            parent_belief: Option<RC<Self::Sentence>>,
+            solution: Option<RC<Self::Sentence>>,
+        ) -> Self {
+            let key = s.to_key();
+            Self {
+                sentence: s,
+                key,
+                budget: b,
+                parent_task,
+                parent_belief,
+                best_solution: solution,
+            }
         }
     }
 }
