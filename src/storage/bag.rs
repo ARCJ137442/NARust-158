@@ -1301,7 +1301,7 @@ mod tests {
     #[test]
     fn single_item() -> AResult {
         // 构造测试用「袋」
-        let mut bag = Bag1::default();
+        let mut bag = Bag1::new(1, 1);
         dbg!(&bag);
 
         // 初始化 // ? 是否应该自带
@@ -1353,14 +1353,17 @@ mod tests {
             bag._empty_level(0) => true, // 取走的是第0层
         }
 
-        // 修改预算值：优先级"0 => 1"
+        // 修改预算值：优先级"0 => 1"，耐久度"0 => 1"
+        // ! 📝如果没有耐久度
         taken.budget.inc_priority(ShortFloatV1::ONE);
+        taken.budget.inc_durability(ShortFloatV1::ONE);
         asserts! {
             // 最终增长到 1.0
             taken.budget.priority() == ShortFloatV1::ONE,
+            taken.budget.durability() == ShortFloatV1::ONE,
         }
 
-        // 放回元素
+        // 放回元素，其中会有「遗忘」的操作
         bag.put_back(taken);
         asserts! {
             bag.size() == 1, // 放回了
