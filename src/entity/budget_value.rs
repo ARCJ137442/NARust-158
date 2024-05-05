@@ -202,7 +202,7 @@ pub trait BudgetValueConcrete: BudgetValue + Sized {
         q: <Self as BudgetValue>::E,
     ) -> Self;
 
-    /// 模拟 `BudgetValue` 构造函数(p, d, q)
+    /// 模拟 `new BudgetValue(p, d, q)`
     /// * 🚩将浮点数分别转换为「短浮点」
     ///
     /// # 📄OpenNARS `BudgetValue`

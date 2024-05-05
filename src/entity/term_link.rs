@@ -3,7 +3,8 @@
 //! * ✅【2024-05-05 12:13:53】基本完成单元测试
 
 use super::Item;
-use crate::{io::symbols, language::Term};
+use crate::{global::RC, io::symbols, language::Term};
+use std::fmt::Display;
 
 /// 实现与「词项链类型」相关的结构
 /// * 🎯复刻OpenNARS `TermLink.type`与`TermLink.index`
@@ -185,31 +186,71 @@ mod link_type {
             }
         }
     }
+
+    /// 与[`TermLinkRef`]作比较
+    /// * 🎯允许更高性能地直接与[`TermLinkRef`]判等，而无需创建新值
+    impl PartialEq<TermLinkRef<'_>> for TermLinkType {
+        fn eq(&self, other: &TermLinkRef) -> bool {
+            // 简化以下匹配代码
+            use TermLinkType::*;
+            type Ref<'a> = TermLinkRef<'a>;
+            // 开始匹配
+            match (self, other) {
+                // 类型相同，无附加参数
+                (SELF, Ref::SELF)
+                | (Component, Ref::Component)
+                | (ComponentStatement, Ref::ComponentStatement)
+                | (ComponentCondition, Ref::ComponentCondition) => true,
+                // 类型相同，附加参数相同
+                (Compound(vec), Ref::Compound(vec2))
+                | (CompoundStatement(vec), Ref::CompoundStatement(vec2))
+                | (CompoundCondition(vec), Ref::CompoundCondition(vec2))
+                | (Transform(vec), Ref::Transform(vec2)) => vec == vec2,
+                // 类型不同
+                _ => false,
+            }
+        }
+    }
 }
 pub use link_type::*;
 
 /// 模拟OpenNARS `nars.entity.TermLink`
 /// * 🚩首先是一个「Item」
-pub trait TermLink: Item + Sized {
-    // ! 🚩【2024-05-04 20:49:09】暂不模拟构造函数
-    // /// 模拟 `TermLink`构造函数
-    // /// * 🚩需要「词项」「链接」「预算值」
-    // fn new(t: &Term, link: ComponentIndexRef) -> Self;
+/// * ❓【2024-05-06 00:08:34】目前「词项链」和「[『词项』](Term)链」并没分开来，似乎是个不好的习惯
+///   * ❓到底「任务链」应不应该继承「词项链」
+///   * 💭或许这俩应该分开，至少现在这个[`TermLink`]应该改成`TargetLink`或者别的什么抽象特征
+///   * 📌然后[`TermLink`]就是`TargetLink<Target = Term>`这样
+///
+/// TODO: 🏗️【2024-05-06 00:10:28】↑后续再行动，优化复用情况
+///
+/// # 📄OpenNARS
+///
+/// A link between a compound term and a component term
+///
+/// A TermLink links the current Term to a target Term, which is
+/// either a component of, or compound made from, the current term.
+///
+/// Neither of the two terms contain variable shared with other terms.
+///
+/// The index value(s) indicates the location of the component in the compound.
+///
+/// This class is mainly used in inference.RuleTable to dispatch premises to
+/// inference rules
+pub trait TermLink: Item {
+    /// 连接所基于的「目标」
+    /// * 📌可以是[词项](Term)，亦可为[任务](super::Task)
+    /// * ❓目前似乎需要为「词项」实现一个特征，然后将约束限定在「词项」上
+    ///   * ❗这样才能至少使用「词项」的功能
+    ///   * 📄如「通过[`Display`]生成[『元素id』](crate::storage::BagKey)」
+    type Target: Display;
 
     /// 🆕根据自身生成[`Item::key`]
     /// * 🎯可复用、无副作用的「字符串生成」逻辑
     /// * 🔗OpenNARS源码参见[`TermLink::_set_key`]
     /// * 🚩【2024-05-04 23:20:50】现在升级为静态方法，无需`self`
     ///   * 🎯为了「在构造之前生成key」
-    fn _generate_key(target: &Term, type_ref: TermLinkRef) -> String {
-        use symbols::*;
-        let (at1, at2) = match type_ref.is_to_component() {
-            true => (TO_COMPONENT_1, TO_COMPONENT_2),
-            false => (TO_COMPOUND_1, TO_COMPOUND_2),
-        };
-        // 🆕直接格式化 | 🎯只要保证「能展示链接类型和链接索引」即可
-        format!("{at1}T-{type_ref:?}{at2}{target}") // ! 注意：at2里边已经包含空格
-    }
+    /// * 🚩现不再提供默认的[`String`]实现，以便完全和字符串[`String`]解耦
+    fn _generate_key(target: &Self::Target, type_ref: TermLinkRef) -> Self::Key;
 
     /// 模拟`TermLink.setKey`
     /// * 🚩将自身信息转换为用于「唯一标识」的「袋元素id」
@@ -243,7 +284,7 @@ pub trait TermLink: Item + Sized {
 
     /// 🆕模拟[`Item::key`]的可变版本
     /// * 🎯在模拟`TermLink.setKey`时要用于赋值
-    fn __key_mut(&mut self) -> &mut String;
+    fn __key_mut(&mut self) -> &mut Self::Key;
 
     /// 模拟`TermLink.target`
     /// * 📝链接所归属的词项
@@ -259,7 +300,7 @@ pub trait TermLink: Item + Sized {
     /// - Get the target of the link
     ///
     /// @return The Term pointed by the link
-    fn target(&self) -> &Term;
+    fn target(&self) -> &Self::Target;
 
     /// 模拟`TermLink.type`
     /// * 🚩【2024-05-04 22:42:10】回避Rust关键字`type`
@@ -271,35 +312,37 @@ pub trait TermLink: Item + Sized {
     // * 📝OpenNARS始终将这俩方法用在「规则表的分派」中，并且总是会对「词项链类型」做分派
 }
 
+/// 具体的「词项链」类型
+/// * 🚩将原先的「词项链」变成真正的「[词项](Term)链」
+/// * 🚩在原有的「词项链」基础上增加
+pub trait TermLinkConcrete: TermLink<Target = Term> + Sized {
+    /// 模拟 `new TermLink(Term t, short p, int... indices)`
+    /// * 🚩需要「词项」「链接」「预算值」
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// Constructor for TermLink template
+    ///
+    /// called in CompoundTerm.prepareComponentLinks only
+    ///
+    /// @param t       Target Term
+    /// @param p       Link type
+    /// @param indices Component indices in compound, may be 1 to 4
+    fn new(
+        budget: Self::Budget,
+        target: impl Into<RC<Self::Target>>,
+        type_ref: TermLinkType,
+    ) -> Self;
+
+    // TODO: 复现其它构造函数
+    // TODO: 模拟 `new TermLink(String s, BudgetValue v)`
+    // TODO: 模拟 `new TermLink(Term t, TermLink template, BudgetValue v)`
+}
+
 /// 初代实现
 mod impl_v1 {
     use super::*;
     use crate::entity::BudgetValueConcrete;
-
-    /// 与[`TermLinkRef`]作比较
-    /// * 🎯允许更高性能地直接与[`TermLinkRef`]判等，而无需创建新值
-    impl PartialEq<TermLinkRef<'_>> for TermLinkType {
-        fn eq(&self, other: &TermLinkRef) -> bool {
-            // 简化以下匹配代码
-            use TermLinkType::*;
-            type Ref<'a> = TermLinkRef<'a>;
-            // 开始匹配
-            match (self, other) {
-                // 类型相同，无附加参数
-                (SELF, Ref::SELF)
-                | (Component, Ref::Component)
-                | (ComponentStatement, Ref::ComponentStatement)
-                | (ComponentCondition, Ref::ComponentCondition) => true,
-                // 类型相同，附加参数相同
-                (Compound(vec), Ref::Compound(vec2))
-                | (CompoundStatement(vec), Ref::CompoundStatement(vec2))
-                | (CompoundCondition(vec), Ref::CompoundCondition(vec2))
-                | (Transform(vec), Ref::Transform(vec2)) => vec == vec2,
-                // 类型不同
-                _ => false,
-            }
-        }
-    }
 
     /// 词项链 初代实现
     /// * 🚩目前不限制其中「预算值」的类型
@@ -307,15 +350,16 @@ mod impl_v1 {
     pub struct TermLinkV1<B: BudgetValueConcrete> {
         key: String,
         budget: B,
-        target: Term,
+        target: RC<Term>,
         type_ref: TermLinkType,
     }
 
-    impl<B: BudgetValueConcrete> TermLinkV1<B> {
+    impl<B: BudgetValueConcrete> TermLinkConcrete for TermLinkV1<B> {
         /// 构造函数
         /// * 📌包含「预算」「目标词项」「类型」
         /// * 🚩其key是自行计算的
-        pub fn new(budget: B, target: Term, type_ref: TermLinkType) -> Self {
+        fn new(budget: B, target: impl Into<RC<Term>>, type_ref: TermLinkType) -> Self {
+            let target = target.into();
             Self {
                 key: Self::_generate_key(&target, type_ref.to_ref()),
                 budget,
@@ -343,7 +387,9 @@ mod impl_v1 {
     }
 
     impl<B: BudgetValueConcrete> TermLink for TermLinkV1<B> {
-        fn target(&self) -> &Term {
+        type Target = Term;
+
+        fn target(&self) -> &Self::Target {
             &self.target
         }
 
@@ -353,6 +399,16 @@ mod impl_v1 {
 
         fn __key_mut(&mut self) -> &mut String {
             &mut self.key
+        }
+
+        fn _generate_key(target: &Self::Target, type_ref: TermLinkRef) -> Self::Key {
+            use symbols::*;
+            let (at1, at2) = match type_ref.is_to_component() {
+                true => (TO_COMPONENT_1, TO_COMPONENT_2),
+                false => (TO_COMPOUND_1, TO_COMPOUND_2),
+            };
+            // 🆕直接格式化 | 🎯只要保证「能展示链接类型和链接索引」即可
+            format!("{at1}T-{type_ref:?}{at2}{target}") // ! 注意：at2里边已经包含空格
         }
     }
 }

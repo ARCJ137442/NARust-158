@@ -41,4 +41,10 @@ nar_dev_utils::mods! {
 
     // 词项链袋
     pub use term_link_bag;
+
+    // 新近任务袋
+    pub use novel_task_bag;
+
+    // 记忆区
+    pub use memory;
 }

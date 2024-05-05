@@ -1,10 +1,11 @@
 //! 🎯复刻OpenNARS `nars.entity.TermLinkBag`
 //! * 📌「词项链袋」
 //! * ✅【2024-05-04 17:50:50】基本功能复刻完成
+//! * ✅【2024-05-06 00:13:38】初代实现完成
 
 use super::Bag;
 use crate::{
-    entity::{TaskLink, TermLink},
+    entity::{Item, TaskLink, TermLinkConcrete},
     global::ClockTime,
     nars::DEFAULT_PARAMETERS,
 };
@@ -16,17 +17,30 @@ use crate::{
 ///   * ✅这也能避免冗余的对「记忆区」的引用
 /// * ⚠️ 在[「袋」](Bag)的基础上，对[「取出」](Bag::take_out)做了优化
 ///   * 🎯优化目的：避免重复推理
-pub trait TermLinkBag<L: TermLink>: Bag<L> {
+pub trait TermLinkBag: Bag<Self::Link> {
+    /// 绑定的「词项链」类型
+    /// * 🎯一种实现只能对应一种「词项链袋」
+    type Link: TermLinkConcrete;
+
     /// 结合已有的「任务链」和「时间」去取出
+    ///
+    /// TODO: 关于`task_link`的可变问题，有待在[`TermLink::novel`]中修复
     ///
     /// # 📄OpenNARS
     ///
-    /// Replace default to prevent repeated inference, by checking TaskLink
+    /// Replace default to prevent repeated inference, by checking TermLink
     ///
-    /// @param taskLink The selected TaskLink
+    /// @param taskLink The selected TermLink
     /// @param time     The current time
     /// @return The selected TermLink
-    fn take_out_with_link(&mut self, task_link: &impl TaskLink, time: ClockTime) -> Option<L> {
+    fn take_out_with_link<LTaskLink>(
+        &mut self,
+        task_link: &mut LTaskLink,
+        time: ClockTime,
+    ) -> Option<Self::Link>
+    where
+        LTaskLink: TaskLink<Budget = <Self::Link as Item>::Budget, Key = <Self::Link as Item>::Key>,
+    {
         /* 📄OpenNARS源码：
         for (int i = 0; i < Parameters.MAX_MATCHED_TERM_LINK; i++) {
             TermLink termLink = takeOut();
@@ -43,7 +57,7 @@ pub trait TermLinkBag<L: TermLink>: Bag<L> {
             match self.take_out() {
                 None => return None,
                 Some(term_link) => {
-                    if task_link.novel(&term_link, time) {
+                    if task_link.update_novel(&term_link, time) {
                         return Some(term_link);
                     }
                     self.put_back(term_link);
@@ -53,3 +67,25 @@ pub trait TermLinkBag<L: TermLink>: Bag<L> {
         None
     }
 }
+
+/// 初代实现
+mod impl_v1 {
+    use super::*;
+    use crate::{
+        entity::{BudgetV1, SentenceV1, StampV1, TaskV1, TermLinkV1, TruthV1},
+        storage::{BagKeyV1, BagV1},
+    };
+
+    /// 自动为「任务链+[`BagKeyV1`]+[`BagV1`]」实现「新近任务袋」
+    impl<T: TermLinkConcrete<Key = BagKeyV1>> TermLinkBag for BagV1<T> {
+        type Link = T;
+    }
+
+    /// 初代[`TermLinkBag`]实现
+    /// * 🚩【2024-05-05 22:29:47】只需限定一系列类型，而无需再声明新`struct`
+    pub type TermLinkBagV1 =
+        BagV1<TermLinkV1<TaskV1<SentenceV1<TruthV1, StampV1>, BagKeyV1, BudgetV1>>>;
+}
+pub use impl_v1::*;
+
+// * ✅单元测试参见`super::Bag`
