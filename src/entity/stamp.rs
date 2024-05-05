@@ -23,7 +23,7 @@ use std::hash::{Hash, Hasher};
 /// be not unique.
 /// The derived sentences inherits serial numbers from its parents, cut at the
 /// baseLength limit.
-pub trait Stamp: Hash + PartialEq {
+pub trait Stamp {
     // ! ❌【2024-05-05 14:07:05】不模拟`Stamp.currentSerial`，理由同上
 
     /// 模拟`Stamp.evidentialBase`、`Stamp.getBase`
@@ -69,39 +69,6 @@ pub trait Stamp: Hash + PartialEq {
     fn get(&self, i: usize) -> ClockTime {
         self.evidential_base()[i]
     }
-
-    /// 模拟`Stamp.toSet`、`Stamp.equals`
-    /// * 🎯用于方便实现者用其统一实现[`PartialEq`]
-    /// * 🚩证据基集合判等
-    ///
-    /// # 📄OpenNARS
-    ///
-    /// Check if two stamps contains the same content
-    ///
-    /// @param that The Stamp to be compared
-    /// @return Whether the two have contain the same elements
-    #[inline(always)]
-    fn equals(&self, other: &impl Stamp) -> bool {
-        set_vec_eq(self.evidential_base(), other.evidential_base())
-    }
-
-    /// 模拟`Stamp.hashCode`
-    /// * 🎯用于方便实现者用其统一实现[`Hash`]
-    /// * ⚠️🆕此处仅对「证据基」作散列化，以保证「散列码相等⇔时间戳相等」
-    /// * 📝OpenNARS是通过「证据基+创建时间 → 字符串 → 散列码」转换的
-    ///   * 📌但这样会破坏上述的一致性
-    ///   * 💭【2024-05-05 17:39:19】似乎仍然只能保证「散列码相等⇒时间戳相等」，顺序因素无法保证
-    /// * 🚩证据基集合散列化
-    ///
-    /// # 📄OpenNARS
-    ///
-    /// The hash code of Stamp
-    ///
-    /// @return The hash code
-    #[inline(always)]
-    fn __hash<H: Hasher>(&self, state: &mut H) {
-        self.evidential_base().hash(state);
-    }
 }
 
 /// [`Vec`]集合判等
@@ -118,7 +85,7 @@ fn set_vec_eq<T: Clone + Ord>(v1: &[T], v2: &[T]) -> bool {
 /// * 🎯约束构造方法
 ///
 /// * 🚩用[`Clone`]对标Java接口`Cloneable`，并模拟`new Stamp(Stamp)`
-pub trait StampConcrete: Stamp + Clone {
+pub trait StampConcrete: Stamp + Clone + Hash + PartialEq {
     /// 空的、内部的构造函数
     /// * 🚩⚠️【2024-05-05 15:48:24】仅直接安放数值，不负责任何语义处理
     /// * 📌与`current_serial`无关
@@ -258,6 +225,39 @@ pub trait StampConcrete: Stamp + Clone {
             true => Some(Self::__from_merge(first, second, time)),
             false => Some(Self::__from_merge(second, first, time)),
         }
+    }
+
+    /// 模拟`Stamp.toSet`、`Stamp.equals`
+    /// * 🎯用于方便实现者用其统一实现[`PartialEq`]
+    /// * 🚩证据基集合判等
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// Check if two stamps contains the same content
+    ///
+    /// @param that The Stamp to be compared
+    /// @return Whether the two have contain the same elements
+    #[inline(always)]
+    fn equals(&self, other: &impl Stamp) -> bool {
+        set_vec_eq(self.evidential_base(), other.evidential_base())
+    }
+
+    /// 模拟`Stamp.hashCode`
+    /// * 🎯用于方便实现者用其统一实现[`Hash`]
+    /// * ⚠️🆕此处仅对「证据基」作散列化，以保证「散列码相等⇔时间戳相等」
+    /// * 📝OpenNARS是通过「证据基+创建时间 → 字符串 → 散列码」转换的
+    ///   * 📌但这样会破坏上述的一致性
+    ///   * 💭【2024-05-05 17:39:19】似乎仍然只能保证「散列码相等⇒时间戳相等」，顺序因素无法保证
+    /// * 🚩证据基集合散列化
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// The hash code of Stamp
+    ///
+    /// @return The hash code
+    #[inline(always)]
+    fn __hash<H: Hasher>(&self, state: &mut H) {
+        self.evidential_base().hash(state);
     }
 }
 

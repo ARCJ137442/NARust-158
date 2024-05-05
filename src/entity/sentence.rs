@@ -14,7 +14,7 @@ use std::{
 // /// 🆕模拟OpenNARS `nars.entity.Sentence.punctuation`
 // /// * 📌作为一个枚举，相比「字符」更能指定其范围
 // /// * 🚩【2024-05-05 17:08:35】目前直接复用[「枚举Narsese」](narsese::enum_narsese)的工作
-pub type Punctuation = narsese::enum_narsese::Punctuation;
+// pub type Punctuation = narsese::enum_narsese::Punctuation;
 
 /// 模拟OpenNARS `nars.entity.Sentence.punctuation`和OpenNARS`nars.entity.Sentence.truth`
 /// * 🎯应对「判断有真值，问题无真值」的情况
@@ -40,18 +40,13 @@ impl<T: TruthValueConcrete> SentenceType<T> {
 }
 
 /// 模拟OpenNARS `nars.entity.Sentence`
-/// * 📝OpenNARS中`revisable`不参与判等、散列化
-/// * 🚩用特征约束 [`Hash`]模拟`Stamp.hashCode`
-/// * 🚩用特征约束 [`PartialEq`]模拟`Stamp.hashCode`
-///   * ⚠️因「孤儿规则」限制，无法统一自动实现
-///   * 📌统一的逻辑：**对「证据基」集合判等（无序相等）**
 ///
 /// # 📄OpenNARS
 ///
 /// A Sentence is an abstract class, mainly containing a Term, a TruthValue, and a Stamp.
 ///
 /// It is used as the premises and conclusions of all inference rules.
-pub trait Sentence: Hash + PartialEq {
+pub trait Sentence {
     /// 绑定的「真值」类型
     type Truth: TruthValueConcrete;
 
@@ -166,78 +161,6 @@ pub trait Sentence: Hash + PartialEq {
     /// [`Sentence::revisable`]的可变版本
     fn revisable_mut(&mut self) -> &mut bool;
 
-    /// 模拟`Sentence.equals`
-    /// * 🎯用于方便实现者用其统一实现[`PartialEq`]
-    /// * 📝OpenNARS中「是否可修订」不被纳入「判等」的标准
-    ///
-    /// # 📄OpenNARS
-    ///
-    /// To check whether two sentences are equal
-    ///
-    /// @param that The other sentence
-    /// @return Whether the two sentences have the same content
-    fn equals(&self, other: &impl Sentence<Truth = Self::Truth, Stamp = Self::Stamp>) -> bool {
-        /* 📄OpenNARS源码：
-        if (that instanceof Sentence) {
-            Sentence t = (Sentence) that;
-            return content.equals(t.getContent()) && punctuation == t.getPunctuation() && truth.equals(t.getTruth())
-                    && stamp.equals(t.getStamp());
-        }
-        return false; */
-        self.content() == other.content()
-            && self.punctuation() == other.punctuation()
-            && self.truth() == other.truth()
-            && self.stamp() == other.stamp()
-    }
-
-    /// 模拟`Sentence.hashCode`
-    /// * 🎯用于方便实现者用其统一实现[`Hash`]
-    /// * 🚩散列化除了[`Sentence::revisable`]外的所有值
-    ///
-    /// # 📄OpenNARS
-    ///
-    /// To produce the hash-code of a sentence
-    ///
-    /// @return A hash-code
-    #[inline(always)]
-    fn __hash<H: Hasher>(&self, state: &mut H) {
-        /* 📄OpenNARS源码：
-        int hash = 5;
-        hash = 67 * hash + (this.content != null ? this.content.hashCode() : 0);
-        hash = 67 * hash + this.punctuation;
-        hash = 67 * hash + (this.truth != null ? this.truth.hashCode() : 0);
-        hash = 67 * hash + (this.stamp != null ? this.stamp.hashCode() : 0);
-        return hash; */
-        self.content().hash(state);
-        self.punctuation().hash(state);
-        self.truth().hash(state);
-        self.stamp().hash(state);
-    }
-
-    /// ! ❌不直接模拟`equivalentTo`方法，重定向自`equals`方法
-    /// * 📄OpenNARS中只在`Concept.addToTable`中使用
-    /// * ⚠️已弃用：OpenNARS 3.1.0已经将其删除
-    ///
-    /// # 📄OpenNARS
-    ///
-    /// Check whether the judgement is equivalent to another one
-    ///
-    /// The two may have different keys
-    ///
-    /// @param that The other judgement
-    /// @return Whether the two are equivalent
-    #[inline(always)]
-    fn equivalent_to(
-        &self,
-        other: &impl Sentence<Truth = Self::Truth, Stamp = Self::Stamp>,
-    ) -> bool {
-        /* 📄OpenNARS源码：
-        assert content.equals(that.getContent()) && punctuation == that.getPunctuation();
-        return (truth.equals(that.getTruth()) && stamp.equals(that.getStamp())); */
-        // TODO: 【2024-05-05 17:57:21】应该把「判等」「散列化」都迁移到「具体类型」的特征中去
-        <Self as Sentence>::equals(self, other)
-    }
-
     /// 模拟`Sentence.cloneContent`
     /// * 🚩拷贝内部词项
     ///
@@ -323,41 +246,41 @@ pub trait Sentence: Hash + PartialEq {
 
 // ! ❌【2024-05-05 18:12:28】由于「真值」不是【每种类型的语句都有】，因此不能自动实现
 // ! ❌若通过`unwrap`实现，则很容易在「问题」上panic
-// /// 自动实现「真值」特征
-// /// * ✨语句代理「真值」的特征，可以被看作「真值」使用
-// impl<S: Sentence + Eq> TruthValue for S {
-//     type E = <S::Truth as TruthValue>::E;
+/* /// 自动实现「真值」特征
+/// * ✨语句代理「真值」的特征，可以被看作「真值」使用
+impl<S: Sentence + Eq> TruthValue for S {
+    type E = <S::Truth as TruthValue>::E;
 
-//     #[inline(always)]
-//     fn frequency(&self) -> Self::E {
-//         self.truth().frequency()
-//     }
+    #[inline(always)]
+    fn frequency(&self) -> Self::E {
+        self.truth().frequency()
+    }
 
-//     #[inline(always)]
-//     fn frequency_mut(&mut self) -> &mut Self::E {
-//         self.truth_mut().frequency_mut()
-//     }
+    #[inline(always)]
+    fn frequency_mut(&mut self) -> &mut Self::E {
+        self.truth_mut().frequency_mut()
+    }
 
-//     #[inline(always)]
-//     fn confidence(&self) -> Self::E {
-//         self.truth().confidence()
-//     }
+    #[inline(always)]
+    fn confidence(&self) -> Self::E {
+        self.truth().confidence()
+    }
 
-//     #[inline(always)]
-//     fn confidence_mut(&mut self) -> &mut Self::E {
-//         self.truth_mut().confidence_mut()
-//     }
+    #[inline(always)]
+    fn confidence_mut(&mut self) -> &mut Self::E {
+        self.truth_mut().confidence_mut()
+    }
 
-//     #[inline(always)]
-//     fn is_analytic(&self) -> bool {
-//         self.truth().is_analytic()
-//     }
+    #[inline(always)]
+    fn is_analytic(&self) -> bool {
+        self.truth().is_analytic()
+    }
 
-//     #[inline(always)]
-//     fn set_analytic(&mut self) {
-//         self.truth_mut().set_analytic()
-//     }
-// }
+    #[inline(always)]
+    fn set_analytic(&mut self) {
+        self.truth_mut().set_analytic()
+    }
+} */
 
 /// 自动实现「时间戳」特征
 /// * ✨语句代理「时间戳」的特征，可以被看作「时间戳」使用
@@ -376,11 +299,18 @@ impl<S: Sentence + Hash> Stamp for S {
 /// [`Sentence`]的具体类型版本
 /// * 📌假定信息就是「所获取的信息」没有其它外延
 /// * 🎯约束构造方法
+/// * 📝OpenNARS中`revisable`不参与判等、散列化
+/// * 🚩用特征约束 [`Hash`]模拟`Stamp.hashCode`
+/// * 🚩用特征约束 [`PartialEq`]模拟`Stamp.hashCode`
+///   * ⚠️因「孤儿规则」限制，无法统一自动实现
+///   * 📌统一的逻辑：**对「证据基」集合判等（无序相等）**
 ///
 /// * 🚩用[`Clone`]对标Java接口`Cloneable`，并模拟`new Sentence(Stamp)`
-pub trait SentenceConcrete: Sentence + Clone {
+pub trait SentenceConcrete: Sentence + Clone + Hash + PartialEq {
     /// 模拟`new Sentence(Term content, char punctuation, TruthValue truth, Stamp stamp, boolean revisable)`
     /// * 📌包含所有字段的构造函数
+    /// * 🚩【2024-05-05 18:39:19】现在使用「语句类型」简并「标点」「真值」两个字段
+    ///   * 🎯应对「判断有真值，问题无真值」的情形
     ///
     /// # 📄OpenNARS
     ///
@@ -393,13 +323,17 @@ pub trait SentenceConcrete: Sentence + Clone {
     /// @param revisable   Whether the sentence can be revised
     fn new(
         content: Term,
-        punctuation: Punctuation,
-        truth: Self::Truth,
+        // punctuation: Punctuation,
+        // truth: Self::Truth,
+        sentence_type: SentenceType<Self::Truth>,
         stamp: Self::Stamp,
         revisable: bool,
     ) -> Self;
+
     /// 模拟`new Sentence(Term content, char punctuation, TruthValue truth, Stamp stamp)`
     /// * 📝OpenNARS中默认`revisable`为`true`
+    /// * 🚩【2024-05-05 18:39:19】现在使用「语句类型」简并「标点」「真值」两个字段
+    ///   * 🎯应对「判断有真值，问题无真值」的情形
     ///
     /// # 📄OpenNARS
     ///
@@ -411,10 +345,94 @@ pub trait SentenceConcrete: Sentence + Clone {
     /// @param stamp       The stamp of the sentence indicating its derivation time
     fn new_revisable(
         content: Term,
-        punctuation: Punctuation,
-        truth: Self::Truth,
+        // punctuation: Punctuation,
+        // truth: Self::Truth,
+        sentence_type: SentenceType<Self::Truth>,
         stamp: Self::Stamp,
     ) -> Self {
-        Self::new(content, punctuation, truth, stamp, true)
+        Self::new(content, sentence_type, stamp, true)
     }
+
+    /// 模拟`Sentence.equals`
+    /// * 🎯用于方便实现者用其统一实现[`PartialEq`]
+    /// * 📝OpenNARS中「是否可修订」不被纳入「判等」的标准
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// To check whether two sentences are equal
+    ///
+    /// @param that The other sentence
+    /// @return Whether the two sentences have the same content
+    fn equals(&self, other: &impl Sentence<Truth = Self::Truth, Stamp = Self::Stamp>) -> bool {
+        /* 📄OpenNARS源码：
+        if (that instanceof Sentence) {
+            Sentence t = (Sentence) that;
+            return content.equals(t.getContent()) && punctuation == t.getPunctuation() && truth.equals(t.getTruth())
+                    && stamp.equals(t.getStamp());
+        }
+        return false; */
+        self.content() == other.content()
+            && self.punctuation() == other.punctuation()
+            // && self.truth() == other.truth() // ! 📌【2024-05-05 18:36:52】「真值」已经在上边的「标点（语句类型）」中被连带判断了
+            && self.stamp() == other.stamp()
+    }
+
+    /// 模拟`Sentence.hashCode`
+    /// * 🎯用于方便实现者用其统一实现[`Hash`]
+    /// * 🚩散列化除了[`Sentence::revisable`]外的所有值
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// To produce the hash-code of a sentence
+    ///
+    /// @return A hash-code
+    #[inline(always)]
+    fn __hash<H: Hasher>(&self, state: &mut H) {
+        /* 📄OpenNARS源码：
+        int hash = 5;
+        hash = 67 * hash + (this.content != null ? this.content.hashCode() : 0);
+        hash = 67 * hash + this.punctuation;
+        hash = 67 * hash + (this.truth != null ? this.truth.hashCode() : 0);
+        hash = 67 * hash + (this.stamp != null ? this.stamp.hashCode() : 0);
+        return hash; */
+        self.content().hash(state);
+        self.punctuation().hash(state);
+        self.truth().hash(state);
+        self.stamp().hash(state);
+    }
+
+    /// ! ❌不直接模拟`equivalentTo`方法，重定向自`equals`方法
+    /// * 📄OpenNARS中只在`Concept.addToTable`中使用
+    /// * ⚠️已弃用：OpenNARS 3.1.0已经将其删除
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// Check whether the judgement is equivalent to another one
+    ///
+    /// The two may have different keys
+    ///
+    /// @param that The other judgement
+    /// @return Whether the two are equivalent
+    #[inline(always)]
+    fn equivalent_to(
+        &self,
+        other: &impl Sentence<Truth = Self::Truth, Stamp = Self::Stamp>,
+    ) -> bool {
+        /* 📄OpenNARS源码：
+        assert content.equals(that.getContent()) && punctuation == that.getPunctuation();
+        return (truth.equals(that.getTruth()) && stamp.equals(that.getStamp())); */
+        // TODO: 【2024-05-05 17:57:21】应该把「判等」「散列化」都迁移到「具体类型」的特征中去
+        self.equals(other)
+    }
+}
+
+// TODO: 初代实现
+mod impl_v1 {}
+use impl_v1::*;
+
+// TODO: 单元测试
+/// 单元测试
+#[cfg(test)]
+mod tests {
+    use super::*;
 }

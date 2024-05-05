@@ -4,6 +4,7 @@
         "Cloneable",
         "Hasher",
         "infty",
+        "judgements",
         "nogui",
         "powf",
         "powi",

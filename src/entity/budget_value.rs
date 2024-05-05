@@ -193,7 +193,7 @@ pub trait BudgetValue {
 ///     * 📄任务[`super::Task`]
 /// * 📌整个特征建立在「预算值就是预算值」，即「实现者本身**只有**p、d、q三元组」的基础上
 /// * 🚩包括「构造函数」与「转换函数」
-pub trait BudgetValueConcrete: Sized + BudgetValue {
+pub trait BudgetValueConcrete: BudgetValue + Sized {
     /// 内置构造函数(p, d, q)
     /// * 🚩直接从「短浮点」构造
     fn new(
