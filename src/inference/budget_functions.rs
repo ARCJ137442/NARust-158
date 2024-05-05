@@ -19,12 +19,12 @@ pub trait BudgetFunctions: BudgetValueConcrete {
     ///
     /// # 📄OpenNARS
     ///
-    /// Determine the quality of a judgment by its truth value alone
+    /// Determine the quality of a judgement by its truth value alone
     ///
-    /// Mainly decided by confidence, though binary judgment is also preferred
+    /// Mainly decided by confidence, though binary judgement is also preferred
     ///
-    /// @param t The truth value of a judgment
-    /// @return The quality of the judgment, according to truth value only
+    /// @param t The truth value of a judgement
+    /// @return The quality of the judgement, according to truth value only
     fn truth_to_quality(t: &impl TruthValue) -> Self::E {
         /* 📄OpenNARS源码：
         float exp = t.getExpectation();
@@ -35,21 +35,21 @@ pub trait BudgetFunctions: BudgetValueConcrete {
 
     /// 模拟`BudgetFunctions.rankBelief`
     /// * 🚩🆕【2024-05-03 21:46:17】仅传入「语句」中的「真值」与「时间戳长度」，而非「语句」本身
-    ///   * 🚩`judgment.getTruth()` => `truth`
-    ///   * 🚩`judgment.getStamp().length()` => `stamp_len`
+    ///   * 🚩`judgement.getTruth()` => `truth`
+    ///   * 🚩`judgement.getStamp().length()` => `stamp_len`
     /// * 📝在使用该函数返回值的地方，仅为「比较大小」
     ///   * 但[`Self::E`]已经实现了[`Ord`]并且需要[`UtilityFunctions::or`]
     ///
     /// # 📄OpenNARS
     ///
-    /// Determine the rank of a judgment by its quality and originality (stamp length), called from Concept
+    /// Determine the rank of a judgement by its quality and originality (stamp length), called from Concept
     ///
-    /// @param judgment The judgment to be ranked
-    /// @return The rank of the judgment, according to truth value only
+    /// @param judgement The judgement to be ranked
+    /// @return The rank of the judgement, according to truth value only
     fn rank_belief(truth: &impl TruthValue<E = Self::E>, stamp_len: usize) -> Self::E {
         /* 📄OpenNARS源码：
-        float confidence = judgment.getTruth().getConfidence();
-        float originality = 1.0f / (judgment.getStamp().length() + 1);
+        float confidence = judgement.getTruth().getConfidence();
+        float originality = 1.0f / (judgement.getStamp().length() + 1);
         return or(confidence, originality); */
         let confidence = truth.confidence();
         let originality = Self::E::from_float(1.0 / (stamp_len as Float + 1.0));
@@ -82,7 +82,7 @@ pub trait BudgetFunctions: BudgetValueConcrete {
         problem_solution_quality: Self::E, // * 🚩对标`LocalRules.solutionQuality(problem, solution);`
         solution_truth: &impl TruthValue<E = Self::E>, // * 🚩对标`solution.getTruth()`
         task_feedback_to_links: bool,      // * 🚩对标`feedbackToLinks`
-        task_sentence_is_judgment: bool,   // * 🚩对标`task.getSentence().isJudgment()`
+        task_sentence_is_judgement: bool,  // * 🚩对标`task.getSentence().isJudgement()`
         task_budget: &mut Self,            // * 🚩对标`task`（在判断完「是否为判断」之后）
         memory_current_task_link_budget: &mut Self, // * 🚩对标`memory.currentTaskLink`
         memory_current_belief_link_budget: &mut Self, // * 🚩对标`memory.currentBeliefLink`
@@ -94,9 +94,9 @@ pub trait BudgetFunctions: BudgetValueConcrete {
             task = memory.currentTask;
             feedbackToLinks = true;
         }
-        boolean judgmentTask = task.getSentence().isJudgment();
+        boolean judgementTask = task.getSentence().isJudgement();
         float quality = LocalRules.solutionQuality(problem, solution);
-        if (judgmentTask) {
+        if (judgementTask) {
             task.incPriority(quality);
         } else {
             float taskPriority = task.getPriority();
@@ -116,7 +116,7 @@ pub trait BudgetFunctions: BudgetValueConcrete {
         // ! 【2024-05-04 00:40:21】跳过对task的「空值判定」和「判断句判定」
         // * 💭相当于将一些「需要使用高级功能」的「判定逻辑」交给调用方了
         let quality = problem_solution_quality;
-        if task_sentence_is_judgment {
+        if task_sentence_is_judgement {
             task_budget.inc_priority(problem_solution_quality);
         } else {
             let task_priority = task_budget.priority();
@@ -141,7 +141,7 @@ pub trait BudgetFunctions: BudgetValueConcrete {
     ///
     /// Evaluate the quality of a revision, then de-prioritize the premises
     ///
-    /// @param tTruth The truth value of the judgment in the task
+    /// @param tTruth The truth value of the judgement in the task
     /// @param bTruth The truth value of the belief
     /// @param truth  The truth value of the conclusion of revision
     /// @return The budget for the new task

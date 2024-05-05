@@ -6,7 +6,7 @@
 //!
 //! * `ShortFloat`: `BudgetValue` (priority/durability/quality) and `TruthValue` (frequency/confidence)
 //! * `Stamp`: serial numbers and creation time associated to a TruthValue
-//! * `Sentence`: a Term, a TruthValue, and a Stamp. A Sentence can be a Judgment, a Goal, or a Question.
+//! * `Sentence`: a Term, a TruthValue, and a Stamp. A Sentence can be a Judgement, a Goal, or a Question.
 //! * `Task`: a Sentence to be processed.
 //! * `TermLink`: built in pair between a compound term and a component term.
 //! * `TaskLink`: special TermLink referring to a Task, whose Term equals or contains the current Term.

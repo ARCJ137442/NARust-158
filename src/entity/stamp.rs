@@ -3,7 +3,7 @@
 //! * ✅【2024-05-05 17:03:34】单元测试初步完成
 
 use crate::{global::ClockTime, nars::DEFAULT_PARAMETERS};
-use std::hash::Hash;
+use std::hash::{Hash, Hasher};
 
 /// 模拟OpenNARS `nars.entity.Stamp`
 /// * 🚩🆕【2024-05-05 14:06:13】目前拒绝「全局静态变量」：这些量应该始终有个确切的来源
@@ -23,7 +23,7 @@ use std::hash::Hash;
 /// be not unique.
 /// The derived sentences inherits serial numbers from its parents, cut at the
 /// baseLength limit.
-pub trait Stamp: Hash {
+pub trait Stamp: Hash + PartialEq {
     // ! ❌【2024-05-05 14:07:05】不模拟`Stamp.currentSerial`，理由同上
 
     /// 模拟`Stamp.evidentialBase`、`Stamp.getBase`
@@ -83,6 +83,24 @@ pub trait Stamp: Hash {
     #[inline(always)]
     fn equals(&self, other: &impl Stamp) -> bool {
         set_vec_eq(self.evidential_base(), other.evidential_base())
+    }
+
+    /// 模拟`Stamp.hashCode`
+    /// * 🎯用于方便实现者用其统一实现[`Hash`]
+    /// * ⚠️🆕此处仅对「证据基」作散列化，以保证「散列码相等⇔时间戳相等」
+    /// * 📝OpenNARS是通过「证据基+创建时间 → 字符串 → 散列码」转换的
+    ///   * 📌但这样会破坏上述的一致性
+    ///   * 💭【2024-05-05 17:39:19】似乎仍然只能保证「散列码相等⇒时间戳相等」，顺序因素无法保证
+    /// * 🚩证据基集合散列化
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// The hash code of Stamp
+    ///
+    /// @return The hash code
+    #[inline(always)]
+    fn __hash<H: Hasher>(&self, state: &mut H) {
+        self.evidential_base().hash(state);
     }
 }
 
@@ -246,7 +264,6 @@ pub trait StampConcrete: Stamp + Clone {
 /// 初代实现
 mod impl_v1 {
     use super::*;
-    use std::hash::Hasher;
 
     /// [时间戳](Stamp)初代实现
     #[derive(Debug, Clone)]
@@ -255,21 +272,19 @@ mod impl_v1 {
         creation_time: ClockTime,
     }
 
-    /// 仅比对「证据基」所含元素
-    /// * 模拟OpenNARS`equals`
+    /// 模拟OpenNARS`equals`
     impl PartialEq for StampV1 {
+        #[inline(always)]
         fn eq(&self, other: &Self) -> bool {
             self.equals(other)
         }
     }
 
     /// 模拟OpenNARS`hashCode`
-    /// * ⚠️🆕此处仅对「证据基」作散列化，以保证「散列码相等⇔时间戳相等」
-    /// * 📝OpenNARS是通过「证据基+创建时间 → 字符串 → 散列码」转换的
-    ///   * 📌但这样会破坏上述的一致性
     impl Hash for StampV1 {
+        #[inline(always)]
         fn hash<H: Hasher>(&self, state: &mut H) {
-            self.evidential_base.hash(state);
+            self.__hash(state)
         }
     }
 

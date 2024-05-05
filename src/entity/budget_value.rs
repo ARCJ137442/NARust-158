@@ -15,7 +15,7 @@ use crate::{global::Float, inference::UtilityFunctions};
 /// # 📄OpenNARS
 ///
 /// A triple of priority (current), durability (decay), and quality (long-term average).
-pub trait BudgetValue: Sized {
+pub trait BudgetValue {
     /// 一种类型只可能有一种「证据值」
     /// * ✅兼容OpenNARS `ShortFloat`
     type E: ShortFloat;

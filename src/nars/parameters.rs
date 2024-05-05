@@ -120,18 +120,18 @@ macro_once! {
 
         /// # 📄OpenNARS
         ///
-        /// Default confidence of input judgment.
-        pub default_judgment_confidence: Float = 0.9,
+        /// Default confidence of input judgement.
+        pub default_judgement_confidence: Float = 0.9,
 
         /// # 📄OpenNARS
         ///
-        /// Default priority of input judgment
-        pub default_judgment_priority: Float = 0.8,
+        /// Default priority of input judgement
+        pub default_judgement_priority: Float = 0.8,
 
         /// # 📄OpenNARS
         ///
-        /// Default durability of input judgment
-        pub default_judgment_durability: Float = 0.8,
+        /// Default durability of input judgement
+        pub default_judgement_durability: Float = 0.8,
 
         /// # 📄OpenNARS
         ///
@@ -243,9 +243,9 @@ mod tests {
             budget_threshold => 0.01
             default_confirmation_expectation => 0.8
             default_creation_expectation => 0.66
-            default_judgment_confidence => 0.9
-            default_judgment_priority => 0.8
-            default_judgment_durability => 0.8
+            default_judgement_confidence => 0.9
+            default_judgement_priority => 0.8
+            default_judgement_durability => 0.8
             default_question_priority => 0.9
             default_question_durability => 0.9
             bag_level => 100

@@ -13,9 +13,9 @@
 //! Open-NARS implements the following formal language, Narsese.
 //!
 //! ```ebnf
-//!           <sentence> ::= <judgment>
+//!           <sentence> ::= <judgement>
 //!                        | <question>
-//!           <judgment> ::= <statement> <truth-value>
+//!           <judgement> ::= <statement> <truth-value>
 //!           <question> ::= <statement>
 //!          <statement> ::= <<term> <relation> <term>>
 //!                        | <compound-statement>

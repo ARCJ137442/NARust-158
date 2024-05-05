@@ -11,16 +11,14 @@ use crate::{
 use std::hash::Hash;
 
 /// 模拟OpenNARS `nars.entity.TruthValue`
-/// * 📌几个前置特征：
-///   * [`Sized`]：模拟构造函数
-///   * [`Clone`]：模拟OpenNARS `clone`
+/// * 📌前置特征：
 ///   * [`Eq`]：模拟OpenNARS `equals`
 ///   * [`Hash`]：模拟OpenNARS `hashCode`
 ///
 /// # 📄OpenNARS
 ///
 /// Frequency and confidence.
-pub trait TruthValue: Sized + Clone + Eq + Hash {
+pub trait TruthValue: Eq + Hash {
     /// 一种类型只可能有一种「证据值」
     /// * ✅兼容OpenNARS `ShortFloat`
     type E: ShortFloat;
@@ -123,6 +121,9 @@ pub trait TruthValue: Sized + Clone + Eq + Hash {
 }
 
 /// 真值的「具体类型」
+/// * 📌前置特征：
+///   * [`Sized`]：模拟构造函数
+///   * [`Clone`]：模拟OpenNARS `clone`
 /// * 🎯有选择地支持「限定的构造函数」
 ///   * 📄需要构造函数：真值函数中「创建新值的函数」
 ///   * 📄不要构造函数：具有「真值属性」但【不可从真值参数构造】的类型
@@ -131,7 +132,7 @@ pub trait TruthValue: Sized + Clone + Eq + Hash {
 /// * 📌整个特征建立在「真值就是真值」，即「实现者本身**只有**f、c、a三元组」的基础上
 /// * 🚩包括「构造函数」与「转换函数」
 /// * 💭【2024-05-04 17:14:08】这是否有些像Julia中「抽象类型🆚具体类型」的关系
-pub trait TruthValueConcrete: Sized + TruthValue {
+pub trait TruthValueConcrete: TruthValue + Sized + Clone {
     /// 🆕最原始的构造函数(f, c, a)
     /// * 🎯用于[`TruthValue::new_analytic_default`]
     /// * 用于接收「内部转换后的结果」
