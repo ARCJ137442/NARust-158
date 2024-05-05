@@ -1,109 +1,192 @@
 //! 🎯复刻OpenNARS `nars.entity.TermLink`
 //! * ✅【2024-05-04 23:10:35】基本完成功能
+//! * ✅【2024-05-05 12:13:53】基本完成单元测试
 
 use super::Item;
 use crate::{io::symbols, language::Term};
 
-/// 指示一个「直接/间接 的」组分 在复合词项中的位置
-/// * 🚩直接表示一个「路径式坐标」
-/// * ⚠️隐式要求合法：路径必须得能找到
-/// * 📄`A` 在 `<(*, A, B) --> C>`中的路径
-///   * 是(`(*, A, B)`在`<(*, A, B) --> C>`中的路径)/`0`（第一个）
-///     * `(*, A, B)`在`<(*, A, B) --> C>`中的路径
-///       * 是`0`（陈述主词）
-///   * 是`0`/`0`（第一个中的第一个）
-///   * 因此总索引为`[0, 0]`
-/// * 🚩【2024-05-04 20:35:25】因为「可交换词项」目前表示为「自动排序的词项」，因此不设任何特殊操作
-///   * ❗亦即：「集合」也是能被索引的
-///   * 📄`A`在`{A, B}`的位置就是`0`，而非什么「属于/不属于」（或`None`/`Some(具体索引)`）
-pub type ComponentIndex = Vec<usize>;
-/// [`ComponentIndex`]的引用版本
-/// * 🎯【2024-05-04 20:44:24】出于性能考量
-pub type ComponentIndexRef<'a> = &'a [usize];
+/// 实现与「词项链类型」相关的结构
+/// * 🎯复刻OpenNARS `TermLink.type`与`TermLink.index`
+mod link_type {
+    /// 指示一个「直接/间接 的」组分 在复合词项中的位置
+    /// * 🚩直接表示一个「路径式坐标」
+    /// * ⚠️隐式要求合法：路径必须得能找到
+    /// * 📄`A` 在 `<(*, A, B) --> C>`中的路径
+    ///   * 是(`(*, A, B)`在`<(*, A, B) --> C>`中的路径)/`0`（第一个）
+    ///     * `(*, A, B)`在`<(*, A, B) --> C>`中的路径
+    ///       * 是`0`（陈述主词）
+    ///   * 是`0`/`0`（第一个中的第一个）
+    ///   * 因此总索引为`[0, 0]`
+    /// * 🚩【2024-05-04 20:35:25】因为「可交换词项」目前表示为「自动排序的词项」，因此不设任何特殊操作
+    ///   * ❗亦即：「集合」也是能被索引的
+    ///   * 📄`A`在`{A, B}`的位置就是`0`，而非什么「属于/不属于」（或`None`/`Some(具体索引)`）
+    pub type ComponentIndex = Vec<usize>;
+    /// [`ComponentIndex`]的引用版本
+    /// * 🎯【2024-05-04 20:44:24】出于性能考量
+    pub type ComponentIndexRef<'a> = &'a [usize];
 
-/// 词项链引用
-/// * 🚩只表示「连接的『类型』与『属性』」而不表示「连接的『起点』」
-/// * 🎯复刻`TermLink.type`与`TermLink.indexes`字段
-///   * ✨简并两个字段，而无需额外的假设与判断
-/// * 🚩🆕利用Rust `enum`枚举类型的优势
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
-pub enum TermLinkRef<'a> {
-    /// 与自身的连接
-    /// * 📌图式：`C -> C`
-    /// * ⚠️仅在任务链中使用
-    /// * 🚩【2024-05-04 19:11:04】回避Rust关键词`Self`
-    ///
-    /// # 📄OpenNARS
-    ///
-    /// At C, point to C; TaskLink only
-    SELF,
+    /// 词项链引用
+    /// * 🚩只表示「连接的『类型』与『属性』」而不表示「连接的『起点』」
+    /// * 🎯复刻`TermLink.type`与`TermLink.indexes`字段
+    ///   * ✨简并两个字段，而无需额外的假设与判断
+    /// * 🚩🆕利用Rust `enum`枚举类型的优势
+    #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+    pub enum TermLinkRef<'a> {
+        /// 与自身的连接
+        /// * 📌图式：`C -> C`
+        /// * ⚠️仅在任务链中使用
+        /// * 🚩【2024-05-04 19:11:04】回避Rust关键词`Self`
+        ///
+        /// # 📄OpenNARS
+        ///
+        /// At C, point to C; TaskLink only
+        SELF,
 
-    /// 复合词项/组分
-    /// * 📌图式：`(&&, A, C)` => `C`
-    ///
-    /// # 📄OpenNARS
-    ///
-    /// At (&&, A, C), point to C
-    Component,
+        /// 复合词项/组分
+        /// * 📌图式：`(&&, A, C)` => `C`
+        ///
+        /// # 📄OpenNARS
+        ///
+        /// At (&&, A, C), point to C
+        Component,
 
-    /// 复合词项/整体
-    /// * 📌图式：`C` => `(&&, A, C)`
-    /// * 🚩【2024-05-04 20:30:13】需要一个「位置索引」来获取「组分位置」
-    ///
-    /// # 📄OpenNARS
-    ///
-    /// At C, point to (&&, A, C)
-    Compound(ComponentIndexRef<'a>),
+        /// 复合词项/整体
+        /// * 📌图式：`C` => `(&&, A, C)`
+        /// * 🚩【2024-05-04 20:30:13】需要一个「位置索引」来获取「组分位置」
+        ///
+        /// # 📄OpenNARS
+        ///
+        /// At C, point to (&&, A, C)
+        Compound(ComponentIndexRef<'a>),
 
-    /// 陈述/组分
-    /// * 📌图式：`<C -- A>` => `C`
-    ///
-    /// # 📄OpenNARS
-    ///
-    /// At <C --> A>, point to C
-    ComponentStatement,
+        /// 陈述/组分
+        /// * 📌图式：`<C -- A>` => `C`
+        ///
+        /// # 📄OpenNARS
+        ///
+        /// At <C --> A>, point to C
+        ComponentStatement,
 
-    /// 陈述/整体
-    /// * 📌图式：`C` => `<C -- A>`
-    ///
-    /// # 📄OpenNARS
-    ///
-    /// At C, point to <C --> A>
-    CompoundStatement(ComponentIndexRef<'a>),
+        /// 陈述/整体
+        /// * 📌图式：`C` => `<C -- A>`
+        ///
+        /// # 📄OpenNARS
+        ///
+        /// At C, point to <C --> A>
+        CompoundStatement(ComponentIndexRef<'a>),
 
-    /// 条件/组分
-    /// * 📌图式：`<(&&, C, B) ==> A>` => `C`
-    ///
-    /// # 📄OpenNARS
-    ///
-    /// At <(&&, C, B) ==> A>, point to C
-    ComponentCondition,
+        /// 条件/组分
+        /// * 📌图式：`<(&&, C, B) ==> A>` => `C`
+        ///
+        /// # 📄OpenNARS
+        ///
+        /// At <(&&, C, B) ==> A>, point to C
+        ComponentCondition,
 
-    /// 条件/整体
-    /// * 📌图式：`C` => `<(&&, C, B) ==> A>`
-    ///
-    /// # 📄OpenNARS
-    ///
-    /// At C, point to <(&&, C, B) ==> A>
-    CompoundCondition(ComponentIndexRef<'a>),
+        /// 条件/整体
+        /// * 📌图式：`C` => `<(&&, C, B) ==> A>`
+        ///
+        /// # 📄OpenNARS
+        ///
+        /// At C, point to <(&&, C, B) ==> A>
+        CompoundCondition(ComponentIndexRef<'a>),
 
-    /// 转换
-    /// * 📌图式：`C` => `<(*, C, B) --> A>`
-    /// * ⚠️仅在任务链中使用
-    ///
-    /// # 📄OpenNARS
-    ///
-    /// At C, point to <(*, C, B) --> A>; TaskLink only
-    Transform(ComponentIndexRef<'a>),
-}
+        /// 转换
+        /// * 📌图式：`C` => `<(*, C, B) --> A>`
+        /// * ⚠️仅在任务链中使用
+        ///
+        /// # 📄OpenNARS
+        ///
+        /// At C, point to <(*, C, B) --> A>; TaskLink only
+        Transform(ComponentIndexRef<'a>),
+    }
 
-impl TermLinkRef<'_> {
-    /// 模拟`TermLink`中的`(type % 2) == 1`
-    pub fn is_to_component(&self) -> bool {
-        use TermLinkRef::*;
-        matches!(self, Component | ComponentStatement | ComponentCondition)
+    impl TermLinkRef<'_> {
+        /// 模拟`TermLink`中的`(type % 2) == 1`
+        pub fn is_to_component(&self) -> bool {
+            use TermLinkRef::*;
+            matches!(self, Component | ComponentStatement | ComponentCondition)
+        }
+    }
+
+    /// [`TermLinkRef`]具备所有权的类型
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub enum TermLinkType {
+        /// 与自身的连接
+        /// * 📌图式：`C -> C`
+        /// * ⚠️仅在任务链中使用
+        SELF,
+
+        /// 复合词项/组分
+        /// * 📌图式：`(&&, A, C)` => `C`
+        ///
+        /// # 📄OpenNARS
+        ///
+        /// At (&&, A, C), point to C
+        Component,
+
+        /// 复合词项/整体
+        /// * 📌图式：`C` => `(&&, A, C)`
+        Compound(ComponentIndex),
+
+        /// 陈述/组分
+        /// * 📌图式：`<C -- A>` => `C`
+        ComponentStatement,
+
+        /// 陈述/整体
+        /// * 📌图式：`C` => `<C -- A>`
+        CompoundStatement(ComponentIndex),
+
+        /// 条件/组分
+        /// * 📌图式：`<(&&, C, B) ==> A>` => `C`
+        ComponentCondition,
+
+        /// 条件/整体
+        /// * 📌图式：`C` => `<(&&, C, B) ==> A>`
+        CompoundCondition(ComponentIndex),
+
+        /// 转换
+        /// * 📌图式：`C` => `<(*, C, B) --> A>`
+        /// * ⚠️仅在任务链中使用
+        Transform(ComponentIndex),
+    }
+
+    impl TermLinkType {
+        /// 转换为引用类型
+        /// * 🎯将「具所有权类型」转换为「类引用类型」
+        pub fn to_ref(&self) -> TermLinkRef {
+            use TermLinkType::*;
+            match self {
+                SELF => TermLinkRef::SELF,
+                Component => TermLinkRef::Component,
+                Compound(vec) => TermLinkRef::Compound(vec),
+                ComponentStatement => TermLinkRef::ComponentStatement,
+                CompoundStatement(vec) => TermLinkRef::CompoundStatement(vec),
+                ComponentCondition => TermLinkRef::ComponentCondition,
+                CompoundCondition(vec) => TermLinkRef::CompoundCondition(vec),
+                Transform(vec) => TermLinkRef::Transform(vec),
+            }
+        }
+    }
+
+    /// 从引用类型中转换
+    impl From<TermLinkRef<'_>> for TermLinkType {
+        fn from(value: TermLinkRef<'_>) -> Self {
+            use TermLinkRef::*;
+            match value {
+                SELF => Self::SELF,
+                Component => Self::Component,
+                Compound(vec) => Self::Compound(vec.to_owned()),
+                ComponentStatement => Self::ComponentStatement,
+                CompoundStatement(vec) => Self::CompoundStatement(vec.to_owned()),
+                ComponentCondition => Self::ComponentCondition,
+                CompoundCondition(vec) => Self::CompoundCondition(vec.to_owned()),
+                Transform(vec) => Self::Transform(vec.to_owned()),
+            }
+        }
     }
 }
+pub use link_type::*;
 
 /// 模拟OpenNARS `nars.entity.TermLink`
 /// * 🚩首先是一个「Item」
@@ -193,60 +276,27 @@ mod impl_v1 {
     use super::*;
     use crate::entity::BudgetValueConcrete;
 
-    /// [`TermLinkRef`]具备所有权的类型
-    #[derive(Debug, Clone, PartialEq, Eq)]
-    pub enum TermLinkType {
-        /// 与自身的连接
-        /// * 📌图式：`C -> C`
-        /// * ⚠️仅在任务链中使用
-        SELF,
-
-        /// 复合词项/组分
-        /// * 📌图式：`(&&, A, C)` => `C`
-        ///
-        /// # 📄OpenNARS
-        ///
-        /// At (&&, A, C), point to C
-        Component,
-
-        /// 复合词项/整体
-        /// * 📌图式：`C` => `(&&, A, C)`
-        Compound(ComponentIndex),
-
-        /// 陈述/组分
-        /// * 📌图式：`<C -- A>` => `C`
-        ComponentStatement,
-
-        /// 陈述/整体
-        /// * 📌图式：`C` => `<C -- A>`
-        CompoundStatement(ComponentIndex),
-
-        /// 条件/组分
-        /// * 📌图式：`<(&&, C, B) ==> A>` => `C`
-        ComponentCondition,
-
-        /// 条件/整体
-        /// * 📌图式：`C` => `<(&&, C, B) ==> A>`
-        CompoundCondition(ComponentIndex),
-
-        /// 转换
-        /// * 📌图式：`C` => `<(*, C, B) --> A>`
-        /// * ⚠️仅在任务链中使用
-        Transform(ComponentIndex),
-    }
-
-    impl TermLinkType {
-        pub fn to_ref(&self) -> TermLinkRef {
+    /// 与[`TermLinkRef`]作比较
+    /// * 🎯允许更高性能地直接与[`TermLinkRef`]判等，而无需创建新值
+    impl PartialEq<TermLinkRef<'_>> for TermLinkType {
+        fn eq(&self, other: &TermLinkRef) -> bool {
+            // 简化以下匹配代码
             use TermLinkType::*;
-            match self {
-                SELF => TermLinkRef::SELF,
-                Component => TermLinkRef::Component,
-                Compound(vec) => TermLinkRef::Compound(vec),
-                ComponentStatement => TermLinkRef::ComponentStatement,
-                CompoundStatement(vec) => TermLinkRef::CompoundStatement(vec),
-                ComponentCondition => TermLinkRef::ComponentCondition,
-                CompoundCondition(vec) => TermLinkRef::CompoundCondition(vec),
-                Transform(vec) => TermLinkRef::Transform(vec),
+            type Ref<'a> = TermLinkRef<'a>;
+            // 开始匹配
+            match (self, other) {
+                // 类型相同，无附加参数
+                (SELF, Ref::SELF)
+                | (Component, Ref::Component)
+                | (ComponentStatement, Ref::ComponentStatement)
+                | (ComponentCondition, Ref::ComponentCondition) => true,
+                // 类型相同，附加参数相同
+                (Compound(vec), Ref::Compound(vec2))
+                | (CompoundStatement(vec), Ref::CompoundStatement(vec2))
+                | (CompoundCondition(vec), Ref::CompoundCondition(vec2))
+                | (Transform(vec), Ref::Transform(vec2)) => vec == vec2,
+                // 类型不同
+                _ => false,
             }
         }
     }
@@ -311,6 +361,8 @@ pub use impl_v1::*;
 /// 单元测试
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use super::*;
     use crate::{
         entity::{BudgetV1, BudgetValueConcrete},
@@ -351,28 +403,68 @@ mod tests {
     /// 测试/_set_key
     #[test]
     fn _set_key() -> AResult {
-        todo!();
+        // 新建词项链
+        let mut tl = TL::new(
+            Budget::from_float(0.5, 0.5, 0.5),
+            Term::new_word("term"),
+            TermLinkType::SELF,
+        );
+        // 默认不应该为空
+        assert!(!tl.key().is_empty());
+        // ! 强行修改key
+        *tl.__key_mut() = "".into();
+        // 改了之后就被清空了
+        assert!(tl.key().is_empty());
+        // 重新设置
+        tl._set_key();
+        // 设置之后不该为空
+        assert!(!tl.key().is_empty());
+        // 完成
         ok!()
     }
 
-    /// 测试/__key_mut
-    #[test]
-    fn __key_mut() -> AResult {
-        todo!();
-        ok!()
-    }
+    // * ✅测试/__key_mut已在[`_set_key`]中测试
 
     /// 测试/target
     #[test]
     fn target() -> AResult {
-        todo!();
+        // 新建词项
+        let term = Term::from_str("<{(*, A), B, C} ==> <D --> E>>")?;
+        // 装入词项链
+        let tl = TL::new(Budget::default(), term.clone(), TermLinkType::SELF);
+        // 应该一致
+        assert_eq!(term, *tl.target());
+        // 完成
         ok!()
     }
 
     /// 测试/type_ref
+    /// * 🎯[`TermLink::type_ref`]
+    /// * 🎯[`TermLinkType::from`]
+    /// * 🎯[`TermLinkType::to_ref`]
     #[test]
     fn type_ref() -> AResult {
-        todo!();
+        // 新建词项链类型
+        let link = TermLinkType::CompoundCondition(vec![
+            'A' as usize,
+            'R' as usize,
+            'C' as usize,
+            'J' as usize,
+            1,
+            3,
+            7,
+            4,
+            4,
+            2,
+        ]);
+        // 装入词项链
+        let tl = TL::new(Budget::default(), Term::from_str("term")?, link.clone());
+        // 应该一致
+        assert_eq!(link, tl.type_ref());
+        // 转换后应该一致
+        assert_eq!(link.to_ref(), tl.type_ref());
+        assert_eq!(link, TermLinkType::from(tl.type_ref()));
+        // 完成
         ok!()
     }
 }
