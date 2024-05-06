@@ -279,6 +279,7 @@ pub trait Concept: Item {
         } */
         todo!("// TODO: 有待实现")
     }
+
     /// 模拟`Concept.addToTable`
     /// * 🚩实际上是个静态方法：不依赖实例
     /// * 🚩对「物品列表」使用标准库的[`Vec`]类型，与[`Concept::__beliefs_mut`]同步
@@ -315,6 +316,63 @@ pub trait Concept: Item {
         } else if (i == table.size()) {
             table.add(newSentence);
         } */
+        todo!("// TODO: 有待实现")
+    }
+
+    /// 模拟`Concept.evaluation`
+    /// * 📝实际上不依赖实例，是个静态方法
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// Evaluate a query against beliefs (and desires in the future)
+    ///
+    /// @param query The question to be processed
+    /// @param list  The list of beliefs to be used
+    /// @return The best candidate belief selected
+    fn __evaluation(query: Self::Sentence, list: &[Self::Sentence]) -> Option<&Self::Sentence> {
+        /* 📄OpenNARS源码：
+        if (list == null) {
+            return null;
+        }
+        float currentBest = 0;
+        float beliefQuality;
+        Sentence candidate = null;
+        for (Sentence judgment : list) {
+            beliefQuality = LocalRules.solutionQuality(query, judgment);
+            if (beliefQuality > currentBest) {
+                currentBest = beliefQuality;
+                candidate = judgment;
+            }
+        }
+        return candidate; */
+        todo!("// TODO: 有待实现")
+    }
+
+    /* ---------- insert Links for indirect processing ---------- */
+
+    /// 模拟`Concept.insertTaskLink`
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// Insert a TaskLink into the TaskLink bag
+    /// <p>
+    /// called only from Memory.continuedProcess
+    ///
+    /// @param taskLink The termLink to be inserted
+    fn insert_task_link(&mut self, task_link: Self::TaskLink) {
+        /* 📄OpenNARS源码：
+        BudgetValue taskBudget = taskLink.getBudget();
+        taskLinks.putIn(taskLink);
+        memory.activateConcept(this, taskBudget); */
+        todo!("// TODO: 有待实现")
+    }
+
+    /// 模拟`Concept.________`
+    ///
+    /// # 📄OpenNARS
+    ///
+    fn ________() {
+        /* 📄OpenNARS源码： */
         todo!("// TODO: 有待实现")
     }
 
