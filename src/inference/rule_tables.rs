@@ -29,7 +29,7 @@ pub enum SyllogismFigure {
 use SyllogismFigure::*;
 
 /// 模拟`RuleTables`
-/// * 🚩现在通过「推理上下文」自动锁定其内的「子类型」
+/// * 🚩【2024-05-07 01:56:57】现在通过「推理上下文」自动锁定其内的「子类型」
 pub trait RuleTables: ReasonContext {
     /// 模拟`RuleTables.reason`
     /// * 💭似乎总是要因为「同步内部类型」加很多「泛型参数」进去
@@ -701,3 +701,9 @@ pub trait RuleTables: ReasonContext {
 
 /// 自动实现，以便添加方法
 impl<T: ReasonContext> RuleTables for T {}
+
+/// TODO: 单元测试
+#[cfg(test)]
+mod tests {
+    use super::*;
+}
