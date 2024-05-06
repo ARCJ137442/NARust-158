@@ -201,6 +201,7 @@ pub trait StampConcrete: Stamp + Clone + Hash + PartialEq {
     /// @param second The second Stamp
     /// @param time   The new creation time
     /// @return The merged Stamp, or null
+    #[doc(alias = "from_make")]
     fn from_merge(first: &impl Stamp, second: &impl Stamp, time: ClockTime) -> Option<Self> {
         /* 📄OpenNARS源码：
         for (int i = 0; i < first.length(); i++) {

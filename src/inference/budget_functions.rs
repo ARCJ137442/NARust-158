@@ -458,7 +458,7 @@ pub trait BudgetFunctions: BudgetValueConcrete {
         return budgetInference(truthToQuality(truth), content.getComplexity(), memory); */
         Self::__budget_inference(
             Self::truth_to_quality(truth),
-            content.get_complexity(),
+            content.complexity(),
             memory_t_budget,
             memory_current_belief_link_budget_and_target_activation,
         )
@@ -487,7 +487,7 @@ pub trait BudgetFunctions: BudgetValueConcrete {
         return budgetInference(1, content.getComplexity(), memory); */
         Self::__budget_inference(
             Self::E::ONE,
-            content.get_complexity(),
+            content.complexity(),
             memory_t_budget,
             memory_current_belief_link_budget_and_target_activation,
         )
@@ -510,7 +510,7 @@ pub trait BudgetFunctions: BudgetValueConcrete {
         return budgetInference(w2c(1), content.getComplexity(), memory); */
         Self::__budget_inference(
             Self::E::w2c(1.0),
-            content.get_complexity(),
+            content.complexity(),
             memory_t_budget,
             memory_current_belief_link_budget_and_target_activation,
         )

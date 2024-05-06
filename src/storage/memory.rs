@@ -3,6 +3,8 @@
 //!
 //! TODO: 🏗️【2024-05-06 00:19:43】有待着手开始；待[`crate::entity::Concept`]完成之后
 
+use crate::{entity::ConceptConcrete, global::ClockTime};
+
 /// 有关「记忆区报告」相关
 /// * 🎯记忆区输出信息
 /// * 🚩【2024-05-06 09:35:37】复用[`navm`]中的「NAVM输出」
@@ -59,7 +61,25 @@ pub use report::*;
 /// # 📄OpenNARS
 ///
 /// The memory of the system.
-pub trait Memory {}
+pub trait Memory {
+    /// 绑定的「概念」类型
+    type Concept: ConceptConcrete;
+
+    /// 模拟`Memory.getTime`
+    /// * 🎯【2024-05-06 21:13:48】从[`Concept::get_belief`]来
+    ///
+    /// TODO: 🏗️【2024-05-06 21:14:33】后续要迁移
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// 🈚
+    #[doc(alias = "get_time")]
+    fn time(&self) -> ClockTime {
+        /* 📄OpenNARS源码：
+        return reasoner.getTime(); */
+        todo!("// TODO: 后续要迁移")
+    }
+}
 
 /// [`Memory`]的具体版本
 /// * 🎯规定「构造函数」「比对判等」等逻辑

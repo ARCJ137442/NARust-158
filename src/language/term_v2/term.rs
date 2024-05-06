@@ -12,18 +12,25 @@ use nar_dev_utils::if_return;
 
 /// 📄OpenNARS `nars.language.Term`
 impl Term {
-    /// 📄OpenNARS `Term.getName` 方法
+    /// 模拟`Term.getName`
     /// * 🆕使用自身内建的「获取名称」方法
     ///   * 相较OpenNARS更**短**
     ///   * 仍能满足OpenNARS的需求
     /// * 🎯OpenNARS原有需求
     ///   * 📌保证「词项不同 ⇔ 名称不同」
     ///   * 📌保证「可用于『概念』『记忆区』的索引」
-    pub fn get_name(&self) -> String {
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// Reporting the name of the current Term.
+    ///
+    /// @return The name of the term as a String
+    #[doc(alias = "get_name")]
+    pub fn name(&self) -> String {
         self.format_name()
     }
 
-    /// 📄OpenNARS `Term.getComplexity` 方法
+    /// 模拟`Term.getComplexity`
     /// * 🚩逻辑 from OpenNARS
     ///   * 词语 ⇒ 1
     ///   * 变量 ⇒ 0
@@ -36,7 +43,8 @@ impl Term {
     /// - The syntactic complexity of a variable is 0, because it does not refer to * any concept.
     ///
     /// @return The complexity of the term, an integer
-    pub fn get_complexity(&self) -> usize {
+    #[doc(alias = "get_complexity")]
+    pub fn complexity(&self) -> usize {
         // 对「变量」特殊处理：不引用到任何「概念」
         if_return! {
             self.instanceof_variable() => 0
@@ -49,12 +57,12 @@ impl Term {
             // 原子 ⇒ 1 | 不包括「变量」
             Named(..) => 1,
             // 一元 ⇒ 1 + 内部词项复杂度
-            Unary(term) => 1 + term.get_complexity(),
+            Unary(term) => 1 + term.complexity(),
             // 二元 ⇒ 1 + 内部所有词项复杂度之和
-            Binary(term1, term2) => 1 + term1.get_complexity() + term2.get_complexity(),
+            Binary(term1, term2) => 1 + term1.complexity() + term2.complexity(),
             // 多元 ⇒ 1 + 内部所有词项复杂度之和
             Multi(terms) | MultiIndexed(_, terms) => {
-                1 + terms.iter().map(Term::get_complexity).sum::<usize>()
+                1 + terms.iter().map(Term::complexity).sum::<usize>()
             }
         }
     }
@@ -69,7 +77,7 @@ mod tests {
     use nar_dev_utils::{asserts, macro_once};
 
     #[test]
-    fn get_name() -> AResult {
+    fn name() -> AResult {
         macro_once! {
             // * 🚩模式：词项字符串 ⇒ 预期
             macro fmt($($term:literal => $expected:expr)*) {
@@ -114,7 +122,7 @@ mod tests {
             // * 🚩模式：词项字符串 ⇒ 预期
             macro fmt($($term:literal => $expected:expr)*) {
                 asserts! {$(
-                    term!($term).get_complexity() => $expected
+                    term!($term).complexity() => $expected
                 )*}
             }
             // 占位符

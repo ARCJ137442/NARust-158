@@ -345,7 +345,7 @@ pub fn find_substitute(
     fn make_common_variable(v1: &Term, v2: &Term) -> Term {
         Term::new(
             COMMON_VARIABLE,
-            TermComponents::Named(v1.get_name() + &v2.get_name()),
+            TermComponents::Named(v1.name() + &v2.name()),
         )
     }
 
