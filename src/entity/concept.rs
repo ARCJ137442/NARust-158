@@ -510,6 +510,7 @@ pub trait Concept: Item {
 
     /// 模拟`Concept.fire`
     /// * 📝OpenNARS中从「记忆区」的[「处理概念」](Memory::process_concept)方法中调用
+    /// * ⚠️依赖：[`crate::inference::RuleTables`]
     ///
     /// # 📄OpenNARS
     ///

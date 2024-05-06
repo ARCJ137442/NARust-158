@@ -131,7 +131,7 @@ pub trait TaskLink: TermLink<Target = Self::Task> {
 
 /// 「任务链」的具体类型
 /// * 🎯【2024-05-06 11:19:52】作为[`TermLinkConcrete`]的对应物
-pub trait TaskLinkConcrete: TermLink {}
+pub trait TaskLinkConcrete: TaskLink {}
 
 /// 初代实现
 mod impl_v1 {

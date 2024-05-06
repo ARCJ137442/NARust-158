@@ -102,11 +102,48 @@ mod link_type {
         Transform(ComponentIndexRef<'a>),
     }
 
-    impl TermLinkRef<'_> {
+    impl<'a> TermLinkRef<'a> {
         /// 模拟`TermLink`中的`(type % 2) == 1`
         pub fn is_to_component(&self) -> bool {
             use TermLinkRef::*;
             matches!(self, Component | ComponentStatement | ComponentCondition)
+        }
+
+        /// 🆕判断是否有「位置索引」
+        /// * 🎯用于在推理中 判断/假定 「是否有位置索引」
+        /// * 🚩【2024-05-06 23:02:36】根据英语网站的解释，采用`indexes`而非`indices`
+        ///   * 📝后者据称更偏向【数学/统计学】含义
+        ///   * 🔗https://www.nasdaq.com/articles/indexes-or-indices-whats-the-deal-2016-05-12
+        ///   * 🚩下[`Self::get_indexes`]、[`TermLink::get_indexes`]同
+        #[doc(alias = "has_indices")]
+        pub fn has_indexes(&self) -> bool {
+            use TermLinkRef::*;
+            matches!(
+                self,
+                Compound(..) | CompoundStatement(..) | CompoundCondition(..) | Transform(..)
+            )
+        }
+
+        /// 🆕尝试获取「位置索引」
+        /// * 🚩只对具有「位置索引」的枚举返回[`Some`]
+        /// * 🎯用于在推理中获取「是否有位置索引」以便分派规则
+        /// * 🚩【2024-05-06 22:56:23】因为可能为空，所以保留`get_`前缀
+        /// * 📌此处所返回引用之生命周期，并非`self`的生命周期，而是「其所引用之对象」的生命周期
+        ///   * ⚠️`'a`可能比`self`活得更久，参见[`super::TermLink::get_indexes`]的情况
+        #[doc(alias = "indexes")]
+        #[doc(alias = "indices")]
+        #[doc(alias = "get_indices")]
+        pub fn get_indexes(&self) -> Option<ComponentIndexRef<'a>> {
+            use TermLinkRef::*;
+            match *self {
+                // 有索引的情况
+                Compound(indexes)
+                | CompoundStatement(indexes)
+                | CompoundCondition(indexes)
+                | Transform(indexes) => Some(indexes),
+                // 其它情况
+                SELF | Component | ComponentStatement | ComponentCondition => None,
+            }
         }
     }
 
@@ -305,10 +342,30 @@ pub trait TermLink: Item {
     /// 模拟`TermLink.type`
     /// * 🚩【2024-05-04 22:42:10】回避Rust关键字`type`
     /// * 🚩对外只读，对子类开放
+    #[doc(alias = "link_type")]
+    #[doc(alias = "link_type_ref")]
     fn type_ref(&self) -> TermLinkRef;
 
-    // * ✅无需模拟`TermLink.getIndices`——其已包含在[`TermLink::type_ref`]中
-    // * ✅无需模拟`TermLink.getIndex`——其已包含在[`TermLink::type_ref`]中
+    /// 模拟`TermLink.getIndices`
+    /// * 🚩通过[`TermLink::type_ref`]直接获取
+    /// * ⚠️可能为空
+    #[inline(always)]
+    #[doc(alias = "get_indices")]
+    #[doc(alias = "indices")]
+    fn get_indexes(&self) -> Option<ComponentIndexRef> {
+        self.type_ref().get_indexes()
+    }
+
+    /// 模拟`TermLink.getIndex`
+    /// * 🚩通过[`TermLink::type_ref`]直接获取
+    /// * ⚠️可能为空
+    #[inline(always)]
+    #[doc(alias = "index")]
+    #[doc(alias = "get")]
+    fn get_index(&self, index: usize) -> Option<usize> {
+        self.type_ref().get_indexes().map(|indexes| indexes[index])
+    }
+
     // * 📝OpenNARS始终将这俩方法用在「规则表的分派」中，并且总是会对「词项链类型」做分派
 }
 
