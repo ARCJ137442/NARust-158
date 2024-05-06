@@ -444,7 +444,10 @@ mod tests {
             /// * 🚩模式：【时间戳`stamp!`】 => [证据时间...]
             macro test($( $stamp:tt => [ $($time:expr $(,)? )* ] )*) {
                 $(
-                    assert_eq!(stamp!($stamp).evidential_base(), [ $($time),* ]);
+                     // ! ⚠️【2024-05-06 11:30:48】可能的编译错误：在引入`serde_json`后，若对空数组判等，则会导致`&[usize]`与`&[serde_json::Value]`的类型歧义
+                     // * 🚩故此处限定「预期」的类型
+                    let expected: &[ClockTime] = &[ $($time),* ];
+                    assert_eq!(stamp!($stamp).evidential_base(), expected);
                 )*
             }
             {0: } => []

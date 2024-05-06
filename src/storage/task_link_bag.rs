@@ -4,7 +4,7 @@
 //! * ✅【2024-05-06 00:13:38】初代实现完成
 
 use super::Bag;
-use crate::entity::TaskLink;
+use crate::entity::{TaskLink, TaskLinkConcrete};
 
 /// 模拟OpenNARS `nars.entity.TaskLinkBag`
 /// * 📌【2024-05-04 17:30:35】实际上就是「袋+任务链+特定参数」
@@ -14,7 +14,7 @@ use crate::entity::TaskLink;
 pub trait TaskLinkBag: Bag<Self::Link> {
     /// 绑定的「任务链」类型
     /// * 🎯一种实现只能对应一种「任务链袋」
-    type Link: TaskLink;
+    type Link: TaskLinkConcrete;
 }
 
 /// 初代实现
@@ -26,7 +26,7 @@ mod impl_v1 {
     };
 
     /// 自动为「任务链+[`BagKeyV1`]+[`BagV1`]」实现「新近任务袋」
-    impl<T: TaskLink<Key = BagKeyV1>> TaskLinkBag for BagV1<T> {
+    impl<T: TaskLinkConcrete<Key = BagKeyV1>> TaskLinkBag for BagV1<T> {
         type Link = T;
     }
 
