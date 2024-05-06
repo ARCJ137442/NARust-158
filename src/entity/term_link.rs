@@ -417,14 +417,13 @@ pub use impl_v1::*;
 /// 单元测试
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
-
     use super::*;
     use crate::{
         entity::{BudgetV1, BudgetValueConcrete},
         global::tests::AResult,
         ok, test_term,
     };
+    use std::str::FromStr;
 
     /// 用于测试的预算值类型
     type Budget = BudgetV1;
@@ -506,12 +505,12 @@ mod tests {
             'R' as usize,
             'C' as usize,
             'J' as usize,
-            1,
-            3,
-            7,
-            4,
-            4,
-            2,
+            '1' as usize,
+            '3' as usize,
+            '7' as usize,
+            '4' as usize,
+            '4' as usize,
+            '2' as usize,
         ]);
         // 装入词项链
         let tl = TL::new(Budget::default(), Term::from_str("term")?, link.clone());
