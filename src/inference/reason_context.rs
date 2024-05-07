@@ -6,8 +6,8 @@
 
 use crate::{
     entity::{
-        BudgetValueConcrete, ConceptConcrete, SentenceConcrete, StampConcrete, TaskConcrete,
-        TaskLinkConcrete, TermLinkConcrete, TruthValueConcrete,
+        BudgetValueConcrete, ConceptConcrete, SentenceConcrete, ShortFloat, StampConcrete,
+        TaskConcrete, TaskLinkConcrete, TermLinkConcrete, TruthValueConcrete,
     },
     language::Term,
     storage::{BagKey, MemoryConcrete},
@@ -17,15 +17,18 @@ use crate::{
 /// * 🎯【2024-05-06 22:16:22】最初用于提供「已被确定的类型约束」
 ///   * 📌避免过多函数中「泛型约束满天飞」并且「无法用宏简化」的场面
 ///     * 📝Rust中的宏并不能用在任何「可扩展为标签树」的地方
-/// * 🚩只提供一系列关联类型，而不提供具体方法
+/// * 🚩【2024-05-07 19:06:48】只提供一系列关联类型，而暂不提供具体方法
 ///   * 这些「具体方法」留给后续的「自动实现之派生特征」，作为「追加方法」的手段
 pub trait ReasonContext {
     // * 这下边都是为了「统一类型」 * //
 
-    // 真值 × 时间戳 → 语句 //
+    // 短浮点 → 真值 × 时间戳 → 语句 //
+
+    /// 短浮点
+    type ShortFloat: ShortFloat;
 
     /// 真值
-    type Truth: TruthValueConcrete;
+    type Truth: TruthValueConcrete<E = Self::ShortFloat>;
 
     /// 时间戳
     type Stamp: StampConcrete;
@@ -39,7 +42,7 @@ pub trait ReasonContext {
     type Key: BagKey;
 
     /// 预算值
-    type Budget: BudgetValueConcrete;
+    type Budget: BudgetValueConcrete<E = Self::ShortFloat>;
 
     /// 任务
     type Task: TaskConcrete<Sentence = Self::Sentence, Key = Self::Key, Budget = Self::Budget>;

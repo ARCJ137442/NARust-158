@@ -13,7 +13,10 @@ use crate::{entity::Sentence, global::ClockTime, nars::DEFAULT_PARAMETERS};
 /// The reason to separate a Task and a TaskLink is that the same Task can be
 /// linked from multiple Concepts, with different BudgetValue.
 pub trait TaskLink: TermLink<Target = Self::Task> {
-    type Task: Task;
+    /// 绑定的「任务」类型
+    /// * 🚩【2024-05-07 19:00:30】目前认为，需要与自身所用之「元素id」「预算值」类型相同
+    type Task: Task<Budget = Self::Budget, Key = Self::Key>;
+
     // * ✅无需模拟`TaskLink.targetTask`、`TaskLink.getTargetTask`
     //   * 📌此实现已被特征约束`T: Task`限定
     // /// 模拟`TaskLink.targetTask`、`TaskLink.getTargetTask`

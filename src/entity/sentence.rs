@@ -102,6 +102,8 @@ pub trait Sentence {
     /// Get the punctuation of the sentence
     ///
     /// @return The character '.' or '?'
+    #[doc(alias = "type")]
+    #[doc(alias = "sentence_type")]
     fn punctuation(&self) -> &SentenceType<Self::Truth>;
     /// [`Sentence::punctuation`]的可变版本
     /// * 🚩【2024-05-05 18:13:47】[`Sentence::truth_mut`]需要

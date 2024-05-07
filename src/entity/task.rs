@@ -1,7 +1,7 @@
 //! 🎯复刻OpenNARS `nars.entity.Task`
 //! * ✅【2024-05-05 21:38:53】基本方法复刻完毕
 
-use super::{BudgetValueConcrete, Item, Sentence, SentenceConcrete};
+use super::{BudgetValueConcrete, Item, Sentence, SentenceConcrete, TruthValue};
 use crate::{global::RC, storage::BagKey};
 use std::hash::Hash;
 
@@ -22,7 +22,8 @@ pub trait Task {
     type Key: BagKey;
 
     /// 绑定的「预算值」类型
-    type Budget: BudgetValueConcrete;
+    /// * 🚩【2024-05-07 18:53:40】必须限定其「短浮点」类型与[「真值」](Sentence::Truth)一致
+    type Budget: BudgetValueConcrete<E = <<Self::Sentence as Sentence>::Truth as TruthValue>::E>;
 
     /// 🆕获取内部作为引用的「元素id」
     /// * 🎯用于返回引用而非值
@@ -236,7 +237,7 @@ mod impl_v1 {
     where
         S: SentenceConcrete,
         K: BagKey,
-        B: BudgetValueConcrete,
+        B: BudgetValueConcrete<E = <S::Truth as TruthValue>::E>,
     {
         sentence: S,
         key: K,
@@ -251,7 +252,7 @@ mod impl_v1 {
     where
         S: SentenceConcrete,
         K: BagKey,
-        B: BudgetValueConcrete,
+        B: BudgetValueConcrete<E = <S::Truth as TruthValue>::E>,
     {
         type Sentence = S;
         type Key = K;
@@ -317,8 +318,8 @@ mod impl_v1 {
     impl<S, B> TaskConcrete for TaskV1<S, BagKeyV1, B>
     where
         S: SentenceConcrete,
-        B: BudgetValueConcrete,
         S::Truth: Debug,
+        B: BudgetValueConcrete<E = <S::Truth as TruthValue>::E>,
     {
         #[inline(always)]
         fn new(

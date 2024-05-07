@@ -1,7 +1,9 @@
 //! 🎯复刻OpenNARS `nars.entity.Memory`
 //! * 📌「记忆区」
+//! * 🚧【2024-05-07 18:52:42】目前复现方法：先函数API（提供函数签名），再
 //!
 //! TODO: 🏗️【2024-05-06 00:19:43】有待着手开始；待[`crate::entity::Concept`]完成之后
+//! TODO: 🏗️【2024-05-07 18:52:36】有待完成API：
 
 use crate::{entity::ConceptConcrete, global::ClockTime};
 

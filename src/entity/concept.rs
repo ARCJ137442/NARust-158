@@ -20,7 +20,8 @@ pub trait Concept: Item {
 
     /// 绑定的「真值」类型
     /// * 📌必须是「具体」类型
-    type Truth: TruthValueConcrete;
+    /// * 🚩【2024-05-07 18:53:40】目前认为，必须限定其「短浮点」类型与[「预算值」](Item::Budget)一致
+    type Truth: TruthValueConcrete<E = <Self::Budget as BudgetValue>::E>;
 
     // * ✅至于「元素id」与「预算值」，已在Item约束中绑定
 
@@ -46,7 +47,7 @@ pub trait Concept: Item {
 
     /// 绑定的「任务链」
     /// * 🎯每个实现中只会实现一种类型，用于统一多个函数的参数
-    type TaskLink: TaskLinkConcrete<Key = Self::Key, Budget = Self::Budget>;
+    type TaskLink: TaskLinkConcrete<Task = Self::Task, Key = Self::Key, Budget = Self::Budget>;
 
     /// 模拟`Concept.term`、`Concept.getTerm`
     /// * 🚩只读：OpenNARS仅在构造函数中赋值
