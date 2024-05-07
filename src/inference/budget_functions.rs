@@ -258,7 +258,7 @@ pub trait BudgetFunctions: BudgetValueConcrete {
     ///
     /// @param concept The concept
     /// @param budget  The budget for the new item
-    fn activate<B>(&mut self, budget: &impl BudgetValue<E = Self::E>) {
+    fn activate(&mut self, budget: &impl BudgetValue<E = Self::E>) {
         /* 📄OpenNARS源码：
         float oldPri = concept.getPriority();
         float priority = or(oldPri, budget.getPriority());

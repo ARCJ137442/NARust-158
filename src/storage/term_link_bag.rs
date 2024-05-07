@@ -3,7 +3,7 @@
 //! * ✅【2024-05-04 17:50:50】基本功能复刻完成
 //! * ✅【2024-05-06 00:13:38】初代实现完成
 
-use super::Bag;
+use super::BagConcrete;
 use crate::{
     entity::{Item, TaskLink, TermLinkConcrete},
     global::ClockTime,
@@ -17,7 +17,11 @@ use crate::{
 ///   * ✅这也能避免冗余的对「记忆区」的引用
 /// * ⚠️ 在[「袋」](Bag)的基础上，对[「取出」](Bag::take_out)做了优化
 ///   * 🎯优化目的：避免重复推理
-pub trait TermLinkBag: Bag<Self::Link> {
+/// * 🚩【2024-05-07 20:57:36】锁定是「具体特征」
+///   * 📌目前必须有构造函数
+///   * ⚠️不然会有`ConceptBag: BagConcrete<Self::Concept> + ConceptBag`的「双重叠加」问题
+///     * ❌这样会出现两套实现
+pub trait TermLinkBag: BagConcrete<Self::Link> {
     /// 绑定的「词项链」类型
     /// * 🎯一种实现只能对应一种「词项链袋」
     type Link: TermLinkConcrete;
@@ -76,7 +80,7 @@ mod impl_v1 {
         storage::{BagKeyV1, BagV1},
     };
 
-    /// 自动为「任务链+[`BagKeyV1`]+[`BagV1`]」实现「新近任务袋」
+    /// 自动为「任务链+[`BagKeyV1`]+[`BagV1`]」实现「词项链袋」
     impl<T: TermLinkConcrete<Key = BagKeyV1>> TermLinkBag for BagV1<T> {
         type Link = T;
     }

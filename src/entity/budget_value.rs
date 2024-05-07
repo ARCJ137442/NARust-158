@@ -213,7 +213,7 @@ pub trait BudgetValueConcrete: BudgetValue + Sized {
     /// @param d Initial durability
     /// @param q Initial quality
     #[inline(always)]
-    fn from_float(p: Float, d: Float, q: Float) -> Self {
+    fn from_floats(p: Float, d: Float, q: Float) -> Self {
         Self::new(
             <Self as BudgetValue>::E::from_float(p),
             <Self as BudgetValue>::E::from_float(d),
@@ -295,7 +295,7 @@ mod tests {
     macro_rules! budget {
         // 三参数
         ($p:expr; $d:expr; $q:expr) => {
-            Budget::from_float($p, $d, $q)
+            Budget::from_floats($p, $d, $q)
         };
     }
 

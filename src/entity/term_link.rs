@@ -493,12 +493,12 @@ mod tests {
     #[test]
     fn new() -> AResult {
         let tl = TL::new(
-            Budget::from_float(0.5, 0.5, 0.5),
+            Budget::from_floats(0.5, 0.5, 0.5),
             Term::new_word("term"),
             TermLinkType::SELF,
         );
         let tl2 = TL::new(
-            Budget::from_float(0.1, 0.5, 1.0),
+            Budget::from_floats(0.1, 0.5, 1.0),
             test_term!("<(*, {A, B}) --> C>"),
             // ? `<(*, {A, B}) --> C>` => A
             TermLinkType::CompoundStatement(vec![0, 0]),
@@ -517,7 +517,7 @@ mod tests {
     fn _set_key() -> AResult {
         // 新建词项链
         let mut tl = TL::new(
-            Budget::from_float(0.5, 0.5, 0.5),
+            Budget::from_floats(0.5, 0.5, 0.5),
             Term::new_word("term"),
             TermLinkType::SELF,
         );

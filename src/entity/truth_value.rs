@@ -148,7 +148,7 @@ pub trait TruthValueConcrete: TruthValue + Sized + Clone + Eq + Hash {
     /// 模拟OpenNARS 构造函数 (f, c, a)
     /// * ⚠️此处让「f」「c」为浮点数，内部实现时再转换
     #[inline(always)]
-    fn from_float(frequency: Float, confidence: Float, is_analytic: bool) -> Self {
+    fn from_floats(frequency: Float, confidence: Float, is_analytic: bool) -> Self {
         Self::new(
             Self::E::from_float(frequency),
             Self::E::from_float(confidence),
@@ -286,7 +286,7 @@ mod tests {
         };
         // 三参数
         ($f:expr; $c:expr; $a:expr) => {
-            Truth::from_float($f, $c, $a)
+            Truth::from_floats($f, $c, $a)
         };
     }
 

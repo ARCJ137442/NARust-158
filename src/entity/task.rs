@@ -367,8 +367,8 @@ mod tests {
     fn from_input() -> AResult {
         // 构造
         let content = test_term!("A");
-        let truth = TruthV1::from_float(1.0, 0.9, false);
-        let budget = BudgetV1::from_float(0.5, 0.5, 0.5);
+        let truth = TruthV1::from_floats(1.0, 0.9, false);
+        let budget = BudgetV1::from_floats(0.5, 0.5, 0.5);
         let stamp = StampV1::with_time(0, 0);
         let revisable = false;
         let sentence = SentenceV1::new(content, SentenceType::Judgement(truth), stamp, revisable);

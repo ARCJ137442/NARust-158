@@ -134,7 +134,7 @@ where
     /// # 📄OpenNARS `Bag.itemTable`
     ///
     /// array of lists of items, for items on different level
-    fn __item_tale(&self) -> &impl BagItemTable<E::Key>;
+    fn __item_table(&self) -> &impl BagItemTable<E::Key>;
     fn __item_table_mut(&mut self) -> &mut impl BagItemTable<E::Key>;
 
     /// 模拟`Bag.itemTable`的「构造赋值」
@@ -224,43 +224,9 @@ where
 
     // ** 属性迁移完毕 ** //
 
-    // ! ❌【2024-05-04 12:36:21】暂时还是不迁移「构造方法」，而是留给实现者自行决定
-    // * 📝乃至OpenNARS中整个`memory`的引用，只是「在初始化时，根据记忆区属性决定自身容量」而已
-    //    * 💭这个引用如果对参数及早求值，根本就无需长期存在
-    // TODO: 🏗️实现方式有待商酌
-    // /// 🆕实际上的「构造方法」
-    // /// * 🎯用于创造一个「白板」对象
-    // /// * 🎯结合[`Bag::new`]实现「有预设方法的构造」逻辑
-    // ///
-    // fn new_struct() -> Self;
-
-    // /// 模拟 `new Bag()`
-    // /// * 📝OpenNARS中一直都是传承一个参数
-    // /// * 🚩创建一个空袋（不论是何种实现者）
-    // /// * 🚩🆕目前不创建对「记忆区」的引用
-    // ///   * 💭虽然即便可以使用[`Rc`]/[`Arc`]
-    // /// * 🎯创建一个已经[「初始化」](Bag::init)的新袋
-    // ///   * 📝OpenNARS中，后续实现者（词项链袋 等）均只会通过一个`super`调用它
-    // ///
-    // /// # 📄OpenNARS
-    // ///
-    // /// constructor, called from subclasses
-    // ///
-    // /// @param memory The reference to memory
-    // fn new() -> Self
-    // where
-    //     Self: Sized,
-    // {
-    //     /* 📄OpenNARS源码：
-    //     this.memory = memory;
-    //     capacity = capacity();
-    //     init(); */
-    //     let mut this = Self::new_struct();
-    //     this.init();
-    //     this
-    // }
-
     /// 模拟`Bag.init`
+    /// * 🚩初始化「元素映射」「层级映射」
+    ///   * 📄对应[`Self::__name_table`]、[`Self::__item_table`]
     ///
     /// # 📄OpenNARS `Bag.init`
     ///
@@ -374,6 +340,12 @@ where
     #[inline(always)]
     fn get_mut(&mut self, key: &E::Key) -> Option<&mut E> {
         self.__name_table_mut().get_mut(key)
+    }
+
+    /// 🆕提供「元素id是否对应值」的功能
+    /// * 🎯【2024-05-07 22:19:07】在「记忆区」查找时，为规避「直接带Concept [`Option`]」带来的借用问题，采用「只查询是否有」的方式
+    fn has(&self, key: &E::Key) -> bool {
+        self.__name_table().has(key)
     }
 
     /// 模拟`Bag.putIn`
@@ -518,7 +490,7 @@ where
                 *self.__current_counter_mut() = 1;
             } else {
                 *self.__current_counter_mut() =
-                    self.__item_tale().get(self.__current_level()).size();
+                    self.__item_table().get(self.__current_level()).size();
             }
         }
         let selected_key = self.__take_out_first(self.__current_level());
@@ -574,7 +546,7 @@ where
     fn _empty_level(&self, level: usize) -> bool {
         /* 📄OpenNARS源码：
         return (itemTable.get(n).isEmpty()); */
-        self.__item_tale().get(level).is_empty()
+        self.__item_table().get(level).is_empty()
     }
 
     /// 模拟`Bag.getLevel`
@@ -680,7 +652,7 @@ where
         mass -= (level + 1);
         refresh();
         return selected; */
-        let selected = self.__item_tale().get(level).get_first().cloned();
+        let selected = self.__item_table().get(level).get_first().cloned();
         if selected.is_some() {
             // * 🚩仅在「有选择到」时移除 | ✅【2024-05-04 14:31:30】此举修复了「mass溢出」的bug！
             self.__item_table_mut().get_mut(level).remove_first();
@@ -720,6 +692,45 @@ where
     // ! ❌toStringLong
 }
 
+/// [`Bag`]的具体类型
+/// * ✅构造方法
+/// * 🎯【2024-05-07 20:58:48】目前是因为`Memory`的构造函数初始化需要
+pub trait BagConcrete<E: Item>: Bag<E> + Sized {
+    /// 🆕实际上的「构造方法」
+    /// * 🎯用于创造一个「白板」对象
+    /// * 🎯结合[`Bag::new`]实现「有预设方法的构造」逻辑
+    fn __new(capacity: usize, forget_rate: usize) -> Self;
+
+    /// 模拟 `new Bag(Memory memory)`
+    /// * 📝OpenNARS中一直都是传承一个参数
+    /// * 🚩创建一个空袋（不论是何种实现者）
+    /// * 🚩🆕【2024-05-07 20:46:25】目前不创建、传入对「记忆区」的引用
+    ///   * 🚩取而代之的是：直接传入所需参数作为属性
+    ///   * 🎯减少循环引用
+    ///   * 💭虽然即便可以使用[`Rc`]/[`Arc`]
+    /// * 🎯创建一个已经[「初始化」](Bag::init)的新袋
+    ///   * 📝OpenNARS中，后续实现者（词项链袋 等）均只会通过一个`super`调用它
+    /// * 🚩虽然在OpenNARS中`Bag`是`protected`的，但鉴于各子类实现如`ConceptBag`中是公开的，此处默认作「公开」处理
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// constructor, called from subclasses
+    ///
+    /// @param memory The reference to memory
+    fn new(capacity: usize, forget_rate: usize) -> Self
+    where
+        Self: Sized,
+    {
+        /* 📄OpenNARS源码：
+        this.memory = memory;
+        capacity = capacity();
+        init(); */
+        let mut this = Self::__new(capacity, forget_rate);
+        this.init();
+        this
+    }
+}
+
 /// 用于袋的「索引」
 /// * 🎯方便后续安插方法
 pub trait BagKey: Clone + Eq {}
@@ -755,6 +766,14 @@ pub trait BagNameTable<E: Item> {
     /// [`Self::get`]的可变引用版本
     /// * 🎯【2024-04-28 09:27:23】备用
     fn get_mut(&mut self, key: &E::Key) -> Option<&mut E>;
+
+    /// 🆕判断「是否包含元素」
+    /// * 🎯用于[`Bag`]的[「是否有元素」查询](Bag::has)
+    /// * 📜默认实现：`self.get(key).is_some()`
+    #[inline(always)]
+    fn has(&self, key: &E::Key) -> bool {
+        self.get(key).is_some()
+    }
 
     /// 模拟`Bag.nameTable.put`方法
     /// * 🎯预期是「向映射插入值」
@@ -1117,8 +1136,111 @@ mod impl_v1 {
         // ! ❌不作`showLevel: usize`显示用变量：不用于显示
     }
 
-    impl<E: Item<Key = BagKeyV1>> BagV1<E> {
-        pub fn new(capacity: usize, forget_rate: usize) -> Self {
+    impl<E: Item<Key = BagKeyV1>> Default for BagV1<E> {
+        /// * 🚩【2024-05-04 16:26:53】默认当「概念袋」使
+        fn default() -> Self {
+            Self::new(
+                DEFAULT_PARAMETERS.concept_bag_size,
+                DEFAULT_PARAMETERS.concept_forgetting_cycle,
+            )
+        }
+    }
+
+    /// 对「以字符串为索引的袋」实现特征
+    /// * 🚩【2024-05-04 12:01:15】下面这些就是给出自己的属性，即「属性映射」
+    impl<E: Item<Key = BagKeyV1>> Bag<E> for BagV1<E> {
+        #[inline(always)]
+        fn __distributor(&self) -> &impl Distributor {
+            &self.distributor
+        }
+
+        #[inline(always)]
+        fn __name_table(&self) -> &impl BagNameTable<E> {
+            // * ⚠️【2024-05-04 11:54:07】目前只有「字符串key」的「散列映射」实现了「名称表」
+            &self.item_map
+        }
+
+        #[inline(always)]
+        fn __name_table_mut(&mut self) -> &mut impl BagNameTable<E> {
+            &mut self.item_map
+        }
+
+        #[inline(always)]
+        fn __name_table_mut_new_(&mut self) {
+            self.item_map = HashMap::new();
+        }
+
+        #[inline(always)]
+        fn __item_table(&self) -> &impl BagItemTable<<E as Item>::Key> {
+            &self.level_map
+        }
+
+        #[inline(always)]
+        fn __item_table_mut(&mut self) -> &mut impl BagItemTable<<E as Item>::Key> {
+            &mut self.level_map
+        }
+
+        #[inline(always)]
+        fn __item_table_mut_new_(&mut self) {
+            // * 🚩只在这里初始化
+            self.level_map = BagItemTableV1::new(Self::__TOTAL_LEVEL);
+        }
+
+        #[inline(always)]
+        fn __capacity(&self) -> usize {
+            self.capacity
+        }
+
+        #[inline(always)]
+        fn __mass(&self) -> usize {
+            self.mass
+        }
+
+        #[inline(always)]
+        fn __mass_mut(&mut self) -> &mut usize {
+            &mut self.mass
+        }
+
+        #[inline(always)]
+        fn __level_index(&self) -> usize {
+            self.level_index
+        }
+
+        #[inline(always)]
+        fn __level_index_mut(&mut self) -> &mut usize {
+            &mut self.level_index
+        }
+
+        #[inline(always)]
+        fn __current_level(&self) -> usize {
+            self.current_level
+        }
+
+        #[inline(always)]
+        fn __current_level_mut(&mut self) -> &mut usize {
+            &mut self.current_level
+        }
+
+        #[inline(always)]
+        fn __current_counter(&self) -> usize {
+            self.current_counter
+        }
+
+        #[inline(always)]
+        fn __current_counter_mut(&mut self) -> &mut usize {
+            &mut self.current_counter
+        }
+
+        #[inline(always)]
+        fn _forget_rate(&self) -> usize {
+            self.forget_rate
+        }
+    }
+
+    impl<E: Item<Key = BagKeyV1>> BagConcrete<E> for BagV1<E> {
+        // 实现构造函数
+        #[inline(always)]
+        fn __new(capacity: usize, forget_rate: usize) -> Self {
             Self {
                 // 这两个是「超参数」要因使用者而异
                 capacity,
@@ -1137,90 +1259,6 @@ mod impl_v1 {
             }
         }
     }
-
-    impl<E: Item<Key = BagKeyV1>> Default for BagV1<E> {
-        /// * 🚩【2024-05-04 16:26:53】默认当「概念袋」使
-        fn default() -> Self {
-            Self::new(
-                DEFAULT_PARAMETERS.concept_bag_size,
-                DEFAULT_PARAMETERS.concept_forgetting_cycle,
-            )
-        }
-    }
-
-    /// 对「以字符串为索引的袋」实现特征
-    /// * 🚩【2024-05-04 12:01:15】下面这些就是给出自己的属性，即「属性映射」
-    impl<E: Item<Key = BagKeyV1>> Bag<E> for BagV1<E> {
-        fn __distributor(&self) -> &impl Distributor {
-            &self.distributor
-        }
-
-        fn __name_table(&self) -> &impl BagNameTable<E> {
-            // * ⚠️【2024-05-04 11:54:07】目前只有「字符串key」的「散列映射」实现了「名称表」
-            &self.item_map
-        }
-
-        fn __name_table_mut(&mut self) -> &mut impl BagNameTable<E> {
-            &mut self.item_map
-        }
-
-        fn __name_table_mut_new_(&mut self) {
-            self.item_map = HashMap::new();
-        }
-
-        fn __item_tale(&self) -> &impl BagItemTable<<E as Item>::Key> {
-            &self.level_map
-        }
-
-        fn __item_table_mut(&mut self) -> &mut impl BagItemTable<<E as Item>::Key> {
-            &mut self.level_map
-        }
-
-        fn __item_table_mut_new_(&mut self) {
-            // * 🚩只在这里初始化
-            self.level_map = BagItemTableV1::new(Self::__TOTAL_LEVEL);
-        }
-
-        fn __capacity(&self) -> usize {
-            self.capacity
-        }
-
-        fn __mass(&self) -> usize {
-            self.mass
-        }
-
-        fn __mass_mut(&mut self) -> &mut usize {
-            &mut self.mass
-        }
-
-        fn __level_index(&self) -> usize {
-            self.level_index
-        }
-
-        fn __level_index_mut(&mut self) -> &mut usize {
-            &mut self.level_index
-        }
-
-        fn __current_level(&self) -> usize {
-            self.current_level
-        }
-
-        fn __current_level_mut(&mut self) -> &mut usize {
-            &mut self.current_level
-        }
-
-        fn __current_counter(&self) -> usize {
-            self.current_counter
-        }
-
-        fn __current_counter_mut(&mut self) -> &mut usize {
-            &mut self.current_counter
-        }
-
-        fn _forget_rate(&self) -> usize {
-            self.forget_rate
-        }
-    }
 }
 pub use impl_v1::*;
 
@@ -1235,6 +1273,7 @@ mod tests {
     use nar_dev_utils::{asserts, list};
 
     /// [`Item`]的测试用初代实现
+    /// * 💭【2024-05-07 20:50:29】实际上并没有用：真正有用的是「任务」「概念」等「实体类」
     #[derive(Debug, Clone, Default, Hash, PartialEq)]
     pub struct ItemV1<K: BagKey> {
         key: K,

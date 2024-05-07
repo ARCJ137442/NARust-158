@@ -359,6 +359,10 @@ pub trait Concept: Item {
     /* ---------- insert Links for indirect processing ---------- */
 
     /// 模拟`Concept.insertTaskLink`
+    /// * 🚩【2024-05-07 22:29:32】应该是个关联函数
+    ///   * 💭插入「词项链」要使用「记忆区」但「记忆区」却又循环操作「概念」本身（获取所有权），这不会冲突吗？
+    /// 
+    /// TODO: 🏗️【2024-05-07 22:31:05】有待适配
     ///
     /// # 📄OpenNARS
     ///
