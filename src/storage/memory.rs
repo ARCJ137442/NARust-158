@@ -1,9 +1,8 @@
 //! 🎯复刻OpenNARS `nars.entity.Memory`
 //! * 📌「记忆区」
-//! * 🚧【2024-05-07 18:52:42】目前复现方法：先函数API（提供函数签名），再
+//! * 🚧【2024-05-07 18:52:42】目前复现方法：先函数API（提供函数签名），再翻译填充函数体代码
 //!
-//! TODO: 🏗️【2024-05-06 00:19:43】有待着手开始；待[`crate::entity::Concept`]完成之后
-//! TODO: 🏗️【2024-05-07 18:52:36】有待完成API：
+//! * ✅【2024-05-08 15:46:28】目前已初步实现方法API，并完成部分方法模拟
 
 use crate::{
     entity::*,
@@ -253,13 +252,15 @@ pub trait Memory: ReasonContext<Memory = Self> {
     fn current_belief_link_mut(&mut self) -> &mut Self::TermLink;
 
     /// 模拟`Memory.currentBelief`
+    /// * 🚩【2024-05-08 11:49:37】为强调「引用」需要，此处返回[`RC`]而非引用
+    /// * 🚩【2024-05-08 14:33:03】仍有可能为空：见[`Memory::single_premise_task`]
     ///
     /// # 📄OpenNARS
     ///
     /// The selected belief
-    fn current_belief(&self) -> &Self::Sentence;
+    fn current_belief(&self) -> &Option<RC<Self::Sentence>>;
     /// [`Memory::current_belief`]的可变版本
-    fn current_belief_mut(&mut self) -> &mut Self::Sentence;
+    fn current_belief_mut(&mut self) -> &mut Option<RC<Self::Sentence>>;
 
     /// 模拟`Memory.newStamp`
     ///
@@ -584,9 +585,9 @@ pub trait Memory: ReasonContext<Memory = Self> {
         let task = <Self::Task as TaskConcrete>::from_activate(
             (*sentence).clone(),
             budget.clone(),
-            Some(self.current_task().clone()),
-            Some(sentence.clone()),
-            Some(candidate_belief),
+            self.current_task().clone(),
+            sentence.clone(),
+            candidate_belief,
         );
         let narsese = NarseseValue::from_term(task.content().into());
         self.recorder_mut().put(Output::UNCLASSIFIED {
@@ -636,24 +637,17 @@ pub trait Memory: ReasonContext<Memory = Self> {
         } */
         let budget_threshold = DEFAULT_PARAMETERS.budget_threshold;
         let budget_threshold = Self::ShortFloat::from_float(budget_threshold);
-        if task.above_threshold(budget_threshold) {
+        let budget_summary = task.summary().to_float();
+        // * 🚩🆕【2024-05-08 14:45:59】合并条件：预算值在阈值之上 && 达到（日志用的）音量水平
+        if task.above_threshold(budget_threshold) && budget_summary > self.silence_percent() {
             let narsese = NarseseValue::from_term(task.content().into());
-            let budget_summary = task.summary().to_float();
-            if budget_summary > self.silence_percent() {
-                self.recorder_mut().put(Output::OUT {
-                    // * 🚩【2024-05-07 23:05:14】目前仍是将词项转换为「词法Narsese」
-                    // TODO: 后续要将整个「任务」转换为字符串
-                    content_raw: format!("!!! Derived: {}", task.content()),
-                    narsese: Some(narsese),
-                });
-                self.__new_tasks_mut().push_back(task);
-            } else {
-                // * 🚩要输出：结果不同了
-                self.recorder_mut().put(Output::COMMENT {
-                    content: format!("!!! Ignored: {}", task.content()),
-                    // TODO: 后续要将整个「任务」转换为字符串
-                });
-            }
+            self.recorder_mut().put(Output::OUT {
+                // * 🚩【2024-05-07 23:05:14】目前仍是将词项转换为「词法Narsese」
+                // TODO: 后续要将整个「任务」转换为字符串
+                content_raw: format!("!!! Derived: {}", task.content()),
+                narsese: Some(narsese),
+            });
+            self.__new_tasks_mut().push_back(task);
         } else {
             // 此时还是输出一个「被忽略」好
             self.recorder_mut().put(Output::COMMENT {
@@ -665,15 +659,422 @@ pub trait Memory: ReasonContext<Memory = Self> {
 
     /* --------------- new task building --------------- */
 
-    /// 模拟`Memory.xxxxxxxx`
+    /// 模拟`Memory.doublePremiseTask`
+    /// * ✅此处无需判断「新内容」为空：编译期非空检查
     ///
     /// # 📄OpenNARS
     ///
-    fn xxxxxxxx(&mut self) {
+    /// Shared final operations by all double-premise rules, called from the
+    /// rules except StructuralRules
+    ///
+    /// @param newContent The content of the sentence in task
+    /// @param newTruth   The truth value of the sentence in task
+    /// @param newBudget  The budget value in task
+    fn double_premise_task_revisable(
+        &mut self,
+        new_content: Term,
+        new_truth: Self::Truth,
+        new_budget: Self::Budget,
+    ) {
         /* 📄OpenNARS源码：
-         */
+        if (newContent != null) {
+            Sentence newSentence = new Sentence(newContent, currentTask.getSentence().getPunctuation(), newTruth, newStamp);
+            Task newTask = new Task(newSentence, newBudget, currentTask, currentBelief);
+            derivedTask(newTask);
+        } */
+        let mut new_punctuation = self.current_task().sentence().punctuation().clone();
+        // * 🆕🚩【2024-05-08 11:52:03】需要以此将「真值」插入「语句类型/标点」中（「问题」可能没有真值）
+        if let SentenceType::Judgement(truth) = &mut new_punctuation {
+            *truth = new_truth;
+        }
+        let new_sentence = <Self::Sentence as SentenceConcrete>::new_revisable(
+            new_content,
+            new_punctuation,
+            self.new_stamp().clone(),
+        );
+        let new_task = <Self::Task as TaskConcrete>::from_derive(
+            new_sentence,
+            new_budget,
+            Some(self.current_task().clone()),
+            self.current_belief().clone(),
+        );
+        self.derived_task(new_task);
+    }
+
+    /// 模拟`Memory.doublePremiseTask`
+    /// * 📌【2024-05-08 11:57:38】相比[`Memory::double_premise_task_revisable`]多了个`revisable`作为「语句」的推理参数
+    ///   * 🚩作用在「语句」上
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// Shared final operations by all double-premise rules, called from the
+    /// rules except StructuralRules
+    ///
+    /// @param newContent The content of the sentence in task
+    /// @param newTruth   The truth value of the sentence in task
+    /// @param newBudget  The budget value in task
+    /// @param revisable  Whether the sentence is revisable
+    fn double_premise_task(
+        &mut self,
+        new_content: Term,
+        new_truth: Self::Truth,
+        new_budget: Self::Budget,
+        revisable: bool,
+    ) {
+        /* 📄OpenNARS源码：
+        if (newContent != null) {
+            Sentence taskSentence = currentTask.getSentence();
+            Sentence newSentence = new Sentence(newContent, taskSentence.getPunctuation(), newTruth, newStamp,
+                    revisable);
+            Task newTask = new Task(newSentence, newBudget, currentTask, currentBelief);
+            derivedTask(newTask);
+        } */
+        let mut new_punctuation = self.current_task().sentence().punctuation().clone();
+        // * 🆕🚩【2024-05-08 11:52:03】需要以此将「真值」插入「语句类型/标点」中（「问题」可能没有真值）
+        if let SentenceType::Judgement(truth) = &mut new_punctuation {
+            *truth = new_truth;
+        }
+        let new_sentence = <Self::Sentence as SentenceConcrete>::new(
+            new_content,
+            new_punctuation,
+            self.new_stamp().clone(),
+            revisable, // * 📌【2024-05-08 11:57:19】就这里是新增的
+        );
+        let new_task = <Self::Task as TaskConcrete>::from_derive(
+            new_sentence,
+            new_budget,
+            Some(self.current_task().clone()),
+            self.current_belief().clone(),
+        );
+        self.derived_task(new_task);
+    }
+
+    /// 模拟`Memory.singlePremiseTask`
+    /// * 📝OpenNARS中使用「当前任务」的标点/真值
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// Shared final operations by all single-premise rules, called in StructuralRules
+    ///
+    /// @param newContent The content of the sentence in task
+    /// @param newTruth   The truth value of the sentence in task
+    /// @param newBudget  The budget value in task
+    fn single_premise_task_current(
+        &mut self,
+        new_content: Term,
+        new_truth: Self::Truth,
+        new_budget: Self::Budget,
+    ) {
+        /* 📄OpenNARS源码：
+        singlePremiseTask(newContent, currentTask.getSentence().getPunctuation(), newTruth, newBudget); */
+        self.single_premise_task(
+            new_content,
+            self.current_task().sentence().punctuation().clone(),
+            new_truth,
+            new_budget,
+        );
+    }
+
+    /// 模拟`Memory.singlePremiseTask`
+    /// * 📌支持自定义的「标点」（附带「真值」）
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// Shared final operations by all single-premise rules, called in StructuralRules
+    ///
+    ///
+    /// @param newContent  The content of the sentence in task
+    /// @param punctuation The punctuation of the sentence in task
+    /// @param newTruth    The truth value of the sentence in task
+    /// @param newBudget   The budget value in task
+    fn single_premise_task(
+        &mut self,
+        new_content: Term,
+        punctuation: SentenceType<Self::Truth>,
+        new_truth: Self::Truth,
+        new_budget: Self::Budget,
+    ) {
+        /* 📄OpenNARS源码：
+        Task parentTask = currentTask.getParentTask();
+        if (parentTask != null && newContent.equals(parentTask.getContent())) { // circular structural inference
+            return;
+        }
+        Sentence taskSentence = currentTask.getSentence();
+        if (taskSentence.isJudgment() || currentBelief == null) {
+            newStamp = new Stamp(taskSentence.getStamp(), getTime());
+        } else { // to answer a question with negation in NAL-5 --- move to activated task?
+            newStamp = new Stamp(currentBelief.getStamp(), getTime());
+        }
+        Sentence newSentence = new Sentence(newContent, punctuation, newTruth, newStamp, taskSentence.getRevisable());
+        Task newTask = new Task(newSentence, newBudget, currentTask, null);
+        derivedTask(newTask); */
+        // 判重
+        let parent_task = self.current_task().parent_task();
+        if let Some(parent_task) = parent_task {
+            if *parent_task.content() == new_content {
+                return;
+            }
+        }
+        // 产生「新标点」与「新真值」
+        let mut new_punctuation = self.current_task().sentence().punctuation().clone();
+        // * 🆕🚩【2024-05-08 11:52:03】需要以此将「真值」插入「语句类型/标点」中（「问题」可能没有真值）
+        if let SentenceType::Judgement(truth) = &mut new_punctuation {
+            *truth = new_truth;
+        }
+        // 产生「新时间戳」
+        let task_sentence = self.current_task().sentence();
+        // * 🆕🚩【2024-05-08 14:40:12】此处通过「先决定『旧时间戳』再构造」避免了重复代码与非必要`unwrap`
+        let old_stamp = match (task_sentence.is_judgement(), self.current_belief()) {
+            (true, _) | (_, None) => task_sentence.stamp(), // * 📄对应`taskSentence.isJudgment() || currentBelief == null`
+            (_, Some(belief)) => belief.stamp(),
+        };
+        let new_stamp = <Self::Stamp as StampConcrete>::with_old(old_stamp, self.time());
+        // 语句、任务
+        let new_sentence = <Self::Sentence as SentenceConcrete>::new(
+            new_content,
+            punctuation,
+            self.new_stamp().clone(),
+            task_sentence.revisable(), // * 📌【2024-05-08 11:57:19】就这里是新增的
+        );
+        *self.new_stamp_mut() = new_stamp; // ! 🚩【2024-05-08 15:36:57】必须放在后边：借用检查不通过
+        let new_task = <Self::Task as TaskConcrete>::from_derive(
+            new_sentence,
+            new_budget,
+            Some(self.current_task().clone()),
+            None,
+        );
+        self.derived_task(new_task);
+    }
+
+    /* ---------- system working workCycle ---------- */
+
+    /// 模拟`Memory.workCycle`
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// An atomic working cycle of the system: process new Tasks, then fire a concept
+    ///
+    /// Called from Reasoner.tick only
+    ///
+    /// @param clock The current time to be displayed
+    fn work_cycle(&mut self) {
+        /* 📄OpenNARS源码：
+        recorder.append(" --- " + clock + " ---\n");
+        processNewTask();
+        if (noResult()) { // necessary?
+            processNovelTask();
+        }
+        if (noResult()) { // necessary?
+            processConcept();
+        }
+        novelTasks.refresh(); */
+        let time = self.time(); // ! 🚩【2024-05-08 15:38:00】必须先获取：借用问题
+        self.recorder_mut().put(Output::COMMENT {
+            content: format!("--- Cycle {time} ---"),
+        });
+        self.__process_new_task();
+        // TODO: `necessary?`可能也是自己需要考虑的问题：是否只在「处理无果」时继续
+        if self.no_result() {
+            // * 🚩🆕【2024-05-08 14:49:27】合并条件
+            self.__process_novel_task();
+            self.__process_concept();
+        }
+        // self.__novel_tasks().refresh(); // ! ❌【2024-05-08 14:49:48】这个方法是「观察者」用的，此处不用
+    }
+
+    /// 模拟`Memory.processNewTask`
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// Process the newTasks accumulated in the previous workCycle, accept input
+    /// ones and those that corresponding to existing concepts, plus one from the
+    /// buffer.
+    fn __process_new_task(&mut self) {
+        /* 📄OpenNARS源码：
+        Task task;
+        int counter = newTasks.size(); // don't include new tasks produced in the current workCycle
+        while (counter-- > 0) {
+            task = newTasks.removeFirst();
+            if (task.isInput() || (termToConcept(task.getContent()) != null)) { // new input or existing concept
+                immediateProcess(task);
+            } else {
+                Sentence s = task.getSentence();
+                if (s.isJudgment()) {
+                    double d = s.getTruth().getExpectation();
+                    if (d > Parameters.DEFAULT_CREATION_EXPECTATION) {
+                        novelTasks.putIn(task); // new concept formation
+                    } else {
+                        recorder.append("!!! Neglected: " + task + "\n");
+                    }
+                }
+            }
+        } */
+        // let mut task;
+        // // * 🚩逆序遍历，实际上又是做了个`-->`语法
+        // for counter in (0..self.__new_tasks().len()).rev() {
+        //     task = self.__new_tasks_mut().pop_front();
+        // }
+        // ! ❌【2024-05-08 14:55:26】莫只是照抄OpenNARS的逻辑：此处只是要「倒序取出」而已
+        while let Some(task) = self.__new_tasks_mut().pop_front() {
+            let task_concent = task.content();
+            if task.is_input() || self.term_to_concept(task_concent).is_some() {
+                self.__immediate_process(task);
+            } else {
+                let sentence = task.sentence();
+                if let SentenceType::Judgement(truth) = sentence.punctuation() {
+                    let d = truth.expectation();
+                    if d > DEFAULT_PARAMETERS.default_creation_expectation {
+                        self.__novel_tasks_mut().put_in(task);
+                    } else {
+                        self.recorder_mut().put(Output::COMMENT {
+                            content: format!("!!! Neglected: {}", task.content()),
+                            // TODO: 后续要将整个「任务」转换为字符串
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    /// 模拟`Memory.processNovelTask`
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// Select a novel task to process.
+    fn __process_novel_task(&mut self) {
+        /* 📄OpenNARS源码：
+        Task task = novelTasks.takeOut(); // select a task from novelTasks
+        if (task != null) {
+            immediateProcess(task);
+        } */
+        let task = self.__novel_tasks_mut().take_out();
+        if let Some(task) = task {
+            self.__immediate_process(task);
+        }
+    }
+
+    /// 模拟`Memory.processConcept`
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// Select a concept to fire.
+    fn __process_concept(&mut self) {
+        /* 📄OpenNARS源码：
+        currentConcept = concepts.takeOut();
+        if (currentConcept != null) {
+            currentTerm = currentConcept.getTerm();
+            recorder.append(" * Selected Concept: " + currentTerm + "\n");
+            concepts.putBack(currentConcept); // current Concept remains in the bag all the time
+            currentConcept.fire(); // a working workCycle
+        } */
+        let concept = self.__concepts_mut().take_out();
+        if let Some(current_concept) = concept {
+            let current_term = current_concept.term();
+            self.recorder_mut().put(Output::COMMENT {
+                // * 🚩【2024-05-07 23:05:14】目前仍是将词项转换为「词法Narsese」
+                content: format!("* Selected Concept: {}", current_term),
+            });
+            let key = current_concept.key().clone(); // * 🚩🆕【2024-05-08 15:08:22】拷贝「元素id」以便在「放回」之后仍然能索引
+            self.__concepts_mut().put_back(current_concept);
+            // current_concept.fire(); // ! ❌【2024-05-08 15:09:04】不采用：放回了还用，将导致引用混乱
+            self.__fire_concept(&key);
+        }
+    }
+
+    /// 🆕模拟`Concept.fire`
+    /// * 📌【2024-05-08 15:06:09】不能让「概念」干「记忆区」干的事
+    /// * 📝OpenNARS中从「记忆区」的[「处理概念」](Memory::process_concept)方法中调用
+    /// * ⚠️依赖：[`crate::inference::RuleTables`]
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// An atomic step in a concept, only called in {@link Memory#processConcept}
+    fn __fire_concept(&mut self, concept_key: &Self::Key) {
+        /* 📄OpenNARS源码：
+        TaskLink currentTaskLink = taskLinks.takeOut();
+        if (currentTaskLink == null) {
+            return;
+        }
+        memory.currentTaskLink = currentTaskLink;
+        memory.currentBeliefLink = null;
+        memory.getRecorder().append(" * Selected TaskLink: " + currentTaskLink + "\n");
+        Task task = currentTaskLink.getTargetTask();
+        memory.currentTask = task; // one of the two places where this variable is set
+        // memory.getRecorder().append(" * Selected Task: " + task + "\n"); // for
+        // debugging
+        if (currentTaskLink.getType() == TermLink.TRANSFORM) {
+            memory.currentBelief = null;
+            RuleTables.transformTask(currentTaskLink, memory); // to turn this into structural inference as below?
+        } else {
+            int termLinkCount = Parameters.MAX_REASONED_TERM_LINK;
+            // while (memory.noResult() && (termLinkCount > 0)) {
+            while (termLinkCount > 0) {
+                TermLink termLink = termLinks.takeOut(currentTaskLink, memory.getTime());
+                if (termLink != null) {
+                    memory.getRecorder().append(" * Selected TermLink: " + termLink + "\n");
+                    memory.currentBeliefLink = termLink;
+                    RuleTables.reason(currentTaskLink, termLink, memory);
+                    termLinks.putBack(termLink);
+                    termLinkCount--;
+                } else {
+                    termLinkCount = 0;
+                }
+            }
+        }
+        taskLinks.putBack(currentTaskLink); */
+        let mut this = self
+            .__concepts_mut()
+            .get_mut(concept_key)
+            .expect("不可能失败");
+        let current_task_link = this.__task_links_mut().take_out();
+        if let Some(current_task_link) = current_task_link {
+            *self.current_task_link_mut() = current_task_link;
+            // *self.current_belief_link_mut() = None; // ? 【2024-05-08 15:41:21】这个有意义吗
+            todo!("// TODO: 有待实现")
+        }
+    }
+
+    /* ---------- task processing ---------- */
+
+    /// 模拟`Memory.immediateProcess`
+    /// * 📝OpenNARS中对「任务处理」都需要在「常数时间」中运行完毕
+    ///   * 💡【2024-05-08 15:34:49】这也是为何「可交换词项变量匹配」需要伪随机「shuffle」
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// Immediate processing of a new task,
+    /// in constant time Local processing,
+    /// in one concept only
+    ///
+    /// @param task the task to be accepted
+    fn __immediate_process(&mut self, task: Self::Task) {
+        /* 📄OpenNARS源码：
+        currentTask = task; // one of the two places where this variable is set
+        recorder.append("!!! Insert: " + task + "\n");
+        currentTerm = task.getContent();
+        currentConcept = getConcept(currentTerm);
+        if (currentConcept != null) {
+            activateConcept(currentConcept, task.getBudget());
+            currentConcept.directProcess(task);
+        } */
         todo!("// TODO: 有待实现")
     }
+
+    /* ---------- display ---------- */
+    // ! ❌【2024-05-08 15:42:42】目前不复刻「显示」类方法
+    // * conceptsStartPlay
+    // * taskBuffersStartPlay
+    // * report
+    // * toString
+    // * toStringLongIfNotNull
+    // * toStringLongIfNotNull
+    // * toStringIfNotNull
+
+    // * ✅`getTaskForgettingRate`已在开头实现
+    // * ✅`getBeliefForgettingRate`已在开头实现
+    // * ✅`getConceptForgettingRate`已在开头实现
+
+    // ! ❌【2024-05-08 15:44:26】暂不模拟`Memory.NullInferenceRecorder`
 }
 
 /// [`Memory`]的具体版本
@@ -731,4 +1132,16 @@ pub trait MemoryConcrete: Memory + Sized {
             task_forgetting_rate,
         )
     }
+}
+
+/// TODO: 初代实现
+mod impl_v1 {
+    use super::*;
+}
+pub use impl_v1::*;
+
+/// TODO: 单元测试
+#[cfg(test)]
+mod tests {
+    use super::*;
 }

@@ -23,6 +23,7 @@ use std::{
 
 /// 模拟OpenNARS `nars.entity.Sentence.punctuation`和OpenNARS`nars.entity.Sentence.truth`
 /// * 🎯应对「判断有真值，问题无真值」的情况
+#[doc(alias = "Punctuation")]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum SentenceType<T: TruthValueConcrete> {
     /// 🆕「判断」有真值

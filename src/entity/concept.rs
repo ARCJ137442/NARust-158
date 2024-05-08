@@ -1,5 +1,6 @@
 //! 🎯复刻OpenNARS `nars.entity.Concept`
-//! TODO: 着手开始复刻
+//!
+//! * ✅【2024-05-08 15:46:28】目前已初步实现方法API
 
 use super::{
     BudgetValue, Item, Sentence, SentenceConcrete, StampConcrete, Task, TaskConcrete,
@@ -361,7 +362,7 @@ pub trait Concept: Item {
     /// 模拟`Concept.insertTaskLink`
     /// * 🚩【2024-05-07 22:29:32】应该是个关联函数
     ///   * 💭插入「词项链」要使用「记忆区」但「记忆区」却又循环操作「概念」本身（获取所有权），这不会冲突吗？
-    /// 
+    ///
     /// TODO: 🏗️【2024-05-07 22:31:05】有待适配
     ///
     /// # 📄OpenNARS
@@ -513,48 +514,8 @@ pub trait Concept: Item {
 
     /* ---------- main loop ---------- */
 
-    /// 模拟`Concept.fire`
-    /// * 📝OpenNARS中从「记忆区」的[「处理概念」](Memory::process_concept)方法中调用
-    /// * ⚠️依赖：[`crate::inference::RuleTables`]
-    ///
-    /// # 📄OpenNARS
-    ///
-    /// An atomic step in a concept, only called in {@link Memory#processConcept}
-    fn fire() {
-        /* 📄OpenNARS源码：
-        TaskLink currentTaskLink = taskLinks.takeOut();
-        if (currentTaskLink == null) {
-            return;
-        }
-        memory.currentTaskLink = currentTaskLink;
-        memory.currentBeliefLink = null;
-        memory.getRecorder().append(" * Selected TaskLink: " + currentTaskLink + "\n");
-        Task task = currentTaskLink.getTargetTask();
-        memory.currentTask = task; // one of the two places where this variable is set
-        // memory.getRecorder().append(" * Selected Task: " + task + "\n"); // for
-        // debugging
-        if (currentTaskLink.getType() == TermLink.TRANSFORM) {
-            memory.currentBelief = null;
-            RuleTables.transformTask(currentTaskLink, memory); // to turn this into structural inference as below?
-        } else {
-            int termLinkCount = Parameters.MAX_REASONED_TERM_LINK;
-            // while (memory.noResult() && (termLinkCount > 0)) {
-            while (termLinkCount > 0) {
-                TermLink termLink = termLinks.takeOut(currentTaskLink, memory.getTime());
-                if (termLink != null) {
-                    memory.getRecorder().append(" * Selected TermLink: " + termLink + "\n");
-                    memory.currentBeliefLink = termLink;
-                    RuleTables.reason(currentTaskLink, termLink, memory);
-                    termLinks.putBack(termLink);
-                    termLinkCount--;
-                } else {
-                    termLinkCount = 0;
-                }
-            }
-        }
-        taskLinks.putBack(currentTaskLink); */
-        todo!("// TODO: 有待实现")
-    }
+    // ! ❌【2024-05-08 15:06:45】不在此处模拟`Concept.fire`：本该是记忆区干的事
+    // * 📄参考[`Memory::__fire_concept`]
 
     // ! ❌【2024-05-06 21:23:00】暂不实现与「呈现」「观察」有关的方法
 }

@@ -128,6 +128,8 @@ pub trait TaskConcrete: Task + Sized {
     }
 
     /// 模拟`new Task(Sentence s, BudgetValue b, Task parentTask, Sentence parentBelief)`
+    /// * 🚩【2024-05-08 14:33:40】锁定保持[`Option`]：不能再假定为[`Some`]了
+    ///   * 📄参见[`crate::storage::Memory::single_premise_task`]
     ///
     /// # 📄OpenNARS
     ///
@@ -161,15 +163,15 @@ pub trait TaskConcrete: Task + Sized {
     fn from_activate(
         sentence: Self::Sentence,
         budget: Self::Budget,
-        parent_task: Option<RC<Self>>,
-        parent_belief: Option<RC<Self::Sentence>>,
-        solution: Option<RC<Self::Sentence>>,
+        parent_task: RC<Self>,
+        parent_belief: RC<Self::Sentence>,
+        solution: RC<Self::Sentence>,
     ) -> Self {
         /* 📄OpenNARS源码：
         this(s, b, parentTask, parentBelief);
         this.bestSolution = solution; */
-        let mut this = Self::from_derive(sentence, budget, parent_task, parent_belief);
-        *this.best_solution_mut() = solution.clone();
+        let mut this = Self::from_derive(sentence, budget, Some(parent_task), Some(parent_belief));
+        *this.best_solution_mut() = Some(solution.clone());
         this // ? 【2024-05-08 11:14:29】💭是否可以直接使用`Self::new`而无需再赋值
              // TODO: 🏗️【2024-05-08 11:15:12】日后在「有足够单元测试」的环境下精简
     }
