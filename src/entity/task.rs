@@ -102,19 +102,11 @@ pub trait Task {
 }
 
 pub trait TaskConcrete: Task + Sized {
-    /// 模拟`new Task(Sentence s, BudgetValue b, Task parentTask, Sentence parentBelief, Sentence solution)`
+    /// 🆕模拟`new Task(Sentence s, BudgetValue b, Task parentTask, Sentence parentBelief, Sentence solution)`
     /// * 🚩完全参数的构造函数
-    ///
-    /// # 📄OpenNARS
-    ///
-    /// Constructor for an activated task
-    ///
-    /// @param s            The sentence
-    /// @param b            The budget
-    /// @param parentTask   The task from which this new task is derived
-    /// @param parentBelief The belief from which this new task is derived
-    /// @param solution     The belief to be used in future inference
-    fn new(
+    /// * 🚩【2024-05-08 11:21:58】函数签名与[`Self::from_activate`]相同，但语义并不相似
+    ///   * ⚠️私有性：该函数本身应该是【更为内部】【不应被外界直接调用】的
+    fn __new(
         sentence: Self::Sentence,
         budget: Self::Budget,
         parent_task: Option<RC<Self>>,
@@ -132,7 +124,7 @@ pub trait TaskConcrete: Task + Sized {
     /// @param b The budget
     #[inline(always)]
     fn from_input(sentence: Self::Sentence, budget: Self::Budget) -> Self {
-        Self::new(sentence, budget, None, None, None)
+        Self::__new(sentence, budget, None, None, None)
     }
 
     /// 模拟`new Task(Sentence s, BudgetValue b, Task parentTask, Sentence parentBelief)`
@@ -152,7 +144,34 @@ pub trait TaskConcrete: Task + Sized {
         parent_task: Option<RC<Self>>,
         parent_belief: Option<RC<Self::Sentence>>,
     ) -> Self {
-        Self::new(sentence, budget, parent_task, parent_belief, None)
+        Self::__new(sentence, budget, parent_task, parent_belief, None)
+    }
+
+    /// 模拟`new Task(Sentence s, BudgetValue b, Task parentTask, Sentence parentBelief, Sentence solution)`
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// Constructor for an activated task
+    ///
+    /// @param s            The sentence
+    /// @param b            The budget
+    /// @param parentTask   The task from which this new task is derived
+    /// @param parentBelief The belief from which this new task is derived
+    /// @param solution     The belief to be used in future inference
+    fn from_activate(
+        sentence: Self::Sentence,
+        budget: Self::Budget,
+        parent_task: Option<RC<Self>>,
+        parent_belief: Option<RC<Self::Sentence>>,
+        solution: Option<RC<Self::Sentence>>,
+    ) -> Self {
+        /* 📄OpenNARS源码：
+        this(s, b, parentTask, parentBelief);
+        this.bestSolution = solution; */
+        let mut this = Self::from_derive(sentence, budget, parent_task, parent_belief);
+        *this.best_solution_mut() = solution.clone();
+        this // ? 【2024-05-08 11:14:29】💭是否可以直接使用`Self::new`而无需再赋值
+             // TODO: 🏗️【2024-05-08 11:15:12】日后在「有足够单元测试」的环境下精简
     }
 }
 
@@ -322,7 +341,7 @@ mod impl_v1 {
         B: BudgetValueConcrete<E = <S::Truth as TruthValue>::E>,
     {
         #[inline(always)]
-        fn new(
+        fn __new(
             s: Self::Sentence,
             b: Self::Budget,
             parent_task: Option<RC<Self>>,

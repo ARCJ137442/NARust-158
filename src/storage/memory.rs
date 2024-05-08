@@ -7,7 +7,7 @@
 
 use crate::{
     entity::*,
-    global::{ClockTime, Float},
+    global::{ClockTime, Float, RC},
     inference::*,
     language::Term,
     nars::DEFAULT_PARAMETERS,
@@ -234,13 +234,14 @@ pub trait Memory: ReasonContext<Memory = Self> {
     fn current_task_link_mut(&mut self) -> &mut Self::TaskLink;
 
     /// 模拟`Memory.currentTask`
+    /// * 🚩【2024-05-08 11:17:37】为强调「引用」需要，此处返回[`RC`]而非引用
     ///
     /// # 📄OpenNARS
     ///
     /// The selected Task
-    fn current_task(&self) -> &Self::Task;
+    fn current_task(&self) -> &RC<Self::Task>;
     /// [`Memory::current_task`]的可变版本
-    fn current_task_mut(&mut self) -> &mut Self::Task;
+    fn current_task_mut(&mut self) -> &mut RC<Self::Task>;
 
     /// 模拟`Memory.currentBeliefLink`
     ///
@@ -330,10 +331,17 @@ pub trait Memory: ReasonContext<Memory = Self> {
     ///
     /// TODO: 🏗️【2024-05-06 21:14:33】后续再考虑其实际存储地点
     #[doc(alias = "get_time")]
-    fn silence_value(&self) -> ClockTime {
+    fn silence_value(&self) -> usize {
         /* 📄OpenNARS源码：
         return reasoner.getTime(); */
         todo!("// TODO: 后续要迁移")
+    }
+
+    /// 🆕简化`self.silence_value() as Float / 100 as Float`逻辑
+    /// * 🎯统一表示「音量」的百分比（静音の度）
+    #[inline(always)]
+    fn silence_percent(&self) -> Float {
+        self.silence_value() as Float / 100 as Float
     }
 
     /// 模拟`Memory.noResult`
@@ -546,6 +554,7 @@ pub trait Memory: ReasonContext<Memory = Self> {
     }
 
     /// 模拟`Memory.activatedTask`
+    /// * 🚩【2024-05-08 11:19:18】因传参需要，部分地方使用[`RC`]
     ///
     /// # 📄OpenNARS
     ///
@@ -554,7 +563,12 @@ pub trait Memory: ReasonContext<Memory = Self> {
     /// @param budget          The budget value of the new Task
     /// @param sentence        The content of the new Task
     /// @param candidateBelief The belief to be used in future inference, for forward/backward correspondence
-    fn activated_task(&mut self) {
+    fn activated_task(
+        &mut self,
+        budget: &Self::Budget,
+        sentence: RC<Self::Sentence>,
+        candidate_belief: RC<Self::Sentence>,
+    ) {
         /* 📄OpenNARS源码：
         Task task = new Task(sentence, budget, currentTask, sentence, candidateBelief);
         recorder.append("!!! Activated: " + task.toString() + "\n");
@@ -567,7 +581,36 @@ pub trait Memory: ReasonContext<Memory = Self> {
             }
         }
         newTasks.add(task); */
-        todo!("// TODO: 有待实现")
+        let task = <Self::Task as TaskConcrete>::from_activate(
+            (*sentence).clone(),
+            budget.clone(),
+            Some(self.current_task().clone()),
+            Some(sentence.clone()),
+            Some(candidate_belief),
+        );
+        let narsese = NarseseValue::from_term(task.content().into());
+        self.recorder_mut().put(Output::UNCLASSIFIED {
+            r#type: "ACTIVATED".into(),
+            // * 🚩【2024-05-07 23:05:14】目前仍是将词项转换为「词法Narsese」
+            // TODO: 后续要将整个「任务」转换为字符串
+            content: format!("!!! Activated: {}", task.content()),
+            narsese: Some(narsese),
+        });
+        // 问题⇒尝试输出
+        if let SentenceType::Question = sentence.punctuation() {
+            let s = task.budget().summary().to_float();
+            if s > self.silence_percent() {
+                let narsese = NarseseValue::from_term(task.content().into());
+                self.recorder_mut().put(Output::OUT {
+                    // * 🚩【2024-05-07 23:05:14】目前仍是将词项转换为「词法Narsese」
+                    // TODO: 后续要将整个「任务」转换为字符串
+                    content_raw: format!("!!! Derived: {}", task.content()),
+                    narsese: Some(narsese),
+                });
+            }
+        }
+        // 追加到「推理上下文」的「新任务」
+        self.__new_tasks_mut().push_back(task);
     }
 
     /// 模拟`Memory.derivedTask`
@@ -596,8 +639,7 @@ pub trait Memory: ReasonContext<Memory = Self> {
         if task.above_threshold(budget_threshold) {
             let narsese = NarseseValue::from_term(task.content().into());
             let budget_summary = task.summary().to_float();
-            let min_silent = self.silence_value() as Float / 100 as Float;
-            if budget_summary > min_silent {
+            if budget_summary > self.silence_percent() {
                 self.recorder_mut().put(Output::OUT {
                     // * 🚩【2024-05-07 23:05:14】目前仍是将词项转换为「词法Narsese」
                     // TODO: 后续要将整个「任务」转换为字符串
