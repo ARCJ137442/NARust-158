@@ -2,7 +2,7 @@
 //! * 🚩【2024-05-02 21:51:38】此处将会对接[NAVM.rs](navm)与[BabelNAR.rs](babel_nar)
 //!   * ⚠️后续布局会和OpenNARS有很大不同
 //!
-//! # 📄OpenNARS `nars.main` | Top-level classes of the system, when running with a GUI
+//! # 📄OpenNARS
 //!
 //! This package contains the top classes of the system.
 //!
@@ -10,7 +10,7 @@
 //!
 //! `Reasoner`: controls the interaction between the memory and the communication channels.
 //!
-//! # 📄OpenNARS `nars.main_nogui` | Top-level classes of the system, when running in batch mode
+//! # 📄OpenNARS
 //!
 //! This package contains the top classes of the system.
 //!

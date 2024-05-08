@@ -17,7 +17,7 @@ use nar_dev_utils::pipe;
 
 /// 【派生】用于「短浮点」的实用方法
 ///
-/// # 📄OpenNARS `nars.inference.UtilityFunctions`
+/// # 📄OpenNARS
 ///
 /// Common functions on real numbers, mostly in [0,1].
 pub trait UtilityFunctions: ShortFloat {

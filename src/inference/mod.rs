@@ -1,7 +1,7 @@
 //! NARS中有关「推理」的内容
 //! * 🚩【2024-05-02 15:54:15】计划通过「全有默认实现的模板特征」作为功能实现方法
 //!
-//! # 📄OpenNARS `nars.inference` | The inference rules and control functions
+//! # 📄OpenNARS
 //!
 //! The entry point of the package is `RuleTables`, which dispatch the premises (a task, and maybe also a belief) to various rules, according to their type combination.
 //!

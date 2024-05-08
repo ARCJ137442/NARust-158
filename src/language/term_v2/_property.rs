@@ -3,7 +3,11 @@
 //!   * 📌至少并非OpenNARS原先所定义的
 
 use super::*;
+use crate::ToDisplayAndBrief;
 use nar_dev_utils::macro_once;
+use narsese::{
+    conversion::string::impl_lexical::format_instances::FORMAT_ASCII, lexical::Term as TermLexical,
+};
 
 /// 手动实现「判等」逻辑
 /// * 📄OpenNARS `Term.equals` 方法
@@ -115,9 +119,19 @@ impl Term {
 /// 实现[`Display`]
 /// * 🎯调试时便于展现内部结构
 /// * ⚡性能友好
+/// * ⚠️并非CommonNarsese语法
 impl std::fmt::Display for Term {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.format_name())
+    }
+}
+
+/// 自动实现[`ToDisplayAndBrief`]
+/// * 🚩【2024-05-08 23:30:59】「简略显示」与「完全显示」相同
+/// * 🚩【2024-05-08 23:31:32】目前使用ASCII格式化器去做，性能可能会低
+impl ToDisplayAndBrief for Term {
+    fn to_display(&self) -> String {
+        FORMAT_ASCII.format(&TermLexical::from(self))
     }
 }
 

@@ -2,15 +2,15 @@
 //! * ✅【2024-05-05 21:38:53】基本方法复刻完毕
 
 use super::{BudgetValueConcrete, Item, Sentence, SentenceConcrete, TruthValue};
-use crate::{global::RC, storage::BagKey};
-use std::{fmt::Debug, hash::Hash};
+use crate::{global::RC, storage::BagKey, ToDisplayAndBrief};
+use std::hash::Hash;
 
-/// 模拟OpenNARS `nars.entity.Task`
+/// 模拟`nars.entity.Task`
 ///
 /// # 📄OpenNARS
 ///
 /// A task to be processed, consists of a Sentence and a BudgetValue
-pub trait Task: Debug {
+pub trait Task: ToDisplayAndBrief {
     // TODO: 可能后续统一要求`Display`
     /// 绑定的「语句」类型
     ///
@@ -100,6 +100,51 @@ pub trait Task: Debug {
     }
 
     // * ✅`merge`已通过「自动实现」被自动模拟
+
+    /// 模拟`Task.toString`
+    /// * 🚩【2024-05-08 23:56:19】现在借道[`ToDisplayAndBrief`]予以实现
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// Get a String representation of the Task
+    ///
+    /// @return The Task as a String
+    fn __to_display(&self) -> String
+    where
+        Self: Sized,
+    {
+        /* 📄OpenNARS源码：
+        StringBuilder s = new StringBuilder();
+        s.append(super.toString()).append(" ");
+        s.append(getSentence().getStamp());
+        if (parentTask != null) {
+            s.append("  \n from task: ").append(parentTask.toStringBrief());
+            if (parentBelief != null) {
+                s.append("  \n from belief: ").append(parentBelief.toStringBrief());
+            }
+        }
+        if (bestSolution != null) {
+            s.append("  \n solution: ").append(bestSolution.toStringBrief());
+        }
+        return s.toString(); */
+        let mut s = String::new();
+        s += &<Self as Item>::__to_display(self);
+        s.push(' ');
+        s.push_str(&self.stamp().to_display());
+        if let Some(parent_task) = self.parent_task() {
+            s += "\n from task: ";
+            s += &parent_task.to_display();
+        }
+        if let Some(parent_belief) = self.parent_belief() {
+            s += "\n from belief: "; // * 🚩🆕【2024-05-09 00:50:41】此处不采用嵌套：都可能有
+            s += &parent_belief.to_display();
+        }
+        if let Some(best_solution) = self.best_solution() {
+            s += "\n solution: ";
+            s += &best_solution.to_display();
+        }
+        s
+    }
 }
 
 pub trait TaskConcrete: Task + Clone + Sized {
@@ -250,7 +295,7 @@ impl<T: Task> Item for T {
 /// 初代实现
 mod impl_v1 {
     use super::*;
-    use crate::storage::BagKeyV1;
+    use crate::{__impl_to_display_and_display, storage::BagKeyV1};
     use std::fmt::Debug;
 
     /// [`Task`]的初代实现
@@ -267,6 +312,17 @@ mod impl_v1 {
         parent_task: Option<RC<Self>>,
         parent_belief: Option<RC<S>>,
         best_solution: Option<RC<S>>,
+    }
+
+    // * 🚩自动实现`ToDisplayAndBrief`
+    __impl_to_display_and_display! {
+        @(to_display;;) // * 🚩只有`to_display`一个
+        {S, K, B}
+        TaskV1<S, K, B> as Task
+        where
+            S: SentenceConcrete,
+            K: BagKey,
+            B: BudgetValueConcrete<E = <S::Truth as TruthValue>::E>,
     }
 
     /// 逐个字段实现
@@ -352,7 +408,7 @@ mod impl_v1 {
             solution: Option<RC<Self::Sentence>>,
         ) -> Self {
             Self {
-                key: s.to_key(),
+                key: s.to_key_string(),
                 sentence: s,
                 budget: b,
                 parent_task,

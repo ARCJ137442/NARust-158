@@ -3,13 +3,12 @@
 //! # 分派器
 //! * 伪随机数生成器
 //!
-//! # 📄OpenNARS `nars.storage.Distributor`
+//! # 📄OpenNARS
 //!
 //! A pseudo-random number generator, used in Bag.
 
-use std::fmt::Debug;
-
 use nar_dev_utils::manipulate;
+use std::fmt::Debug;
 
 /// 伪随机数分派器
 /// * 🎯用于`Bag`结构的伪随机加权分派
@@ -105,7 +104,7 @@ pub struct DistributorV1 {
     ///   * 📝Rust中[`Vec`]附带一个`capacity`以便实现「变长数组」，但实际上只需要一块恒定的内存（指针）
     ///   * 🔗<https://johnbsmith.github.io/Informatik/Rust/Dateien/Rust-container-cheat-sheet.pdf>
     ///
-    /// # 📄OpenNARS `Distributor.order`
+    /// # 📄OpenNARS
     ///
     /// Shuffled sequence of index numbers
     order: Box<[usize]>,

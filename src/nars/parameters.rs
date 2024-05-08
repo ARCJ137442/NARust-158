@@ -50,7 +50,7 @@ macro_once! {
     }
     /// NARS运行的「超参数」
     ///
-    /// # 📄OpenNARS `nars.main_nogui.Parameters`
+    /// # 📄OpenNARS
     ///
     /// Collected system parameters. To be modified before compiling.
     #[derive(Debug, Clone, Copy, PartialEq)]

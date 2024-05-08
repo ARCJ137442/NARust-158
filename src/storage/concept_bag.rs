@@ -8,7 +8,7 @@ use crate::{
     language::Term,
 };
 
-/// 模拟OpenNARS `nars.entity.ConceptBag`
+/// 模拟`nars.entity.ConceptBag`
 /// * 📌【2024-05-04 17:30:35】实际上就是「袋+概念+特定参数」
 ///   * 📌目前不限制构造过程（即 不覆盖方法）
 /// * 🚩有关「固定容量」与「遗忘时长」交给构造时决定

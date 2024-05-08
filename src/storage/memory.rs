@@ -12,6 +12,7 @@ use crate::{
     language::Term,
     nars::DEFAULT_PARAMETERS,
     storage::*,
+    ToDisplayAndBrief,
 };
 use narsese::api::NarseseValue;
 use std::collections::VecDeque;
@@ -98,7 +99,7 @@ use super::{ConceptBag, NovelTaskBag};
 use navm::output::Output;
 pub use report::*;
 
-/// 模拟OpenNARS `nars.entity.Memory`
+/// 模拟`nars.entity.Memory`
 /// * 🚩直接通过「要求[『推理上下文』](ReasonContext)」获得完整的「类型约束」
 ///   * ✅一并解决「上下文各种完全限定语法」的语法噪音问题
 /// * 🚩【2024-05-08 16:34:15】因为"<as [`RuleTables`]>"的需要，增加约束[`Sized`]
@@ -1038,7 +1039,10 @@ pub trait Memory: ReasonContext<Memory = Self> + Sized {
         if let Some(current_task_link) = current_task_link {
             // ! 🚩【2024-05-08 16:19:31】必须在「修改」之前先报告（读取）
             self.recorder_mut().put(Output::COMMENT {
-                content: format!("* Selected TaskLink: {:?}", current_task_link),
+                content: format!(
+                    "* Selected TaskLink: {}",
+                    &Task::__to_display(current_task_link.target())
+                ),
                 // TODO: 后续要将整个「任务」转换为字符串
             });
             *self.current_task_link_mut() = current_task_link;
@@ -1069,7 +1073,10 @@ pub trait Memory: ReasonContext<Memory = Self> + Sized {
                 }
                 for term_link in term_links_to_process {
                     self.recorder_mut().put(Output::COMMENT {
-                        content: format!("* Selected TermLink: {:?}", term_link),
+                        content: format!(
+                            "* Selected TermLink: {}",
+                            Term::to_display(term_link.target())
+                        ),
                         // TODO: 后续要将整个「任务」转换为字符串
                     });
                     *self.current_belief_link_mut() = Some(term_link);

@@ -9,19 +9,15 @@
 //!   * 📄时间戳需要结合推理器自身，以及「记忆区」「概念」等
 
 use super::{Stamp, StampConcrete, TruthValueConcrete};
-use crate::{io::symbols, language::Term};
-use nar_dev_utils::ToDebug;
-use std::{
-    fmt::Debug,
-    hash::{Hash, Hasher},
-};
+use crate::{io::symbols, language::Term, ToDisplayAndBrief};
+use std::hash::{Hash, Hasher};
 
-// /// 🆕模拟OpenNARS `nars.entity.Sentence.punctuation`
+// /// 🆕模拟`nars.entity.Sentence.punctuation`
 // /// * 📌作为一个枚举，相比「字符」更能指定其范围
 // /// * 🚩【2024-05-05 17:08:35】目前直接复用[「枚举Narsese」](narsese::enum_narsese)的工作
 // pub type Punctuation = narsese::enum_narsese::Punctuation;
 
-/// 模拟OpenNARS `nars.entity.Sentence.punctuation`和OpenNARS`nars.entity.Sentence.truth`
+/// 模拟`nars.entity.Sentence.punctuation`和OpenNARS`nars.entity.Sentence.truth`
 /// * 🎯应对「判断有真值，问题无真值」的情况
 #[doc(alias = "Punctuation")]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -45,14 +41,14 @@ impl<T: TruthValueConcrete> SentenceType<T> {
     }
 }
 
-/// 模拟OpenNARS `nars.entity.Sentence`
+/// 模拟`nars.entity.Sentence`
 ///
 /// # 📄OpenNARS
 ///
 /// A Sentence is an abstract class, mainly containing a Term, a TruthValue, and a Stamp.
 ///
 /// It is used as the premises and conclusions of all inference rules.
-pub trait Sentence: Debug {
+pub trait Sentence: ToDisplayAndBrief {
     // TODO: 可能后续统一要求`Display`
     /// 绑定的「真值」类型
     type Truth: TruthValueConcrete;
@@ -239,17 +235,15 @@ pub trait Sentence: Debug {
     /// * 📝这个函数似乎被用来给Task作为「Item」提供索引
     ///   * 📄OpenNARS中没有用到时间戳
     /// * 💭实际上只要「独一无二」即可
-    /// * 🚩只要求作[`Debug`]处理
+    /// * 🚩【2024-05-08 22:18:06】目前直接对接[`ToDisplayAndBrief`]
     ///
     /// # 📄OpenNARS
     ///
     /// Get a String representation of the sentence for key of Task and TaskLink
     ///
     /// @return The String
-    fn to_key(&self) -> String
-    where
-        Self::Truth: Debug,
-    {
+    #[doc(alias = "to_key")]
+    fn to_key_string(&self) -> String {
         // TODO: 【2024-05-05 19:46:12】这个方法似乎应该被迁移到「任务」上，不应绑定字符串类型，也不应触及上层「任务」「Item」等
         /* 📄OpenNARS源码：
         StringBuilder s = new StringBuilder();
@@ -264,9 +258,53 @@ pub trait Sentence: Debug {
         s.push(self.punctuation().punctuation_char());
         s.push(' ');
         if let Some(truth) = self.truth() {
-            s += &truth.to_debug();
+            s += &truth.to_display_brief();
         }
         s
+    }
+
+    /// 模拟`Sentence.toString`
+    /// * 🚩【2024-05-08 23:34:34】现在借道[`ToDisplayAndBrief`]予以实现
+    /// * 🚩与[`Sentence::to_key_string`]不同的是：会纳入时间戳，并且全都是「详细信息」
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// Get a String representation of the sentence
+    ///
+    /// @return The String
+    fn __to_display(&self) -> String {
+        /* 📄OpenNARS源码：
+        StringBuilder s = new StringBuilder();
+        s.append(content.toString());
+        s.append(punctuation).append(" ");
+        if (truth != null) {
+            s.append(truth.toStringBrief());
+        }
+        s.append(stamp.toString());
+        return s.toString(); */
+        let mut s = String::new();
+        s += &self.content().to_string();
+        s.push(self.punctuation().punctuation_char());
+        s.push(' ');
+        if let Some(truth) = self.truth() {
+            s += &truth.to_display();
+        }
+        s += &self.stamp().to_display();
+        s
+    }
+
+    /// 模拟`Sentence.toStringBrief`
+    /// * 🚩【2024-05-08 23:37:44】现在借道[`Sentence::to_key_string`]予以实现
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// Get a String representation of the sentence, with 2-digit accuracy
+    ///
+    /// @return The String
+    fn __to_display_brief(&self) -> String {
+        /* 📄OpenNARS源码：
+        return toKey() + stamp.toString(); */
+        self.to_key_string() + &self.stamp().to_display()
     }
 }
 
@@ -456,6 +494,7 @@ pub trait SentenceConcrete: Sentence + Clone + Hash + PartialEq {
 ///   * 📄[「概念」](super::Concept)中的「信念表」
 mod impl_v1 {
     use super::*;
+    use crate::__impl_to_display_and_display;
 
     #[derive(Debug, Clone)]
     pub struct SentenceV1<T: TruthValueConcrete, S: StampConcrete> {
@@ -492,6 +531,15 @@ mod impl_v1 {
         fn hash<H: Hasher>(&self, state: &mut H) {
             self.__hash(state);
         }
+    }
+
+    // * 🚩自动实现`ToDisplayAndBrief`
+    __impl_to_display_and_display! {
+        {T, S}
+        SentenceV1<T, S> as Sentence
+        where
+            T: TruthValueConcrete,
+            S: StampConcrete,
     }
 
     impl<T, S> Sentence for SentenceV1<T, S>

@@ -7,48 +7,34 @@ use super::ShortFloatV1;
 use crate::{
     global::Float,
     io::{TRUTH_VALUE_MARK, VALUE_SEPARATOR},
+    ToDisplayAndBrief,
 };
 use std::fmt::Debug;
 use std::hash::Hash;
 
-/// 模拟OpenNARS `nars.entity.TruthValue`
+/// 模拟`nars.entity.TruthValue`
 ///
 /// # 📄OpenNARS
 ///
 /// Frequency and confidence.
-pub trait TruthValue: Debug {
-    // TODO: 可能后续统一要求`Display`
+pub trait TruthValue: ToDisplayAndBrief {
     /// 一种类型只可能有一种「证据值」
     /// * ✅兼容OpenNARS `ShortFloat`
     type E: ShortFloat;
 
-    /// 🆕不使用「字符」而是用统一的「字符串」
-    ///
-    /// # 📄OpenNARS `TruthValue.DELIMITER`
-    ///
-    /// The character that marks the two ends of a truth value
-    const DELIMITER: char = TRUTH_VALUE_MARK;
-
-    /// 🆕不使用「字符」而是用统一的「字符串」
-    ///
-    /// # 📄OpenNARS `TruthValue.SEPARATOR`
-    ///
-    /// The character that separates the factors in a truth value
-    const SEPARATOR: char = VALUE_SEPARATOR;
-
     // ! 🚩【2024-05-04 17:12:30】现在有关「构造」「转换」的方法，均被迁移至[`TruthValueConcrete`]特征中
 
-    /// 模拟OpenNARS `TruthValue.frequency`、`getFrequency`
+    /// 模拟`TruthValue.frequency`、`getFrequency`
     /// * 📌此处仍然直接返回（新的）「证据值」而非浮点
     fn frequency(&self) -> Self::E;
     fn frequency_mut(&mut self) -> &mut Self::E;
 
-    /// 模拟OpenNARS `TruthValue.confidence`、`getConfidence`
+    /// 模拟`TruthValue.confidence`、`getConfidence`
     /// * 📌此处仍然直接返回（新的）「证据值」而非浮点
     fn confidence(&self) -> Self::E;
     fn confidence_mut(&mut self) -> &mut Self::E;
 
-    /// 模拟OpenNARS `TruthValue.isAnalytic`、`getAnalytic`
+    /// 模拟`TruthValue.isAnalytic`、`getAnalytic`
     /// * 📝OpenNARS将其用于「A + <A ==> B> = B」导出的真值中，然后在「下一次据此推导」中「排除结论」
     ///   * 💭【2024-05-03 15:34:29】或许正是为了「只导出一遍」或者「由此导出的结论不能直接使用」
     ///
@@ -59,7 +45,7 @@ pub trait TruthValue: Debug {
     /// @return The isAnalytic value
     fn is_analytic(&self) -> bool;
 
-    /// 模拟OpenNARS `TruthValue.setAnalytic`
+    /// 模拟`TruthValue.setAnalytic`
     /// * 🚩实质上只是「把默认的`false`设置为`true`」而已
     ///
     /// # 📄OpenNARS
@@ -67,7 +53,7 @@ pub trait TruthValue: Debug {
     /// Set the isAnalytic flag
     fn set_analytic(&mut self);
 
-    /// 模拟OpenNARS `getExpectation`
+    /// 模拟`getExpectation`
     /// * 🚩此处返回浮点数，因为中间结果可能是负数
     /// * 📝公式： $c * (f - 0.5) + 0.5$
     /// * ✨保证结果范围在 $[0, 1]$ 内
@@ -84,7 +70,7 @@ pub trait TruthValue: Debug {
         self.confidence().value() * (self.frequency().value() - 0.5) + 0.5
     }
 
-    /// 模拟OpenNARS `getExpDifAbs`
+    /// 模拟`getExpDifAbs`
     /// * 🎯两个真值期望的绝对差
     /// * 🚩仍然返回浮点数
     ///
@@ -102,7 +88,7 @@ pub trait TruthValue: Debug {
         (self.expectation() - other.expectation()).abs()
     }
 
-    /// 模拟OpenNARS `isNegative`
+    /// 模拟`isNegative`
     ///
     /// # 📄OpenNARS
     ///
@@ -115,16 +101,58 @@ pub trait TruthValue: Debug {
         self.frequency() < Self::E::HALF
     }
 
-    // * ❌【2024-05-03 10:52:10】不实现「仅用于 显示/呈现」的方法，包括所有的`toString` `toStringBrief`
-    // ! ⚠️孤儿规则：implementing a foreign trait is only possible if at least one of the types for which it is implemented is local
+    /// 模拟`toString`
+    /// * 🚩【2024-05-08 22:12:42】现在鉴于实际情况，仍然实现`toString`、`toStringBrief`方法
+    ///   * 🚩具体方案：实现一个统一的、内部的、默认的`__to_display(_brief)`，再通过「手动嫁接」完成最小成本实现
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// The String representation of a TruthValue
+    ///
+    /// @return The String
+    fn __to_display(&self) -> String {
+        MARK.to_string()
+            + &self.frequency().to_display()
+            + SEPARATOR
+            + &self.confidence().to_display()
+            + MARK
+    }
+
+    /// 模拟`toStringBrief`
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// A simplified String representation of a TruthValue, where each factor is accurate to 1%
+    ///
+    /// @return The String
+    fn __to_display_brief(&self) -> String {
+        // ! 🆕🚩【2024-05-08 22:16:40】不对`1.00 => 0.99`做特殊映射
+        MARK.to_string()
+            + &self.frequency().to_display_brief()
+            + SEPARATOR
+            + &self.confidence().to_display_brief()
+            + MARK
+    }
 }
+
+/// * 🚩【2024-05-09 00:56:52】改：统一为字符串
+/// # 📄OpenNARS
+///
+/// The character that marks the two ends of a budget value
+const MARK: &str = TRUTH_VALUE_MARK;
+
+/// * 🚩【2024-05-09 00:56:52】改：统一为字符串
+/// # 📄OpenNARS
+///
+/// The character that separates the factors in a budget value
+const SEPARATOR: &str = VALUE_SEPARATOR;
 
 /// 真值的「具体类型」
 /// * 📌前置特征：
 ///   * [`Sized`]：模拟构造函数
-///   * [`Clone`]：模拟OpenNARS `clone`
-///   * [`Eq`]：模拟OpenNARS `equals`
-///   * [`Hash`]：模拟OpenNARS `hashCode`
+///   * [`Clone`]：模拟`clone`
+///   * [`Eq`]：模拟`equals`
+///   * [`Hash`]：模拟`hashCode`
 /// * 🎯有选择地支持「限定的构造函数」
 ///   * 📄需要构造函数：真值函数中「创建新值的函数」
 ///   * 📄不要构造函数：具有「真值属性」但【不可从真值参数构造】的类型
@@ -147,7 +175,7 @@ pub trait TruthValueConcrete: TruthValue + Sized + Clone + Eq + Hash {
         Self::new(frequency, confidence, false)
     }
 
-    /// 模拟OpenNARS 构造函数 (f, c, a)
+    /// 模拟构造函数 (f, c, a)
     /// * ⚠️此处让「f」「c」为浮点数，内部实现时再转换
     #[inline(always)]
     fn from_floats(frequency: Float, confidence: Float, is_analytic: bool) -> Self {
@@ -158,7 +186,7 @@ pub trait TruthValueConcrete: TruthValue + Sized + Clone + Eq + Hash {
         )
     }
 
-    /// 模拟OpenNARS 构造函数 (f, c)
+    /// 模拟构造函数 (f, c)
     /// * 🚩默认让参数`is_analytic`为`false`
     ///
     /// # 📄OpenNARS
@@ -187,6 +215,7 @@ pub trait TruthValueConcrete: TruthValue + Sized + Clone + Eq + Hash {
 /// 初代实现
 mod impl_v1 {
     use super::*;
+    use crate::__impl_to_display_and_display;
     use std::hash::Hasher;
 
     /// [`TruthValue`]初代实现
@@ -202,7 +231,7 @@ mod impl_v1 {
         a: bool,
     }
 
-    /// 模拟OpenNARS `equals`
+    /// 模拟`equals`
     /// * ⚠️其中[`Self::a`]即`isAnalytic`不参与判等
     impl PartialEq for TruthV1 {
         #[inline(always)]
@@ -265,6 +294,10 @@ mod impl_v1 {
                 a: is_analytic,
             }
         }
+    }
+
+    __impl_to_display_and_display! {
+        TruthV1 as TruthValue
     }
 }
 pub use impl_v1::*;

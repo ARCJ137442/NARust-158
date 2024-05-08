@@ -10,7 +10,7 @@ use crate::{
     nars::DEFAULT_PARAMETERS,
 };
 
-/// 模拟OpenNARS `nars.entity.TermLinkBag`
+/// 模拟`nars.entity.TermLinkBag`
 /// * 📌【2024-05-04 17:30:35】实际上就是「袋+词项链+特定参数」
 ///   * 📌目前不限制构造过程（即 不覆盖方法）
 /// * 🚩有关「固定容量」与「遗忘时长」交给构造时决定

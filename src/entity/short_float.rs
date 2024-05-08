@@ -8,13 +8,13 @@
 //!
 //! * ✅【2024-05-02 21:41:48】（初代实现）基本复刻完毕
 
-use crate::global::Float;
+use crate::{global::Float, ToDisplayAndBrief};
 use narsese::api::EvidentNumber;
 use std::ops::{BitAnd, BitOr, Not};
 use thiserror::Error;
 
 /// 🆕【前提】抽象的「短浮点」特征
-/// * 🎯模拟OpenNARS `nars.entity.ShortFloat`（抽象特征）
+/// * 🎯模拟`nars.entity.ShortFloat`（抽象特征）
 /// * 🎯在基本的[「证据数」](EvidentNumber)基础上，添加更多NAL细节功能
 ///   * 📄原[`nars.inference.UtilityFunctions`](crate::inference::UtilityFunctions)的「扩展逻辑与或非」
 /// * 🚩【2024-05-02 16:05:04】搬迁自[`crate::entity::BudgetValue`]
@@ -47,6 +47,7 @@ use thiserror::Error;
 /// * [`Not`]：NAL逻辑非
 /// * [`BitAnd`]：NAL逻辑与 模拟`UtilityFunctions.and`
 /// * [`BitOr`]：NAL逻辑或 模拟`UtilityFunctions.or`
+/// * [`ToDisplayAndBrief`]：模拟`toString`、`toStringBrief`
 pub trait ShortFloat:
     EvidentNumber
     + Copy
@@ -54,6 +55,7 @@ pub trait ShortFloat:
     + Not<Output = Self>
     + BitAnd<Self, Output = Self>
     + BitOr<Self, Output = Self>
+    + ToDisplayAndBrief
 // * 📝不要在特征冒号后边的类型之间加注释，会破坏格式化器工作
 // * 🚩【2024-05-02 18:33:19】将`Ord`作为在[`EvidentNumber`]之上的「附加要求」之一：需要在「预算值合并」使用「取最大」方法
 {
@@ -96,7 +98,7 @@ pub trait ShortFloat:
     ///   * 📄在`BudgetFunctions.distributeAmongLinks`中又需要用到「浮点值运算」
     fn to_float(&self) -> Float;
 
-    /// 模拟OpenNARS `ShortFloat.getValue`
+    /// 模拟`ShortFloat.getValue`
     /// * 🎯获取「浮点值」
     /// * 🚩直接重定向到[`Self::to_float`]
     #[inline(always)]
@@ -120,10 +122,14 @@ pub trait ShortFloat:
         // self.clone_from(new_value)
         *self = new_value;
     }
+
+    // ! 🚩【2024-05-08 23:24:05】此处确实不需要`ShortFloat`实现[`__to_display(_brief)`](ToDisplayAndBrief)：不同具体实现有不同的做法
 }
 
 /// 初代实现 + 单元测试
 mod impl_v1 {
+    use crate::impl_display_from_to_display;
+
     use super::*;
 
     /// 用作「短浮点」的整数类型
@@ -144,7 +150,7 @@ mod impl_v1 {
     /// * 🚩【2024-05-02 09:27:03】目前相当于「直接乘以一万」
     const MULTIPLIER_TO_UINT: Float = 10000.0;
 
-    /// 模拟OpenNARS `nars.entity.ShortFloat`（具体结构）
+    /// 模拟`nars.entity.ShortFloat`（具体结构）
     /// * 初代实现
     /// * 🚩使用`u32`0~4294967296的范围覆盖`0~10000²`
     /// * ✨原生支持四则运算
@@ -204,7 +210,7 @@ mod impl_v1 {
             (0.0..=1.0).contains(&value)
         }
 
-        /// 模拟OpenNARS`getValue`
+        /// 模拟`getValue`
         /// * 🚩获取浮点值
         /// * 🚩【2024-05-03 10:51:09】更名为`value_float`以暂时避免与「短浮点」的`value`重名
         ///
@@ -225,7 +231,7 @@ mod impl_v1 {
             self.value
         }
 
-        /// 模拟OpenNARS`ShortFloat.setValue`
+        /// 模拟`ShortFloat.setValue`
         /// * 🚩设置浮点值（有检查）
         pub fn set_value(&mut self, value: Float) -> Result<(), ShortFloatError> {
             // 转换、检查并设置值
@@ -301,19 +307,32 @@ mod impl_v1 {
         }
     }
 
-    /// 模拟`ShortFloat.toString`
-    impl std::fmt::Display for ShortFloatV1 {
-        #[inline]
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            // 对`1`的特别处理
-            if self.value == SHORT_MAX {
-                return write!(f, "1.0000");
+    /// 模拟`ShortFloat.toString`、`ShortFloat.toStringBrief`
+    impl ToDisplayAndBrief for ShortFloatV1 {
+        fn to_display(&self) -> String {
+            match self.value {
+                // 对`1`的特别处理 | 🆕不同于OpenNARS：会将「异常值」按原样展示
+                SHORT_MAX => "1.0000".to_string(),
+                // 否则：右对齐，左边补零到四位，前缀添加`0.`格式化
+                value => format!("0.{value:0>4}"),
             }
-            // 否则：右对齐，左边补零到四位，前缀添加`0.`
-            // 格式化
-            write!(f, "0.{:0>4}", self.value)
+        }
+
+        fn to_display_brief(&self) -> String {
+            match self.value {
+                // 对`1`的特别处理
+                SHORT_MAX => "1.00".to_string(),
+                // 否则：右对齐，只取两位，前缀添加`0.`格式化
+                value => {
+                    let s = ((value + 50) / 100).to_string();
+                    format!("0.{s:0>4}")
+                }
+            }
         }
     }
+
+    // 一行自动实现`Display`
+    impl_display_from_to_display! { ShortFloatV1 }
 
     /// 实现「从浮点到『短浮点』的直接转换」
     /// 🚩直接通过「构造函数+尝试转换」实现

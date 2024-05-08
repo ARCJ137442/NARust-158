@@ -2,10 +2,14 @@
 //! * ✅【2024-05-02 00:52:34】所有方法基本复刻完毕
 
 use super::{ShortFloat, ShortFloatV1};
-use crate::{global::Float, inference::UtilityFunctions};
-use std::fmt::Debug;
+use crate::{
+    global::Float,
+    inference::UtilityFunctions,
+    io::{BUDGET_VALUE_MARK, VALUE_SEPARATOR},
+    ToDisplayAndBrief,
+};
 
-/// 模拟OpenNARS `nars.entity.BudgetValue`
+/// 模拟`nars.entity.BudgetValue`
 /// * 🎯实现最大程度的抽象与通用
 ///   * 💭后续可以在底层用各种「证据值」替换，而不影响整个推理器逻辑
 /// * 🚩不直接使用「获取可变引用」的方式
@@ -16,8 +20,7 @@ use std::fmt::Debug;
 /// # 📄OpenNARS
 ///
 /// A triple of priority (current), durability (decay), and quality (long-term average).
-pub trait BudgetValue: Debug {
-    // TODO: 可能后续统一要求`Display`
+pub trait BudgetValue: ToDisplayAndBrief {
     /// 一种类型只可能有一种「证据值」
     /// * ✅兼容OpenNARS `ShortFloat`
     type E: ShortFloat;
@@ -184,8 +187,58 @@ pub trait BudgetValue: Debug {
         self.summary() >= budget_threshold
     }
 
-    // * ❌【2024-05-02 00:52:02】不实现「仅用于 显示/呈现」的方法，包括所有的`toString` `toStringBrief`
+    // ! ❌【2024-05-08 21:53:30】不进行「自动实现」而是「提供所需的默认实现」
+    //   * 📌情况：若直接使用「自动实现」则Rust无法分辨「既实现了『预算值』又实现了『真值』的类型所用的方法」
+    //   * 📝解决方案：提供一套`__`内部默认实现，后续在「结构」实现时可利用这俩「默认实现方法」通过方便的「宏」自动实现[`ToDisplayAndBrief`]
+
+    /// 模拟`toString`
+    /// * 🚩【2024-05-08 22:12:42】现在鉴于实际情况，仍然实现`toString`、`toStringBrief`方法
+    ///   * 🚩具体方案：实现一个统一的、内部的、默认的`__to_display(_brief)`，再通过「手动嫁接」完成最小成本实现
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// Fully display the BudgetValue
+    ///
+    /// @return String representation of the value
+    fn __to_display(&self) -> String {
+        MARK.to_string()
+            + &self.priority().to_display()
+            + SEPARATOR
+            + &self.durability().to_display()
+            + SEPARATOR
+            + &self.quality().to_display()
+            + MARK
+    }
+
+    /// 模拟`toStringBrief`
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// Briefly display the BudgetValue
+    ///
+    /// @return String representation of the value with 2-digit accuracy
+    fn __to_display_brief(&self) -> String {
+        MARK.to_string()
+            + &self.priority().to_display_brief()
+            + SEPARATOR
+            + &self.durability().to_display_brief()
+            + SEPARATOR
+            + &self.quality().to_display_brief()
+            + MARK
+    }
 }
+
+/// * 🚩【2024-05-09 00:56:52】改：统一为字符串
+/// # 📄OpenNARS
+///
+/// The character that marks the two ends of a budget value
+const MARK: &str = BUDGET_VALUE_MARK;
+
+/// * 🚩【2024-05-09 00:56:52】改：统一为字符串
+/// # 📄OpenNARS
+///
+/// The character that separates the factors in a budget value
+const SEPARATOR: &str = VALUE_SEPARATOR;
 
 /// 预算值的「具体类型」
 /// * 🎯有选择地支持「限定的构造函数」
@@ -208,7 +261,7 @@ pub trait BudgetValueConcrete: BudgetValue + Sized + Clone {
     /// 模拟 `new BudgetValue(p, d, q)`
     /// * 🚩将浮点数分别转换为「短浮点」
     ///
-    /// # 📄OpenNARS `BudgetValue`
+    /// # 📄OpenNARS
     ///
     /// Constructor with initialization
     ///
@@ -228,6 +281,7 @@ pub trait BudgetValueConcrete: BudgetValue + Sized + Clone {
 /// 初代实现
 mod impl_v1 {
     use super::*;
+    use crate::__impl_to_display_and_display;
 
     /// [预算值](BudgetValue)的初步实现
     /// * 🚩直接表示为一个三元组（但并非直接对元组实现）
@@ -276,10 +330,9 @@ mod impl_v1 {
         }
     }
 
-    impl std::fmt::Display for BudgetV1 {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            write!(f, "${}; {}; {}$", self.0, self.1, self.2)
-        }
+    // 自动派生并实现[`ToDisplayAndBrief`]与[`Display`]
+    __impl_to_display_and_display! {
+        BudgetV1 as BudgetValue
     }
 }
 pub use impl_v1::*;

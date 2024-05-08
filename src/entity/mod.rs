@@ -1,6 +1,6 @@
 //! 可被存放的「实体」
 //!
-//! # 📄OpenNARS `nars.entity`
+//! # 📄OpenNARS
 //!
 //! Data entities that are independently stored
 //!
@@ -19,6 +19,7 @@
 //! 2. Indirect processing by reasoning, in related concepts and unlimited steps. It happens in each inference cycle.
 
 nar_dev_utils::mods! {
+
     // 短浮点 `ShortFloat`
     pub use short_float;
 

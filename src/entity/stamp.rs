@@ -2,13 +2,16 @@
 //! * ✅【2024-05-05 15:50:54】基本特征功能复刻完成
 //! * ✅【2024-05-05 17:03:34】单元测试初步完成
 
-use crate::{global::ClockTime, nars::DEFAULT_PARAMETERS};
-use std::{
-    fmt::Debug,
-    hash::{Hash, Hasher},
+use crate::{
+    global::ClockTime,
+    io::{STAMP_CLOSER, STAMP_OPENER, STAMP_SEPARATOR, STAMP_STARTER},
+    nars::DEFAULT_PARAMETERS,
+    ToDisplayAndBrief,
 };
+use nar_dev_utils::{join_to, manipulate};
+use std::hash::{Hash, Hasher};
 
-/// 模拟OpenNARS `nars.entity.Stamp`
+/// 模拟`nars.entity.Stamp`
 /// * 🚩🆕【2024-05-05 14:06:13】目前拒绝「全局静态变量」：这些量应该始终有个确切的来源
 ///   * 📄如：推理器时钟
 /// * 🚩用特征约束 [`Hash`]模拟`Stamp.hashCode`
@@ -26,7 +29,7 @@ use std::{
 /// be not unique.
 /// The derived sentences inherits serial numbers from its parents, cut at the
 /// baseLength limit.
-pub trait Stamp: Debug {
+pub trait Stamp: ToDisplayAndBrief {
     // TODO: 可能后续统一要求`Display`
     // ! ❌【2024-05-05 14:07:05】不模拟`Stamp.currentSerial`，理由同上
 
@@ -72,6 +75,43 @@ pub trait Stamp: Debug {
     /// @return The number at the index
     fn get(&self, i: usize) -> ClockTime {
         self.evidential_base()[i]
+    }
+
+    /// 模拟`toString`
+    /// * 🚩【2024-05-08 22:12:42】现在鉴于实际情况，仍然实现`toString`、`toStringBrief`方法
+    ///   * 🚩具体方案：实现一个统一的、内部的、默认的`__to_display(_brief)`，再通过「手动嫁接」完成最小成本实现
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// Get a String form of the Stamp for display
+    /// Format: {creationTime [: eventTime] : evidentialBase}
+    ///
+    /// @return The Stamp as a String
+    fn __to_display(&self) -> String {
+        // 生成头部：`{0:`
+        let mut s = manipulate!(
+            STAMP_OPENER.to_string()
+            => {+= &self.creation_time().to_string()}#
+            => .push(' ')
+            => .push_str(STAMP_STARTER)
+            => .push(' ')
+        );
+        // 循环迭代加入中部：`0;1;2`
+        join_to(
+            &mut s,
+            self.evidential_base().iter().map(ToString::to_string),
+            STAMP_SEPARATOR,
+        );
+        // 最终加入尾部：`}`
+        s.push_str(STAMP_CLOSER);
+        s
+    }
+
+    /// 🆕填补`toStringBrief`：与`toString`行为一致
+    /// * 🚩【2024-05-08 23:04:08】这样就没必要刻意修改宏[`crate::__impl_to_display`]的实现了
+    #[inline(always)]
+    fn __to_display_brief(&self) -> String {
+        self.__to_display()
     }
 }
 
@@ -269,6 +309,7 @@ pub trait StampConcrete: Stamp + Clone + Hash + PartialEq {
 /// 初代实现
 mod impl_v1 {
     use super::*;
+    use crate::__impl_to_display_and_display;
 
     /// [时间戳](Stamp)初代实现
     #[derive(Debug, Clone)]
@@ -277,7 +318,7 @@ mod impl_v1 {
         creation_time: ClockTime,
     }
 
-    /// 模拟OpenNARS`equals`
+    /// 模拟`equals`
     impl PartialEq for StampV1 {
         #[inline(always)]
         fn eq(&self, other: &Self) -> bool {
@@ -285,12 +326,18 @@ mod impl_v1 {
         }
     }
 
-    /// 模拟OpenNARS`hashCode`
+    /// 模拟`hashCode`
     impl Hash for StampV1 {
         #[inline(always)]
         fn hash<H: Hasher>(&self, state: &mut H) {
             self.__hash(state)
         }
+    }
+
+    __impl_to_display_and_display! {
+        // * 🚩【2024-05-09 00:37:24】只实现一个方法（其它默认）
+        @(to_display;;)
+        StampV1 as Stamp
     }
 
     impl Stamp for StampV1 {

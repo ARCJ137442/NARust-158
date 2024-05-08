@@ -3,8 +3,7 @@
 //! * ✅【2024-05-05 12:13:53】基本完成单元测试
 
 use super::Item;
-use crate::{global::RC, io::symbols, language::Term};
-use std::fmt::{Debug, Display};
+use crate::{global::RC, io::symbols, language::Term, ToDisplayAndBrief};
 
 /// 实现与「词项链类型」相关的结构
 /// * 🎯复刻OpenNARS `TermLink.type`与`TermLink.index`
@@ -251,12 +250,13 @@ mod link_type {
 }
 pub use link_type::*;
 
-/// 模拟OpenNARS `nars.entity.TermLink`
+/// 模拟`nars.entity.TermLink`
 /// * 🚩首先是一个「Item」
 /// * ❓【2024-05-06 00:08:34】目前「词项链」和「[『词项』](Term)链」并没分开来，似乎是个不好的习惯
 ///   * ❓到底「任务链」应不应该继承「词项链」
 ///   * 💭或许这俩应该分开，至少现在这个[`TermLink`]应该改成`TargetLink`或者别的什么抽象特征
 ///   * 📌然后[`TermLink`]就是`TargetLink<Target = Term>`这样
+///   * 📝【2024-05-09 00:53:40】已经观察到，OpenNARS 3.0.4使用了`TLink`作为「共同接口」
 ///
 /// TODO: 🏗️【2024-05-06 00:10:28】↑后续再行动，优化复用情况
 ///
@@ -273,13 +273,13 @@ pub use link_type::*;
 ///
 /// This class is mainly used in inference.RuleTable to dispatch premises to
 /// inference rules
-pub trait TermLink: Item + Debug { // TODO: 后续可能要求`Display`
+pub trait TermLink: Item {
     /// 连接所基于的「目标」
     /// * 📌可以是[词项](Term)，亦可为[任务](super::Task)
     /// * ❓目前似乎需要为「词项」实现一个特征，然后将约束限定在「词项」上
     ///   * ❗这样才能至少使用「词项」的功能
     ///   * 📄如「通过[`Display`]生成[『元素id』](crate::storage::BagKey)」
-    type Target: Display;
+    type Target: ToDisplayAndBrief;
 
     /// 🆕根据自身生成[`Item::key`]
     /// * 🎯可复用、无副作用的「字符串生成」逻辑
@@ -399,7 +399,7 @@ pub trait TermLinkConcrete: TermLink<Target = Term> + Sized {
 /// 初代实现
 mod impl_v1 {
     use super::*;
-    use crate::entity::BudgetValueConcrete;
+    use crate::{__impl_to_display_and_display, entity::BudgetValueConcrete};
 
     /// 词项链 初代实现
     /// * 🚩目前不限制其中「预算值」的类型
@@ -409,6 +409,11 @@ mod impl_v1 {
         budget: B,
         target: RC<Term>,
         type_ref: TermLinkType,
+    }
+
+    __impl_to_display_and_display! {
+        {B: BudgetValueConcrete}
+        TermLinkV1<B> as Item
     }
 
     impl<B: BudgetValueConcrete> TermLinkConcrete for TermLinkV1<B> {

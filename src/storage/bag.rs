@@ -6,8 +6,8 @@ use crate::{
     global::Float,
     inference::BudgetFunctions,
     nars::DEFAULT_PARAMETERS,
+    ToDisplayAndBrief,
 };
-use std::fmt::Debug;
 
 /// 对应OpenNARS的「袋」
 /// * 📝【2024-04-26 23:12:15】核心逻辑：通过称作「预算」的机制，经济地分配内部元素
@@ -69,52 +69,58 @@ where
     // * ↑此处`Item`泛型仿OpenNARS`Bag`
     E: Item,
 {
-    /// 总层数
+    /// 模拟`Bag.TOTAL_LEVEL`
+    /// *📌总层数
     /// * 🚩【2024-05-04 01:44:29】根据OpenNARS中「常量」的定义，在此将其全局化
     ///   * 📌`static final` ⇒ `const`
     ///
-    /// # 📄OpenNARS `Bag.TOTAL_LEVEL`
+    /// # 📄OpenNARS
     ///
     /// priority levels
     const __TOTAL_LEVEL: usize = DEFAULT_PARAMETERS.bag_level;
 
-    /// 触发阈值
-    /// * 📌触发の阈值
+    /// 模拟`Bag.THRESHOLD`
+    /// * 📌触发阈值
+    /// * 📝触发の阈值
     ///
-    /// # 📄OpenNARS `Bag.THRESHOLD`
+    /// # 📄OpenNARS
     ///
     /// firing threshold
     const __THRESHOLD: usize = DEFAULT_PARAMETERS.bag_threshold;
 
+    /// 模拟`Bag.RELATIVE_THRESHOLD`
     /// 相对阈值
     /// * 🚩由`触发阈值 / 总层数`计算得来
     ///
-    /// # 📄OpenNARS `Bag.RELATIVE_THRESHOLD`
+    /// # 📄OpenNARS
     ///
     /// relative threshold, only calculate once
     const __RELATIVE_THRESHOLD: Float = Self::__THRESHOLD as Float / Self::__TOTAL_LEVEL as Float;
 
-    /// 加载因子
+    /// 模拟`Bag.LOAD_FACTOR`
+    /// * 📌加载因子
     /// * ❓尚不清楚其含义
     ///
-    /// # 📄OpenNARS `Bag.LOAD_FACTOR`
+    /// # 📄OpenNARS
     ///
     /// hash table load factor
     const __LOAD_FACTOR: Float = DEFAULT_PARAMETERS.load_factor;
 
-    /// 【只读常量】分派器
+    /// 模拟`Bag.DISTRIBUTOR`
+    /// * 📌【只读常量】分派器
     /// * ❌【2024-05-04 01:46:06】这个「静态常量」因为`Self::Distributor`没有「常量构造函数」而暂且还是以「特征方法」的形式存在
     /// * 🚩【2024-05-04 12:01:42】实际上并不需要强行把「分派器」绑定在「袋」上作为关联类型
     ///
-    /// # 📄OpenNARS `Bag.DISTRIBUTOR`
+    /// # 📄OpenNARS
     ///
     /// shared DISTRIBUTOR that produce the probability distribution
     fn __distributor(&self) -> &impl Distributor;
 
-    /// 模拟`Bag.nameTable`属性
+    /// 模拟`Bag.nameTable`
     /// * 🚩【2024-04-28 08:43:25】目前不与任何「映射」类型绑定
     ///   * ❌不打算直接返回[`HashMap`]
-    /// # 📄OpenNARS `Bag.nameTable`
+    ///
+    /// # 📄OpenNARS
     ///
     /// mapping from key to item
     fn __name_table(&self) -> &impl BagNameTable<E>;
@@ -126,7 +132,7 @@ where
     fn __name_table_mut_new_(&mut self);
     // end `nameTable`
 
-    /// 模拟`Bag.itemTable`属性
+    /// 模拟`Bag.itemTable`
     /// * 📝OpenNARS中基于「优先级」的元素获取
     /// * 🚩【2024-04-28 10:47:35】目前只获取「元素id」而非「元素」
     ///   * ⚠️后续直接`unwrap`：通过`name_table`保证元素存在
@@ -135,7 +141,7 @@ where
     ///   * ⚠️若全部将「可变成员」作为可变引用`&mut 成员类型`返回，则这样的成员无法在「不可变变量」中使用
     ///     * 💭【2024-05-01 21:48:56】因此替换不等效
     ///
-    /// # 📄OpenNARS `Bag.itemTable`
+    /// # 📄OpenNARS
     ///
     /// array of lists of items, for items on different level
     fn __item_table(&self) -> &impl BagItemTable<E::Key>;
@@ -147,26 +153,28 @@ where
     fn __item_table_mut_new_(&mut self);
     // end `itemTable`
 
-    /// 一个「袋」的「容量」
+    /// 模拟`Bag.capacity`
+    /// * 📌一个「袋」的「容量」
     /// * 🚩只读
     ///   * 📄`private final int capacity;`
     /// * 📝OpenNARS中作为「属性」定义，仅仅是为了「缓存数值」并「在子类中分派不同的『大小』作为常数返回值」用
     ///   * 🚩因此无需附带`setter`
     /// * 💭【2024-05-04 01:48:01】实际上可以被定义为「关联常量」
     ///
-    /// # 📄OpenNARS `Bag.capacity`
+    /// # 📄OpenNARS
     ///
     /// * 【作为属性】defined in different bags
     /// * 【作为方法】To get the capacity of the concrete subclass
     ///   * @return Bag capacity, in number of Items allowed
     fn __capacity(&self) -> usize;
 
-    /// 一个「袋」已有元素的层数
+    /// 模拟`Bag.mass`
+    /// * 📌一个「袋」已有元素的层数
     /// * 🚩会随着「增删元素」而变
     ///   * 🚩故需要一个「可变」版本
     ///   * 📝Rust允许`*self.__mass_mut() = XXX`的语法：左值可以是表达式
     ///
-    /// # 📄OpenNARS `Bag.mass`
+    /// # 📄OpenNARS
     ///
     /// current sum of occupied level
     fn __mass(&self) -> usize;
@@ -176,25 +184,27 @@ where
     /// * 🎯用于在「分派器」中调用「下一层级」
     /// * 📄`levelIndex = capacity % TOTAL_LEVEL; // so that different bags start at different point`
     ///
-    /// # 📄OpenNARS `Bag.levelIndex`
+    /// # 📄OpenNARS
     ///
     /// index to get next level, kept in individual objects
     fn __level_index(&self) -> usize;
     fn __level_index_mut(&mut self) -> &mut usize;
 
-    /// 一个「袋」中用于指示「当前层级」的状态量
+    /// 模拟`Bag.currentLevel`
+    /// * 📌一个「袋」中用于指示「当前层级」的状态量
     /// * ❓和`levelIndex`区别何在
     ///
-    /// # 📄OpenNARS `Bag.currentLevel`
+    /// # 📄OpenNARS
     ///
     /// current take out level
     fn __current_level(&self) -> usize;
     fn __current_level_mut(&mut self) -> &mut usize;
 
+    /// 模拟`Bag.currentCounter`
     /// 一个「袋」中用于指示「当前计数器」的状态量
     /// * 📝【2024-05-01 21:50:09】在OpenNARS中与「层级」有关
     ///
-    /// # 📄OpenNARS `Bag.currentCounter`
+    /// # 📄OpenNARS
     ///
     /// maximum number of items to be taken out at current level
     fn __current_counter(&self) -> usize;
@@ -232,7 +242,7 @@ where
     /// * 🚩初始化「元素映射」「层级映射」
     ///   * 📄对应[`Self::__name_table`]、[`Self::__item_table`]
     ///
-    /// # 📄OpenNARS `Bag.init`
+    /// # 📄OpenNARS
     ///
     /// 🈚
     fn init(&mut self) {
@@ -262,7 +272,7 @@ where
     /// * 📝用于并体现AIKR所衍生的「资源竞争」思想
     /// * 🚩【2024-05-04 12:00:04】OpenNARS中该值不可变，且多为常量（任务链袋中还与「记忆区」相关）
     ///
-    /// # 📄OpenNARS `Bag.forgetRate`
+    /// # 📄OpenNARS
     ///
     /// Get the item decay rate,
     /// which differs in difference subclass,
@@ -275,7 +285,7 @@ where
     /// * 🎯从模拟`Bag.nameTable`派生
     /// * 🚩转发内部`name_table`成员
     ///
-    /// # 📄OpenNARS `Bag.size`
+    /// # 📄OpenNARS
     ///
     /// The number of items in the bag
     #[inline(always)]
@@ -285,7 +295,7 @@ where
 
     /// 模拟`Bag.averagePriority`
     ///
-    /// # 📄OpenNARS `Bag.averagePriority`
+    /// # 📄OpenNARS
     ///
     /// Get the average priority of Items
     ///
@@ -314,7 +324,7 @@ where
     /// * 🎯从模拟`Bag.nameTable.containsValue`派生
     /// * 📜默认使用[`Self::get`]
     ///
-    /// # 📄OpenNARS `Bag.contains`
+    /// # 📄OpenNARS
     ///
     /// Check if the bag contains the item
     ///
@@ -328,7 +338,7 @@ where
     /// 模拟`Bag.get`
     /// * 🚩转发内部`name_table`成员
     ///
-    /// # 📄OpenNARS `Bag.get`
+    /// # 📄OpenNARS
     ///
     /// Get an Item by key
     ///
@@ -686,14 +696,61 @@ where
         // self.refresh() // ! ❌【2024-05-04 11:46:09】不复刻这个有关「观察者」的方法
     }
 
-    // ! ❌【2024-05-04 01:57:00】有关「观察者」「呈现用」的方法，此处暂且不进行复刻
+    // ! ❌【2024-05-04 01:57:00】有关「观察者」的方法，此处暂且不进行复刻
 
     // ! ❌addBagObserver
     // ! ❌play
     // ! ❌stop
     // ! ❌refresh
-    // ! ❌toString
-    // ! ❌toStringLong
+
+    /// 模拟`Bag.toString`
+    /// * 🚩🆕一次显示所有层，避开`showLevel`
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// Collect Bag content into a String for display
+    ///
+    /// @return A String representation of the content
+    fn __to_display(&self) -> String {
+        /* 📄OpenNARS源码：
+        StringBuffer buf = new StringBuffer(" ");
+        for (int i = TOTAL_LEVEL; i >= showLevel; i--) {
+            if (!emptyLevel(i - 1)) {
+                buf = buf.append("\n --- Level ").append(i).append(":\n ");
+                for (int j = 0; j < itemTable.get(i - 1).size(); j++) {
+                    buf = buf.append(itemTable.get(i - 1).get(j).toStringBrief()).append("\n ");
+                }
+            }
+        }
+        return buf.toString(); */
+        let mut buf = String::new();
+        for level in (0..Self::__TOTAL_LEVEL).rev() {
+            if self._empty_level(level) {
+                buf += "\n --- Level ";
+                buf += &level.to_string();
+                buf += ":\n ";
+                let level_size = self.__item_table().get(level).size();
+                for i in 0..level_size {
+                    let key = self.__item_table().get(level).get(i);
+                    if let Some(key) = key {
+                        let item = self.get(key).unwrap(); // ! 📌【2024-05-09 01:27:59】不可能没有
+                        buf += &item.to_display_brief();
+                        buf += "\n "
+                    }
+                }
+            }
+        }
+        buf
+    }
+
+    /// 模拟`Bag.toStringLong`
+    /// * 🆕直接使用[前者](Bag::__to_display)，顺带避开`showSizes`
+    ///
+    /// # 📄OpenNARS
+    ///
+    fn __to_display_long(&self) -> String {
+        self.__to_display()
+    }
 }
 
 /// [`Bag`]的具体类型
@@ -737,8 +794,9 @@ pub trait BagConcrete<E: Item>: Bag<E> + Sized {
 
 /// 用于袋的「索引」
 /// * 🎯方便后续安插方法
-/// TODO: 🏗️【2024-05-08 16:18:28】可能后续统一要求`Display`
-pub trait BagKey: Debug + Clone + Eq {}
+/// * 🚩【2024-05-09 00:09:00】现在通过要求[`ToDisplayAndBrief`]完成对「可呈现」的约束
+///   * 以便[`crate::entity::Item`]、[`crate::entity::Task`]等用到
+pub trait BagKey: ToDisplayAndBrief + Clone + Eq {}
 
 /// 袋的「名称映射」
 /// * 📄OpenNARS`Bag.nameTable`
@@ -812,7 +870,7 @@ pub trait BagNameTable<E: Item> {
 ///   * 遍历所有层级 `for (LinkedList<E> items : itemTable)`（仅呈现）
 /// * 🔦预计实现者：`Vec<VecDeque<Item>>`
 ///
-/// # 📄OpenNARS `Bag.itemTable`
+/// # 📄OpenNARS
 ///
 /// array of lists of items, for items on different level
 pub trait BagItemTable<Key: BagKey> {
@@ -897,6 +955,14 @@ mod impl_v1 {
     /// * 🚩【2024-05-05 21:16:25】目前直接使用字符串[`String`]
     /// * 🎯主要是为了与标准库类型区分，后续方便分离升级
     pub type BagKeyV1 = String;
+
+    /// 默认实现`toString`：就是它本身（但要复制出一个新的）
+    impl ToDisplayAndBrief for BagKeyV1 {
+        #[inline(always)]
+        fn to_display(&self) -> String {
+            self.clone()
+        }
+    }
 
     /// 📜为[`BagKeyV1`]实现「元素id」
     impl BagKey for BagKeyV1 {}
@@ -1055,7 +1121,7 @@ mod impl_v1 {
         ///   * 从键移除值 `remove`
         ///   * 判断是否为空 `isEmpty`
         ///
-        /// # 📄OpenNARS `Bag.nameTable`
+        /// # 📄OpenNARS
         ///
         /// `mapping from key to item`
         item_map: HashMap<E::Key, E>,
@@ -1073,7 +1139,7 @@ mod impl_v1 {
         /// * 📌【2024-04-27 14:13:36】目前对外层用[`Vec`]，内层用[`VecDeque`]
         ///   * 📌并且，仅存储键，避免复制与额外引用
         ///
-        /// # 📄OpenNARS `Bag.itemTable`
+        /// # 📄OpenNARS
         ///
         /// array of lists of items, for items on different level
         level_map: BagItemTableV1<E::Key>,
@@ -1082,7 +1148,7 @@ mod impl_v1 {
         /// * 📌在不同地方有不同的定义
         /// * 📝是一个「构造时固定」的属性
         ///
-        /// # 📄OpenNARS `Bag.capacity`
+        /// # 📄OpenNARS
         ///
         /// - defined in different bags
         /// - To get the capacity of the concrete subclass
@@ -1095,7 +1161,7 @@ mod impl_v1 {
         /// * 📝是一个「构造时固定」的属性
         /// * 📝OpenNARS用于[`Bag::put_back`]的「放回时遗忘」中
         ///
-        /// # 📄OpenNARS `Bag.forgetRate`
+        /// # 📄OpenNARS
         ///
         /// Get the item decay rate, which differs in difference subclass, and can be
         /// changed in run time by the user, so not a constant.
@@ -1106,7 +1172,7 @@ mod impl_v1 {
         /// 质量
         /// * ❓暂且不能完全明白其含义
         ///
-        /// # 📄OpenNARS `Bag.mass`
+        /// # 📄OpenNARS
         ///
         /// current sum of occupied level
         mass: usize,
@@ -1114,7 +1180,7 @@ mod impl_v1 {
         /// 层级索引
         /// * ❓暂且不能完全明白其含义
         ///
-        /// # 📄OpenNARS `Bag.levelIndex`
+        /// # 📄OpenNARS
         ///
         /// index to get next level, kept in individual objects
         level_index: usize,
@@ -1122,7 +1188,7 @@ mod impl_v1 {
         /// 当前层级
         /// * ❓暂且不能完全明白其含义
         ///
-        /// # 📄OpenNARS `Bag.currentLevel`
+        /// # 📄OpenNARS
         ///
         /// current take out level
         current_level: usize,
@@ -1130,7 +1196,7 @@ mod impl_v1 {
         /// 当前层级
         /// * ❓暂且不能完全明白其含义
         ///
-        /// # 📄OpenNARS `Bag.currentCounter`
+        /// # 📄OpenNARS
         ///
         /// maximum number of items to be taken out at current level
         current_counter: usize,
@@ -1271,6 +1337,7 @@ pub use impl_v1::*;
 mod tests {
     use super::*;
     use crate::{
+        ToDisplayAndBrief, __impl_to_display_and_display,
         entity::{BudgetV1, BudgetValue, BudgetValueConcrete, ShortFloat, ShortFloatV1},
         global::tests::AResult,
         ok,
@@ -1314,6 +1381,14 @@ mod tests {
                 ),
             )
         }
+    }
+
+    // * 🚩自动实现`ToDisplayAndBrief`
+    __impl_to_display_and_display! {
+        // * 🚩【2024-05-09 00:36:45】↓三个方法都实现
+        @(to_display; to_display_brief; to_display_long)
+        {K: BagKey}
+        ItemV1<K> as Item
     }
 
     impl<K: BagKey> Item for ItemV1<K> {
@@ -1589,6 +1664,7 @@ mod tests {
             //放回元素
             bag.put_back(taken);
         }
+        println!("{}", bag.__to_display_long());
 
         // 最终完成
         ok!()

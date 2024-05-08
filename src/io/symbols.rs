@@ -21,9 +21,10 @@ pub const VAR_DEPENDENT: &str = "#";
 pub const VAR_QUERY: &str = "?";
 
 // 数值分隔符，必须与「词项分隔符」相异
-pub const BUDGET_VALUE_MARK: char = '$';
-pub const TRUTH_VALUE_MARK: char = '%';
-pub const VALUE_SEPARATOR: char = ';';
+// * 🚩【2024-05-09 00:56:34】改：统一为字符串
+pub const BUDGET_VALUE_MARK: &str = "$";
+pub const TRUTH_VALUE_MARK: &str = "%";
+pub const VALUE_SEPARATOR: &str = ";";
 
 // 复合词项括弧
 pub const COMPOUND_TERM_OPENER: char = '(';
@@ -72,10 +73,11 @@ pub const RESET_MARK: char = '*';
 pub const COMMENT_MARK: char = '/';
 
 // 时间戳 | 展示用
-pub const STAMP_OPENER: char = '{';
-pub const STAMP_CLOSER: char = '}';
-pub const STAMP_SEPARATOR: char = ';';
-pub const STAMP_STARTER: char = ':';
+// * 🚩【2024-05-09 00:56:34】改：统一为字符串
+pub const STAMP_OPENER: &str = "{";
+pub const STAMP_CLOSER: &str = "}";
+pub const STAMP_SEPARATOR: &str = ";";
+pub const STAMP_STARTER: &str = ":";
 
 // 词项链类型 | 展示用
 pub const TO_COMPONENT_1: &str = " @(";

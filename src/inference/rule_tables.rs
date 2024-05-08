@@ -196,8 +196,6 @@ pub trait RuleTables: ReasonContext {
             .current_belief_link()
             .as_ref()
             .expect("此处必须有：在调用前设定了非空值");
-        task_link;
-        term_link;
         todo!("// TODO: 有待实现")
     }
 
@@ -592,7 +590,7 @@ pub trait RuleTables: ReasonContext {
     /// @param memory       Reference to the memory
     fn __compound_and_self(
         compound: &Term,
-        componment: &Term,
+        component: &Term,
         compound_task: bool,
         memory: &mut Self::Memory,
     ) {

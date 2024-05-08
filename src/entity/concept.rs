@@ -7,13 +7,14 @@ use super::{
     TaskLinkConcrete, TermLinkConcrete, TruthValueConcrete,
 };
 use crate::{
-    entity::{SentenceType, ShortFloat},
+    entity::*,
     global::Float,
     inference::{LocalRules, ReasonContext},
     language::Term,
-    storage::{Bag, Memory, TaskLinkBag, TermLinkBag},
+    storage::*,
+    ToDisplayAndBrief,
 };
-/// 模拟OpenNARS `nars.entity.Concept`
+/// 模拟`nars.entity.Concept`
 /// * 🚩【2024-05-04 17:28:30】「概念」首先能被作为「Item」使用
 pub trait Concept: Item {
     /// 绑定的「时间戳」类型
@@ -51,6 +52,14 @@ pub trait Concept: Item {
     /// * 🎯每个实现中只会实现一种类型，用于统一多个函数的参数
     type TaskLink: TaskLinkConcrete<Task = Self::Task, Key = Self::Key, Budget = Self::Budget>;
 
+    /// 绑定的「词项链袋」
+    /// * 🎯每个实现中只会实现一种类型，用于统一多个函数的参数
+    type TermLinkBag: TermLinkBag<Link = Self::TermLink>;
+
+    /// 绑定的「任务链袋」
+    /// * 🎯每个实现中只会实现一种类型，用于统一多个函数的参数
+    type TaskLinkBag: TaskLinkBag<Link = Self::TaskLink>;
+
     /// 模拟`Concept.term`、`Concept.getTerm`
     /// * 🚩只读：OpenNARS仅在构造函数中赋值
     ///
@@ -73,9 +82,9 @@ pub trait Concept: Item {
     /// # 📄OpenNARS
     ///
     /// Task links for indirect processing
-    fn __task_links(&self) -> &impl TaskLinkBag<Link = Self::TaskLink>;
+    fn __task_links(&self) -> &Self::TaskLinkBag;
     /// [`Concept::__task_links`]的可变版本
-    fn __task_links_mut(&mut self) -> &mut impl TaskLinkBag<Link = Self::TaskLink>;
+    fn __task_links_mut(&mut self) -> &mut Self::TaskLinkBag;
 
     /// 模拟`Concept.termLinks`
     /// * 🚩私有：未对外暴露直接的公开接口
@@ -83,9 +92,9 @@ pub trait Concept: Item {
     /// # 📄OpenNARS
     ///
     /// Term links between the term and its components and compounds
-    fn __term_links(&self) -> &impl TermLinkBag<Link = Self::TermLink>;
+    fn __term_links(&self) -> &Self::TermLinkBag;
     /// [`Concept::__term_links`]的可变版本
-    fn __term_links_mut(&mut self) -> &mut impl TermLinkBag<Link = Self::TermLink>;
+    fn __term_links_mut(&mut self) -> &mut Self::TermLinkBag;
 
     /// 模拟`Concept.termLinkTemplates`、`Concept.getTermLinkTemplates`
     /// * 🚩只读：仅在构造函数中被赋值
@@ -449,6 +458,41 @@ pub trait Concept: Item {
 
     /* ---------- access local information ---------- */
 
+    /// 模拟`Concept.toString`
+    /// * ❌无法直接「默认实现[`Display`]」：孤儿规则
+    /// * ✅通过[别的特征](ToDisplayAndBrief)去实现
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// Return a String representation of the Item
+    ///
+    /// @return The String representation of the full content
+    fn __to_display(&self) -> String {
+        self.budget().__to_display() + " " + &self.key().to_display()
+    }
+
+    /// 模拟`Concept.toStringBrief`
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// Return a String representation of the Item after simplification
+    ///
+    /// @return A simplified String representation of the content
+    #[inline(always)]
+    fn __to_display_brief(&self) -> String {
+        self.budget().__to_display_brief() + " " + &self.key().to_display_brief()
+    }
+
+    /// 模拟`Concept.toStringLong`
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// 🈚
+    #[inline(always)]
+    fn __to_display_long(&self) -> String {
+        self.to_display()
+    }
+
     // ! ❌【2024-05-06 18:45:48】暂不模拟`toString`与`toStringLong`、`toStringIfNotNull`
     // ? ℹ️似乎`toString`还要用到`NARSBatch.isStandAlone()`这种「全局属性」
 
@@ -533,6 +577,7 @@ pub trait Concept: Item {
     // * 📄参考[`Memory::__fire_concept`]
 
     // ! ❌【2024-05-06 21:23:00】暂不实现与「呈现」「观察」有关的方法
+    // * 📄有关`toString`在上头`access local information`中
 }
 
 /// 「概念」的具体类型
@@ -554,14 +599,101 @@ pub trait ConceptConcrete: Concept + Sized {
 /// 初代实现
 mod impl_v1 {
     use super::*;
+    use crate::{
+        __impl_to_display_and_display,
+        entity::{StampV1, TaskV1, TermLinkV1, TruthV1},
+    };
 
     /// TODO: 初代实现
     pub struct ConceptV1 {
         // TODO: 添加字段
     }
 
+    /*
+
+    impl Item for ConceptV1 {
+        type Key = BagKeyV1;
+        type Budget = BudgetV1;
+
+        fn key(&self) -> &Self::Key {
+            todo!()
+        }
+
+        fn budget(&self) -> &Self::Budget {
+            todo!()
+        }
+
+        fn budget_mut(&mut self) -> &mut Self::Budget {
+            todo!()
+        }
+    }
+
+    impl Concept for ConceptV1 {
+        type Stamp = StampV1;
+
+        type Truth = TruthV1;
+
+        type Sentence = SentenceV1<Self::Truth, Self::Stamp>;
+
+        type Task = TaskV1<Self::Sentence, Self::Key, Self::Budget>;
+
+        type TermLink = TermLinkV1<Self::Budget>;
+
+        type TaskLink = TaskLinkV1<Self::Task>;
+
+        type TaskLinkBag = TaskLinkBagV1;
+
+        // ! ❌【2024-05-09 01:43:32】the trait bound `entity::term_link::impl_v1::TermLinkV1<entity::task::impl_v1::TaskV1<entity::sentence::impl_v1::SentenceV1<entity::truth_value::impl_v1::TruthV1, entity::stamp::impl_v1::StampV1>, std::string::String, entity::budget_value::impl_v1::BudgetV1>>: entity::item::Item` is not satisfied
+        // ! the trait `entity::item::Item` is implemented for `entity::term_link::impl_v1::TermLinkV1<B>`
+        type TermLinkBag = TermLinkBagV1;
+
+        fn term(&self) -> &Term {
+            todo!()
+        }
+
+        fn __task_links(&self) -> &Self::TaskLinkBag {
+            todo!()
+        }
+
+        fn __task_links_mut(&mut self) -> &mut Self::TaskLinkBag {
+            todo!()
+        }
+
+        fn __term_links(&self) -> &Self::TermLinkBag {
+            todo!()
+        }
+
+        fn __term_links_mut(&mut self) -> &mut Self::TermLinkBag {
+            todo!()
+        }
+
+        fn term_link_templates(&self) -> &[Self::TermLink] {
+            todo!()
+        }
+
+        fn __questions(&self) -> &[Self::Task] {
+            todo!()
+        }
+
+        fn __questions_mut(&mut self) -> &mut Vec<Self::Task> {
+            todo!()
+        }
+
+        fn __beliefs(&self) -> &[Self::Sentence] {
+            todo!()
+        }
+
+        fn __beliefs_mut(&mut self) -> &mut Vec<Self::Sentence> {
+            todo!()
+        }
+    }
+
+    __impl_to_display_and_display! {
+        ConceptV1 as Concept
+    }
+
     // TODO: 有待迁移到`ConceptConcrete`实现
-    impl ConceptV1 {
+    impl ConceptConcrete for ConceptV1 {
         fn new(term: Term) -> Self {
             /* 📄OpenNARS源码：
             super(tm.getName());
@@ -577,7 +709,7 @@ mod impl_v1 {
             // TODO: 复刻逻辑
             Self {}
         }
-    }
+    } */
 }
 pub use impl_v1::*;
 

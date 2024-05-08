@@ -2,9 +2,9 @@
 //! * ✅【2024-05-06 00:13:26】基本功能复刻完成
 
 use super::{Item, Task, TermLink, TermLinkConcrete};
-use crate::{entity::Sentence, global::ClockTime, nars::DEFAULT_PARAMETERS};
+use crate::{entity::Sentence, global::ClockTime, nars::DEFAULT_PARAMETERS, ToDisplayAndBrief};
 
-/// 模拟OpenNARS `nars.entity.TaskLink`
+/// 模拟`nars.entity.TaskLink`
 ///
 /// # 📄OpenNARS
 ///
@@ -135,12 +135,15 @@ pub trait TaskLink: TermLink<Target = Self::Task> {
 
 /// 「任务链」的具体类型
 /// * 🎯【2024-05-06 11:19:52】作为[`TermLinkConcrete`]的对应物
-pub trait TaskLinkConcrete: TaskLink {}
+pub trait TaskLinkConcrete: TaskLink {
+    // TODO: 增加构造函数
+}
 
 /// 初代实现
 mod impl_v1 {
     use super::*;
     use crate::{
+        __impl_to_display_and_display,
         entity::{sentence::Sentence, Item, TaskConcrete, TermLinkRef, TermLinkType, TermLinkV1},
         global::RC,
         storage::BagKeyV1,
@@ -155,6 +158,12 @@ mod impl_v1 {
         budget: T::Budget,
         target: RC<T>,
         type_ref: TermLinkType,
+        // TODO: 再增加字段，完成初代实现
+    }
+
+    __impl_to_display_and_display! {
+        {T: TaskConcrete}
+        TaskLinkV1<T> as Item
     }
 
     impl<T: TaskConcrete> Item for TaskLinkV1<T> {
@@ -181,7 +190,7 @@ mod impl_v1 {
     /// TODO: 【2024-05-05 23:14:49】🏗️后续定要做彻底的抽象化：对「语句」使用「ToKey」等特征方法……
     impl<T> TermLink for TaskLinkV1<T>
     where
-        T: TaskConcrete<Key = BagKeyV1> + Display,
+        T: TaskConcrete<Key = BagKeyV1>,
     {
         type Target = T;
 
@@ -202,6 +211,40 @@ mod impl_v1 {
             TermLinkV1::<T::Budget>::_generate_key(target.content(), type_ref)
         }
     }
+
+    // TODO: 🏗️【2024-05-09 01:37:39】实装初代实现
+    impl<T> TaskLink for TaskLinkV1<T>
+    where
+        T: TaskConcrete<Key = BagKeyV1>,
+    {
+        type Task = T;
+
+        fn __recorded_links(&self) -> &[Self::Key] {
+            todo!()
+        }
+
+        fn __recorded_links_mut(&mut self) -> &mut [&mut Self::Key] {
+            todo!()
+        }
+
+        fn __recording_time(&self) -> &[ClockTime] {
+            todo!()
+        }
+
+        fn __recording_time_mut(&mut self) -> &mut [&mut ClockTime] {
+            todo!()
+        }
+
+        fn __counter(&self) -> usize {
+            todo!()
+        }
+
+        fn __counter_mut(&mut self) -> &mut usize {
+            todo!()
+        }
+    }
+
+    impl<T> TaskLinkConcrete for TaskLinkV1<T> where T: TaskConcrete<Key = BagKeyV1> {}
 }
 pub use impl_v1::*;
 
