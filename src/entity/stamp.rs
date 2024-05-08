@@ -3,7 +3,10 @@
 //! * ✅【2024-05-05 17:03:34】单元测试初步完成
 
 use crate::{global::ClockTime, nars::DEFAULT_PARAMETERS};
-use std::hash::{Hash, Hasher};
+use std::{
+    fmt::Debug,
+    hash::{Hash, Hasher},
+};
 
 /// 模拟OpenNARS `nars.entity.Stamp`
 /// * 🚩🆕【2024-05-05 14:06:13】目前拒绝「全局静态变量」：这些量应该始终有个确切的来源
@@ -23,7 +26,8 @@ use std::hash::{Hash, Hasher};
 /// be not unique.
 /// The derived sentences inherits serial numbers from its parents, cut at the
 /// baseLength limit.
-pub trait Stamp {
+pub trait Stamp: Debug {
+    // TODO: 可能后续统一要求`Display`
     // ! ❌【2024-05-05 14:07:05】不模拟`Stamp.currentSerial`，理由同上
 
     /// 模拟`Stamp.evidentialBase`、`Stamp.getBase`

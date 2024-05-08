@@ -52,7 +52,8 @@ impl<T: TruthValueConcrete> SentenceType<T> {
 /// A Sentence is an abstract class, mainly containing a Term, a TruthValue, and a Stamp.
 ///
 /// It is used as the premises and conclusions of all inference rules.
-pub trait Sentence {
+pub trait Sentence: Debug {
+    // TODO: 可能后续统一要求`Display`
     /// 绑定的「真值」类型
     type Truth: TruthValueConcrete;
 

@@ -7,6 +7,7 @@ use crate::{
     inference::BudgetFunctions,
     nars::DEFAULT_PARAMETERS,
 };
+use std::fmt::Debug;
 
 /// 对应OpenNARS的「袋」
 /// * 📝【2024-04-26 23:12:15】核心逻辑：通过称作「预算」的机制，经济地分配内部元素
@@ -733,7 +734,8 @@ pub trait BagConcrete<E: Item>: Bag<E> + Sized {
 
 /// 用于袋的「索引」
 /// * 🎯方便后续安插方法
-pub trait BagKey: Clone + Eq {}
+/// TODO: 🏗️【2024-05-08 16:18:28】可能后续统一要求`Display`
+pub trait BagKey: Debug + Clone + Eq {}
 
 /// 袋的「名称映射」
 /// * 📄OpenNARS`Bag.nameTable`

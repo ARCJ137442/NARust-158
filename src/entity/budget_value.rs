@@ -3,6 +3,7 @@
 
 use super::{ShortFloat, ShortFloatV1};
 use crate::{global::Float, inference::UtilityFunctions};
+use std::fmt::Debug;
 
 /// 模拟OpenNARS `nars.entity.BudgetValue`
 /// * 🎯实现最大程度的抽象与通用
@@ -15,7 +16,8 @@ use crate::{global::Float, inference::UtilityFunctions};
 /// # 📄OpenNARS
 ///
 /// A triple of priority (current), durability (decay), and quality (long-term average).
-pub trait BudgetValue {
+pub trait BudgetValue: Debug {
+    // TODO: 可能后续统一要求`Display`
     /// 一种类型只可能有一种「证据值」
     /// * ✅兼容OpenNARS `ShortFloat`
     type E: ShortFloat;

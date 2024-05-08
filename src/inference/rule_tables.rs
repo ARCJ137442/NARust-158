@@ -6,7 +6,7 @@
 //! * ✅基本完成「特征方法」API：函数签名、返回值、参数类型
 
 use super::ReasonContext;
-use crate::{entity::*, language::Term};
+use crate::{entity::*, language::*, storage::*};
 
 /// 🆕用于表征[`RuleTables::index_to_figure`]推导出的「三段论子类型」
 /// * 📝OpenNARS中是在「三段论推理」的「陈述🆚陈述」中表示「位置关系」
@@ -37,8 +37,11 @@ use SyllogismFigure::*;
 /// * 🚩【2024-05-07 01:56:57】现在通过「推理上下文」自动锁定其内的「子类型」
 pub trait RuleTables: ReasonContext {
     /// 模拟`RuleTables.reason`
-    /// * 💭似乎总是要因为「同步内部类型」加很多「泛型参数」进去
-    ///   * 💫是很Rusty，但似乎太过于Rusty——泛型满天飞，可读性降低
+    /// * 🚩【2024-05-08 16:36:34】仅保留「记忆区」单个参数
+    ///   * 📌情况：该函数只在[`Memory::__fire_concept`]调用，且其中的`task_link`也固定为「当前任务链」
+    ///   * 📌原因：同时传入「自身可变引用」与「自身不可变引用」⇒借用错误
+    ///
+    /// TODO: 🏗️【2024-05-08 17:04:04】后续要简化这类耦合情形
     ///
     /// # 📄OpenNARS
     ///
@@ -47,7 +50,10 @@ pub trait RuleTables: ReasonContext {
     /// @param tLink  The selected TaskLink, which will provide a task
     /// @param bLink  The selected TermLink, which may provide a belief
     /// @param memory Reference to the memory
-    fn reason(task_link: &Self::TermLink, term_link: &Self::TaskLink, memory: &mut Self::Memory) {
+    fn reason(
+        /* task_link: &Self::TermLink, term_link: &Self::TaskLink,  */
+        memory: &mut Self::Memory,
+    ) {
         /* 📄OpenNARS：
         Task task = memory.currentTask;
         Sentence taskSentence = task.getSentence();
@@ -185,6 +191,13 @@ pub trait RuleTables: ReasonContext {
                         break;
                 }
         } */
+        let task_link = memory.current_task_link();
+        let term_link = memory
+            .current_belief_link()
+            .as_ref()
+            .expect("此处必须有：在调用前设定了非空值");
+        task_link;
+        term_link;
         todo!("// TODO: 有待实现")
     }
 
@@ -671,6 +684,9 @@ pub trait RuleTables: ReasonContext {
     /* ----- inference with one TaskLink only ----- */
 
     /// 模拟`RuleTables.transformTask`
+    /// * 🚩【2024-05-08 16:36:34】仅保留「记忆区」单个参数
+    ///   * 📌情况：该函数只在[`Memory::__fire_concept`]调用，且其中的`task_link`也固定为「当前任务链」
+    ///   * 📌原因：同时传入「自身可变引用」与「自身不可变引用」⇒借用错误
     ///
     /// # 📄OpenNARS
     ///
@@ -679,7 +695,7 @@ pub trait RuleTables: ReasonContext {
     ///
     /// @param tLink  The task link
     /// @param memory Reference to the memory
-    fn transform_task(task_link: &Self::TermLink, memory: &mut Self::Memory) {
+    fn transform_task(/* task_link: &Self::TaskLink,  */ memory: &mut Self::Memory) {
         /* 📄OpenNARS源码：
         CompoundTerm content = (CompoundTerm) memory.currentTask.getContent().clone();
         short[] indices = tLink.getIndices();
@@ -700,6 +716,7 @@ pub trait RuleTables: ReasonContext {
         if (inh instanceof Inheritance) {
             StructuralRules.transformProductImage((Inheritance) inh, content, indices, memory);
         } */
+        let task_link = memory.current_task_link();
         todo!("// TODO: 有待实现")
     }
 }

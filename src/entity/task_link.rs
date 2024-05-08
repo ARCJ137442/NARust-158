@@ -70,6 +70,7 @@ pub trait TaskLink: TermLink<Target = Self::Task> {
     /// @param termLink    The TermLink to be checked
     /// @param currentTime The current time
     /// @return Whether they are novel to each other
+    #[doc(alias = "novel")]
     fn update_novel<SelfTermLink>(
         &mut self,
         term_link: &SelfTermLink,

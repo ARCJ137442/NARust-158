@@ -8,6 +8,7 @@ use crate::{
     global::Float,
     io::{TRUTH_VALUE_MARK, VALUE_SEPARATOR},
 };
+use std::fmt::Debug;
 use std::hash::Hash;
 
 /// 模拟OpenNARS `nars.entity.TruthValue`
@@ -15,7 +16,8 @@ use std::hash::Hash;
 /// # 📄OpenNARS
 ///
 /// Frequency and confidence.
-pub trait TruthValue {
+pub trait TruthValue: Debug {
+    // TODO: 可能后续统一要求`Display`
     /// 一种类型只可能有一种「证据值」
     /// * ✅兼容OpenNARS `ShortFloat`
     type E: ShortFloat;

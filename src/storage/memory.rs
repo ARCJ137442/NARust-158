@@ -3,6 +3,7 @@
 //! * 🚧【2024-05-07 18:52:42】目前复现方法：先函数API（提供函数签名），再翻译填充函数体代码
 //!
 //! * ✅【2024-05-08 15:46:28】目前已初步实现方法API，并完成部分方法模拟
+//! * ✅【2024-05-08 17:17:41】目前已初步完成所有方法的模拟
 
 use crate::{
     entity::*,
@@ -100,11 +101,12 @@ pub use report::*;
 /// 模拟OpenNARS `nars.entity.Memory`
 /// * 🚩直接通过「要求[『推理上下文』](ReasonContext)」获得完整的「类型约束」
 ///   * ✅一并解决「上下文各种完全限定语法」的语法噪音问题
+/// * 🚩【2024-05-08 16:34:15】因为"<as [`RuleTables`]>"的需要，增加约束[`Sized`]
 ///
 /// # 📄OpenNARS
 ///
 /// The memory of the system.
-pub trait Memory: ReasonContext<Memory = Self> {
+pub trait Memory: ReasonContext<Memory = Self> + Sized {
     // /// 绑定的「概念」类型
     // type Concept: ConceptConcrete;
 
@@ -243,13 +245,14 @@ pub trait Memory: ReasonContext<Memory = Self> {
     fn current_task_mut(&mut self) -> &mut RC<Self::Task>;
 
     /// 模拟`Memory.currentBeliefLink`
+    /// * 🚩【2024-05-08 14:33:03】仍有可能为空：见[`Memory::__fire_concept`]
     ///
     /// # 📄OpenNARS
     ///
     /// The selected TermLink
-    fn current_belief_link(&self) -> &Self::TermLink;
+    fn current_belief_link(&self) -> &Option<Self::TermLink>;
     /// [`Memory::current_belief_link`]的可变版本
-    fn current_belief_link_mut(&mut self) -> &mut Self::TermLink;
+    fn current_belief_link_mut(&mut self) -> &mut Option<Self::TermLink>;
 
     /// 模拟`Memory.currentBelief`
     /// * 🚩【2024-05-08 11:49:37】为强调「引用」需要，此处返回[`RC`]而非引用
@@ -1022,15 +1025,52 @@ pub trait Memory: ReasonContext<Memory = Self> {
             }
         }
         taskLinks.putBack(currentTaskLink); */
-        let mut this = self
+        let this = self
             .__concepts_mut()
             .get_mut(concept_key)
             .expect("不可能失败");
         let current_task_link = this.__task_links_mut().take_out();
         if let Some(current_task_link) = current_task_link {
+            // ! 🚩【2024-05-08 16:19:31】必须在「修改」之前先报告（读取）
+            self.recorder_mut().put(Output::COMMENT {
+                content: format!("* Selected TaskLink: {:?}", current_task_link),
+                // TODO: 后续要将整个「任务」转换为字符串
+            });
             *self.current_task_link_mut() = current_task_link;
-            // *self.current_belief_link_mut() = None; // ? 【2024-05-08 15:41:21】这个有意义吗
-            todo!("// TODO: 有待实现")
+            *self.current_belief_link_mut() = None; // ? 【2024-05-08 15:41:21】这个有意义吗
+            let current_task_link = self.current_task_link();
+            let task = current_task_link.target();
+            *self.current_task_mut() = RC::new(task.clone()); // ! 🚩【2024-05-08 16:21:32】目前为「引用计数」需要，暂时如此引入（后续需要解决…）
+
+            // ! 🚩【2024-05-08 16:21:32】↓再次获取，避免借用问题
+            if let TermLinkRef::Transform(..) = self.current_task_link().type_ref() {
+                *self.current_belief_mut() = None;
+                // let current_task_link = self.current_task_link();
+                <Self as RuleTables>::transform_task(self);
+            } else {
+                let this = self
+                    .__concepts_mut()
+                    .get_mut(concept_key)
+                    .expect("不可能失败"); // ! 重新获取，以解决借用问题
+                                           // * 🚩🆕【2024-05-08 16:52:41】新逻辑：先收集，再处理——避免重复借用
+                let mut term_links_to_process = vec![];
+                // * 🆕🚩【2024-05-08 16:55:53】简化：实际上只是「最多尝试指定次数下，到了就不尝试」
+                for _ in 0..DEFAULT_PARAMETERS.max_reasoned_term_link {
+                    let term_link = this.__term_links_mut().take_out();
+                    match term_link {
+                        Some(term_link) => term_links_to_process.push(term_link),
+                        None => break,
+                    }
+                }
+                for term_link in term_links_to_process {
+                    self.recorder_mut().put(Output::COMMENT {
+                        content: format!("* Selected TermLink: {:?}", term_link),
+                        // TODO: 后续要将整个「任务」转换为字符串
+                    });
+                    *self.current_belief_link_mut() = Some(term_link);
+                    <Self as RuleTables>::reason(self);
+                }
+            }
         }
     }
 
@@ -1057,7 +1097,19 @@ pub trait Memory: ReasonContext<Memory = Self> {
             activateConcept(currentConcept, task.getBudget());
             currentConcept.directProcess(task);
         } */
-        todo!("// TODO: 有待实现")
+        self.recorder_mut().put(Output::COMMENT {
+            content: format!("!!! Insert: {}", task.content()),
+            // TODO: 后续要将整个「任务」转换为字符串
+        });
+        *self.current_task_mut() = RC::new(task);
+        // ! 🚩【2024-05-08 16:07:06】此处不得不使用大量`clone`以解决借用问题；后续可能是性能瓶颈
+        let task = &**self.current_task();
+        let current_term = task.content().clone();
+        let budget = task.budget().clone();
+        if let Some(current_concept) = self.get_concept_or_create(&current_term) {
+            let key = current_concept.____key_cloned(); // ! 此处亦需复制，以免借用问题
+            self.activate_concept(&key, &budget);
+        }
     }
 
     /* ---------- display ---------- */

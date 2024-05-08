@@ -3,14 +3,15 @@
 
 use super::{BudgetValueConcrete, Item, Sentence, SentenceConcrete, TruthValue};
 use crate::{global::RC, storage::BagKey};
-use std::hash::Hash;
+use std::{fmt::Debug, hash::Hash};
 
 /// 模拟OpenNARS `nars.entity.Task`
 ///
 /// # 📄OpenNARS
 ///
 /// A task to be processed, consists of a Sentence and a BudgetValue
-pub trait Task {
+pub trait Task: Debug {
+    // TODO: 可能后续统一要求`Display`
     /// 绑定的「语句」类型
     ///
     /// ? 【2024-05-05 19:43:16】是要「直接绑定语句」还是「绑定真值、时间戳等，再由其组装成『语句』」
@@ -101,7 +102,7 @@ pub trait Task {
     // * ✅`merge`已通过「自动实现」被自动模拟
 }
 
-pub trait TaskConcrete: Task + Sized {
+pub trait TaskConcrete: Task + Clone + Sized {
     /// 🆕模拟`new Task(Sentence s, BudgetValue b, Task parentTask, Sentence parentBelief, Sentence solution)`
     /// * 🚩完全参数的构造函数
     /// * 🚩【2024-05-08 11:21:58】函数签名与[`Self::from_activate`]相同，但语义并不相似

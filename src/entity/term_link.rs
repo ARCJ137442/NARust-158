@@ -4,7 +4,7 @@
 
 use super::Item;
 use crate::{global::RC, io::symbols, language::Term};
-use std::fmt::Display;
+use std::fmt::{Debug, Display};
 
 /// 实现与「词项链类型」相关的结构
 /// * 🎯复刻OpenNARS `TermLink.type`与`TermLink.index`
@@ -273,7 +273,7 @@ pub use link_type::*;
 ///
 /// This class is mainly used in inference.RuleTable to dispatch premises to
 /// inference rules
-pub trait TermLink: Item {
+pub trait TermLink: Item + Debug { // TODO: 后续可能要求`Display`
     /// 连接所基于的「目标」
     /// * 📌可以是[词项](Term)，亦可为[任务](super::Task)
     /// * ❓目前似乎需要为「词项」实现一个特征，然后将约束限定在「词项」上
