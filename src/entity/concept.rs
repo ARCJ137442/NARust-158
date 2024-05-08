@@ -9,6 +9,7 @@ use super::{
 use crate::{
     entity::{SentenceType, ShortFloat},
     global::Float,
+    inference::{LocalRules, ReasonContext},
     language::Term,
     storage::{Bag, Memory, TaskLinkBag, TermLinkBag},
 };
@@ -202,6 +203,10 @@ pub trait Concept: Item {
             }
             addToTable(judgment, beliefs, Parameters.MAXIMUM_BELIEF_LENGTH);
         } */
+        let judgement = task.sentence();
+        // let old_belief = Self::__evaluation(judgement, self.__beliefs());
+        // TODO: ❓【2024-05-08 17:43:59】有待解决「需要额外引入的『推理上下文』」问题
+        //   * 💭可能需要把这一系列「process」迁移出去，如`trait ConceptProcess: ReasonContext`
         todo!("// TODO: 有待实现")
     }
 
@@ -338,7 +343,13 @@ pub trait Concept: Item {
     /// @param query The question to be processed
     /// @param list  The list of beliefs to be used
     /// @return The best candidate belief selected
-    fn __evaluation(query: Self::Sentence, list: &[Self::Sentence]) -> Option<&Self::Sentence> {
+    fn __evaluation<'l, Context>(
+        query: &Self::Sentence,
+        list: &'l [Self::Sentence],
+    ) -> Option<&'l Self::Sentence>
+    where
+        Context: ReasonContext<Concept = Self, Sentence = Self::Sentence>,
+    {
         /* 📄OpenNARS源码：
         if (list == null) {
             return null;
@@ -354,6 +365,10 @@ pub trait Concept: Item {
             }
         }
         return candidate; */
+        let current_best: Float = 0.0;
+        for judgement in list {
+            let belief_quality = <Context as LocalRules>::solution_quality(Some(query), judgement);
+        }
         todo!("// TODO: 有待实现")
     }
 

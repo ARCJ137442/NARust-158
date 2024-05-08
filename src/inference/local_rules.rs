@@ -47,8 +47,8 @@ pub trait LocalRules: ReasonContext {
         match sentence.punctuation() {
             // 判断⇒若能修订，转换到「修订」
             SentenceType::Judgement(..) => {
-                if Self::revisable(sentence, belief) {
-                    Self::revision(sentence, belief, true, memory);
+                if <Self as LocalRules>::revisable(sentence, belief) {
+                    <Self as LocalRules>::revision(sentence, belief, true, memory);
                 }
             }
             // 问题⇒尝试用信念解答
