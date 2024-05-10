@@ -20,7 +20,6 @@ use crate::{inference::BudgetFunctions, storage::BagKey, ToDisplayAndBrief};
 ///
 /// It has a key and a budget. Cannot be cloned
 pub trait Item: ToDisplayAndBrief {
-    // TODO: 可能后续统一要求`Display`
     /// 「元素id」类型
     /// * 🎯一个类型只有一种
     /// * 🚩【2024-05-01 22:36:42】在`Bag.putIn`中，需要复制键以置入「元素映射」

@@ -319,13 +319,14 @@ mod impl_v1 {
         }
 
         fn to_display_brief(&self) -> String {
-            match self.value {
-                // 对`1`的特别处理
-                SHORT_MAX => "1.00".to_string(),
-                // 否则：右对齐，只取两位，前缀添加`0.`格式化
+            // * 🚩先尝试舍入，再决定截断
+            match self.value + 50 {
+                // 对`1`的特别处理（此时可能要大于了：舍入）
+                v if v >= SHORT_MAX => "1.00".to_string(),
+                // 否则：四舍五入到百分位；右对齐，只取两位，前缀添加`0.`格式化
                 value => {
-                    let s = ((value + 50) / 100).to_string();
-                    format!("0.{s:0>4}")
+                    let s = (value / 100).to_string();
+                    format!("0.{s:0>2}")
                 }
             }
         }
@@ -496,6 +497,7 @@ mod impl_v1 {
         /// conflicting implementation in crate `core`:
         /// - impl<T, U> std::convert::TryFrom<U> for T
         /// where U: std::convert::Into<T>;
+        #[inline(always)]
         fn from_float(value: Float) -> Self {
             // ! ⚠️【2024-05-02 20:41:19】直接unwrap
             Self::try_from(value).unwrap()
@@ -538,6 +540,9 @@ mod impl_v1 {
         use crate::{global::tests::AResult, ok};
         use nar_dev_utils::macro_once;
 
+        /// 用于测试的类型简写
+        type SF = ShortFloatV1;
+
         // 基本功能 //
 
         /// 📜默认浮点判等精度：1e-6
@@ -569,7 +574,7 @@ mod impl_v1 {
                 // * 🚩模式：短整数（作为构造函数参数）
                 macro test($( $short:expr )*) {
                     $(
-                        let _ = ShortFloatV1::new($short);
+                        let _ = SF::new($short);
                     )*
                 }
                 0
@@ -589,7 +594,7 @@ mod impl_v1 {
                 // * 🚩模式：短整数（构造用）⇒预期值
                 macro test($( $short:expr => $expected:expr )*) {
                     $(
-                        let sf = ShortFloatV1::new_unchecked($short);
+                        let sf = SF::new_unchecked($short);
                         // ! ⚠️此处必须使用「约等」判断，否则会出现`0.009 != 0.009000000000000001`的情形
                         assert_approx_eq!(sf.value_float(), $expected);
                     )*
@@ -614,7 +619,7 @@ mod impl_v1 {
                 // * 🚩模式：短整数（构造用） -> 浮点数（赋值用）⇒预期值（短整数） @ 返回的模式
                 macro test($( $short:literal -> $float:expr => $expected:literal @ $pattern:pat)*) {
                     $(
-                        let mut sf = ShortFloatV1::new_unchecked($short);
+                        let mut sf = SF::new_unchecked($short);
                         let result = sf.set_value($float);
                         // 检查返回值
                         assert_eq!(sf.value, $expected);
@@ -656,7 +661,7 @@ mod impl_v1 {
                 // * 🚩模式：短整数（构造用） -> 浮点数（赋值用）⇒预期值（短整数）
                 macro test($( $short:literal -> $float:expr => $expected:expr)*) {
                     $(
-                        let mut sf = ShortFloatV1::new_unchecked($short);
+                        let mut sf = SF::new_unchecked($short);
                         sf.set_value_unchecked($float);
                         // 检查返回值
                         assert_eq!(sf.value, $expected, "设置值`{sf:?} -> {}`不符预期`{}`", $float, $expected);
@@ -700,7 +705,7 @@ mod impl_v1 {
                 // * 🚩模式：短整数（构造用） => 预期值（字符串）
                 macro test($( $short:expr => $expected:expr)*) {
                     $(
-                        let mut sf = ShortFloatV1::new_unchecked($short);
+                        let mut sf = SF::new_unchecked($short);
                         let formatted = format!("{sf}");
                         // 检查返回值
                         assert_eq!(formatted, $expected);
@@ -734,22 +739,22 @@ mod impl_v1 {
                     )*
                 }
                 // 正常转换
-                0.0                 => Ok(ShortFloatV1 {value: 0})
-                1.0                 => Ok(ShortFloatV1 {value: 10000})
-                0.009               => Ok(ShortFloatV1 {value: 90})
-                0.9                 => Ok(ShortFloatV1 {value: 9000})
-                0.1024              => Ok(ShortFloatV1 {value: 1024})
-                0.8192              => Ok(ShortFloatV1 {value: 8192})
+                0.0                 => Ok(SF {value: 0})
+                1.0                 => Ok(SF {value: 10000})
+                0.009               => Ok(SF {value: 90})
+                0.9                 => Ok(SF {value: 9000})
+                0.1024              => Ok(SF {value: 1024})
+                0.8192              => Ok(SF {value: 8192})
                 // 四舍五入
-                0.00001             => Ok(ShortFloatV1 {value: 0})
-                0.00002             => Ok(ShortFloatV1 {value: 0})
-                0.00003             => Ok(ShortFloatV1 {value: 0})
-                0.00004             => Ok(ShortFloatV1 {value: 0})
-                0.00005             => Ok(ShortFloatV1 {value: 1})
-                0.00006             => Ok(ShortFloatV1 {value: 1})
-                0.00007             => Ok(ShortFloatV1 {value: 1})
-                0.00008             => Ok(ShortFloatV1 {value: 1})
-                0.00009             => Ok(ShortFloatV1 {value: 1})
+                0.00001             => Ok(SF {value: 0})
+                0.00002             => Ok(SF {value: 0})
+                0.00003             => Ok(SF {value: 0})
+                0.00004             => Ok(SF {value: 0})
+                0.00005             => Ok(SF {value: 1})
+                0.00006             => Ok(SF {value: 1})
+                0.00007             => Ok(SF {value: 1})
+                0.00008             => Ok(SF {value: 1})
+                0.00009             => Ok(SF {value: 1})
                 // 异常转换：超出范围
                 -0.1                => Err(OutOfRange(..))
                  2.0                => Err(OutOfRange(..))
@@ -770,7 +775,7 @@ mod impl_v1 {
                 macro test($( $short:expr => $pattern:pat)*) {
                     $(
                         // 尝试转换
-                        let sf = ShortFloatV1::new_unchecked($short);
+                        let sf = SF::new_unchecked($short);
                         // 检查返回值（兼检查转换结果）
                         assert!(matches!(sf.check_valid(), $pattern));
                     )*
@@ -797,7 +802,7 @@ mod impl_v1 {
             /// 快捷构造
             macro_rules! sf {
                 ($short:expr) => {
-                    ShortFloatV1::new_unchecked($short)
+                    SF::new_unchecked($short)
                 };
             }
             // 正常值 | 异常时会panic //
@@ -832,7 +837,65 @@ mod impl_v1 {
             ok!()
         }
 
-        // NAL相关 //
+        /// 测试/__to_display
+        #[test]
+        fn __to_display() -> AResult {
+            macro_once! {
+                /// * 🚩模式：短浮点（浮点值） ⇒ 预期
+                macro test($( $value:tt => $expected:tt)*) {
+                    $(
+                        assert_eq!(
+                            SF::from_float($value).to_display(),
+                            $expected
+                        );
+                    )*
+                }
+                // 0
+                0.0    => "0.0000"
+                // 1与非1
+                1.0    => "1.0000"
+                0.9    => "0.9000"
+                // 各个位数
+                0.1    => "0.1000"
+                0.42   => "0.4200"
+                0.137  => "0.1370"
+                0.442  => "0.4420"
+                0.1024 => "0.1024"
+                0.2185 => "0.2185"
+            }
+            ok!()
+        }
+
+        /// 测试/__to_display_brief
+        #[test]
+        fn __to_display_brief() -> AResult {
+            macro_once! {
+                /// * 🚩模式：短浮点（浮点值） ⇒ 预期
+                macro test($( $value:tt => $expected:tt)*) {
+                    $(
+                        assert_eq!(
+                            SF::from_float($value).to_display_brief(),
+                            $expected
+                        );
+                    )*
+                }
+                // 0
+                0.0    => "0.00"
+                // 1与非1
+                1.0    => "1.00"
+                0.9    => "0.90"
+                // 各个位数
+                0.1    => "0.10"
+                0.42   => "0.42"
+                0.137  => "0.14" // ! 五入
+                0.442  => "0.44" // ! 四舍
+                0.1024 => "0.10" // ! 四舍
+                0.2185 => "0.22" // ! 五入
+                0.999  => "1.00" // ! 五入到`1`
+                0.9999 => "1.00" // ! 五入到`1`
+            }
+            ok!()
+        }
     }
 }
 pub use impl_v1::*;

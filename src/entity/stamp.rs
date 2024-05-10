@@ -8,7 +8,9 @@ use crate::{
     nars::DEFAULT_PARAMETERS,
     ToDisplayAndBrief,
 };
+use anyhow::Result;
 use nar_dev_utils::{join_to, manipulate};
+use narsese::lexical::Stamp as LexicalStamp;
 use std::hash::{Hash, Hasher};
 
 /// 模拟`nars.entity.Stamp`
@@ -29,9 +31,8 @@ use std::hash::{Hash, Hasher};
 /// be not unique.
 /// The derived sentences inherits serial numbers from its parents, cut at the
 /// baseLength limit.
-pub trait Stamp: ToDisplayAndBrief {
-    // TODO: 可能后续统一要求`Display`
-    // ! ❌【2024-05-05 14:07:05】不模拟`Stamp.currentSerial`，理由同上
+pub trait Stamp: ToDisplayAndBrief + PartialEq {
+    // ! ❌【2024-05-05 14:07:05】不模拟`Stamp.currentSerial`，理由同上「拒绝全局静态变量」
 
     /// 模拟`Stamp.evidentialBase`、`Stamp.getBase`
     /// * 📝译名为「证据基」
@@ -305,16 +306,21 @@ pub trait StampConcrete: Stamp + Clone + Hash + PartialEq {
         self.evidential_base().hash(state);
     }
 
-    /// 🆕自「解析器」构造
+    /// 🆕自「词法Narsese / 解析器」构造
     /// * 🎯模拟`nars.io.StringParser.parseTask`的一部分
     /// * 🚩通过「记忆区内部时钟」从用户输入构造
     ///   * 🔗参考OpenNARS`nars.main_nogui.ReasonerBatch.textInputLine`
     ///   * 🔗参考OpenNARS`nars.io.StringParser.parseExperience`
     /// * ⚠️不同于OpenNARS：此处的`current_serial`直接采用`time`
     ///   * 📌【2024-05-10 11:53:52】理由：本身意义只是需要「创建时唯一」的单调递增变量
+    /// * 🚩【2024-05-10 19:55:39】改名`from_lexical`，实际上并不使用
+    ///   * 📌目前总是返回`Ok`（解析成功）
+    ///   * 🎯容许后续补充
+    /// * 📝OpenNARS 1.5.8并未有「时间戳」的「时态」机制
     #[inline(always)]
-    fn from_input(time: ClockTime) -> Self {
-        Self::with_time(time, time)
+    #[doc(alias = "from_input")]
+    fn from_lexical(_: LexicalStamp, time: ClockTime) -> Result<Self> {
+        Ok(Self::with_time(time, time))
     }
 }
 
@@ -397,6 +403,23 @@ mod tests {
     /// 测试用「时间戳」类型
     type S = StampV1;
 
+    /// 测试用「时间戳判等」
+    /// * 🎯完全比对所有字段，并且按照顺序逐个比对
+    macro_rules! assert_s_eq {
+        // 对两个「时间戳」完全判等
+        ($s1:expr, $s2:expr $(, $($arg:tt)*)?) => {
+            assert_eq!($s1.evidential_base(), $s2.evidential_base() $(, $($arg)*)?);
+            assert_eq!($s1.creation_time(), $s2.creation_time() $(, $($arg)*)?);
+        };
+        // 对两个「时间戳Option」完全判等
+        (Option $s1:expr, $s2:expr $(, $($arg:tt)*)?) => {
+            assert_eq!($s1.is_some(), $s2.is_some() $(, $($arg)*)?);
+            if let (Some(s1), Some(s2)) = ($s1, $s2) {
+                assert_s_eq!(s1, s2 $(, $($arg)*)?);
+            }
+        };
+    }
+
     /// 测试/set_vec_eq
     /// * 🎯数组集合判等
     #[test]
@@ -441,7 +464,7 @@ mod tests {
             /// * 🚩模式：(当前时钟时间, 创建时间) => 预期【时间戳`stamp!`】
             macro test($( ( $current_serial:expr, $time:expr ) => $stamp:tt )*) {
                 $(
-                    assert_eq!(S::with_time( $current_serial, $time ), stamp!($stamp));
+                    assert_s_eq!(S::with_time( $current_serial, $time ), stamp!($stamp));
                 )*
             }
             (1, 0) => {0: 1}
@@ -458,7 +481,7 @@ mod tests {
             /// * 🚩模式：(旧【时间戳`stamp!`】, 创建时间) => 预期【时间戳`stamp!`】
             macro test($( ( $old:tt, $time:expr ) => $stamp:tt )*) {
                 $(
-                    assert_eq!(S::with_old( &stamp!($old), $time ), stamp!($stamp));
+                    assert_s_eq!(S::with_old( &stamp!($old), $time ), stamp!($stamp));
                 )*
             }
             ({0: 1}, 1) => {1: 1}
@@ -478,11 +501,11 @@ mod tests {
             macro test {
                 // 没结果
                 (@SINGLE ( $s1:tt, $s2:tt, $time:expr ) => None ) => {
-                    assert_eq!(S::from_merge( &stamp!($s1), &stamp!($s2), $time ), None);
+                    assert_s_eq!(Option S::from_merge( &stamp!($s1), &stamp!($s2), $time ), None::<S>);
                 }
                 // 有结果
                 (@SINGLE ( $s1:tt, $s2:tt, $time:expr ) => $stamp:tt ) => {
-                    assert_eq!(S::from_merge( &stamp!($s1), &stamp!($s2), $time ), Some(stamp!($stamp)));
+                    assert_s_eq!(Option S::from_merge( &stamp!($s1), &stamp!($s2), $time ), Some(stamp!($stamp)));
                 }
                 // 总模式
                 ( $( $parameters:tt => $expected:tt )* ) => {
@@ -570,5 +593,34 @@ mod tests {
         }
     }
 
-    // * ✅测试/equals 已在先前函数中测试过（断言所必须）
+    /// 测试/equals
+    #[test]
+    fn equals() {
+        macro_once! {
+            /// * 🚩模式：(【时间戳1`stamp!`】, 【时间戳2`stamp!`】, 创建时间) => 预期【时间戳`stamp!`/None】
+            macro test( $( ($s1:tt, $s2:tt) => $expected:tt )* ) {
+                $(
+                    // 验证「相等」符合预期
+                    assert_eq!(stamp!($s1).equals(&stamp!($s2)), $expected);
+                    // 验证`equals`与`==`一致
+                    assert_eq!(stamp!($s1) == stamp!($s2), $expected);
+                )*
+            }
+            // 单个：不一致就是不一致
+            ({0: 1}, {0: 1}) => true
+            ({0: 1}, {0: 2}) => false
+            ({0: 2}, {0: 1}) => false
+            // 只比较「证据基」而不比较「创建时间」
+            ({0: 1}, {1: 1}) => true
+            // 多个：无序比较证据基
+            ({0: 1; 2}, {0: 1; 2}) => true
+            ({0: 1; 2}, {0: 2; 1}) => true
+            ({1000: 1; 2}, {0: 2; 1}) => true // 忽略创建时间
+            ({0: 1; 2; 3}, {0: 2; 1; 3}) => true
+            ({0: 1; 2; 3}, {0: 1; 3; 2}) => true
+            ({0: 1; 2; 3}, {0: 3; 2; 1}) => true
+            ({0: 1; 2; 3}, {0: 2; 3; 1}) => true
+            ({0: 1; 2; 3}, {0: 3; 1; 2}) => true
+        }
+    }
 }

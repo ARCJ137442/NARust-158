@@ -1,17 +1,24 @@
 //! 🎯复刻OpenNARS `nars.entity.Task`
 //! * ✅【2024-05-05 21:38:53】基本方法复刻完毕
 
-use super::{BudgetValueConcrete, Item, Sentence, SentenceConcrete, TruthValue};
-use crate::{global::RC, storage::BagKey, ToDisplayAndBrief};
+use super::{BudgetValue, BudgetValueConcrete, Item, Sentence, SentenceConcrete, TruthValue};
+use crate::{
+    global::{ClockTime, RC},
+    storage::BagKey,
+    ToDisplayAndBrief,
+};
+use anyhow::Result;
+use narsese::lexical::Task as LexicalTask;
 use std::hash::Hash;
 
 /// 模拟`nars.entity.Task`
+///
+/// TODO: 🏗️【2024-05-10 20:37:04】或许后续考虑直接让[`Task`]要求派生自[`Sentence`]与[`Budget`]？
 ///
 /// # 📄OpenNARS
 ///
 /// A task to be processed, consists of a Sentence and a BudgetValue
 pub trait Task: ToDisplayAndBrief {
-    // TODO: 可能后续统一要求`Display`
     /// 绑定的「语句」类型
     ///
     /// ? 【2024-05-05 19:43:16】是要「直接绑定语句」还是「绑定真值、时间戳等，再由其组装成『语句』」
@@ -221,6 +228,34 @@ pub trait TaskConcrete: Task + Clone + Sized {
         this // ? 【2024-05-08 11:14:29】💭是否可以直接使用`Self::new`而无需再赋值
              // TODO: 🏗️【2024-05-08 11:15:12】日后在「有足够单元测试」的环境下精简
     }
+
+    /// 🆕从「词法Narsese」中折叠
+    /// * 🎯词法折叠；字符串解析器
+    /// * 📌附带所有来自「记忆区」「时钟」「真值」「预算值」的超参数
+    fn from_lexical(
+        lexical: LexicalTask,
+        truth_default_values: [<<Self::Sentence as Sentence>::Truth as TruthValue>::E; 2],
+        budget_default_values: [<Self::Budget as BudgetValue>::E; 3],
+        truth_is_analytic: bool,
+        stamp_time: ClockTime,
+        sentence_revisable: bool,
+    ) -> Result<Self> {
+        // 直接解构
+        let LexicalTask { budget, sentence } = lexical;
+        // 语句
+        let sentence = <Self::Sentence as SentenceConcrete>::from_lexical(
+            sentence,
+            truth_default_values,
+            truth_is_analytic,
+            stamp_time,
+            sentence_revisable,
+        )?;
+        // 预算值
+        let budget =
+            <Self::Budget as BudgetValueConcrete>::from_lexical(budget, budget_default_values)?;
+        // 构造
+        Ok(Self::from_input(sentence, budget))
+    }
 }
 
 /// 自动实现「语句」
@@ -423,10 +458,13 @@ pub use impl_v1::*;
 /// 单元测试
 #[cfg(test)]
 mod tests {
+    use narsese::conversion::string::impl_lexical::format_instances::FORMAT_ASCII;
+
     use super::*;
     use crate::{
         entity::{
-            BudgetV1, SentenceType, SentenceV1, StampConcrete, StampV1, TruthV1, TruthValueConcrete,
+            BudgetV1, SentenceType, SentenceV1, ShortFloat, ShortFloatV1, StampConcrete, StampV1,
+            TruthV1, TruthValueConcrete,
         },
         global::tests::AResult,
         language::Term,
@@ -438,21 +476,106 @@ mod tests {
     /// 测试用具体类型
     type T = TaskV1<SentenceV1<TruthV1, StampV1>, BagKeyV1, BudgetV1>;
 
+    /// 短浮点简写别名
+    type SF = ShortFloatV1;
+
+    /// 测试用默认值/真值
+    fn truth_default_values() -> [ShortFloatV1; 2] {
+        [SF::from_float(1.0), SF::from_float(0.9)]
+    }
+
+    /// 测试用默认值/预算值
+    fn budget_default_values() -> [ShortFloatV1; 3] {
+        [
+            SF::from_float(0.8),
+            SF::from_float(0.8),
+            SF::from_float(0.8),
+        ]
+    }
+
+    /// 测试用默认值/当前序列（发生时间）
+    const CURRENT_SERIAL_DEFAULT: ClockTime = 0;
+
+    /// 测试用默认值/可修订
+    const REVISABLE_DEFAULT: bool = true;
+
+    /// 测试用默认值/是否为「分析真值」
+    const IS_ANALYTIC_DEFAULT: bool = false;
+
+    /// 快捷构造宏
+    /// * 🚩使用「变量遮蔽」的方式，允许「可选参数」的出现
+    ///   * 📌虽然这里的「可选参数」仍然需要排序
+    macro_rules! l_task {
+        (
+            // 主参数：文本
+            $text:expr $(;
+            // 可选参数
+            $(time = $time:expr , )?
+            $(is_analytic = $is_analytic:expr , )?
+            $(revisable = $revisable:expr , )?
+            $(truth_default_values = $truth_default_values:expr , )?
+            $(budget_default_values = $budget_default_values:expr , )? )?
+        ) => {{
+            let lexical = FORMAT_ASCII.parse($text)?.try_into_task()?;
+            // time
+            let time = CURRENT_SERIAL_DEFAULT;
+            $( let time = $time; )?
+            // is_analytic
+            let is_analytic = IS_ANALYTIC_DEFAULT;
+            $( let is_analytic = $is_analytic; )?
+            // revisable
+            let revisable = REVISABLE_DEFAULT;
+            $( let revisable = $revisable; )?
+            // truth_default_values
+            let truth_default_values = truth_default_values();
+            $( let truth_default_values = $truth_default_values; )?
+            // budget_default_values
+            let budget_default_values = budget_default_values();
+            $( let budget_default_values = $budget_default_values; )?
+            T::from_lexical(lexical, truth_default_values, budget_default_values, is_analytic, time, revisable)?
+        }};
+    }
+
     // * ✅测试/new 已在后续函数中测试
 
     /// 测试/from_input
+    /// * 🎯顺带测试「展示类函数」是否正常运行（不检验展示结果）
     #[test]
     fn from_input() -> AResult {
+        /// ! 本身「简略」模式下「预算值」仍然是「详细」，OpenNARS如此
+        ///   * 📄OpenNARS`s.append(super.toString())`
+        ///   * 📄[`Task::__to_display`]
+        fn show(task: T) {
+            println!("BRIEF:   {}", task.to_display_brief());
+            println!("NORMAL:  {}", task.to_display());
+            println!("LONG:    {}", task.to_display_long());
+        }
+        // 构造（一行）
+        let text = "$0.8; 0.8; 0.8$ A. :|: %1.0; 0.9%";
+        let task = l_task!(text);
+        // 展示
+        show(task);
         // 构造
         let content = test_term!("A");
-        let truth = TruthV1::from_floats(1.0, 0.9, false);
-        let budget = BudgetV1::from_floats(0.5, 0.5, 0.5);
-        let stamp = StampV1::with_time(0, 0);
+        let current_serial = 0;
+        let stamp = StampV1::with_time(current_serial, 0);
+        let is_analytic = false;
+        let truth = TruthV1::from_floats(1.0, 0.9, is_analytic);
         let revisable = false;
         let sentence = SentenceV1::new(content, SentenceType::Judgement(truth), stamp, revisable);
+        let budget = BudgetV1::from_floats(0.5, 0.5, 0.5);
         let task = T::from_input(sentence, budget);
         // 展示
-        dbg!(task);
+        show(task);
+
+        // 完成
+        ok!()
+    }
+
+    /// 测试/`to_display`、`to_display_brief`、`to_display_long`
+    /// * 🎯所有OpenNARS相关的「显示」方法
+    #[test]
+    fn to_display_xxx() -> AResult {
         // 完成
         ok!()
     }

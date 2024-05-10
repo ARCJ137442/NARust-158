@@ -8,16 +8,16 @@
 //! * 💭这里的「解析器」有可能是特定的
 //!   * 📄时间戳需要结合推理器自身，以及「记忆区」「概念」等
 
-use super::{Stamp, StampConcrete, TruthValueConcrete};
-use crate::{io::symbols, language::Term, ToDisplayAndBrief};
+use super::{Stamp, StampConcrete, TruthValue, TruthValueConcrete};
+use crate::{global::ClockTime, io::symbols, language::Term, ToDisplayAndBrief};
+use anyhow::{anyhow, Result};
+use narsese::lexical::{
+    Punctuation as LexicalPunctuation, Sentence as LexicalSentence, Truth as LexicalTruth,
+};
 use std::hash::{Hash, Hasher};
 
-// /// 🆕模拟`nars.entity.Sentence.punctuation`
-// /// * 📌作为一个枚举，相比「字符」更能指定其范围
-// /// * 🚩【2024-05-05 17:08:35】目前直接复用[「枚举Narsese」](narsese::enum_narsese)的工作
-// pub type Punctuation = narsese::enum_narsese::Punctuation;
-
 /// 模拟`nars.entity.Sentence.punctuation`和OpenNARS`nars.entity.Sentence.truth`
+/// * 🚩枚举分立「判断」「问题」，并且容纳其中有差异的方面
 /// * 🎯应对「判断有真值，问题无真值」的情况
 #[doc(alias = "Punctuation")]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -30,18 +30,47 @@ pub enum SentenceType<T: TruthValueConcrete> {
 }
 
 impl<T: TruthValueConcrete> SentenceType<T> {
-    /// 将自身与「标点字符」作转换
+    /// 🆕将自身与「标点字符」作转换
     /// * 🎯用于生成[`super::Item`]的（字符串）id
     fn punctuation_char(&self) -> char {
+        use symbols::*;
         use SentenceType::*;
         match self {
-            Judgement(_) => symbols::JUDGMENT_MARK,
-            Question => symbols::QUESTION_MARK,
+            Judgement(_) => JUDGMENT_MARK,
+            Question => QUESTION_MARK,
+        }
+    }
+
+    /// 🆕从「词法标点」与「词法真值」转换
+    pub fn from_lexical(
+        punctuation: LexicalPunctuation,
+        truth: LexicalTruth,
+        default_values: [<T as TruthValue>::E; 2],
+        is_analytic: bool,
+    ) -> Result<Self> {
+        use symbols::*;
+        use SentenceType::*;
+        // 取首字符
+        match punctuation.chars().next() {
+            None => Err(anyhow!("标点不能为空")),
+            Some(punctuation) => match punctuation {
+                // 判断
+                JUDGMENT_MARK => Ok(Judgement(<T as TruthValueConcrete>::from_lexical(
+                    truth,
+                    default_values,
+                    is_analytic,
+                )?)),
+                // 问题
+                QUESTION_MARK => Ok(Question),
+                // 其它
+                _ => Err(anyhow!("不支持的标点类型 {punctuation:?} {truth:?}")),
+            },
         }
     }
 }
 
 /// 模拟`nars.entity.Sentence`
+/// * 📌【2024-05-10 20:17:04】此处不加入对[`PartialEq`]的要求：会将要求传播到上层的「词项链」「任务链」
 ///
 /// # 📄OpenNARS
 ///
@@ -49,7 +78,6 @@ impl<T: TruthValueConcrete> SentenceType<T> {
 ///
 /// It is used as the premises and conclusions of all inference rules.
 pub trait Sentence: ToDisplayAndBrief {
-    // TODO: 可能后续统一要求`Display`
     /// 绑定的「真值」类型
     type Truth: TruthValueConcrete;
 
@@ -339,7 +367,7 @@ impl<S: Sentence + Eq> TruthValue for S {
 
 /// 自动实现「时间戳」特征
 /// * ✨语句代理「时间戳」的特征，可以被看作「时间戳」使用
-impl<S: Sentence + Hash> Stamp for S {
+impl<S: Sentence + PartialEq> Stamp for S {
     #[inline(always)]
     fn evidential_base(&self) -> &[crate::global::ClockTime] {
         self.stamp().evidential_base()
@@ -478,6 +506,37 @@ pub trait SentenceConcrete: Sentence + Clone + Hash + PartialEq {
         return (truth.equals(that.getTruth()) && stamp.equals(that.getStamp())); */
         self.equals(other)
     }
+
+    /// 🆕从「词法Narsese」中折叠
+    /// * 📌附带所有来自「记忆区」「时钟」的超参数
+    fn from_lexical(
+        lexical: LexicalSentence,
+        truth_default_values: [<Self::Truth as TruthValue>::E; 2],
+        truth_is_analytic: bool,
+        stamp_time: ClockTime,
+        revisable: bool,
+    ) -> Result<Self> {
+        // 直接解构
+        let LexicalSentence {
+            term,
+            punctuation,
+            stamp,
+            truth,
+        } = lexical;
+        // 词项
+        let content = Term::try_from(term)?;
+        // 标点 & 真值
+        let sentence_type = SentenceType::from_lexical(
+            punctuation,
+            truth,
+            truth_default_values,
+            truth_is_analytic,
+        )?;
+        // 解析时间戳
+        let stamp = <Self::Stamp as StampConcrete>::from_lexical(stamp, stamp_time)?;
+        // 构造
+        Ok(Self::new(content, sentence_type, stamp, revisable))
+    }
 }
 
 // TODO: 有关解析器的方法：从「词项」转换
@@ -609,7 +668,7 @@ mod tests {
     use crate::{
         entity::{StampV1, TruthV1},
         global::tests::AResult,
-        ok, short_float, stamp, term,
+        ok, stamp, term,
     };
 
     /// 用于测试的「语句」类型
@@ -621,7 +680,6 @@ mod tests {
         let term = term!(<A --> B>)?;
         let stamp = stamp!({1: 1; 2; 3});
         let punctuation = SentenceType::Question;
-        let sf = short_float!(str "0.5");
         let sentence = S::new(term, punctuation, stamp, false);
         dbg!(sentence);
         ok!()
@@ -735,6 +793,38 @@ mod tests {
     /// 测试/__to_display_brief
     #[test]
     fn __to_display_brief() -> AResult {
+        // TODO: 填充测试内容
+        ok!()
+    }
+
+    // * ✅测试/new 已在先前测试中测试过
+
+    // * ✅测试/new_revisable 已在先前测试中测试过
+
+    /// 测试/equals
+    #[test]
+    fn equals() -> AResult {
+        // TODO: 填充测试内容
+        ok!()
+    }
+
+    /// 测试/__hash
+    #[test]
+    fn __hash() -> AResult {
+        // TODO: 填充测试内容
+        ok!()
+    }
+
+    /// 测试/equivalent_to
+    #[test]
+    fn equivalent_to() -> AResult {
+        // TODO: 填充测试内容
+        ok!()
+    }
+
+    /// 测试/from_lexical
+    #[test]
+    fn from_lexical() -> AResult {
         // TODO: 填充测试内容
         ok!()
     }
