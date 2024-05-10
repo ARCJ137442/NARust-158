@@ -360,6 +360,18 @@ mod impl_v1 {
             }
         }
     }
+
+    /// 初代「时间戳」的快捷构造宏
+    /// * 🚩模式：{发生时间: 证据1; 证据2; ...}
+    #[macro_export]
+    macro_rules! stamp {
+        ({ $creation_time:tt : $($evidence:expr $(;)? )* }) => {
+            StampV1::__new(
+                $creation_time,
+                &[ $( $evidence ),* ]
+            )
+        };
+    }
 }
 pub use impl_v1::*;
 
@@ -367,6 +379,7 @@ pub use impl_v1::*;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::stamp;
     use nar_dev_utils::macro_once;
 
     /// 测试用「时间戳」类型
@@ -409,21 +422,6 @@ mod tests {
 
     // * ✅测试/__new 已在后续函数中测试
 
-    /// 快捷构造宏
-    /// * 🚩模式：{发生时间: 证据1; 证据2; ...}
-    macro_rules! stamp {
-        ({$creation_time:tt : $($evidence:expr $(;)? )* }) => {
-            S::__new(
-                $creation_time,
-                &[
-                    $(
-                        $evidence
-                    ),*
-                ]
-            )
-        };
-    }
-
     /// 测试/with_time
     #[test]
     fn with_time() {
@@ -431,7 +429,7 @@ mod tests {
             /// * 🚩模式：(当前时钟时间, 创建时间) => 预期【时间戳`stamp!`】
             macro test($( ( $current_serial:expr, $time:expr ) => $stamp:tt )*) {
                 $(
-                    assert_eq!(S::with_time( $current_serial, $time ),stamp!($stamp));
+                    assert_eq!(S::with_time( $current_serial, $time ), stamp!($stamp));
                 )*
             }
             (1, 0) => {0: 1}

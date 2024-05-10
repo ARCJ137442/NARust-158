@@ -18,26 +18,31 @@
 //! 1. Direct processing by matching, in the concept corresponding to the content, in one step. It happens when the task is inserted into memory.
 //! 2. Indirect processing by reasoning, in related concepts and unlimited steps. It happens in each inference cycle.
 
+// 短浮点 `ShortFloat` | 内有导出宏定义
+mod short_float;
+pub use short_float::*;
+
+// 时间戳 `Stamp` | 内有导出宏定义
+mod stamp;
+pub use stamp::*;
+
+// 预算值 `BudgetValue`
+mod budget_value;
+pub use budget_value::*;
+
+// 真值 `TruthValue`
+mod truth_value;
+pub use truth_value::*;
+
+// 语句 `Sentence`
+mod sentence;
+pub use sentence::*;
+
+// 任务 `Task`
+mod task;
+pub use task::*;
+
 nar_dev_utils::mods! {
-
-    // 短浮点 `ShortFloat`
-    pub use short_float;
-
-    // 预算值 `BudgetValue`
-    pub use budget_value;
-
-    // 真值 `TruthValue`
-    pub use truth_value;
-
-    // 时间戳 `Stamp`
-    pub use stamp;
-
-    // 语句 `Sentence`
-    pub use sentence;
-
-    // 任务 `Task`
-    pub use task;
-
     // 词项链 `TermLink`
     pub use term_link;
 

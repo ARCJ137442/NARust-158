@@ -8,6 +8,8 @@ use crate::{
     io::{BUDGET_VALUE_MARK, VALUE_SEPARATOR},
     ToDisplayAndBrief,
 };
+use anyhow::Result;
+use narsese::lexical::Budget as LexicalBudget;
 
 /// 模拟`nars.entity.BudgetValue`
 /// * 🎯实现最大程度的抽象与通用
@@ -275,6 +277,34 @@ pub trait BudgetValueConcrete: BudgetValue + Sized + Clone {
             <Self as BudgetValue>::E::from_float(d),
             <Self as BudgetValue>::E::from_float(q),
         )
+    }
+
+    /// 🆕「词法预算值」到「自身类型」的转换
+    /// * 🎯统一的、全面的「词法预算值→预算值」转换方法
+    /// * 📌需要手动输入「默认值」
+    fn from_lexical(lexical: LexicalBudget, mut default_values: [Self::E; 3]) -> Result<Self> {
+        let sf_str = match lexical.len() {
+            0 => &[],
+            1 => &lexical[0..1],
+            2 => &lexical[0..2],
+            _ => &lexical[0..3],
+        };
+        // 预先解析默认值
+        // ! ⚠️必须合法，否则panic
+        let float_s = &mut default_values;
+        for (i, s) in sf_str.iter().enumerate() {
+            // 浮点解析
+            let v = s.parse::<Float>()?;
+            // 短浮点解析
+            let sf = match Self::E::try_from(v) {
+                Ok(sf) => sf,
+                Err(_) => return Err(anyhow::anyhow!("无效短浮点值：{v}")),
+            };
+            float_s[i] = sf;
+        }
+        // 构造
+        let [p, d, q] = *float_s;
+        Ok(Self::new(p, d, q))
     }
 }
 
@@ -690,6 +720,46 @@ mod tests {
             [0.81; 0.9; 1.0] @ 0.901 => false
             [0.01; 0.1; 1.0] @ 0.101 => false
             [0.2; 0.04; 0.008] @ 0.041 => false
+        }
+        ok!()
+    }
+
+    /// 测试/from_lexical
+    #[test]
+    fn from_lexical() -> AResult {
+        macro_once! {
+            /// * 🚩模式：[词法真值构造方法] ⇒ 预期[真值的构造方法]
+            macro test($(
+                [ $($lexical:tt)* ] @ [$p:expr; $d:expr; $q:expr]
+                => [ $($budget:tt)* ] )*
+            ) {
+                $(
+                    // 构造
+                    let lexical = narsese::lexical_budget!($($lexical)*);
+                    let budget = budget!($($budget)*);
+                    // 解析
+                    let parsed = Budget::from_lexical(
+                        lexical,
+                        [ // 默认值（完全限定语法）
+                            <<Budget as BudgetValue>::E as ShortFloat>::from_float($p),
+                            <<Budget as BudgetValue>::E as ShortFloat>::from_float($d),
+                            <<Budget as BudgetValue>::E as ShortFloat>::from_float($q),
+                        ],
+                    ).unwrap();
+                    // 判等
+                    assert_eq!(parsed, budget);
+                )*
+            }
+            // 完全解析
+            ["1.0" "0.9" "0.5"] @ [0.0; 0.0; 0.0] => [1.0; 0.9; 0.5]
+            ["0.1" "0.2" "0.3"] @ [0.4; 0.5; 0.6] => [0.1; 0.2; 0.3]
+            // 缺省
+            ["0.1" "0.2"] @ [0.5; 0.5; 0.5] => [0.1; 0.2; 0.5]
+            ["0.1"] @ [0.5; 0.5; 0.5] => [0.1; 0.5; 0.5]
+            [] @ [0.5; 0.5; 0.5] => [0.5; 0.5; 0.5]
+            // 多余
+            ["0.1" "0.2" "0.3" "0.4"] @ [0.4; 0.5; 0.6] => [0.1; 0.2; 0.3]
+            ["0.1" "0.2" "0.3" "ARCJ" "137442"] @ [0.4; 0.5; 0.6] => [0.1; 0.2; 0.3]
         }
         ok!()
     }

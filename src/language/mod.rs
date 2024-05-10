@@ -66,7 +66,7 @@ mod term_v2;
 pub use term_v2::*;
 
 // 词项4（候选）
-mod term_v4;
+// mod term_v4;
 // pub use term::*;
 
 // TODO: 有关OpenNARS中「特定词项类型的特定静态方法」

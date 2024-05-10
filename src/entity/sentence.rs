@@ -107,16 +107,6 @@ pub trait Sentence: ToDisplayAndBrief {
     /// * 🚩【2024-05-05 18:13:47】[`Sentence::truth_mut`]需要
     fn punctuation_mut(&mut self) -> &mut SentenceType<Self::Truth>;
 
-    // ! 🚩【2024-05-05 18:10:14】目前用「带真值的『标点』」表示「真值-标点」约束
-    // /// 模拟`Sentence.punctuation`、`Sentence.getPunctuation`
-    // /// * 🚩只读：仅在构造函数中出现赋值
-    // ///
-    // /// # 📄OpenNARS
-    // ///
-    // /// The punctuation also indicates the type of the Sentence: Judgement,
-    // /// Question, or Goal
-    // fn punctuation(&self) -> Punctuation;
-
     /// 模拟`Sentence.truth`、`Sentence.getTruth`
     /// * 🚩读写：可能在「获取真值」后要改变「真值」对象
     /// * ⚠️依据语句的类型而定
@@ -236,6 +226,8 @@ pub trait Sentence: ToDisplayAndBrief {
     ///   * 📄OpenNARS中没有用到时间戳
     /// * 💭实际上只要「独一无二」即可
     /// * 🚩【2024-05-08 22:18:06】目前直接对接[`ToDisplayAndBrief`]
+    /// * 🚩【2024-05-10 01:09:44】现在只会在[`crate::entity::TaskConcrete::__new`]的实现中被用到
+    ///   * 具体体现在[`crate::entity::TaskV1`]中
     ///
     /// # 📄OpenNARS
     ///
@@ -244,7 +236,6 @@ pub trait Sentence: ToDisplayAndBrief {
     /// @return The String
     #[doc(alias = "to_key")]
     fn to_key_string(&self) -> String {
-        // TODO: 【2024-05-05 19:46:12】这个方法似乎应该被迁移到「任务」上，不应绑定字符串类型，也不应触及上层「任务」「Item」等
         /* 📄OpenNARS源码：
         StringBuilder s = new StringBuilder();
         s.append(content.toString());
@@ -489,6 +480,9 @@ pub trait SentenceConcrete: Sentence + Clone + Hash + PartialEq {
     }
 }
 
+// TODO: 有关解析器的方法：从「词项」转换
+// * 📌一个难点是「时间戳」的转换（需要依赖「时钟」等量）
+
 /// 初代实现
 /// * 📌需要作为一个**独立对象**使用
 ///   * 📄[「概念」](super::Concept)中的「信念表」
@@ -612,8 +606,136 @@ pub use impl_v1::*;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::entity::{StampV1, TruthV1};
+    use crate::{
+        entity::{StampV1, TruthV1},
+        global::tests::AResult,
+        ok, short_float, stamp, term,
+    };
 
     /// 用于测试的「语句」类型
     type S = SentenceV1<TruthV1, StampV1>;
+
+    /// 测试/content
+    #[test]
+    fn content() -> AResult {
+        let term = term!(<A --> B>)?;
+        let stamp = stamp!({1: 1; 2; 3});
+        let punctuation = SentenceType::Question;
+        let sf = short_float!(str "0.5");
+        let sentence = S::new(term, punctuation, stamp, false);
+        dbg!(sentence);
+        ok!()
+    }
+
+    /// 测试/content_mut
+    #[test]
+    fn content_mut() -> AResult {
+        // TODO: 填充测试内容
+        ok!()
+    }
+
+    /// 测试/punctuation
+    #[test]
+    fn punctuation() -> AResult {
+        // TODO: 填充测试内容
+        ok!()
+    }
+
+    /// 测试/punctuation_mut
+    #[test]
+    fn punctuation_mut() -> AResult {
+        // TODO: 填充测试内容
+        ok!()
+    }
+
+    /// 测试/truth
+    #[test]
+    fn truth() -> AResult {
+        // TODO: 填充测试内容
+        ok!()
+    }
+
+    /// 测试/truth_mut
+    #[test]
+    fn truth_mut() -> AResult {
+        // TODO: 填充测试内容
+        ok!()
+    }
+
+    /// 测试/stamp
+    #[test]
+    fn stamp() -> AResult {
+        // TODO: 填充测试内容
+        ok!()
+    }
+
+    /// 测试/stamp_mut
+    #[test]
+    fn stamp_mut() -> AResult {
+        // TODO: 填充测试内容
+        ok!()
+    }
+
+    /// 测试/revisable
+    #[test]
+    fn revisable() -> AResult {
+        // TODO: 填充测试内容
+        ok!()
+    }
+
+    /// 测试/revisable_mut
+    #[test]
+    fn revisable_mut() -> AResult {
+        // TODO: 填充测试内容
+        ok!()
+    }
+
+    /// 测试/clone_content
+    #[test]
+    fn clone_content() -> AResult {
+        // TODO: 填充测试内容
+        ok!()
+    }
+
+    /// 测试/is_judgement
+    #[test]
+    fn is_judgement() -> AResult {
+        // TODO: 填充测试内容
+        ok!()
+    }
+
+    /// 测试/is_question
+    #[test]
+    fn is_question() -> AResult {
+        // TODO: 填充测试内容
+        ok!()
+    }
+
+    /// 测试/contain_query_var
+    #[test]
+    fn contain_query_var() -> AResult {
+        // TODO: 填充测试内容
+        ok!()
+    }
+
+    /// 测试/to_key_string
+    #[test]
+    fn to_key_string() -> AResult {
+        // TODO: 填充测试内容
+        ok!()
+    }
+
+    /// 测试/__to_display
+    #[test]
+    fn __to_display() -> AResult {
+        // TODO: 填充测试内容
+        ok!()
+    }
+
+    /// 测试/__to_display_brief
+    #[test]
+    fn __to_display_brief() -> AResult {
+        // TODO: 填充测试内容
+        ok!()
+    }
 }

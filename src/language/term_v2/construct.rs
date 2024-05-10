@@ -271,13 +271,30 @@ impl TermComponents {
     }
 }
 
+/// [「词项」](Term)的快捷构造宏
+#[macro_export]
+macro_rules! term {
+    // 单个词项（字符串）
+    ($s:literal) => {
+        $s.parse::<$crate::language::Term>()
+    };
+    // 单个词项，但unwrap
+    (unwrap $s:expr) => {
+        $s.parse::<$crate::language::Term>().unwrap()
+    };
+    // 单个词项，无需引号
+    ($($t:tt)*) => {
+        stringify!($($t)*).parse::<$crate::language::Term>()
+    };
+}
+
 /// 单元测试
 #[cfg(test)]
 mod tests {
-    use super::super::*;
     use super::*;
-    use crate::{global::tests::AResult, ok, test_term as term};
+    use crate::{global::tests::AResult, ok, test_term as t};
     use nar_dev_utils::{asserts, fail_tests, macro_once};
+    // ! ❌使用`test_term as t`避免`term`重名：即便不导入，也会ambiguous
 
     /// 测试/词项
     #[test]
@@ -307,30 +324,30 @@ mod tests {
         );
         detect(&im_ext);
         // 从「词法Narsese」中解析词项
-        detect(&term!("<A --> B>"));
-        detect(&term!("(--, [C, B, A, 0, 1, 2])"));
-        detect(&term!(
+        detect(&t!("<A --> B>"));
+        detect(&t!("(--, [C, B, A, 0, 1, 2])"));
+        detect(&t!(
             "{<B <-> A>, <D <=> C>, (&&, <A --> B>, <B --> C>), $i, #d, ?q}"
         ));
-        detect(&term!("(/, _, A, B)"));
-        detect(&term!("(/, A, _, B)"));
-        detect(&term!("(/, A, B, _)"));
-        detect(&term!(r"(\, _, A, B)"));
-        detect(&term!(r"(\, A, _, B)"));
-        detect(&term!(r"(\, A, B, _)"));
+        detect(&t!("(/, _, A, B)"));
+        detect(&t!("(/, A, _, B)"));
+        detect(&t!("(/, A, B, _)"));
+        detect(&t!(r"(\, _, A, B)"));
+        detect(&t!(r"(\, A, _, B)"));
+        detect(&t!(r"(\, A, B, _)"));
         // 返回成功
         ok!()
     }
 
     // 失败测试
     fail_tests! {
-        组分数不对_二元_外延差1 term!(unwrap "(-, A)");
-        组分数不对_二元_外延差3 term!(unwrap "(-, A, B, C)");
-        组分数不对_一元_否定 term!(unwrap "(--, A, B)");
-        空集_外延集 term!(unwrap "{}");
-        空集_内涵集 term!(unwrap "[]");
-        空集_外延像 term!(unwrap r"(/, _)");
-        空集_内涵像 term!(unwrap r"(\, _)");
+        组分数不对_二元_外延差1 t!(unwrap "(-, A)");
+        组分数不对_二元_外延差3 t!(unwrap "(-, A, B, C)");
+        组分数不对_一元_否定 t!(unwrap "(--, A, B)");
+        空集_外延集 t!(unwrap "{}");
+        空集_内涵集 t!(unwrap "[]");
+        空集_外延像 t!(unwrap r"(/, _)");
+        空集_内涵像 t!(unwrap r"(\, _)");
     }
 
     #[test]
@@ -339,10 +356,10 @@ mod tests {
             // * 🚩模式：词项字符串 ⇒ 预期词项字符串
             macro from_var_clone($($origin:literal x $new_name:expr => $expected:expr )*) {
                 asserts! {$(
-                    Term::from_var_clone(&term!($origin), $new_name) => term!($expected)
+                    Term::from_var_clone(&t!($origin), $new_name) => t!($expected)
                     // 比对
                     // dbg!(&term);
-                    // assert_eq!(term, term!($expected));
+                    // assert_eq!(term, t!($expected));
                 )*}
             }
             // 原子词项
@@ -360,17 +377,17 @@ mod tests {
             // * 🚩模式：词项字符串 ⇒ 预期词项字符串
             macro from_rename($($origin:literal x $new_name:expr => $expected:expr )*) {
                 asserts! {$(
-                    Term::from_rename(&term!($origin), $new_name) => $expected
+                    Term::from_rename(&t!($origin), $new_name) => $expected
                     // 比对
                     // dbg!(&term);
-                    // assert_eq!(term, term!($expected));
+                    // assert_eq!(term, t!($expected));
                 )*}
             }
             // 原子词项
-            "A" x "B" => Some(term!("B"))
-            "$A" x "B" => Some(term!("$B"))
-            "#A" x "B" => Some(term!("#B"))
-            "?A" x "B" => Some(term!("?B"))
+            "A" x "B" => Some(t!("B"))
+            "$A" x "B" => Some(t!("$B"))
+            "#A" x "B" => Some(t!("#B"))
+            "?A" x "B" => Some(t!("?B"))
             // 其它
             "_" x "B" => None // ! 占位符没有「名称」
             "(*, $A)" x "B" => None

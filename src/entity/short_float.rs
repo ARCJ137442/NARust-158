@@ -56,6 +56,7 @@ pub trait ShortFloat:
     + BitAnd<Self, Output = Self>
     + BitOr<Self, Output = Self>
     + ToDisplayAndBrief
+    + TryFrom<Float>
 // * 📝不要在特征冒号后边的类型之间加注释，会破坏格式化器工作
 // * 🚩【2024-05-02 18:33:19】将`Ord`作为在[`EvidentNumber`]之上的「附加要求」之一：需要在「预算值合并」使用「取最大」方法
 {
@@ -128,9 +129,8 @@ pub trait ShortFloat:
 
 /// 初代实现 + 单元测试
 mod impl_v1 {
-    use crate::impl_display_from_to_display;
-
     use super::*;
+    use crate::impl_display_from_to_display;
 
     /// 用作「短浮点」的整数类型
     /// * 🚩使用0~4294967296的「三十二位无符号整数」覆盖`0~10000`与（相乘时的）`0~100000000`
@@ -512,6 +512,25 @@ mod impl_v1 {
         }
     }
 
+    /// [「短浮点」](ShortFloatV1)的快捷构造宏
+    #[macro_export]
+    macro_rules! short_float {
+        // 从浮点数构造
+        ($float:expr) => {
+            ShortFloatV1::from_float($float)
+        };
+        // 从字符串构造（保留「结果」）
+        (str? $float:expr) => {
+            $s.parse::<$crate::global::Float>()
+                .map($crate::entity::ShortFloatV1::try_from)
+        };
+        // 从字符串构造（一路解包）
+        (str $s:expr) => {
+            $crate::entity::ShortFloatV1::try_from($s.parse::<$crate::global::Float>().unwrap())
+                .unwrap()
+        };
+    }
+
     /// 单元测试
     #[cfg(test)]
     mod tests {
@@ -528,20 +547,20 @@ mod impl_v1 {
         /// 断言约等
         /// * 🎯解决「浮点判等」因精度不够失效的问题
         macro_rules! assert_approx_eq {
-        // * 🚩模式：@精度 值1, 值2
-        ($epsilon:expr; $v1:expr, $v2:expr) => {
-            assert!(
-                ($v1 - $v2).abs() < $epsilon,
-                "{} !≈ {} @ {}",
-                $v1,
-                $v2,
-                $epsilon
-            )
-        };
-        ($v1:expr, $v2:expr) => {
-            assert_approx_eq!(DEFAULT_EPSILON; $v1, $v2)
-        };
-    }
+            // * 🚩模式：@精度 值1, 值2
+            ($epsilon:expr; $v1:expr, $v2:expr) => {
+                assert!(
+                    ($v1 - $v2).abs() < $epsilon,
+                    "{} !≈ {} @ {}",
+                    $v1,
+                    $v2,
+                    $epsilon
+                )
+            };
+            ($v1:expr, $v2:expr) => {
+                assert_approx_eq!(DEFAULT_EPSILON; $v1, $v2)
+            };
+        }
 
         /// 测试/new
         #[test]
@@ -585,11 +604,7 @@ mod impl_v1 {
             ok!()
         }
 
-        /// 测试/is_in_range
-        #[test]
-        fn is_in_range() -> AResult {
-            ok!()
-        }
+        // * ✅测试/is_in_range已在`float_to_short_value`中一并测试过
 
         /// 测试/set_value
         #[test]

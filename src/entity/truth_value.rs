@@ -2,15 +2,15 @@
 //! * 📌【2024-05-02 21:30:40】从「预算函数」来：一些地方必须用到「真值」及其方法
 //! * ✅【2024-05-03 16:21:02】所有方法基本复刻完毕
 
-use super::ShortFloat;
-use super::ShortFloatV1;
+use super::{ShortFloat, ShortFloatV1};
 use crate::{
     global::Float,
     io::{TRUTH_VALUE_MARK, VALUE_SEPARATOR},
     ToDisplayAndBrief,
 };
-use std::fmt::Debug;
-use std::hash::Hash;
+use anyhow::Result;
+use narsese::lexical::Truth as LexicalTruth;
+use std::{fmt::Debug, hash::Hash};
 
 /// 模拟`nars.entity.TruthValue`
 ///
@@ -44,6 +44,9 @@ pub trait TruthValue: ToDisplayAndBrief {
     ///
     /// @return The isAnalytic value
     fn is_analytic(&self) -> bool;
+    /// [`TruthValue::is_analytic`]的内部可变版本
+    /// * 🎯用于[`TruthValue::set_analytic`]
+    fn __is_analytic_mut(&mut self) -> &mut bool;
 
     /// 模拟`TruthValue.setAnalytic`
     /// * 🚩实质上只是「把默认的`false`设置为`true`」而已
@@ -51,7 +54,10 @@ pub trait TruthValue: ToDisplayAndBrief {
     /// # 📄OpenNARS
     ///
     /// Set the isAnalytic flag
-    fn set_analytic(&mut self);
+    #[inline(always)]
+    fn set_analytic(&mut self) {
+        *self.__is_analytic_mut() = true;
+    }
 
     /// 模拟`getExpectation`
     /// * 🚩此处返回浮点数，因为中间结果可能是负数
@@ -210,6 +216,38 @@ pub trait TruthValueConcrete: TruthValue + Sized + Clone + Eq + Hash {
         new TruthValue(0.5f, 0f); */
         Self::new(Self::E::HALF, Self::E::ZERO, false)
     }
+
+    /// 🆕「词法真值」到「自身类型」的转换
+    /// * 🎯统一的、全面的「词法真值→真值」转换方法
+    /// * 📌需要手动输入「默认值」
+    /// * 📌需要手动输入「是否为『分析真值』」
+    fn from_lexical(
+        lexical: LexicalTruth,
+        mut default_values: [Self::E; 2],
+        is_analytic: bool,
+    ) -> Result<Self> {
+        let truth_s = match lexical.len() {
+            0 => &[],
+            1 => &lexical[0..1],
+            _ => &lexical[0..2],
+        };
+        // 预先解析默认值
+        // ! ⚠️必须合法，否则panic
+        let float_s = &mut default_values;
+        for (i, s) in truth_s.iter().enumerate() {
+            // 浮点解析
+            let v = s.parse::<Float>()?;
+            // 短浮点解析
+            let sf = match Self::E::try_from(v) {
+                Ok(sf) => sf,
+                Err(_) => return Err(anyhow::anyhow!("无效短浮点值：{v}")),
+            };
+            float_s[i] = sf;
+        }
+        // 构造
+        let [f, c] = *float_s;
+        Ok(Self::new(f, c, is_analytic))
+    }
 }
 
 /// 初代实现
@@ -280,8 +318,8 @@ mod impl_v1 {
         }
 
         #[inline(always)]
-        fn set_analytic(&mut self) {
-            self.a = true;
+        fn __is_analytic_mut(&mut self) -> &mut bool {
+            &mut self.a
         }
     }
 
@@ -302,28 +340,38 @@ mod impl_v1 {
 }
 pub use impl_v1::*;
 
+/// 转换：涉及「词法Narsese」的解析
+/// * 🚩【2024-05-10 09:40:03】不实现「从字符串解析」
+///   * 无法仅通过「频率」「信度」确定一个「真值」
+///   * [`narsese`]包尚未有简单、直接地解析出「词法真值」的函数
+mod conversion {
+    // ! ❌【2024-05-10 09:35:35】难以仅通过`TryFrom`实现：需要更多参数
+    // ! ❌【2024-05-10 09:35:35】无法批量实现：孤儿规则
+
+    /// 快捷构造宏
+    #[macro_export]
+    macro_rules! truth {
+        // 二参数
+        ($f:expr; $c:expr) => {
+            TruthV1::from_fc($f, $c)
+        };
+        // 三参数
+        ($f:expr; $c:expr; $a:expr) => {
+            TruthV1::from_floats($f, $c, $a)
+        };
+    }
+}
+
 /// 单元测试
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{global::tests::AResult, ok};
+    use crate::{global::tests::AResult, ok, truth};
     use nar_dev_utils::macro_once;
 
     /// 定义要测试的「真值」类型
     type Truth = TruthV1;
     type SF = <Truth as TruthValue>::E;
-
-    /// 快捷构造宏
-    macro_rules! truth {
-        // 二参数
-        ($f:expr; $c:expr) => {
-            Truth::from_fc($f, $c)
-        };
-        // 三参数
-        ($f:expr; $c:expr; $a:expr) => {
-            Truth::from_floats($f, $c, $a)
-        };
-    }
 
     // * ✅测试/new已在「快捷构造宏」中实现
 
@@ -445,6 +493,8 @@ mod tests {
         ok!()
     }
 
+    // * ✅测试/__is_analytic_mut 已在`set_analytic`中测试过
+
     /// 测试/set_analytic
     #[test]
     fn set_analytic() -> AResult {
@@ -543,6 +593,48 @@ mod tests {
             [0.2; 0.9] => true
             [0.1; 0.9] => true
             [0.0; 0.9] => true
+        }
+        ok!()
+    }
+
+    /// 测试/from_lexical
+    #[test]
+    fn from_lexical() -> AResult {
+        macro_once! {
+            /// * 🚩模式：[词法真值构造方法] ⇒ 预期[真值的构造方法]
+            macro test($(
+                [ $($lexical:tt)* ] @ [$f:expr; $c:expr; $is_analytic:expr]
+                => [ $($truth:tt)* ] )*
+            ) {
+                $(
+                    // 构造
+                    let lexical = narsese::lexical_truth!($($lexical)*);
+                    let truth = truth!($($truth)*);
+                    // 解析
+                    let parsed = Truth::from_lexical(
+                        lexical,
+                        [ // 默认值（完全限定语法）
+                            <<Truth as TruthValue>::E as ShortFloat>::from_float($f),
+                            <<Truth as TruthValue>::E as ShortFloat>::from_float($c),
+                        ],
+                        $is_analytic
+                    ).unwrap();
+                    // 判等
+                    assert_eq!(parsed, truth);
+                )*
+            }
+            // 完全解析
+            ["1.0" "0.9"] @ [0.0; 0.0; false] => [1.0; 0.9; false]
+            ["1.0" "0.9"] @ [0.0; 0.0; true] => [1.0; 0.9; true]
+            ["0.0" "0.0"] @ [1.0; 0.9; false] => [0.0; 0.0; false]
+            ["0.0" "0.0"] @ [1.0; 0.9; true] => [0.0; 0.0; true]
+            // 缺省
+            ["0.0"] @ [1.0; 0.9; true] => [0.0; 0.9; true]
+            [] @ [1.0; 0.9; true] => [1.0; 0.9; true]
+            // 多余
+            ["0.0" "0.1" "0.2"] @ [1.0; 0.9; true] => [0.0; 0.1; true]
+            ["0.0" "0.1" "0.2" "0.3"] @ [1.0; 0.9; true] => [0.0; 0.1; true]
+            ["0.0" "0.1" "ARCJ" "137442"] @ [1.0; 0.9; true] => [0.0; 0.1; true]
         }
         ok!()
     }
