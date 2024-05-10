@@ -457,6 +457,7 @@ pub use impl_v1::*;
 /// 单元测试
 #[cfg(test)]
 mod tests {
+    use nar_dev_utils::macro_once;
     use narsese::conversion::string::impl_lexical::format_instances::FORMAT_ASCII;
 
     use super::*;
@@ -515,7 +516,7 @@ mod tests {
             $(truth_default_values = $truth_default_values:expr , )?
             $(budget_default_values = $budget_default_values:expr , )? )?
         ) => {{
-            let lexical = FORMAT_ASCII.parse($text)?.try_into_task()?;
+            let lexical = FORMAT_ASCII.parse($text)?.try_into_task_compatible()?;
             // time
             let time = CURRENT_SERIAL_DEFAULT;
             $( let time = $time; )?
@@ -575,6 +576,29 @@ mod tests {
     /// * 🎯所有OpenNARS相关的「显示」方法
     #[test]
     fn to_display_xxx() -> AResult {
+        // TODO: 单元测试完成实质性内容
+        fn show(task: T) -> T {
+            println!("BRIEF:   {}", task.to_display_brief());
+            println!("NORMAL:  {}", task.to_display());
+            println!("LONG:    {}", task.to_display_long());
+            task
+        }
+        macro_once! {
+            /// * 🚩模式：任务 => 预期
+            macro test( $( $task:literal /* => $expected:tt */ )* ) {
+                $(
+                    show(l_task!($task));
+                )*
+            }
+            "A."
+            "A. :|:"
+            "A. %0.5; 0.5%"
+            "A. :|: %0.5; 0.5%"
+            "$0.1; 0.2; 0.3$ A."
+            "$0.1; 0.2; 0.3$ A. :|:"
+            "$0.1; 0.2; 0.3$ A. %0.5; 0.5%"
+            "$0.1; 0.2; 0.3$ A. :|: %0.5; 0.5%"
+        }
         // 完成
         ok!()
     }
