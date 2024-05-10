@@ -11,6 +11,7 @@
 use super::{Stamp, StampConcrete, TruthValue, TruthValueConcrete};
 use crate::{global::ClockTime, io::symbols, language::Term, ToDisplayAndBrief};
 use anyhow::{anyhow, Result};
+use nar_dev_utils::join;
 use narsese::lexical::{
     Punctuation as LexicalPunctuation, Sentence as LexicalSentence, Truth as LexicalTruth,
 };
@@ -272,14 +273,16 @@ pub trait Sentence: ToDisplayAndBrief {
             s.append(truth.toStringBrief());
         }
         return s.toString(); */
-        let mut s = String::new();
-        s += &self.content().to_string();
-        s.push(self.punctuation().punctuation_char());
-        s.push(' ');
-        if let Some(truth) = self.truth() {
-            s += &truth.to_display_brief();
-        }
-        s
+        join!(
+            // 词项
+            => self.content().to_string()
+            // 标点
+            => self.punctuation().punctuation_char()
+            => ' '
+            // 真值（若有）
+            => (truth.to_display_brief())
+                if let Some(truth) = self.truth()
+        )
     }
 
     /// 模拟`Sentence.toString`
@@ -301,15 +304,18 @@ pub trait Sentence: ToDisplayAndBrief {
         }
         s.append(stamp.toString());
         return s.toString(); */
-        let mut s = String::new();
-        s += &self.content().to_string();
-        s.push(self.punctuation().punctuation_char());
-        s.push(' ');
-        if let Some(truth) = self.truth() {
-            s += &truth.to_display();
-        }
-        s += &self.stamp().to_display();
-        s
+        join!(
+            // 词项
+            => self.content().to_string()
+            // 标点
+            => self.punctuation().punctuation_char()
+            => ' '
+            // 真值（若有）
+            => (truth.to_display_brief())
+                if let Some(truth) = self.truth()
+            // 时间戳
+            => self.stamp().to_display()
+        )
     }
 
     /// 模拟`Sentence.toStringBrief`

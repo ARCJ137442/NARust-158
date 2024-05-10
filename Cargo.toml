@@ -20,7 +20,7 @@ anyhow = "1.0.83"
 thiserror = "1.0.60"
 
 [dependencies.nar_dev_utils]
-version = "0.28"
+version = "0.29"
 features = ["bundled"]
 
 # Narsese支持：API、枚举Narsese & 词法Narsese

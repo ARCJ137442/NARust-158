@@ -9,7 +9,7 @@ use crate::{
     ToDisplayAndBrief,
 };
 use anyhow::Result;
-use nar_dev_utils::{join_to, manipulate};
+use nar_dev_utils::{join, JoinTo};
 use narsese::lexical::Stamp as LexicalStamp;
 use std::hash::{Hash, Hasher};
 
@@ -81,6 +81,7 @@ pub trait Stamp: ToDisplayAndBrief + PartialEq {
     /// 模拟`toString`
     /// * 🚩【2024-05-08 22:12:42】现在鉴于实际情况，仍然实现`toString`、`toStringBrief`方法
     ///   * 🚩具体方案：实现一个统一的、内部的、默认的`__to_display(_brief)`，再通过「手动嫁接」完成最小成本实现
+    /// * ⚠️🆕具体格式化结果相比OpenNARS**没有头尾空白**
     ///
     /// # 📄OpenNARS
     ///
@@ -89,23 +90,32 @@ pub trait Stamp: ToDisplayAndBrief + PartialEq {
     ///
     /// @return The Stamp as a String
     fn __to_display(&self) -> String {
-        // 生成头部：`{0:`
-        let mut s = manipulate!(
-            STAMP_OPENER.to_string()
-            => {+= &self.creation_time().to_string()}#
-            => .push(' ')
-            => .push_str(STAMP_STARTER)
-            => .push(' ')
-        );
-        // 循环迭代加入中部：`0;1;2`
-        join_to(
-            &mut s,
-            self.evidential_base().iter().map(ToString::to_string),
-            STAMP_SEPARATOR,
-        );
-        // 最终加入尾部：`}`
-        s.push_str(STAMP_CLOSER);
-        s
+        /* 📄OpenNARS源码：
+        StringBuilder buffer = new StringBuilder(" " + Symbols.STAMP_OPENER + creationTime);
+        buffer.append(" ").append(Symbols.STAMP_STARTER).append(" ");
+        for (int i = 0; i < baseLength; i++) {
+            buffer.append(Long.toString(evidentialBase[i]));
+            if (i < (baseLength - 1)) {
+                buffer.append(Symbols.STAMP_SEPARATOR);
+            } else {
+                buffer.append(Symbols.STAMP_CLOSER).append(" ");
+            }
+        }
+        return buffer.toString(); */
+        join!(
+            // 生成头部：`{0:`
+            => STAMP_OPENER.to_string()
+            => {# self.creation_time()}
+            => ' '
+            => STAMP_STARTER
+            => ' '
+            // 循环迭代加入中部：`0;1;2`
+            => self.evidential_base()
+                .iter().map(ToString::to_string) // 迭代器转换为字符串
+                .join_to_new(STAMP_SEPARATOR) // 加入到新字串中
+            // 最终加入尾部：`}`
+            => STAMP_CLOSER
+        )
     }
 
     /// 🆕填补`toStringBrief`：与`toString`行为一致
@@ -501,11 +511,11 @@ mod tests {
             macro test {
                 // 没结果
                 (@SINGLE ( $s1:tt, $s2:tt, $time:expr ) => None ) => {
-                    assert_s_eq!(Option S::from_merge( &stamp!($s1), &stamp!($s2), $time ), None::<S>);
+                    assert_s_eq!(Option S::from_merge(&stamp!($s1), &stamp!($s2), $time), None::<S>);
                 }
                 // 有结果
                 (@SINGLE ( $s1:tt, $s2:tt, $time:expr ) => $stamp:tt ) => {
-                    assert_s_eq!(Option S::from_merge( &stamp!($s1), &stamp!($s2), $time ), Some(stamp!($stamp)));
+                    assert_s_eq!(Option S::from_merge(&stamp!($s1), &stamp!($s2), $time), Some(stamp!($stamp)));
                 }
                 // 总模式
                 ( $( $parameters:tt => $expected:tt )* ) => {
@@ -513,12 +523,12 @@ mod tests {
                 }
             }
             ({0: 1}, {0: 1}, 1) => None
-            ({0: 1}, {0: 2}, 10) => {10: 1; 2}
-            ({0: 2}, {0: 1}, 10) => {10: 2; 1}
+            ({0: 1}, {0: 2}, 10) => {10: 2; 1}
+            ({0: 2}, {0: 1}, 10) => {10: 1; 2}
             ({0: 2; 4; 6}, {0: 1; 3; 5}, 10) => {10: 1; 2; 3; 4; 5; 6}
-            ({0 : 1}, {3 : 3}, 4) => {4 : 1;3} // ! 📄来自OpenNARS实际运行过程
-            ({4 : 1;3}, {6 : 6}, 7) => {7 : 1;6;3} // ! 📄来自OpenNARS实际运行过程
-            ({7 : 1;6;3}, {15 : 15}, 29) => {29 : 1;15;6;3} // ! 📄来自OpenNARS实际运行过程
+            ({1 : 2}, {0 : 1}, 2) => {2 : 1;2} // ! 📄来自OpenNARS实际运行过程 | ⚠️注意：需要是传入`Stamp.make`处的参数（可能中途调换位置）
+            ({13 : 3}, {13 : 1;2}, 13) => {13 : 1;3;2} // ! 📄来自OpenNARS实际运行过程
+            ({34 : 4}, {14 : 1;3;2}, 35) => {35 : 1;4;3;2} // ! 📄来自OpenNARS实际运行过程
         }
     }
 
@@ -621,6 +631,23 @@ mod tests {
             ({0: 1; 2; 3}, {0: 3; 2; 1}) => true
             ({0: 1; 2; 3}, {0: 2; 3; 1}) => true
             ({0: 1; 2; 3}, {0: 3; 1; 2}) => true
+        }
+    }
+
+    /// 测试/to_display
+    #[test]
+    fn to_display() {
+        macro_once! {
+            /// * 🚩模式：【时间戳`stamp!`】 => 预期
+            macro test($( $stamp:tt => $expected:expr )*) {
+                $(
+                    assert_eq!(stamp!($stamp).to_display(), $expected);
+                )*
+            }
+            {15 : 15} => "{15 : 15}" // ! 📄来自OpenNARS实际运行过程
+            {29 : 15} => "{29 : 15}" // ! 📄来自OpenNARS实际运行过程
+            {18 : 15;6} => "{18 : 15;6}" // ! 📄来自OpenNARS实际运行过程
+            {7 : 1;6;3} => "{7 : 1;6;3}" // ! 📄来自OpenNARS实际运行过程
         }
     }
 }

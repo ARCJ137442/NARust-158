@@ -9,6 +9,7 @@ use crate::{
     ToDisplayAndBrief,
 };
 use anyhow::Result;
+use nar_dev_utils::join;
 use narsese::lexical::Truth as LexicalTruth;
 use std::{fmt::Debug, hash::Hash};
 
@@ -117,11 +118,13 @@ pub trait TruthValue: ToDisplayAndBrief {
     ///
     /// @return The String
     fn __to_display(&self) -> String {
-        MARK.to_string()
-            + &self.frequency().to_display()
-            + SEPARATOR
-            + &self.confidence().to_display()
-            + MARK
+        join!(
+            => MARK.to_string()
+            => self.frequency().to_display()
+            => SEPARATOR
+            => self.confidence().to_display()
+            => MARK
+        )
     }
 
     /// 模拟`toStringBrief`

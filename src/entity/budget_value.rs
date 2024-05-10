@@ -9,6 +9,7 @@ use crate::{
     ToDisplayAndBrief,
 };
 use anyhow::Result;
+use nar_dev_utils::join;
 use narsese::lexical::Budget as LexicalBudget;
 
 /// 模拟`nars.entity.BudgetValue`
@@ -203,13 +204,15 @@ pub trait BudgetValue: ToDisplayAndBrief {
     ///
     /// @return String representation of the value
     fn __to_display(&self) -> String {
-        MARK.to_string()
-            + &self.priority().to_display()
-            + SEPARATOR
-            + &self.durability().to_display()
-            + SEPARATOR
-            + &self.quality().to_display()
-            + MARK
+        join!(
+            => MARK.to_string()
+            => &self.priority().to_display()
+            => SEPARATOR
+            => &self.durability().to_display()
+            => SEPARATOR
+            => &self.quality().to_display()
+            => MARK
+        )
     }
 
     /// 模拟`toStringBrief`

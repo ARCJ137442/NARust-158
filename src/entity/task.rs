@@ -8,6 +8,7 @@ use crate::{
     ToDisplayAndBrief,
 };
 use anyhow::Result;
+use nar_dev_utils::join;
 use narsese::lexical::Task as LexicalTask;
 use std::hash::Hash;
 
@@ -134,23 +135,21 @@ pub trait Task: ToDisplayAndBrief {
             s.append("  \n solution: ").append(bestSolution.toStringBrief());
         }
         return s.toString(); */
-        let mut s = String::new();
-        s += &<Self as Item>::__to_display(self);
-        s.push(' ');
-        s.push_str(&self.stamp().to_display());
-        if let Some(parent_task) = self.parent_task() {
-            s += "\n from task: ";
-            s += &parent_task.to_display();
-        }
-        if let Some(parent_belief) = self.parent_belief() {
-            s += "\n from belief: "; // * 🚩🆕【2024-05-09 00:50:41】此处不采用嵌套：都可能有
-            s += &parent_belief.to_display();
-        }
-        if let Some(best_solution) = self.best_solution() {
-            s += "\n solution: ";
-            s += &best_solution.to_display();
-        }
-        s
+        join!(
+            // 首先作为一个「Item」
+            => <Self as Item>::__to_display(self)
+            => ' '
+            // 时间戳
+            => self.stamp().to_display()
+            // 下面这些反正格式化会构造新字符串，为了直观均直接用`format!`代表
+            => {# "\n from task: {}" in parent_task.to_display()}
+                if let Some(parent_task) = self.parent_task()
+            // * 🚩🆕【2024-05-09 00:50:41】此处不采用嵌套：都可能有
+            => {# "\n from belief: {}" in parent_belief.to_display()}
+                if let Some(parent_belief) = self.parent_belief()
+            => {# "\n solution: {}" in best_solution.to_display()}
+                if let Some(best_solution) = self.best_solution()
+        )
     }
 }
 
