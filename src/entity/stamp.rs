@@ -304,6 +304,18 @@ pub trait StampConcrete: Stamp + Clone + Hash + PartialEq {
     fn __hash<H: Hasher>(&self, state: &mut H) {
         self.evidential_base().hash(state);
     }
+
+    /// 🆕自「解析器」构造
+    /// * 🎯模拟`nars.io.StringParser.parseTask`的一部分
+    /// * 🚩通过「记忆区内部时钟」从用户输入构造
+    ///   * 🔗参考OpenNARS`nars.main_nogui.ReasonerBatch.textInputLine`
+    ///   * 🔗参考OpenNARS`nars.io.StringParser.parseExperience`
+    /// * ⚠️不同于OpenNARS：此处的`current_serial`直接采用`time`
+    ///   * 📌【2024-05-10 11:53:52】理由：本身意义只是需要「创建时唯一」的单调递增变量
+    #[inline(always)]
+    fn from_input(time: ClockTime) -> Self {
+        Self::with_time(time, time)
+    }
 }
 
 /// 初代实现
