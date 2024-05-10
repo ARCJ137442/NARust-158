@@ -117,13 +117,6 @@ pub trait Stamp: ToDisplayAndBrief + PartialEq {
             => STAMP_CLOSER
         )
     }
-
-    /// 🆕填补`toStringBrief`：与`toString`行为一致
-    /// * 🚩【2024-05-08 23:04:08】这样就没必要刻意修改宏[`crate::__impl_to_display`]的实现了
-    #[inline(always)]
-    fn __to_display_brief(&self) -> String {
-        self.__to_display()
-    }
 }
 
 /// [`Vec`]集合判等

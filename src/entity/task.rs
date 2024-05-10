@@ -111,6 +111,10 @@ pub trait Task: ToDisplayAndBrief {
 
     /// 模拟`Task.toString`
     /// * 🚩【2024-05-08 23:56:19】现在借道[`ToDisplayAndBrief`]予以实现
+    /// * 🚩🆕【2024-05-11 00:20:54】现在不完全按OpenNARS的来
+    ///   * 🚩全`toString`就全`toString`
+    ///   * 🚩全`toStringBrief`就全`toStringBrief`
+    ///   * ...
     ///
     /// # 📄OpenNARS
     ///
@@ -137,7 +141,7 @@ pub trait Task: ToDisplayAndBrief {
         return s.toString(); */
         join!(
             // 首先作为一个「Item」
-            => <Self as Item>::__to_display(self)
+            => Item::__to_display(self)
             => ' '
             // 时间戳
             => self.stamp().to_display()
@@ -148,6 +152,49 @@ pub trait Task: ToDisplayAndBrief {
             => {# "\n from belief: {}" in parent_belief.to_display()}
                 if let Some(parent_belief) = self.parent_belief()
             => {# "\n solution: {}" in best_solution.to_display()}
+                if let Some(best_solution) = self.best_solution()
+        )
+    }
+
+    /// 🆕[`Task::__to_display`]的全简略版本
+    fn __to_display_brief(&self) -> String
+    where
+        Self: Sized,
+    {
+        join!(
+            // 首先作为一个「Item」
+            => Item::__to_display_brief(self)
+            => ' '
+            // 时间戳
+            => self.stamp().to_display_brief()
+            // 下面这些反正格式化会构造新字符串，为了直观均直接用`format!`代表
+            => {# "\n from task: {}" in parent_task.to_display_brief()}
+                if let Some(parent_task) = self.parent_task()
+            // * 🚩🆕【2024-05-09 00:50:41】此处不采用嵌套：都可能有
+            => {# "\n from belief: {}" in parent_belief.to_display_brief()}
+                if let Some(parent_belief) = self.parent_belief()
+            => {# "\n solution: {}" in best_solution.to_display_brief()}
+                if let Some(best_solution) = self.best_solution()
+        )
+    }
+
+    /// 🆕[`Task::__to_display`]的详尽版本
+    fn __to_display_long(&self) -> String
+    where
+        Self: Sized,
+    {
+        join!(
+            // 首先作为一个「Item」
+            => Item::__to_display_long(self)
+            => ' '
+            // * ✅无需额外添加时间戳（详尽版「语句」已有）
+            // 下面这些反正格式化会构造新字符串，为了直观均直接用`format!`代表
+            => {# "\n from task: {}" in parent_task.to_display_long()}
+                if let Some(parent_task) = self.parent_task()
+            // * 🚩🆕【2024-05-09 00:50:41】此处不采用嵌套：都可能有
+            => {# "\n from belief: {}" in parent_belief.to_display_long()}
+                if let Some(parent_belief) = self.parent_belief()
+            => {# "\n solution: {}" in best_solution.to_display_long()}
                 if let Some(best_solution) = self.best_solution()
         )
     }
@@ -350,7 +397,8 @@ mod impl_v1 {
 
     // * 🚩自动实现`ToDisplayAndBrief`
     __impl_to_display_and_display! {
-        @(to_display;;) // * 🚩只有`to_display`一个
+        // * 🚩【2024-05-11 00:24:05】现在是全三个版本
+        @(to_display; to_display_brief; to_display_long)
         {S, K, B}
         TaskV1<S, K, B> as Task
         where

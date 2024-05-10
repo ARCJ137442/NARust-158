@@ -81,7 +81,7 @@ macro_rules! __impl_to_display {
             $(
                 #[inline(always)]
                 fn $to_display_long_name(&self) -> String {
-                    <Self as $ty_as>::__to_display_brief(self)
+                    <Self as $ty_as>::__to_display_long(self)
                 }
             )?
         }
