@@ -545,9 +545,6 @@ pub trait SentenceConcrete: Sentence + Clone + Hash + PartialEq {
     }
 }
 
-// TODO: 有关解析器的方法：从「词项」转换
-// * 📌一个难点是「时间戳」的转换（需要依赖「时钟」等量）
-
 /// 初代实现
 /// * 📌需要作为一个**独立对象**使用
 ///   * 📄[「概念」](super::Concept)中的「信念表」
