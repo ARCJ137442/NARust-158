@@ -55,27 +55,29 @@
 use super::*;
 
 impl Term {
-    /// 用于判断词项是否为「外延像/内涵像」
-    /// * 📄OpenNARS `(com instanceof ImageExt) || (com instanceof ImageInt)` 逻辑
-    /// * 🎯首次用于陈述的`invalid_reflexive`方法
-    #[inline]
-    pub fn instanceof_image(&self) -> bool {
-        matches!(
-            self.identifier.as_str(),
-            IMAGE_EXT_OPERATOR | IMAGE_INT_OPERATOR
-        )
-    }
+    // * ✅现在「判别函数」统一迁移至[`super::compound`]
 
     /// 📄OpenNARS `getRelationIndex` 属性
     /// * 🎯用于获取「像」的关系索引
-    /// * ⚠️若尝试获取「非『像』词项」的关系索引，则会panic
+    /// * 🆕⚠️现在是获取「占位符位置」
+    ///   * 📝原先OpenNARS是将「关系词项」放在占位符处的，现在是根据《NAL》原意，将「关系词项」统一放在「第一个词项」处
+    ///   * 📌所以后续所有的「索引」都变成了「占位符位置」
+    ///   * 💭【2024-05-11 14:40:15】后续可能会在这点上有隐患——随后要注意这种差别
+    ///
+    /// # Panics
+    ///
+    /// ! ⚠️仅限于「像」的`TermComponents::MultiIndexed`词项
+    /// * 若尝试获取「非『像』词项」的关系索引，则会panic
+    ///
+    /// TODO: 【2024-05-11 14:29:23】🏗️后续考虑改为[`Option`]
     ///
     /// # 📄OpenNARS
     ///
     /// get the index of the relation in the component list
     ///
     /// @return the index of relation
-    pub fn get_relation_index(&self) -> usize {
+    #[doc(alias = "get_relation_index")]
+    pub fn get_placeholder_index(&self) -> usize {
         match &&*self.components {
             TermComponents::MultiIndexed(index, _) => *index,
             _ => panic!("尝试获取「非『像』词项」的关系索引"),
@@ -154,10 +156,10 @@ mod tests {
         asserts! {
             // term!(r"(/, _, A, B)").get_relation_index() => 0 // 会被解析为「乘积」
             // term!(r"(\, _, A, B)").get_relation_index() => 0 // 会被解析为「乘积」
-            term!(r"(/, A, _, B)").get_relation_index() => 1
-            term!(r"(\, A, _, B)").get_relation_index() => 1
-            term!(r"(/, A, B, _)").get_relation_index() => 2
-            term!(r"(\, A, B, _)").get_relation_index() => 2
+            term!(r"(/, A, _, B)").get_placeholder_index() => 1
+            term!(r"(\, A, _, B)").get_placeholder_index() => 1
+            term!(r"(/, A, B, _)").get_placeholder_index() => 2
+            term!(r"(\, A, B, _)").get_placeholder_index() => 2
         }
         ok!()
     }

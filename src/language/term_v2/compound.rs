@@ -71,6 +71,13 @@ impl Term {
         self.identifier == SET_INT_OPERATOR
     }
 
+    /// 🆕用于判断是否为「词项集」
+    /// * 📄OpenNARS`instanceof SetExt || instanceof SetInt`逻辑
+    #[inline(always)]
+    pub fn instanceof_set(&self) -> bool {
+        self.instanceof_set_ext() || self.instanceof_set_int()
+    }
+
     /// 🆕用于判断是否为「外延交」
     /// * 📄OpenNARS`instanceof IntersectionExt`逻辑
     /// * 🎯[`crate::inference`]推理规则分派
@@ -87,6 +94,14 @@ impl Term {
         self.identifier == INTERSECTION_INT_OPERATOR
     }
 
+    /// 🆕用于判断是否为「词项交集」
+    /// * 📄OpenNARS`instanceof IntersectionExt || instanceof IntersectionInt`逻辑
+    /// * 🎯首次用于[`crate::inference::StructuralRules::__switch_order`]
+    #[inline(always)]
+    pub fn instanceof_intersection(&self) -> bool {
+        self.instanceof_intersection_ext() || self.instanceof_intersection_int()
+    }
+
     /// 🆕用于判断是否为「外延差」
     /// * 📄OpenNARS`instanceof DifferenceExt`逻辑
     /// * 🎯[`crate::inference`]推理规则分派
@@ -101,6 +116,13 @@ impl Term {
     #[inline(always)]
     pub fn instanceof_difference_int(&self) -> bool {
         self.identifier == DIFFERENCE_INT_OPERATOR
+    }
+
+    /// 🆕用于判断是否为「词项差集」
+    /// * 📄OpenNARS`instanceof DifferenceExt || instanceof DifferenceInt`逻辑
+    #[inline(always)]
+    pub fn instanceof_difference(&self) -> bool {
+        self.instanceof_difference_ext() || self.instanceof_difference_int()
     }
 
     /// 🆕用于判断是否为「乘积」
@@ -127,6 +149,13 @@ impl Term {
         self.identifier == IMAGE_INT_OPERATOR
     }
 
+    /// 🆕用于判断是否为「像」
+    /// * 📄OpenNARS`instanceof ImageExt || instanceof ImageInt`逻辑
+    #[inline(always)]
+    pub fn instanceof_image(&self) -> bool {
+        self.instanceof_image_ext() || self.instanceof_image_int()
+    }
+
     /// 🆕用于判断是否为「合取」
     /// * 📄OpenNARS`instanceof Conjunction`逻辑
     /// * 🎯[`crate::inference`]推理规则分派
@@ -141,6 +170,12 @@ impl Term {
     #[inline(always)]
     pub fn instanceof_disjunction(&self) -> bool {
         self.identifier == DISJUNCTION_OPERATOR
+    }
+    /// 🆕用于判断是否为「词项差集」
+    /// * 📄OpenNARS`instanceof Conjunction || instanceof Disjunction`逻辑
+    #[inline(always)]
+    pub fn instanceof_junction(&self) -> bool {
+        self.instanceof_conjunction() || self.instanceof_disjunction()
     }
 
     /// 🆕用于判断是否为「否定」
