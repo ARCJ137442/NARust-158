@@ -6,6 +6,10 @@ use super::ReasonContext;
 use crate::{entity::*, inference::*, io::VAR_QUERY, language::variable::unify_two, storage::*};
 
 /// 模拟`LocalRules`
+/// * 📝有关「内部思考」「内省」的规则
+///   * 📄真值修正
+///   * 📄问题回答
+///   * 📄命题转换（部分？）
 ///
 /// # 📄OpenNARS
 ///

@@ -31,6 +31,9 @@ pub enum SyllogismSide {
 }
 
 /// 模拟`SyllogisticRules`
+/// * 📝这些规则均为与「陈述」直接相关的规则
+///   * 📌许多均以「陈述」为主体，出现在「条件」或「结论」中
+///   * 📌包含从NAL-1到NAL-6的规则
 ///
 /// # 📄OpenNARS
 ///
@@ -39,7 +42,7 @@ pub trait SyllogisticRules: ReasonContext {
     // --------------- rules used in both first-tense inference and higher-tense inference ---------------
 
     /// 模拟`SyllogisticRules.dedExe`
-    /// * 📝deduction & exemplification
+    /// * 📝演绎 deduction & 举例 exemplification
     ///
     /// # 📄OpenNARS
     ///
@@ -86,7 +89,7 @@ pub trait SyllogisticRules: ReasonContext {
     }
 
     /// 模拟`SyllogisticRules.abdIndCom`
-    /// * 📝abduction & induction & comparison
+    /// * 📝归因 abduction & 归纳 induction & 比较 comparison
     ///
     /// # 📄OpenNARS
     ///

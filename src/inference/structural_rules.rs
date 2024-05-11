@@ -7,6 +7,9 @@ use super::ReasonContext;
 use crate::{entity::*, global::Float, inference::*, language::Term, nars::DEFAULT_PARAMETERS};
 
 /// 模拟`StructuralRules`
+/// * 📝这些规则均是有关「复合词项」的规则
+///   * 📄诸如「NAL-3集合规则」「NAL-4关系规则」「NAL-5命题规则」等
+///   * ❓似乎未涉及到NAL-6
 /// * 📝【2024-05-11 15:03:22】OpenNARS中使用`memory`记忆区引用的地方，往往都是最后「递交推理结果」的`singlePremiseTask`等方法
 ///   * 💭这些完全可以延后，比如放到专门的「推理上下文」中
 ///
