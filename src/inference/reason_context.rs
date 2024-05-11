@@ -10,7 +10,7 @@ use crate::{
         TaskConcrete, TaskLinkConcrete, TermLinkConcrete, TruthValueConcrete,
     },
     language::Term,
-    storage::{BagKey, MemoryConcrete},
+    storage::{BagKey, ConceptBag, MemoryConcrete, TaskLinkBag, TermLinkBag},
 };
 
 /// 🆕「推理上下文」
@@ -71,6 +71,28 @@ pub trait ReasonContext {
         TaskLink = Self::TaskLink,
     >;
 
+    // ! 【2024-05-11 08:56:59】📌↓下面这几个会与「记忆区」冲突，故不约束
+
+    // /// 概念袋
+    // type ConceptBag: ConceptBag<Concept = Self::Concept>;
+
+    // /// 词项链袋
+    // type TermLinkBag: TermLinkBag<Link = Self::TermLink>;
+
+    // /// 任务链袋
+    // type TaskLinkBag: TaskLinkBag<Link = Self::TaskLink>;
+
     /// 记忆区
-    type Memory: MemoryConcrete<Concept = Self::Concept>;
+    type Memory: MemoryConcrete<
+        ShortFloat = Self::ShortFloat,
+        Stamp = Self::Stamp,
+        Truth = Self::Truth,
+        Sentence = Self::Sentence,
+        Key = Self::Key,
+        Task = Self::Task,
+        TermLink = Self::TermLink,
+        TaskLink = Self::TaskLink,
+        Budget = Self::Budget,
+        Concept = Self::Concept,
+    >;
 }

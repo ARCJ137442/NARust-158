@@ -3,7 +3,7 @@
 //! * ✅【2024-05-07 18:51:30】初步实现方法API（函数签名、文档、源码附注）
 
 use super::ReasonContext;
-use crate::{entity::*, inference::*, io::VAR_QUERY, language::variable::unify_two};
+use crate::{entity::*, inference::*, io::VAR_QUERY, language::variable::unify_two, storage::*};
 
 /// 模拟`LocalRules`
 ///
@@ -109,20 +109,26 @@ pub trait LocalRules: ReasonContext {
         let new_truth = new_belief.truth().unwrap();
         let old_truth = old_belief.truth().unwrap();
         let truth = new_truth.revision(old_truth);
-        // let budget = BudgetFunctions::revise(
+        // ! 此处真的要修改词项链、任务链
+        // let memory_current_task_budget = memory.current_task_mut().budget_mut();
+        // let current_task_link_budget = memory.current_task_link().budget();
+        // let current_belief_link_budget = memory.current_belief_link().as_ref().unwrap().budget();
+        // let budget = <<Self as ReasonContext>::Budget>::revise(
         //     new_truth,
         //     old_truth,
         //     &truth,
         //     feedback_to_links,
         //     // 后边这仨参数要统一
         //     memory_current_task_budget,
-        //     memory_current_task_link_budget,
-        //     memory_current_belief_link_budget,
+        //     current_task_link_budget,
+        //     current_belief_link_budget,
         // );
-        // TODO: 统一「推理上下文」与「记忆区.当前任务预算值」等「推理上下文」相关
-        // TODO: 后续复刻完重构时，必定修复此处（可复用的、独立的「上下文」对象）
-        let content = new_belief.content();
-        // TODO: `memory.doublePremiseTask(content, truth, budget);`
+        // // TODO: 统一「推理上下文」与「记忆区.当前任务预算值」等「推理上下文」相关
+        // // TODO: 后续复刻完重构时，必定修复此处（可复用的、独立的「上下文」对象）
+        // let content = new_belief.content();
+        // // TODO: `memory.doublePremiseTask(content, truth, budget);`
+        // memory.double_premise_task_revisable(content.clone(), truth, budget)
+        todo!()
     }
 
     /// 模拟`LocalRules.trySolution`

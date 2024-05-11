@@ -150,9 +150,9 @@ pub trait BudgetFunctions: BudgetValueConcrete {
         b_truth: &impl TruthValue<E = Self::E>,
         truth: &impl TruthValue<E = Self::E>,
         feedback_to_links: bool,
-        memory_current_task_budget: &mut Self,
-        memory_current_task_link_budget: &mut Self,
-        memory_current_belief_link_budget: &mut Self,
+        memory_current_task_budget: &mut impl BudgetValue<E = Self::E>,
+        memory_current_task_link_budget: &mut impl BudgetValue<E = Self::E>,
+        memory_current_belief_link_budget: &mut impl BudgetValue<E = Self::E>,
     ) -> Self {
         /* 📄OpenNARS源码：
         float difT = truth.getExpDifAbs(tTruth);
