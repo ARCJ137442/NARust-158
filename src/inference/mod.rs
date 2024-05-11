@@ -26,6 +26,9 @@ nar_dev_utils::mods! {
     // 🆕推理上下文 [`ReasonContext`](reason_context::ReasonContext)
     pub use reason_context;
 
+    // 🆕推导上下文 [`DerivationContext`](derivation_context::DerivationContext)
+    pub use derivation_context;
+
     // 规则表 `RuleTables`
     pub use rule_tables;
 
