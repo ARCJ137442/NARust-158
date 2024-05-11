@@ -27,26 +27,128 @@
 
 use super::*;
 impl Term {
-    /// 用于判断是否为「复合词项」
+    /// 🆕用于判断是否为「纯复合词项」
+    /// * ⚠️**不**包括陈述
+    pub fn instanceof_compound_pure(&self) -> bool {
+        matches!(
+            self.identifier.as_str(),
+            SET_EXT_OPERATOR
+                | SET_INT_OPERATOR
+                | INTERSECTION_EXT_OPERATOR
+                | INTERSECTION_INT_OPERATOR
+                | DIFFERENCE_EXT_OPERATOR
+                | DIFFERENCE_INT_OPERATOR
+                | PRODUCT_OPERATOR
+                | IMAGE_EXT_OPERATOR
+                | IMAGE_INT_OPERATOR
+                | CONJUNCTION_OPERATOR
+                | DISJUNCTION_OPERATOR
+                | NEGATION_OPERATOR
+        )
+    }
+
+    /// 🆕用于判断是否为「复合词项」
     /// * ⚠️包括陈述
     /// * 📄OpenNARS `instanceof CompoundTerm` 逻辑
+    #[inline(always)]
     pub fn instanceof_compound(&self) -> bool {
-        self.instanceof_statement()
-            || matches!(
-                self.identifier.as_str(),
-                SET_EXT_OPERATOR
-                    | SET_INT_OPERATOR
-                    | INTERSECTION_EXT_OPERATOR
-                    | INTERSECTION_INT_OPERATOR
-                    | DIFFERENCE_EXT_OPERATOR
-                    | DIFFERENCE_INT_OPERATOR
-                    | PRODUCT_OPERATOR
-                    | IMAGE_EXT_OPERATOR
-                    | IMAGE_INT_OPERATOR
-                    | CONJUNCTION_OPERATOR
-                    | DISJUNCTION_OPERATOR
-                    | NEGATION_OPERATOR
-            )
+        self.instanceof_compound_pure() || self.instanceof_statement()
+    }
+
+    /// 🆕用于判断是否为「外延集」
+    /// * 📄OpenNARS`instanceof SetExt`逻辑
+    /// * 🎯[`crate::inference`]推理规则分派
+    #[inline(always)]
+    pub fn instanceof_set_ext(&self) -> bool {
+        self.identifier == SET_EXT_OPERATOR
+    }
+
+    /// 🆕用于判断是否为「内涵集」
+    /// * 📄OpenNARS`instanceof SetInt`逻辑
+    /// * 🎯[`crate::inference`]推理规则分派
+    #[inline(always)]
+    pub fn instanceof_set_int(&self) -> bool {
+        self.identifier == SET_INT_OPERATOR
+    }
+
+    /// 🆕用于判断是否为「外延交」
+    /// * 📄OpenNARS`instanceof IntersectionExt`逻辑
+    /// * 🎯[`crate::inference`]推理规则分派
+    #[inline(always)]
+    pub fn instanceof_intersection_ext(&self) -> bool {
+        self.identifier == INTERSECTION_EXT_OPERATOR
+    }
+
+    /// 🆕用于判断是否为「内涵交」
+    /// * 📄OpenNARS`instanceof IntersectionInt`逻辑
+    /// * 🎯[`crate::inference`]推理规则分派
+    #[inline(always)]
+    pub fn instanceof_intersection_int(&self) -> bool {
+        self.identifier == INTERSECTION_INT_OPERATOR
+    }
+
+    /// 🆕用于判断是否为「外延差」
+    /// * 📄OpenNARS`instanceof DifferenceExt`逻辑
+    /// * 🎯[`crate::inference`]推理规则分派
+    #[inline(always)]
+    pub fn instanceof_difference_ext(&self) -> bool {
+        self.identifier == DIFFERENCE_EXT_OPERATOR
+    }
+
+    /// 🆕用于判断是否为「内涵差」
+    /// * 📄OpenNARS`instanceof DifferenceInt`逻辑
+    /// * 🎯[`crate::inference`]推理规则分派
+    #[inline(always)]
+    pub fn instanceof_difference_int(&self) -> bool {
+        self.identifier == DIFFERENCE_INT_OPERATOR
+    }
+
+    /// 🆕用于判断是否为「乘积」
+    /// * 📄OpenNARS`instanceof Product`逻辑
+    /// * 🎯[`crate::inference`]推理规则分派
+    #[inline(always)]
+    pub fn instanceof_product(&self) -> bool {
+        self.identifier == PRODUCT_OPERATOR
+    }
+
+    /// 🆕用于判断是否为「外延像」
+    /// * 📄OpenNARS`instanceof ImageExt`逻辑
+    /// * 🎯[`crate::inference`]推理规则分派
+    #[inline(always)]
+    pub fn instanceof_image_ext(&self) -> bool {
+        self.identifier == IMAGE_EXT_OPERATOR
+    }
+
+    /// 🆕用于判断是否为「内涵像」
+    /// * 📄OpenNARS`instanceof ImageInt`逻辑
+    /// * 🎯[`crate::inference`]推理规则分派
+    #[inline(always)]
+    pub fn instanceof_image_int(&self) -> bool {
+        self.identifier == IMAGE_INT_OPERATOR
+    }
+
+    /// 🆕用于判断是否为「合取」
+    /// * 📄OpenNARS`instanceof Conjunction`逻辑
+    /// * 🎯[`crate::inference`]推理规则分派
+    #[inline(always)]
+    pub fn instanceof_conjunction(&self) -> bool {
+        self.identifier == CONJUNCTION_OPERATOR
+    }
+
+    /// 🆕用于判断是否为「析取」
+    /// * 📄OpenNARS`instanceof Disjunction`逻辑
+    /// * 🎯[`crate::inference`]推理规则分派
+    #[inline(always)]
+    pub fn instanceof_disjunction(&self) -> bool {
+        self.identifier == DISJUNCTION_OPERATOR
+    }
+
+    /// 🆕用于判断是否为「否定」
+    /// * 📄OpenNARS`instanceof Negation`逻辑
+    /// * 🎯[`crate::inference`]推理规则分派
+    #[inline(always)]
+    pub fn instanceof_negation(&self) -> bool {
+        self.identifier == NEGATION_OPERATOR
     }
 
     /// 📄OpenNARS `CompoundTerm.isCommutative` 属性

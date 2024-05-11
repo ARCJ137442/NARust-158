@@ -8,30 +8,92 @@
 use super::ReasonContext;
 use crate::{entity::*, language::*, storage::*};
 
-/// 🆕用于表征[`RuleTables::index_to_figure`]推导出的「三段论子类型」
+/// 🆕三段论位置
+/// * 🎯用于表征[`RuleTables::index_to_figure`]推导出的「三段论子类型」
 /// * 📝OpenNARS中是在「三段论推理」的「陈述🆚陈述」中表示「位置关系」
 ///   * 📄`<A --> B>`与`<B --> C>`中，`B`就分别在`1`、`0`两个索引位置
 ///     * 📌因此有`SP`或`Subject-Predicate`
-///     * 📌同时也有了其它三种「陈述图式」
+///     * 📌同时也有了其它三种「三段论图式」
+/// * 🚩两种情况：
+///   * 主项
+///   * 谓项
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum SyllogismPosition {
+    /// 主项（第一项）
+    Subject,
+    /// 谓项（第二项）
+    Predicate,
+}
+
+impl SyllogismPosition {
+    /// 🆕调转到相反位置
+    #[inline(always)]
+    pub fn opposite(self) -> Self {
+        match self {
+            Subject => Predicate,
+            Predicate => Subject,
+        }
+    }
+
+    /// 🆕从「数组索引」中来
+    /// * 🎯[`RuleTables::__index_to_figure`]
+    /// * 🚩核心：0→主项，1→谓项，整体`<主项 --> 谓项>`
+    #[inline(always)]
+    pub fn from_index(index: usize) -> Self {
+        match index {
+            0 => Subject,
+            1 => Predicate,
+            _ => panic!("无效索引"),
+        }
+    }
+
+    /// 🆕构造「三段论图式」
+    /// * 🎯[`RuleTables::__index_to_figure`]
+    /// * 🚩直接构造二元组
+    #[inline(always)]
+    pub fn build_figure(first: Self, second: Self) -> SyllogismFigure {
+        (first, second)
+    }
+}
+use SyllogismPosition::*;
+
+/// 三段论图式
+/// * 🎯模拟「三段论推理」中「公共项在两陈述的位置」的四种情况
+/// * 🚩使用二元组实现，允许更细化的组合
+/// * 📝四种主要情况：
+///   * 主项-主项
+///   * 主项-谓项
+///   * 谓项-主项
+///   * 谓项-谓项
 ///
 /// # 📄OpenNARS
 ///
 /// location of the shared term
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum SyllogismFigure {
-    /// 主项对主项
-    SubjectSubject,
+pub type SyllogismFigure = (SyllogismPosition, SyllogismPosition);
 
-    /// 主项对谓项
-    SubjectPredicate,
+/// 存储「三段论图式」常量
+/// * 🎯可完全引用，可简短使用
+///   * ⚡长度与OpenNARS的`11`、`12`相近
+/// * 🚩仅四种
+pub mod syllogistic_figures {
+    use super::*;
 
-    /// 谓项对主项
-    PredicateSubject,
+    /// [三段论图式](SyllogismFigure)/常用/主项-主项
+    #[doc(alias = "SUBJECT_SUBJECT")]
+    pub const SS: SyllogismFigure = (Subject, Subject);
 
-    /// 谓项对谓项
-    PredicatePredicate,
+    /// [三段论图式](SyllogismFigure)/常用/主项-谓项
+    #[doc(alias = "SUBJECT_PREDICATE")]
+    pub const SP: SyllogismFigure = (Subject, Predicate);
+
+    /// [三段论图式](SyllogismFigure)/常用/谓项-主项
+    #[doc(alias = "PREDICATE_SUBJECT")]
+    pub const PS: SyllogismFigure = (Predicate, Subject);
+
+    /// [三段论图式](SyllogismFigure)/常用/谓项-谓项
+    #[doc(alias = "PREDICATE_PREDICATE")]
+    pub const PP: SyllogismFigure = (Predicate, Predicate);
 }
-use SyllogismFigure::*;
 
 /// 模拟`RuleTables`
 /// * 🚩【2024-05-07 01:56:57】现在通过「推理上下文」自动锁定其内的「子类型」
@@ -261,6 +323,10 @@ pub trait RuleTables: ReasonContext {
 
     /// 模拟`RuleTables.indexToFigure`
     ///
+    /// # Panics
+    ///
+    /// ! 若传入的两词项链不合法
+    ///
     /// # 📄OpenNARS
     ///
     /// Decide the figure of syllogism according to the locations of the common term in the premises
@@ -269,8 +335,8 @@ pub trait RuleTables: ReasonContext {
     /// @param link2 The link to the second premise
     /// @return The figure of the syllogism, one of the four: 11, 12, 21, or 22
     fn __index_to_figure(
-        term_link_1: &Self::TermLink,
-        term_link_2: &Self::TermLink,
+        term_link_1: &impl TermLink,
+        term_link_2: &impl TermLink,
     ) -> SyllogismFigure {
         /* 📄OpenNARS源码：
         return (link1.getIndex(0) + 1) * 10 + (link2.getIndex(0) + 1); */
@@ -279,16 +345,10 @@ pub trait RuleTables: ReasonContext {
         debug_assert!(term_link_2.type_ref().has_indexes());
         let root_index_1 = term_link_1.get_index(0).unwrap();
         let root_index_2 = term_link_2.get_index(0).unwrap();
-        // * 🚩核心：0→主项，1→谓项，整体`<主项 --> 谓项>`
-        match (root_index_1, root_index_2) {
-            // 四个位置
-            (0, 0) => SubjectSubject,
-            (0, 1) => SubjectPredicate,
-            (1, 0) => PredicateSubject,
-            (1, 1) => PredicatePredicate,
-            // 不可达的情况
-            _ => unreachable!("不应该出现的位置：({root_index_1}, {root_index_2})"),
-        }
+        SyllogismPosition::build_figure(
+            SyllogismPosition::from_index(root_index_1),
+            SyllogismPosition::from_index(root_index_2),
+        )
     }
 
     /// 模拟`RuleTables.asymmetricAsymmetric`

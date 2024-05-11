@@ -24,7 +24,7 @@ use super::*;
 use nar_dev_utils::if_return;
 
 impl Term {
-    /// 用于判断是否为「陈述词项」
+    /// 🆕用于判断是否为「陈述词项」
     /// * 📄OpenNARS `instanceof Statement` 逻辑
     pub fn instanceof_statement(&self) -> bool {
         matches!(
@@ -34,11 +34,44 @@ impl Term {
                 | SIMILARITY_RELATION
                 | IMPLICATION_RELATION
                 | EQUIVALENCE_RELATION
-                // ↓下边都是派生系词
+                // ↓下边都是派生系词（实际上不会出现，OpenNARS也一样）
                 | INSTANCE_RELATION
                 | PROPERTY_RELATION
                 | INSTANCE_PROPERTY_RELATION
         )
+    }
+
+    /// 🆕用于判断是否为「继承」
+    /// * 📄OpenNARS`instanceof Inheritance`逻辑
+    /// * 📝OpenNARS中「继承」与「实例」「属性」「实例属性」没有继承关系
+    /// * 🎯[`crate::inference::RuleTables`]推理规则分派
+    #[inline(always)]
+    pub fn instanceof_inheritance(&self) -> bool {
+        self.identifier == INHERITANCE_RELATION
+    }
+
+    /// 🆕用于判断是否为「相似」
+    /// * 📄OpenNARS`instanceof Similarity`逻辑
+    /// * 🎯[`crate::inference::RuleTables`]推理规则分派
+    #[inline(always)]
+    pub fn instanceof_similarity(&self) -> bool {
+        self.identifier == SIMILARITY_RELATION
+    }
+
+    /// 🆕用于判断是否为「蕴含」
+    /// * 📄OpenNARS`instanceof Implication`逻辑
+    /// * 🎯[`crate::inference::RuleTables`]推理规则分派
+    #[inline(always)]
+    pub fn instanceof_implication(&self) -> bool {
+        self.identifier == IMPLICATION_RELATION
+    }
+
+    /// 🆕用于判断是否为「等价」
+    /// * 📄OpenNARS`instanceof Equivalence`逻辑
+    /// * 🎯[`crate::inference::RuleTables`]推理规则分派
+    #[inline(always)]
+    pub fn instanceof_equivalence(&self) -> bool {
+        self.identifier == EQUIVALENCE_RELATION
     }
 
     /// 📄OpenNARS `Statement.makeSym` 方法
