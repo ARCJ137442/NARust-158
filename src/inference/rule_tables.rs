@@ -17,12 +17,13 @@ use crate::{entity::*, language::*, storage::*};
 /// * 🚩两种情况：
 ///   * 主项
 ///   * 谓项
+#[doc(alias = "SyllogismLocation")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum SyllogismPosition {
     /// 主项（第一项）
-    Subject,
+    Subject = 0,
     /// 谓项（第二项）
-    Predicate,
+    Predicate = 1,
 }
 
 impl SyllogismPosition {
@@ -60,6 +61,7 @@ use SyllogismPosition::*;
 /// 三段论图式
 /// * 🎯模拟「三段论推理」中「公共项在两陈述的位置」的四种情况
 /// * 🚩使用二元组实现，允许更细化的组合
+///   * ✨基本等同于整数（低开销）类型
 /// * 📝四种主要情况：
 ///   * 主项-主项
 ///   * 主项-谓项
