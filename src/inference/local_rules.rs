@@ -2,7 +2,7 @@
 //! * 📄有关「类型声明」参见[「推理上下文」](super::reason_context)
 //! * ✅【2024-05-07 18:51:30】初步实现方法API（函数签名、文档、源码附注）
 
-use crate::{entity::*, inference::*, io::VAR_QUERY, language::variable::unify_two};
+use crate::{entity::*, inference::*, io::symbols::VAR_QUERY, language::variable::unify_two};
 
 /// 模拟`LocalRules`
 /// * 📝有关「内部思考」「内省」的规则

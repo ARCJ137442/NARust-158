@@ -164,6 +164,11 @@ pub trait ConceptProcess: DerivationContext {
         } else {
             return 0.5f;
         } */
+        let mut question = task.sentence();
+        let mut new_question = true;
+        for self_question in concept.__questions() {
+            // TODO: 【2024-05-12 23:42:08】有待进一步实现
+        }
         todo!("// TODO: 有待实现")
     }
 

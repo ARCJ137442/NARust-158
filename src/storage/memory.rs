@@ -6,12 +6,7 @@
 //! * ✅【2024-05-08 17:17:41】目前已初步完成所有方法的模拟
 
 use crate::{
-    entity::*,
-    global::{ClockTime, Float, RC},
-    inference::*,
-    language::Term,
-    nars::DEFAULT_PARAMETERS,
-    storage::*,
+    entity::*, inference::*, language::Term, nars::DEFAULT_PARAMETERS, storage::*,
     ToDisplayAndBrief,
 };
 use narsese::api::NarseseValue;
@@ -31,7 +26,7 @@ mod report {
         /// * 🚩【2024-05-07 20:09:49】目前使用[`VecDeque`]队列实现
         fn cached_outputs(&self) -> &VecDeque<Output>;
         /// [`MemoryRecorder::cached_outputs`]的可变版本
-        fn cached_outputs_mut(&mut self) -> &mut VecDeque<Output>;
+        fn __cached_outputs_mut(&mut self) -> &mut VecDeque<Output>;
 
         /// 长度大小
         #[inline]
@@ -48,14 +43,22 @@ mod report {
         /// 置入NAVM输出（在末尾）
         #[inline]
         fn put(&mut self, output: Output) {
-            self.cached_outputs_mut().push_back(output)
+            self.__cached_outputs_mut().push_back(output)
         }
 
         /// 取出NAVM输出（在开头）
         /// * ⚠️可能没有（空缓冲区）
         #[inline]
         fn take(&mut self) -> Option<Output> {
-            self.cached_outputs_mut().pop_front()
+            self.__cached_outputs_mut().pop_front()
+        }
+
+        /// 清空
+        /// * 🎯用于推理器「向外输出并清空内部结果」备用
+        ///   * 🚩【2024-05-13 02:13:21】现在直接用`while let Some(output) = self.take()`型语法
+        #[inline]
+        fn clear(&mut self) {
+            self.__cached_outputs_mut().clear()
         }
     }
 
@@ -81,7 +84,7 @@ mod report {
             &self.cached_outputs
         }
 
-        fn cached_outputs_mut(&mut self) -> &mut VecDeque<Output> {
+        fn __cached_outputs_mut(&mut self) -> &mut VecDeque<Output> {
             &mut self.cached_outputs
         }
     }

@@ -4,7 +4,7 @@
 
 use crate::{
     global::ClockTime,
-    io::{STAMP_CLOSER, STAMP_OPENER, STAMP_SEPARATOR, STAMP_STARTER},
+    io::symbols::{STAMP_CLOSER, STAMP_OPENER, STAMP_SEPARATOR, STAMP_STARTER},
     nars::DEFAULT_PARAMETERS,
     ToDisplayAndBrief,
 };

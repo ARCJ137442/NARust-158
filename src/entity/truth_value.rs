@@ -5,7 +5,7 @@
 use super::{ShortFloat, ShortFloatV1};
 use crate::{
     global::Float,
-    io::{TRUTH_VALUE_MARK, VALUE_SEPARATOR},
+    io::symbols::{TRUTH_VALUE_MARK, VALUE_SEPARATOR},
     ToDisplayAndBrief,
 };
 use anyhow::Result;
