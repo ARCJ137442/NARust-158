@@ -2,7 +2,6 @@
 //! * 📄有关「类型声明」参见[「推理上下文」](super::reason_context)
 //! * ✅【2024-05-07 18:51:30】初步实现方法API（函数签名、文档、源码附注）
 
-use super::DerivationContext;
 use crate::{entity::*, inference::*, io::VAR_QUERY, language::variable::unify_two};
 
 /// 模拟`LocalRules`
@@ -37,7 +36,7 @@ pub trait LocalRules: DerivationContext {
     /// @param belief The belief
     /// @param memory Reference to the memory
     #[doc(alias = "match")]
-    fn match_belief(task: &Self::Task, belief: &Self::Sentence, memory: &mut Self::Memory) {
+    fn match_belief(&mut self, task: &Self::Task, belief: &Self::Sentence) {
         /* 📄OpenNARS源码：
         Sentence sentence = (Sentence) task.getSentence().clone();
         if (sentence.isJudgment()) {
@@ -52,7 +51,7 @@ pub trait LocalRules: DerivationContext {
             // 判断⇒若能修订，转换到「修订」
             SentenceType::Judgement(..) => {
                 if <Self as LocalRules>::revisable(sentence, belief) {
-                    <Self as LocalRules>::revision(sentence, belief, true, memory);
+                    self.revision(sentence, belief, true);
                 }
             }
             // 问题⇒尝试用信念解答
@@ -63,7 +62,7 @@ pub trait LocalRules: DerivationContext {
                     task.sentence().clone().content_mut(),
                     &mut belief.content().clone(),
                 ) {
-                    Self::try_solution(belief, task, memory);
+                    self.try_solution(belief, task);
                 }
             }
         }
@@ -97,10 +96,10 @@ pub trait LocalRules: DerivationContext {
     /// @param feedbackToLinks Whether to send feedback to the links
     /// @param memory          Reference to the memory
     fn revision(
+        &mut self,
         new_belief: &Self::Sentence,
         old_belief: &Self::Sentence,
         feedback_to_links: bool,
-        memory: &mut Self::Memory,
     ) {
         /* 📄OpenNARS源码：
         TruthValue newTruth = newBelief.getTruth();
@@ -114,25 +113,15 @@ pub trait LocalRules: DerivationContext {
         let old_truth = old_belief.truth().unwrap();
         let truth = new_truth.revision(old_truth);
         // ! 此处真的要修改词项链、任务链
-        // let memory_current_task_budget = memory.current_task_mut().budget_mut();
-        // let current_task_link_budget = memory.current_task_link().budget();
-        // let current_belief_link_budget = memory.current_belief_link().as_ref().unwrap().budget();
-        // let budget = <<Self as DerivationContext>::Budget>::revise(
-        //     new_truth,
-        //     old_truth,
-        //     &truth,
-        //     feedback_to_links,
-        //     // 后边这仨参数要统一
-        //     memory_current_task_budget,
-        //     current_task_link_budget,
-        //     current_belief_link_budget,
-        // );
-        // // TODO: 统一「推理上下文」与「记忆区.当前任务预算值」等「推理上下文」相关
-        // // TODO: 后续复刻完重构时，必定修复此处（可复用的、独立的「上下文」对象）
-        // let content = new_belief.content();
-        // // TODO: `memory.doublePremiseTask(content, truth, budget);`
-        // memory.double_premise_task_revisable(content.clone(), truth, budget)
-        todo!()
+        let budget = <<Self as ReasonContext>::Budget>::revise(
+            new_truth,
+            old_truth,
+            &truth,
+            feedback_to_links,
+            self,
+        );
+        let content = new_belief.content();
+        self.double_premise_task_revisable(content.clone(), truth, budget);
     }
 
     /// 模拟`LocalRules.trySolution`
@@ -144,7 +133,7 @@ pub trait LocalRules: DerivationContext {
     /// @param belief The proposed answer
     /// @param task   The task to be processed
     /// @param memory Reference to the memory
-    fn try_solution(belief: &Self::Sentence, task: &Self::Task, memory: &mut Self::Memory) {
+    fn try_solution(&mut self, belief: &Self::Sentence, task: &Self::Task) {
         /* 📄OpenNARS源码：
         Sentence problem = task.getSentence();
         Sentence oldBest = task.getBestSolution();
@@ -207,7 +196,7 @@ pub trait LocalRules: DerivationContext {
     /// The task and belief match reversely
     ///
     /// @param memory Reference to the memory
-    fn match_reverse(memory: &mut Self::Memory) {
+    fn match_reverse(&mut self) {
         /* 📄OpenNARS源码：
         Task task = memory.currentTask;
         Sentence belief = memory.currentBelief;
@@ -230,10 +219,10 @@ pub trait LocalRules: DerivationContext {
     /// @param figure location of the shared term
     /// @param memory Reference to the memory
     fn match_asym_sym(
+        &mut self,
         asym: &Self::Sentence,
         sym: &Self::Sentence,
         figure: SyllogismFigure,
-        memory: &mut Self::Memory,
     ) {
         /* 📄OpenNARS源码：
         if (memory.currentTask.getSentence().isJudgment()) {
@@ -255,11 +244,7 @@ pub trait LocalRules: DerivationContext {
     /// @param judgment1 The first premise
     /// @param judgment2 The second premise
     /// @param memory    Reference to the memory
-    fn __infer_to_sym(
-        judgement1: &Self::Sentence,
-        judgement2: &Self::Sentence,
-        memory: &mut Self::Memory,
-    ) {
+    fn __infer_to_sym(&mut self, judgement1: &Self::Sentence, judgement2: &Self::Sentence) {
         /* 📄OpenNARS源码：
         Statement s1 = (Statement) judgment1.getContent();
         Term t1 = s1.getSubject();
@@ -287,7 +272,7 @@ pub trait LocalRules: DerivationContext {
     /// @param asym   The asymmetric premise
     /// @param sym    The symmetric premise
     /// @param memory Reference to the memory
-    fn __infer_to_asym(asym: &Self::Task, sym: &Self::Sentence, memory: &mut Self::Memory) {
+    fn __infer_to_asym(&mut self, asym: &Self::Task, sym: &Self::Sentence) {
         /* 📄OpenNARS源码：
         Statement statement = (Statement) asym.getContent();
         Term sub = statement.getPredicate();
@@ -308,7 +293,7 @@ pub trait LocalRules: DerivationContext {
     /// reversed Inheritance/Implication
     ///
     /// @param memory Reference to the memory
-    fn __conversion(memory: &mut Self::Memory) {
+    fn __conversion(&mut self) {
         /* 📄OpenNARS源码：
         TruthValue truth = TruthFunctions.conversion(memory.currentBelief.getTruth());
         BudgetValue budget = BudgetFunctions.forward(truth, memory);
@@ -323,7 +308,7 @@ pub trait LocalRules: DerivationContext {
     /// Inheritance/Implication and Similarity/Equivalence
     ///
     /// @param memory Reference to the memory
-    fn __convert_relation(memory: &mut Self::Memory) {
+    fn __convert_relation(&mut self) {
         /* 📄OpenNARS源码：
         TruthValue truth = memory.currentBelief.getTruth();
         if (((Statement) memory.currentTask.getContent()).isCommutative()) {
@@ -338,11 +323,7 @@ pub trait LocalRules: DerivationContext {
     /// 模拟`LocalRules.convertedJudgment`
     ///
     /// # 📄OpenNARS
-    fn __converted_judgment(
-        new_truth: &Self::Truth,
-        new_budget: &Self::Budget,
-        memory: &mut Self::Memory,
-    ) {
+    fn __converted_judgment(&mut self, new_truth: &Self::Truth, new_budget: &Self::Budget) {
         /* 📄OpenNARS源码：
         Statement content = (Statement) memory.currentTask.getContent();
         Statement beliefContent = (Statement) memory.currentBelief.getContent();

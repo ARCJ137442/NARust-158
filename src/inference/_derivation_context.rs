@@ -3,13 +3,12 @@
 //! * 📄亦仿自OpenNARS 3.x（3.0.4）`DerivationContext`
 //! * 📝【2024-05-12 02:17:38】基础数据结构可以借鉴OpenNARS 1.5.8，但涉及「推理」的部分，建议采用OpenNARS 3.0.4的架构来复刻
 
-use navm::output::Output;
-
 use super::ReasonContext;
 use crate::{
     global::{ClockTime, Float},
     language::Term,
 };
+use navm::output::Output;
 
 /// 🆕「推导上下文」
 /// * 🎯承载状态变量，解耦「记忆区」
@@ -18,13 +17,20 @@ use crate::{
 ///   * 💭可能经此无需再考虑RC等「共享引用」类型
 /// * 🎯实现「开始推理⇒创建上下文⇒具体推理⇒回收上下文」的新「推理过程」
 ///   * 💭基于「概念+词项链+任务链」的【可并行化】推理
-pub trait DerivationContext: ReasonContext {
+/// * 🚩【2024-05-12 16:09:29】不堪`<Self as XXX>`其扰，要求实现特征[`Sized`]
+pub trait DerivationContext: ReasonContext + Sized {
     /* ---------- Short-term workspace for a single cycle ---------- */
     // * 💭【2024-05-08 17:21:00】大致方案：
     //   * 📌「记忆区」应该作为一个纯粹的「概念/新任务/新近任务 存储器」来使用
     //   * 🚩建立「推理上下文」：其中的数据从「记忆区」取出，经过「推理」生成派生任务与信息，最终「归还」记忆区
     //   * 🚩原属于「记忆区」的推理过程有关函数（如`cycle`），应该放在更顶层的「Reasoner」即「推理器」中，统一调度
     //     * 🚩并且「推理上下文」应该与「记忆区」平级，统一受「推理器」主控调用
+
+    /// 🆕跟随OpenNARS 3.0.4，要求存储对「记忆区」的引用
+    /// * 🚩至于这个「引用」如何存储（带生命周期的内部指针等），可自由决定
+    /// * 🎯目前首次用于[「预算推理」](super::BudgetFunctions::__budget_inference)，上游是「组合规则通过词项优先级调整策略」
+    /// * 🎯目前仅只读
+    fn memory(&self) -> &Self::Memory;
 
     /// 模拟`Memory.newTasks`
     /// * 🚩读写：OpenNARS中要读写对象
@@ -66,9 +72,9 @@ pub trait DerivationContext: ReasonContext {
     ///
     /// # 📄OpenNARS
     ///
-    fn current_task_link(&self) -> &Self::TaskLink;
+    fn current_task_link(&self) -> Option<&Self::TaskLink>;
     /// [`Memory::current_task_link`]的可变版本
-    fn current_task_link_mut(&mut self) -> &mut Self::TaskLink;
+    fn current_task_link_mut(&mut self) -> &mut Option<Self::TaskLink>;
 
     /// 模拟`Memory.currentTask`
     /// * 🚩【2024-05-08 11:17:37】为强调「引用」需要，此处返回[`RC`]而非引用
@@ -189,9 +195,9 @@ pub trait DerivationContext: ReasonContext {
 
 /// 「推导上下文」的「具体类型」
 /// * 🎯构造函数
-pub trait DerivationContextConcrete: DerivationContext + Sized {
+pub trait DerivationContextConcrete: DerivationContext {
     /// 构造函数
     fn new() -> Self {
-        todo!()
+        todo!("// TODO: 待完善")
     }
 }

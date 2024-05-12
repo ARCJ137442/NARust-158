@@ -2,12 +2,14 @@
 //! * 🎯分开存放[「概念」](crate::entity::Concept)中与「推导上下文」有关的方法
 //! * 📄仿自OpenNARS 3.0.4
 
+use navm::output::Output;
+
 use super::DerivationContext;
-use crate::{entity::*, global::Float, inference::*, language::Term, storage::*};
+use crate::{entity::*, global::Float, inference::*, nars::DEFAULT_PARAMETERS, storage::*, *};
 
 ///
 /// * 🚩因为`<Self as LocalRules>::solution_quality`要求[`Sized`]
-pub trait ConceptProcess: DerivationContext + Sized {
+pub trait ConceptProcess: DerivationContext {
     /* ---------- direct processing of tasks ---------- */
 
     /// 模拟`Concept.directProcess`
@@ -218,13 +220,11 @@ pub trait ConceptProcess: DerivationContext + Sized {
     /// @param query The question to be processed
     /// @param list  The list of beliefs to be used
     /// @return The best candidate belief selected
-    fn __evaluation<'l, Context>(
+    fn __evaluation<'l>(
+        &mut self,
         query: &Self::Sentence,
         list: &'l [Self::Sentence],
-    ) -> Option<&'l Self::Sentence>
-    where
-        Context: ReasonContext<Concept = Self, Sentence = Self::Sentence>,
-    {
+    ) -> Option<&'l Self::Sentence> {
         /* 📄OpenNARS源码：
         if (list == null) {
             return null;
@@ -359,4 +359,104 @@ pub trait ConceptProcess: DerivationContext + Sized {
         }
         None
     }
+
+    /* ---------- main loop ---------- */
+
+    /// 🆕模拟`Concept.fire`
+    /// * 📌【2024-05-08 15:06:09】不能让「概念」干「记忆区」干的事
+    /// * 📝OpenNARS中从「记忆区」的[「处理概念」](Memory::process_concept)方法中调用
+    /// * ⚠️依赖：[`crate::inference::RuleTables`]
+    /// * 🚩【2024-05-12 16:08:58】现在独立在「推导上下文」中，
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// An atomic step in a concept, only called in {@link Memory#processConcept}
+    fn __fire_concept(&mut self, concept: &mut Self::Concept) {
+        /* 📄OpenNARS源码：
+        TaskLink currentTaskLink = taskLinks.takeOut();
+        if (currentTaskLink == null) {
+            return;
+        }
+        memory.currentTaskLink = currentTaskLink;
+        memory.currentBeliefLink = null;
+        memory.getRecorder().append(" * Selected TaskLink: " + currentTaskLink + "\n");
+        Task task = currentTaskLink.getTargetTask();
+        memory.currentTask = task; // one of the two places where concept variable is set
+        // memory.getRecorder().append(" * Selected Task: " + task + "\n"); // for
+        // debugging
+        if (currentTaskLink.getType() == TermLink.TRANSFORM) {
+            memory.currentBelief = null;
+            RuleTables.transformTask(currentTaskLink, memory); // to turn concept into structural inference as below?
+        } else {
+            int termLinkCount = Parameters.MAX_REASONED_TERM_LINK;
+            // while (memory.noResult() && (termLinkCount > 0)) {
+            while (termLinkCount > 0) {
+                TermLink termLink = termLinks.takeOut(currentTaskLink, memory.getTime());
+                if (termLink != null) {
+                    memory.getRecorder().append(" * Selected TermLink: " + termLink + "\n");
+                    memory.currentBeliefLink = termLink;
+                    RuleTables.reason(currentTaskLink, termLink, memory);
+                    termLinks.putBack(termLink);
+                    termLinkCount--;
+                } else {
+                    termLinkCount = 0;
+                }
+            }
+        }
+        taskLinks.putBack(currentTaskLink); */
+        let current_task_link = concept.__task_links_mut().take_out();
+        if let Some(current_task_link) = current_task_link {
+            // ! 🚩【2024-05-08 16:19:31】必须在「修改」之前先报告（读取）
+            self.report(Output::COMMENT {
+                content: format!(
+                    "* Selected TaskLink: {}",
+                    current_task_link.target().to_display_long()
+                ),
+            });
+            *self.current_task_link_mut() = Some(current_task_link);
+            *self.current_belief_link_mut() = None; // ? 【2024-05-08 15:41:21】这个有意义吗
+
+            // 此处设定上下文状态
+            let current_task_link = self.current_task_link().unwrap();
+            let task = current_task_link.target();
+            *self.current_task_mut() = task.clone(); // ! 🚩【2024-05-08 16:21:32】目前为「引用计数」需要，暂时如此引入（后续需要解决…）
+
+            // ! 🚩【2024-05-08 16:21:32】↓再次获取，避免借用问题
+            if let TermLinkRef::Transform(..) = self.current_task_link().unwrap().type_ref() {
+                *self.current_belief_mut() = None;
+                // let current_task_link = self.current_task_link();
+                RuleTables::transform_task(self);
+            } else {
+                // * 🚩🆕【2024-05-08 16:52:41】新逻辑：先收集，再处理——避免重复借用
+                let mut term_links_to_process = vec![];
+                // * 🆕🚩【2024-05-08 16:55:53】简化：实际上只是「最多尝试指定次数下，到了就不尝试」
+                for _ in 0..DEFAULT_PARAMETERS.max_reasoned_term_link {
+                    let term_link = concept.__term_links_mut().take_out();
+                    match term_link {
+                        Some(term_link) => term_links_to_process.push(term_link),
+                        None => break,
+                    }
+                }
+                for term_link in term_links_to_process {
+                    self.report(Output::COMMENT {
+                        content: format!(
+                            "* Selected TermLink: {}",
+                            term_link.target().to_display_long()
+                        ),
+                    });
+                    *self.current_belief_link_mut() = Some(term_link);
+                    RuleTables::reason(self);
+                }
+            }
+        }
+    }
+}
+
+/// 自动实现，以便添加方法
+impl<T: DerivationContext> ConceptProcess for T {}
+
+/// TODO: 单元测试
+#[cfg(test)]
+mod tests {
+    use super::*;
 }

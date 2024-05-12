@@ -1,20 +1,19 @@
 //! 🆕有关「推导上下文」与「记忆区」的互操作
 //! * 🎯分开存放[「记忆区」](crate::storage::Memory)中与「推导上下文」有关的方法
 //! * 📄仿自OpenNARS 3.0.4
+//!
+//! * ✅【2024-05-12 16:10:24】基本迁移完所有功能
 
-use super::{DerivationContext, RuleTables};
-use crate::{
-    _to_string::ToDisplayAndBrief, entity::*, language::Term, nars::DEFAULT_PARAMETERS, storage::*,
-};
+use super::{ConceptProcess, DerivationContext};
+use crate::{entity::*, language::Term, nars::DEFAULT_PARAMETERS, storage::*, *};
 use narsese::api::NarseseValue;
 use navm::output::Output;
 
 /// 记忆区处理：整理与「记忆区」有关的操作
 /// * 🚩目前以「记忆区」为中心，以便从「记忆区」处添加方法
 /// * 🚩【2024-05-12 15:00:59】因为`RuleTables::transform_task(self);`，要求[`Sized`]
-pub trait MemoryProcess: DerivationContext + Sized {
+pub trait MemoryProcess: DerivationContext {
     /// 模拟`Memory.activatedTask`
-    /// * 🚩【2024-05-08 11:19:18】因传参需要，部分地方使用[`RC`]
     ///
     /// # 📄OpenNARS
     ///
@@ -426,101 +425,9 @@ pub trait MemoryProcess: DerivationContext + Sized {
             let key = current_concept.key().clone(); // * 🚩🆕【2024-05-08 15:08:22】拷贝「元素id」以便在「放回」之后仍然能索引
             memory.__concepts_mut().put_back(current_concept);
             // current_concept.fire(); // ! ❌【2024-05-08 15:09:04】不采用：放回了还用，将导致引用混乱
-            self.__fire_concept(&key, memory);
-        }
-    }
-
-    /// 🆕模拟`Concept.fire`
-    /// * 📌【2024-05-08 15:06:09】不能让「概念」干「记忆区」干的事
-    /// * 📝OpenNARS中从「记忆区」的[「处理概念」](Memory::process_concept)方法中调用
-    /// * ⚠️依赖：[`crate::inference::RuleTables`]
-    ///
-    /// # 📄OpenNARS
-    ///
-    /// An atomic step in a concept, only called in {@link Memory#processConcept}
-    fn __fire_concept(&mut self, concept_key: &Self::Key, memory: &mut Self::Memory) {
-        /* 📄OpenNARS源码：
-        TaskLink currentTaskLink = taskLinks.takeOut();
-        if (currentTaskLink == null) {
-            return;
-        }
-        memory.currentTaskLink = currentTaskLink;
-        memory.currentBeliefLink = null;
-        memory.getRecorder().append(" * Selected TaskLink: " + currentTaskLink + "\n");
-        Task task = currentTaskLink.getTargetTask();
-        memory.currentTask = task; // one of the two places where this variable is set
-        // memory.getRecorder().append(" * Selected Task: " + task + "\n"); // for
-        // debugging
-        if (currentTaskLink.getType() == TermLink.TRANSFORM) {
-            memory.currentBelief = null;
-            RuleTables.transformTask(currentTaskLink, memory); // to turn this into structural inference as below?
-        } else {
-            int termLinkCount = Parameters.MAX_REASONED_TERM_LINK;
-            // while (memory.noResult() && (termLinkCount > 0)) {
-            while (termLinkCount > 0) {
-                TermLink termLink = termLinks.takeOut(currentTaskLink, memory.getTime());
-                if (termLink != null) {
-                    memory.getRecorder().append(" * Selected TermLink: " + termLink + "\n");
-                    memory.currentBeliefLink = termLink;
-                    RuleTables.reason(currentTaskLink, termLink, memory);
-                    termLinks.putBack(termLink);
-                    termLinkCount--;
-                } else {
-                    termLinkCount = 0;
-                }
-            }
-        }
-        taskLinks.putBack(currentTaskLink); */
-        let this = memory
-            .__concepts_mut()
-            .get_mut(concept_key)
-            .expect("不可能失败");
-        let current_task_link = this.__task_links_mut().take_out();
-        if let Some(current_task_link) = current_task_link {
-            // ! 🚩【2024-05-08 16:19:31】必须在「修改」之前先报告（读取）
-            self.report(Output::COMMENT {
-                content: format!(
-                    "* Selected TaskLink: {}",
-                    current_task_link.target().to_display_long()
-                ),
-            });
-            *self.current_task_link_mut() = current_task_link;
-            *self.current_belief_link_mut() = None; // ? 【2024-05-08 15:41:21】这个有意义吗
-            let current_task_link = self.current_task_link();
-            let task = current_task_link.target();
-            *self.current_task_mut() = task.clone(); // ! 🚩【2024-05-08 16:21:32】目前为「引用计数」需要，暂时如此引入（后续需要解决…）
-
-            // ! 🚩【2024-05-08 16:21:32】↓再次获取，避免借用问题
-            if let TermLinkRef::Transform(..) = self.current_task_link().type_ref() {
-                *self.current_belief_mut() = None;
-                // let current_task_link = self.current_task_link();
-                RuleTables::transform_task(self);
-            } else {
-                let this = memory
-                    .__concepts_mut()
-                    .get_mut(concept_key)
-                    .expect("不可能失败"); // ! 重新获取，以解决借用问题
-                                           // * 🚩🆕【2024-05-08 16:52:41】新逻辑：先收集，再处理——避免重复借用
-                let mut term_links_to_process = vec![];
-                // * 🆕🚩【2024-05-08 16:55:53】简化：实际上只是「最多尝试指定次数下，到了就不尝试」
-                for _ in 0..DEFAULT_PARAMETERS.max_reasoned_term_link {
-                    let term_link = this.__term_links_mut().take_out();
-                    match term_link {
-                        Some(term_link) => term_links_to_process.push(term_link),
-                        None => break,
-                    }
-                }
-                for term_link in term_links_to_process {
-                    self.report(Output::COMMENT {
-                        content: format!(
-                            "* Selected TermLink: {}",
-                            term_link.target().to_display_long()
-                        ),
-                    });
-                    *self.current_belief_link_mut() = Some(term_link);
-                    RuleTables::reason(self);
-                }
-            }
+            let concept = memory.__concepts_mut().get_mut(&key).expect("不可能失败");
+            // * 💡后续或许也把「当前概念」放到「推导上下文」中，仅在最后「回收上下文」时开始
+            self.__fire_concept(concept);
         }
     }
 
@@ -539,7 +446,7 @@ pub trait MemoryProcess: DerivationContext + Sized {
     /// @param task the task to be accepted
     fn __immediate_process(&mut self, task: Self::Task, memory: &mut Self::Memory) {
         /* 📄OpenNARS源码：
-        currentTask = task; // one of the two places where this variable is set
+        currentTask = task; // one of the two places where concept variable is set
         recorder.append("!!! Insert: " + task + "\n");
         currentTerm = task.getContent();
         currentConcept = getConcept(currentTerm);

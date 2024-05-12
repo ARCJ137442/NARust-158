@@ -1,11 +1,7 @@
 //! 🎯复刻OpenNARS `nars.inference.BudgetFunctions`
 
-use super::UtilityFunctions;
-use crate::{
-    entity::{BudgetValue, BudgetValueConcrete, ShortFloat, TruthValue},
-    global::Float,
-    language::Term,
-};
+use super::{DerivationContext, UtilityFunctions};
+use crate::{entity::*, global::Float, language::Term, storage::Memory};
 
 /// 预算函数
 /// * 🚩【2024-05-03 14:48:13】现在仍依照OpenNARS原意「直接创建新值」
@@ -136,6 +132,9 @@ pub trait BudgetFunctions: BudgetValueConcrete {
     }
 
     /// 模拟`BudgetFunctions.revise`
+    /// * 🚩现在从「推导上下文」中解放出来
+    ///   * ⚠️要求上下文的「词项链」「任务链」必须非空
+    ///     * 若分别传入，会有「多个不可变引用」问题
     ///
     /// # 📄OpenNARS
     ///
@@ -150,9 +149,7 @@ pub trait BudgetFunctions: BudgetValueConcrete {
         b_truth: &impl TruthValue<E = Self::E>,
         truth: &impl TruthValue<E = Self::E>,
         feedback_to_links: bool,
-        memory_current_task_budget: &mut impl BudgetValue<E = Self::E>,
-        memory_current_task_link_budget: &mut impl BudgetValue<E = Self::E>,
-        memory_current_belief_link_budget: &mut impl BudgetValue<E = Self::E>,
+        context: &mut impl DerivationContext<ShortFloat = Self::E, Budget = Self>,
     ) -> Self {
         /* 📄OpenNARS源码：
         float difT = truth.getExpDifAbs(tTruth);
@@ -174,18 +171,19 @@ pub trait BudgetFunctions: BudgetValueConcrete {
         float quality = truthToQuality(truth);
         return new BudgetValue(priority, durability, quality); */
         let dif_t = Self::E::from_float(truth.expectation_abs_dif(t_truth));
-        let task = memory_current_task_budget;
+        let task = context.current_task_mut().budget_mut();
         task.dec_priority(!dif_t);
         task.dec_durability(!dif_t);
         if feedback_to_links {
-            let t_link = memory_current_task_link_budget;
+            let t_link = context.current_task_link_mut().as_mut().unwrap();
             t_link.dec_priority(!dif_t);
             t_link.dec_durability(!dif_t);
-            let b_link = memory_current_belief_link_budget;
+            let b_link = context.current_belief_link_mut().as_mut().unwrap();
             let dif_b = Self::E::from_float(truth.expectation_abs_dif(b_truth));
             b_link.dec_priority(!dif_b);
             b_link.dec_durability(!dif_b);
         }
+        let task = context.current_task();
         let dif = truth.confidence() - t_truth.confidence().max(b_truth.confidence());
         let priority = dif | task.priority();
         let durability = Self::E::arithmetical_average([dif, task.durability()]);
@@ -352,22 +350,13 @@ pub trait BudgetFunctions: BudgetValueConcrete {
     /// @return The budget value of the conclusion
     fn forward(
         truth: &impl TruthValue<E = Self::E>,
-        // * 🚩↓对标`Item t`（来自`memory`）
-        memory_t_budget: &impl BudgetValue<E = Self::E>,
-        // * 🚩↓对标两个变量，其中一个在另一个变量的条件里边，因此为「保证同时存在」将其合并到一个变量里头（具体计算交给调用方）
-        memory_current_belief_link_budget_and_target_activation: Option<(
-            &mut impl BudgetValue<E = Self::E>,
-            Self::E,
-        )>,
+        // * 🚩【2024-05-12 15:48:37】↓对标`memory`
+        context: &mut impl DerivationContext<ShortFloat = Self::E, Budget = Self>,
+        memory: &impl Memory<ShortFloat = Self::E>,
     ) -> Self {
         /* 📄OpenNARS源码：
         return budgetInference(truthToQuality(truth), 1, memory); */
-        Self::__budget_inference(
-            Self::truth_to_quality(truth),
-            1,
-            memory_t_budget,
-            memory_current_belief_link_budget_and_target_activation,
-        )
+        Self::__budget_inference(Self::truth_to_quality(truth), 1, context, memory)
     }
 
     /// 模拟`BudgetFunctions.backward`
@@ -382,22 +371,13 @@ pub trait BudgetFunctions: BudgetValueConcrete {
     /// @return The budget value of the conclusion
     fn backward(
         truth: &impl TruthValue<E = Self::E>,
-        // * 🚩↓对标`Item t`（来自`memory`）
-        memory_t_budget: &impl BudgetValue<E = Self::E>,
-        // * 🚩↓对标两个变量，其中一个在另一个变量的条件里边，因此为「保证同时存在」将其合并到一个变量里头（具体计算交给调用方）
-        memory_current_belief_link_budget_and_target_activation: Option<(
-            &mut impl BudgetValue<E = Self::E>,
-            Self::E,
-        )>,
+        // * 🚩【2024-05-12 15:48:37】↓对标`memory`
+        context: &mut impl DerivationContext<ShortFloat = Self::E, Budget = Self>,
+        memory: &impl Memory<ShortFloat = Self::E>,
     ) -> Self {
         /* 📄OpenNARS源码：
         return budgetInference(truthToQuality(truth), 1, memory); */
-        Self::__budget_inference(
-            Self::truth_to_quality(truth),
-            1,
-            memory_t_budget,
-            memory_current_belief_link_budget_and_target_activation,
-        )
+        Self::__budget_inference(Self::truth_to_quality(truth), 1, context, memory)
     }
 
     /// 模拟`BudgetFunctions.backwardWeak`
@@ -413,21 +393,17 @@ pub trait BudgetFunctions: BudgetValueConcrete {
     /// @return The budget value of the conclusion
     fn backward_weak(
         truth: &impl TruthValue<E = Self::E>,
-        // * 🚩↓对标`Item t`（来自`memory`）
-        memory_t_budget: &impl BudgetValue<E = Self::E>,
-        // * 🚩↓对标两个变量，其中一个在另一个变量的条件里边，因此为「保证同时存在」将其合并到一个变量里头（具体计算交给调用方）
-        memory_current_belief_link_budget_and_target_activation: Option<(
-            &mut impl BudgetValue<E = Self::E>,
-            Self::E,
-        )>,
+        // * 🚩【2024-05-12 15:48:37】↓对标`memory`
+        context: &mut impl DerivationContext<ShortFloat = Self::E, Budget = Self>,
+        memory: &impl Memory<ShortFloat = Self::E>,
     ) -> Self {
         /* 📄OpenNARS源码：
         return budgetInference(w2c(1) * truthToQuality(truth), 1, memory); */
         Self::__budget_inference(
             Self::E::w2c(1.0) & Self::truth_to_quality(truth),
             1,
-            memory_t_budget,
-            memory_current_belief_link_budget_and_target_activation,
+            context,
+            memory,
         )
     }
 
@@ -446,21 +422,17 @@ pub trait BudgetFunctions: BudgetValueConcrete {
     fn compound_forward(
         truth: &impl TruthValue<E = Self::E>,
         content: &Term,
-        // * 🚩↓对标`Item t`（来自`memory`）
-        memory_t_budget: &impl BudgetValue<E = Self::E>,
-        // * 🚩↓对标两个变量，其中一个在另一个变量的条件里边，因此为「保证同时存在」将其合并到一个变量里头（具体计算交给调用方）
-        memory_current_belief_link_budget_and_target_activation: Option<(
-            &mut impl BudgetValue<E = Self::E>,
-            Self::E,
-        )>,
+        // * 🚩【2024-05-12 15:48:37】↓对标`memory`
+        context: &mut impl DerivationContext<ShortFloat = Self::E, Budget = Self>,
+        memory: &impl Memory<ShortFloat = Self::E>,
     ) -> Self {
         /* 📄OpenNARS源码：
         return budgetInference(truthToQuality(truth), content.getComplexity(), memory); */
         Self::__budget_inference(
             Self::truth_to_quality(truth),
             content.complexity(),
-            memory_t_budget,
-            memory_current_belief_link_budget_and_target_activation,
+            context,
+            memory,
         )
     }
 
@@ -475,22 +447,13 @@ pub trait BudgetFunctions: BudgetValueConcrete {
     /// @return The budget of the conclusion
     fn compound_backward(
         content: &Term,
-        // * 🚩↓对标`Item t`（来自`memory`）
-        memory_t_budget: &impl BudgetValue<E = Self::E>,
-        // * 🚩↓对标两个变量，其中一个在另一个变量的条件里边，因此为「保证同时存在」将其合并到一个变量里头（具体计算交给调用方）
-        memory_current_belief_link_budget_and_target_activation: Option<(
-            &mut impl BudgetValue<E = Self::E>,
-            Self::E,
-        )>,
+        // * 🚩【2024-05-12 15:48:37】↓对标`memory`
+        context: &mut impl DerivationContext<ShortFloat = Self::E, Budget = Self>,
+        memory: &impl Memory<ShortFloat = Self::E>,
     ) -> Self {
         /* 📄OpenNARS源码：
         return budgetInference(1, content.getComplexity(), memory); */
-        Self::__budget_inference(
-            Self::E::ONE,
-            content.complexity(),
-            memory_t_budget,
-            memory_current_belief_link_budget_and_target_activation,
-        )
+        Self::__budget_inference(Self::E::ONE, content.complexity(), context, memory)
     }
 
     /// 模拟`BudgetFunctions.compoundBackwardWeak`
@@ -498,22 +461,13 @@ pub trait BudgetFunctions: BudgetValueConcrete {
     /// # 📄OpenNARS
     fn compound_backward_weak(
         content: &Term,
-        // * 🚩↓对标`Item t`（来自`memory`）
-        memory_t_budget: &impl BudgetValue<E = Self::E>,
-        // * 🚩↓对标两个变量，其中一个在另一个变量的条件里边，因此为「保证同时存在」将其合并到一个变量里头（具体计算交给调用方）
-        memory_current_belief_link_budget_and_target_activation: Option<(
-            &mut impl BudgetValue<E = Self::E>,
-            Self::E,
-        )>,
+        // * 🚩【2024-05-12 15:48:37】↓对标`memory`
+        context: &mut impl DerivationContext<ShortFloat = Self::E, Budget = Self>,
+        memory: &impl Memory<ShortFloat = Self::E>,
     ) -> Self {
         /* 📄OpenNARS源码：
         return budgetInference(w2c(1), content.getComplexity(), memory); */
-        Self::__budget_inference(
-            Self::E::w2c(1.0),
-            content.complexity(),
-            memory_t_budget,
-            memory_current_belief_link_budget_and_target_activation,
-        )
+        Self::__budget_inference(Self::E::w2c(1.0), content.complexity(), context, memory)
     }
 
     /// 模拟`BudgetFunctions.budgetInference`
@@ -521,8 +475,8 @@ pub trait BudgetFunctions: BudgetValueConcrete {
     /// * 🚩【2024-05-02 21:22:22】此处脱离与「词项链」「任务链」的关系，仅看其「预算」部分
     ///   * 📝OpenNARS源码本质上还是在强调「预算」而非（继承其上的）「词项」「记忆区」
     ///   * 📝之所以OpenNARS要传入「记忆区」「真值」是因为需要「获取其中某个词项/任务」
-    /// * 🚩【2024-05-04 01:11:52】目前通过「将『非纯预算值计算函数』交给调用方计算」勉强实现处理逻辑
-    ///   * 一些逻辑还需交由调用方行使
+    /// * 🚩【2024-05-12 15:55:37】目前在实现「记忆区」「推导上下文」的API之下，可以按逻辑无损复刻
+    ///   * ❓后续是否要将「记忆区」的引用代入「推导上下文」
     ///
     /// # 📄OpenNARS
     ///
@@ -535,13 +489,8 @@ pub trait BudgetFunctions: BudgetValueConcrete {
     fn __budget_inference(
         qual: Self::E,
         complexity: usize,
-        // * 🚩↓对标`Item t`（来自`memory`）
-        memory_t_budget: &impl BudgetValue<E = Self::E>,
-        // * 🚩↓对标两个变量，其中一个在另一个变量的条件里边，因此为「保证同时存在」将其合并到一个变量里头（具体计算交给调用方）
-        memory_current_belief_link_budget_and_target_activation: Option<(
-            &mut impl BudgetValue<E = Self::E>,
-            Self::E,
-        )>,
+        context: &mut impl DerivationContext<ShortFloat = Self::E, Budget = Self>,
+        memory: &impl Memory<ShortFloat = Self::E>,
     ) -> Self {
         /* 📄OpenNARS源码：
         Item t = memory.currentTaskLink;
@@ -560,18 +509,21 @@ pub trait BudgetFunctions: BudgetValueConcrete {
             bLink.incDurability(quality);
         }
         return new BudgetValue(priority, durability, quality); */
-        let mut priority = memory_t_budget.priority();
+        let t_budget = match context.current_task_link() {
+            Some(t_link) => t_link.budget(),
+            None => context.current_task().budget(),
+        };
+        let mut priority = t_budget.priority();
         let mut durability =
-            Self::E::from_float(memory_t_budget.durability().to_float() / complexity as Float);
+            Self::E::from_float(t_budget.durability().to_float() / complexity as Float);
         let quality = Self::E::from_float(qual.to_float() / complexity as Float);
-        if let Some((b_link, activation)) = memory_current_belief_link_budget_and_target_activation
-        {
-            priority = priority | b_link.priority();
-            durability = durability & b_link.durability();
-            let target_activation = activation;
-            b_link.inc_priority(quality | target_activation);
-            b_link.inc_durability(quality);
-        }
+        let b_link = context.current_belief_link_mut().as_mut().unwrap();
+        let activation = memory.get_concept_activation(b_link.target());
+        priority = priority | b_link.priority();
+        durability = durability & b_link.durability();
+        let target_activation = activation;
+        b_link.inc_priority(quality | target_activation);
+        b_link.inc_durability(quality);
         Self::new(priority, durability, quality)
     }
 }

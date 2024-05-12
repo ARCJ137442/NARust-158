@@ -19,6 +19,7 @@ repository = "https://github.com/ARCJ137442/NARust/tree/narust-158"
 anyhow = "1.0.83"
 thiserror = "1.0.60"
 
+# 用于开发NARS的实用工具
 [dependencies.nar_dev_utils]
 version = "0.29"
 features = ["bundled"]

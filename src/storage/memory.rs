@@ -338,6 +338,8 @@ pub trait Memory: ReasonContext<Memory = Self> + Sized {
     }
 
     /// 模拟`Memory.getConceptActivation`
+    /// * 📝被[`BudgetFunctions::__budget_inference`]调用，
+    ///   * ⚠️从而被包括「结构规则」在内的所有规则调用
     ///
     /// # 📄OpenNARS
     ///
