@@ -2,8 +2,8 @@
 //! * 📄有关「类型声明」参见[「推理上下文」](super::reason_context)
 //! * ✅【2024-05-07 18:51:30】初步实现方法API（函数签名、文档、源码附注）
 
-use super::ReasonContext;
-use crate::{entity::*, inference::*, io::VAR_QUERY, language::variable::unify_two, storage::*};
+use super::DerivationContext;
+use crate::{entity::*, inference::*, io::VAR_QUERY, language::variable::unify_two};
 
 /// 模拟`LocalRules`
 /// * 📝有关「内部思考」「内省」的规则
@@ -21,7 +21,7 @@ use crate::{entity::*, inference::*, io::VAR_QUERY, language::variable::unify_tw
 /// judgments; satisfy: between a Sentence and a Question/Goal; merge: between
 /// items of the same type and stamp; conversion: between different inheritance
 /// relations.
-pub trait LocalRules: ReasonContext {
+pub trait LocalRules: DerivationContext {
     /* -------------------- same contents -------------------- */
 
     /// 模拟`LocalRules.match`
@@ -117,7 +117,7 @@ pub trait LocalRules: ReasonContext {
         // let memory_current_task_budget = memory.current_task_mut().budget_mut();
         // let current_task_link_budget = memory.current_task_link().budget();
         // let current_belief_link_budget = memory.current_belief_link().as_ref().unwrap().budget();
-        // let budget = <<Self as ReasonContext>::Budget>::revise(
+        // let budget = <<Self as DerivationContext>::Budget>::revise(
         //     new_truth,
         //     old_truth,
         //     &truth,
@@ -364,7 +364,7 @@ pub trait LocalRules: ReasonContext {
 }
 
 /// 自动实现，以便添加方法
-impl<T: ReasonContext> LocalRules for T {}
+impl<T: DerivationContext> LocalRules for T {}
 
 /// TODO: 单元测试
 #[cfg(test)]

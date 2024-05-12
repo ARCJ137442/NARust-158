@@ -2,11 +2,7 @@
 //! * ✅【2024-05-05 21:38:53】基本方法复刻完毕
 
 use super::{BudgetValue, BudgetValueConcrete, Item, Sentence, SentenceConcrete, TruthValue};
-use crate::{
-    global::{ClockTime, RC},
-    storage::BagKey,
-    ToDisplayAndBrief,
-};
+use crate::{global::ClockTime, storage::BagKey, ToDisplayAndBrief};
 use anyhow::Result;
 use nar_dev_utils::join;
 use narsese::lexical::Task as LexicalTask;
@@ -64,10 +60,10 @@ pub trait Task: ToDisplayAndBrief {
     /// # 📄OpenNARS
     ///
     /// Task from which the Task is derived, or null if input
-    fn parent_task(&self) -> &Option<RC<Self>>;
+    fn parent_task(&self) -> &Option<Box<Self>>;
     /// [`Task::parent_task`]的可变版本
     /// * 📌只能修改「指向哪个[`Task`]」，不能修改所指向[`Task`]内部的数据
-    fn parent_task_mut(&mut self) -> &mut Option<RC<Self>>;
+    fn parent_task_mut(&mut self) -> &mut Option<Box<Self>>;
 
     /// 模拟`Task.parentBelief`、`Task.getParentBelief`
     /// * 🚩【2024-05-05 20:51:48】目前对「共享引用」使用「引用计数」处理
@@ -75,10 +71,10 @@ pub trait Task: ToDisplayAndBrief {
     /// # 📄OpenNARS
     ///
     /// Belief from which the Task is derived, or null if derived from a theorem
-    fn parent_belief(&self) -> &Option<RC<Self::Sentence>>;
+    fn parent_belief(&self) -> &Option<Self::Sentence>;
     /// [`Task::parent_belief`]的可变版本
     /// * 📌只能修改「指向哪个[`Sentence`]」，不能修改所指向[`Sentence`]内部的数据
-    fn parent_belief_mut(&mut self) -> &mut Option<RC<Self::Sentence>>;
+    fn parent_belief_mut(&mut self) -> &mut Option<Self::Sentence>;
 
     /// 模拟`Task.bestSolution`
     /// * 🚩【2024-05-05 20:51:48】目前对「共享引用」使用「引用计数」处理
@@ -86,10 +82,10 @@ pub trait Task: ToDisplayAndBrief {
     /// # 📄OpenNARS
     ///
     /// For Question and Goal: best solution found so far
-    fn best_solution(&self) -> &Option<RC<Self::Sentence>>;
+    fn best_solution(&self) -> &Option<Self::Sentence>;
     /// [`Task::best_solution`]的可变版本
     /// * 📌只能修改「指向哪个[`Sentence`]」，不能修改所指向[`Sentence`]内部的数据
-    fn best_solution_mut(&mut self) -> &mut Option<RC<Self::Sentence>>;
+    fn best_solution_mut(&mut self) -> &mut Option<Self::Sentence>;
 
     // * ✅`getContent`、`getCreationTime`均已通过「自动实现」被自动模拟
 
@@ -208,9 +204,9 @@ pub trait TaskConcrete: Task + Clone + Sized {
     fn __new(
         sentence: Self::Sentence,
         budget: Self::Budget,
-        parent_task: Option<RC<Self>>,
-        parent_belief: Option<RC<Self::Sentence>>,
-        solution: Option<RC<Self::Sentence>>,
+        parent_task: Option<Self>,
+        parent_belief: Option<Self::Sentence>,
+        solution: Option<Self::Sentence>,
     ) -> Self;
 
     /// 模拟`new Task(Sentence s, BudgetValue b)`
@@ -242,8 +238,8 @@ pub trait TaskConcrete: Task + Clone + Sized {
     fn from_derive(
         sentence: Self::Sentence,
         budget: Self::Budget,
-        parent_task: Option<RC<Self>>,
-        parent_belief: Option<RC<Self::Sentence>>,
+        parent_task: Option<Self>,
+        parent_belief: Option<Self::Sentence>,
     ) -> Self {
         Self::__new(sentence, budget, parent_task, parent_belief, None)
     }
@@ -262,9 +258,9 @@ pub trait TaskConcrete: Task + Clone + Sized {
     fn from_activate(
         sentence: Self::Sentence,
         budget: Self::Budget,
-        parent_task: RC<Self>,
-        parent_belief: RC<Self::Sentence>,
-        solution: RC<Self::Sentence>,
+        parent_task: Self,
+        parent_belief: Self::Sentence,
+        solution: Self::Sentence,
     ) -> Self {
         /* 📄OpenNARS源码：
         this(s, b, parentTask, parentBelief);
@@ -301,6 +297,15 @@ pub trait TaskConcrete: Task + Clone + Sized {
             <Self::Budget as BudgetValueConcrete>::from_lexical(budget, budget_default_values)?;
         // 构造
         Ok(Self::from_input(sentence, budget))
+    }
+
+    /// 🆕自身到「词法」的转换
+    /// * 🎯标准Narsese输出需要（Narsese内容）
+    fn to_lexical(&self) -> LexicalTask {
+        LexicalTask {
+            sentence: self.sentence().to_lexical(),
+            budget: self.budget().to_lexical(),
+        }
     }
 }
 
@@ -390,9 +395,9 @@ mod impl_v1 {
         sentence: S,
         key: K,
         budget: B,
-        parent_task: Option<RC<Self>>,
-        parent_belief: Option<RC<S>>,
-        best_solution: Option<RC<S>>,
+        parent_task: Option<Box<Self>>,
+        parent_belief: Option<S>,
+        best_solution: Option<S>,
     }
 
     // * 🚩自动实现`ToDisplayAndBrief`
@@ -444,32 +449,32 @@ mod impl_v1 {
         }
 
         #[inline(always)]
-        fn parent_task(&self) -> &Option<RC<Self>> {
+        fn parent_task(&self) -> &Option<Box<Self>> {
             &self.parent_task
         }
 
         #[inline(always)]
-        fn parent_task_mut(&mut self) -> &mut Option<RC<Self>> {
+        fn parent_task_mut(&mut self) -> &mut Option<Box<Self>> {
             &mut self.parent_task
         }
 
         #[inline(always)]
-        fn parent_belief(&self) -> &Option<RC<Self::Sentence>> {
+        fn parent_belief(&self) -> &Option<Self::Sentence> {
             &self.parent_belief
         }
 
         #[inline(always)]
-        fn parent_belief_mut(&mut self) -> &mut Option<RC<Self::Sentence>> {
+        fn parent_belief_mut(&mut self) -> &mut Option<Self::Sentence> {
             &mut self.parent_belief
         }
 
         #[inline(always)]
-        fn best_solution(&self) -> &Option<RC<Self::Sentence>> {
+        fn best_solution(&self) -> &Option<Self::Sentence> {
             &self.best_solution
         }
 
         #[inline(always)]
-        fn best_solution_mut(&mut self) -> &mut Option<RC<Self::Sentence>> {
+        fn best_solution_mut(&mut self) -> &mut Option<Self::Sentence> {
             &mut self.best_solution
         }
     }
@@ -485,15 +490,15 @@ mod impl_v1 {
         fn __new(
             s: Self::Sentence,
             b: Self::Budget,
-            parent_task: Option<RC<Self>>,
-            parent_belief: Option<RC<Self::Sentence>>,
-            solution: Option<RC<Self::Sentence>>,
+            parent_task: Option<Self>,
+            parent_belief: Option<Self::Sentence>,
+            solution: Option<Self::Sentence>,
         ) -> Self {
             Self {
                 key: s.to_key_string(),
                 sentence: s,
                 budget: b,
-                parent_task,
+                parent_task: parent_task.map(Box::new),
                 parent_belief,
                 best_solution: solution,
             }

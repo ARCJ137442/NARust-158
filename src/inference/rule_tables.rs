@@ -5,7 +5,7 @@
 //!     * 📄参见[「推理上下文」](super::reason_context)
 //! * ✅基本完成「特征方法」API：函数签名、返回值、参数类型
 
-use super::ReasonContext;
+use super::DerivationContext;
 use crate::{entity::*, language::*, storage::*};
 
 /// 🆕三段论位置
@@ -99,7 +99,10 @@ pub mod syllogistic_figures {
 
 /// 模拟`RuleTables`
 /// * 🚩【2024-05-07 01:56:57】现在通过「推理上下文」自动锁定其内的「子类型」
-pub trait RuleTables: ReasonContext {
+/// * 🚩【2024-05-12 14:13:18】目前学习OpenNARS 3.0.4的组织形式——其中所有对「记忆区」的引用，都将由「推理上下文」取代
+///   * 📄包括「读写词项/任务」「缓存产生的输出（并随后交给记忆区）」等
+///   * 🚩后续的所有`memory`参数，均将由`self`取代
+pub trait RuleTables: DerivationContext {
     /// 模拟`RuleTables.reason`
     /// * 🚩【2024-05-08 16:36:34】仅保留「记忆区」单个参数
     ///   * 📌情况：该函数只在[`Memory::__fire_concept`]调用，且其中的`task_link`也固定为「当前任务链」
@@ -114,10 +117,7 @@ pub trait RuleTables: ReasonContext {
     /// @param tLink  The selected TaskLink, which will provide a task
     /// @param bLink  The selected TermLink, which may provide a belief
     /// @param memory Reference to the memory
-    fn reason(
-        /* task_link: &Self::TermLink, term_link: &Self::TaskLink,  */
-        memory: &mut Self::Memory,
-    ) {
+    fn reason(&mut self) {
         /* 📄OpenNARS：
         Task task = memory.currentTask;
         Sentence taskSentence = task.getSentence();
@@ -255,8 +255,8 @@ pub trait RuleTables: ReasonContext {
                         break;
                 }
         } */
-        let task_link = memory.current_task_link();
-        let term_link = memory
+        let task_link = self.current_task_link();
+        let term_link = self
             .current_belief_link()
             .as_ref()
             .expect("此处必须有：在调用前设定了非空值");
@@ -364,10 +364,10 @@ pub trait RuleTables: ReasonContext {
     /// @param figure   The location of the shared term
     /// @param memory   Reference to the memory
     fn __asymmetric_asymmetric(
+        &mut self,
         sentence: &Self::Sentence,
         belief: &Self::Sentence,
         figure: SyllogismFigure,
-        memory: &mut Self::Memory,
     ) {
         /* 📄OpenNARS源码：
         Statement s1 = (Statement) sentence.cloneContent();
@@ -444,10 +444,10 @@ pub trait RuleTables: ReasonContext {
     /// @param figure The location of the shared term
     /// @param memory Reference to the memory
     fn __asymmetric_symmetric(
+        &mut self,
         asymmetric: &Self::Sentence,
         symmetric: &Self::Sentence,
         figure: SyllogismFigure,
-        memory: &mut Self::Memory,
     ) {
         /* 📄OpenNARS源码：
         Statement asymSt = (Statement) asym.cloneContent();
@@ -514,10 +514,10 @@ pub trait RuleTables: ReasonContext {
     /// @param figure       The location of the shared term
     /// @param memory       Reference to the memory
     fn __symmetric_symmetric(
+        &mut self,
         belief: &Self::Sentence,
         task_sentence: &Self::Sentence,
         figure: SyllogismFigure,
-        memory: &mut Self::Memory,
     ) {
         /* 📄OpenNARS源码：
         Statement s1 = (Statement) belief.cloneContent();
@@ -564,10 +564,10 @@ pub trait RuleTables: ReasonContext {
     /// @param index                The location of the second premise in the first
     /// @param memory               Reference to the memory
     fn __detachment_with_var(
+        &mut self,
         original_main_sentence: &Self::Sentence,
         sub_sentence: &Self::Sentence,
         index: usize,
-        memory: &mut Self::Memory,
     ) {
         /* 📄OpenNARS源码：
         Sentence mainSentence = (Sentence) originalMainSentence.clone(); // for substitution
@@ -610,11 +610,11 @@ pub trait RuleTables: ReasonContext {
     /// @param side        The location of the shared term in the statement
     /// @param memory      Reference to the memory
     fn __conditional_ded_ind_with_var(
+        &mut self,
         conditional: &Term,
         index: usize,
         statement: &Term,
         side: usize,
-        memory: &mut Self::Memory,
     ) {
         /* 📄OpenNARS源码：
         CompoundTerm condition = (CompoundTerm) conditional.getSubject();
@@ -650,12 +650,7 @@ pub trait RuleTables: ReasonContext {
     /// @param component    The component term
     /// @param compoundTask Whether the compound comes from the task
     /// @param memory       Reference to the memory
-    fn __compound_and_self(
-        compound: &Term,
-        component: &Term,
-        compound_task: bool,
-        memory: &mut Self::Memory,
-    ) {
+    fn __compound_and_self(&mut self, compound: &Term, component: &Term, compound_task: bool) {
         /* 📄OpenNARS源码：
         if ((compound instanceof Conjunction) || (compound instanceof Disjunction)) {
             if (memory.currentBelief != null) {
@@ -683,7 +678,7 @@ pub trait RuleTables: ReasonContext {
     /// @param taskTerm   The compound from the task
     /// @param beliefTerm The compound from the belief
     /// @param memory     Reference to the memory
-    fn __compound_and_compound(task_term: &Term, belief_term: &Term, memory: &mut Self::Memory) {
+    fn __compound_and_compound(&mut self, task_term: &Term, belief_term: &Term) {
         /* 📄OpenNARS源码：
         if (taskTerm.getClass() == beliefTerm.getClass()) {
             if (taskTerm.size() > beliefTerm.size()) {
@@ -708,12 +703,12 @@ pub trait RuleTables: ReasonContext {
     /// @param beliefTerm The content of the belief
     /// @param memory     Reference to the memory
     fn __compound_and_statement(
+        &mut self,
         compound: &Term,
         index: usize,
         statement: &Term,
         side: usize,
         belief_term: &Term,
-        memory: &mut Self::Memory,
     ) {
         /* 📄OpenNARS源码：
         // if (!memory.currentTask.isStructural()) {
@@ -755,7 +750,7 @@ pub trait RuleTables: ReasonContext {
     ///
     /// @param tLink  The task link
     /// @param memory Reference to the memory
-    fn transform_task(/* task_link: &Self::TaskLink,  */ memory: &mut Self::Memory) {
+    fn transform_task(/* task_link: &Self::TaskLink,  */ &mut self) {
         /* 📄OpenNARS源码：
         CompoundTerm content = (CompoundTerm) memory.currentTask.getContent().clone();
         short[] indices = tLink.getIndices();
@@ -776,13 +771,13 @@ pub trait RuleTables: ReasonContext {
         if (inh instanceof Inheritance) {
             StructuralRules.transformProductImage((Inheritance) inh, content, indices, memory);
         } */
-        let task_link = memory.current_task_link();
+        let task_link = self.current_task_link();
         todo!("// TODO: 有待实现")
     }
 }
 
 /// 自动实现，以便添加方法
-impl<T: ReasonContext> RuleTables for T {}
+impl<T: DerivationContext> RuleTables for T {}
 
 /// TODO: 单元测试
 #[cfg(test)]

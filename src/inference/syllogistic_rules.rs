@@ -3,7 +3,7 @@
 //!
 //! * ✅【2024-05-11 10:08:34】初步复现方法API
 
-use super::ReasonContext;
+use super::DerivationContext;
 use crate::{entity::*, inference::*, language::Term};
 
 /// 🆕表示「三段论侧」
@@ -38,7 +38,7 @@ pub enum SyllogismSide {
 /// # 📄OpenNARS
 ///
 /// Syllogisms: Inference rules based on the transitivity of the relation.
-pub trait SyllogisticRules: ReasonContext {
+pub trait SyllogisticRules: DerivationContext {
     // --------------- rules used in both first-tense inference and higher-tense inference ---------------
 
     /// 模拟`SyllogisticRules.dedExe`
@@ -585,7 +585,7 @@ pub trait SyllogisticRules: ReasonContext {
 }
 
 /// 自动实现，以便添加方法
-impl<T: ReasonContext> SyllogisticRules for T {}
+impl<T: DerivationContext> SyllogisticRules for T {}
 
 /// TODO: 单元测试
 #[cfg(test)]

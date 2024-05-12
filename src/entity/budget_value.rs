@@ -309,6 +309,17 @@ pub trait BudgetValueConcrete: BudgetValue + Sized + Clone {
         let [p, d, q] = *float_s;
         Ok(Self::new(p, d, q))
     }
+
+    /// 🆕自身到「词法」的转换
+    /// * 🎯标准Narsese输出需要（Narsese内容）
+    /// * 🚩【2024-05-12 14:48:31】此处跟随OpenNARS，仅用两位小数
+    fn to_lexical(&self) -> LexicalBudget {
+        vec![
+            self.priority().to_display_brief(),
+            self.durability().to_display_brief(),
+            self.quality().to_display_brief(),
+        ]
+    }
 }
 
 /// 初代实现

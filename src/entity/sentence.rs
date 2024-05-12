@@ -543,6 +543,24 @@ pub trait SentenceConcrete: Sentence + Clone + Hash + PartialEq {
         // 构造
         Ok(Self::new(content, sentence_type, stamp, revisable))
     }
+
+    /// 🆕自身到「词法」的转换
+    /// * 🎯标准Narsese输出需要（Narsese内容）
+    /// * 🚩【2024-05-12 14:48:31】此处跟随OpenNARS，使用空字串
+    ///   * 时态暂均为「永恒」
+    fn to_lexical(&self) -> LexicalSentence {
+        LexicalSentence {
+            term: self.content().into(),
+            // 标点：采用字符串形式
+            punctuation: self.punctuation().punctuation_char().to_string(),
+            stamp: self.stamp().to_lexical(),
+            // 真值可能有、可能无
+            truth: self
+                .truth()
+                .map(TruthValueConcrete::to_lexical)
+                .unwrap_or(vec![]),
+        }
+    }
 }
 
 /// 初代实现

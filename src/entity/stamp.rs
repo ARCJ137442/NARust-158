@@ -325,6 +325,15 @@ pub trait StampConcrete: Stamp + Clone + Hash + PartialEq {
     fn from_lexical(_: LexicalStamp, time: ClockTime) -> Result<Self> {
         Ok(Self::with_time(time, time))
     }
+
+    /// 🆕自身到「词法」的转换
+    /// * 🎯标准Narsese输出需要（Narsese内容）
+    /// * 🚩【2024-05-12 14:48:31】此处跟随OpenNARS，使用空字串
+    ///   * 时态暂均为「永恒」
+    #[inline(always)]
+    fn to_lexical(&self) -> LexicalStamp {
+        LexicalStamp::new()
+    }
 }
 
 /// 初代实现

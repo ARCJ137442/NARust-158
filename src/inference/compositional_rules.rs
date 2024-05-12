@@ -3,7 +3,7 @@
 //!
 //! * ✅【2024-05-12 00:47:43】初步复现方法API
 
-use super::ReasonContext;
+use super::DerivationContext;
 use crate::{entity::*, inference::*, language::Term};
 
 /// 模拟`CompositionalRules`
@@ -17,7 +17,7 @@ use crate::{entity::*, inference::*, language::Term};
 ///
 /// Forward inference only, except the last group (dependent variable
 /// introduction) can also be used backward.
-pub trait CompositionalRules: ReasonContext {
+pub trait CompositionalRules: DerivationContext {
     /// 模拟`CompositionalRules.IntroVarSameSubjectOrPredicate`
     ///
     /// # 📄OpenNARS
@@ -567,7 +567,7 @@ pub trait CompositionalRules: ReasonContext {
 }
 
 /// 自动实现，以便添加方法
-impl<T: ReasonContext> CompositionalRules for T {}
+impl<T: DerivationContext> CompositionalRules for T {}
 
 /// TODO: 单元测试
 #[cfg(test)]

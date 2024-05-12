@@ -251,6 +251,16 @@ pub trait TruthValueConcrete: TruthValue + Sized + Clone + Eq + Hash {
         let [f, c] = *float_s;
         Ok(Self::new(f, c, is_analytic))
     }
+
+    /// 🆕自身到「词法」的转换
+    /// * 🎯标准Narsese输出需要（Narsese内容）
+    /// * 🚩【2024-05-12 14:48:31】此处跟随OpenNARS，仅用两位小数
+    fn to_lexical(&self) -> LexicalTruth {
+        vec![
+            self.frequency().to_display_brief(),
+            self.confidence().to_display_brief(),
+        ]
+    }
 }
 
 /// 初代实现

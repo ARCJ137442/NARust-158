@@ -23,11 +23,17 @@
 //! In each case, there may be multiple applicable rules, which will be applied in parallel. For each rule, each conclusion is formed in three stages, to determine (1) the content (as a Term), (2) the truth-value, and (3) the budget-value, roughly in that order.
 
 nar_dev_utils::mods! {
-    // 🆕推理上下文 [`ReasonContext`](reason_context::ReasonContext)
-    pub use reason_context;
+    // 🆕推理上下文 [`ReasonContext`](_reason_context::ReasonContext)
+    pub use _reason_context;
 
-    // 🆕推导上下文 [`DerivationContext`](derivation_context::DerivationContext)
-    pub use derivation_context;
+    // 🆕推导上下文 [`DerivationContext`](_derivation_context::DerivationContext)
+    pub use _derivation_context;
+
+    // 🆕概念处理 [`ConceptProcess`](_concept_process::DerivationContext)
+    pub use _concept_process;
+
+    // 🆕记忆区处理 [`MemoryProcess`](_memory_process::DerivationContext)
+    pub use _memory_process;
 
     // 规则表 `RuleTables`
     pub use rule_tables;

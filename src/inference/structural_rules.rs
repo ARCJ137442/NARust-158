@@ -3,7 +3,7 @@
 //!
 //! * ✅【2024-05-11 15:10:00】初步复现方法API
 
-use super::ReasonContext;
+use super::DerivationContext;
 use crate::{entity::*, global::Float, inference::*, language::Term, nars::DEFAULT_PARAMETERS};
 
 /// 模拟`StructuralRules`
@@ -16,7 +16,7 @@ use crate::{entity::*, global::Float, inference::*, language::Term, nars::DEFAUL
 /// # 📄OpenNARS
 ///
 /// Single-premise inference rules involving compound terms. Input are one sentence (the premise) and one TermLink (indicating a component)
-pub trait StructuralRules: ReasonContext {
+pub trait StructuralRules: DerivationContext {
     /// 模拟`StructuralRules.RELIANCE`
     const __RELIANCE: Float = DEFAULT_PARAMETERS.reliance;
 
@@ -692,7 +692,7 @@ pub trait StructuralRules: ReasonContext {
 }
 
 /// 自动实现，以便添加方法
-impl<T: ReasonContext> StructuralRules for T {}
+impl<T: DerivationContext> StructuralRules for T {}
 
 /// TODO: 单元测试
 #[cfg(test)]
