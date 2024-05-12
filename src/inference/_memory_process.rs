@@ -110,6 +110,7 @@ pub trait MemoryProcess: DerivationContext {
 
     /// 模拟`Memory.doublePremiseTask`
     /// * ✅此处无需判断「新内容」为空：编译期非空检查
+    /// * ⚠️需要保证自身「新时间戳」非空
     ///
     /// # 📄OpenNARS
     ///
@@ -139,7 +140,7 @@ pub trait MemoryProcess: DerivationContext {
         let new_sentence = <Self::Sentence as SentenceConcrete>::new_revisable(
             new_content,
             new_punctuation,
-            self.new_stamp().clone(),
+            self.new_stamp().as_ref().unwrap().clone(),
         );
         let new_task = <Self::Task as TaskConcrete>::from_derive(
             new_sentence,
@@ -153,6 +154,7 @@ pub trait MemoryProcess: DerivationContext {
     /// 模拟`Memory.doublePremiseTask`
     /// * 📌【2024-05-08 11:57:38】相比[`Memory::double_premise_task_revisable`]多了个`revisable`作为「语句」的推理参数
     ///   * 🚩作用在「语句」上
+    /// * ⚠️要求`new_stamp`字段非空
     ///
     /// # 📄OpenNARS
     ///
@@ -186,7 +188,7 @@ pub trait MemoryProcess: DerivationContext {
         let new_sentence = <Self::Sentence as SentenceConcrete>::new(
             new_content,
             new_punctuation,
-            self.new_stamp().clone(),
+            self.new_stamp().as_ref().unwrap().clone(),
             revisable, // * 📌【2024-05-08 11:57:19】就这里是新增的
         );
         let new_task = <Self::Task as TaskConcrete>::from_derive(
@@ -226,6 +228,7 @@ pub trait MemoryProcess: DerivationContext {
 
     /// 模拟`Memory.singlePremiseTask`
     /// * 📌支持自定义的「标点」（附带「真值」）
+    /// * ⚠️要求`new_stamp`字段非空
     ///
     /// # 📄OpenNARS
     ///
@@ -282,10 +285,10 @@ pub trait MemoryProcess: DerivationContext {
         let new_sentence = <Self::Sentence as SentenceConcrete>::new(
             new_content,
             punctuation,
-            self.new_stamp().clone(),
+            self.new_stamp().as_ref().unwrap().clone(),
             task_sentence.revisable(), // * 📌【2024-05-08 11:57:19】就这里是新增的
         );
-        *self.new_stamp_mut() = new_stamp; // ! 🚩【2024-05-08 15:36:57】必须放在后边：借用检查不通过
+        *self.new_stamp_mut() = Some(new_stamp); // ! 🚩【2024-05-08 15:36:57】必须放在后边：借用检查不通过
         let new_task = <Self::Task as TaskConcrete>::from_derive(
             new_sentence,
             new_budget,

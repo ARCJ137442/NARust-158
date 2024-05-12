@@ -2,10 +2,9 @@
 //! * 🎯分开存放[「概念」](crate::entity::Concept)中与「推导上下文」有关的方法
 //! * 📄仿自OpenNARS 3.0.4
 
-use navm::output::Output;
-
 use super::DerivationContext;
 use crate::{entity::*, global::Float, inference::*, nars::DEFAULT_PARAMETERS, storage::*, *};
+use navm::output::Output;
 
 ///
 /// * 🚩因为`<Self as LocalRules>::solution_quality`要求[`Sized`]
@@ -23,7 +22,7 @@ pub trait ConceptProcess: DerivationContext {
     /// called in Memory.immediateProcess only
     ///
     /// @param task The task to be processed
-    fn direct_process(&mut self, task: &mut Self::Task) {
+    fn direct_process(&mut self, concept: &Self::Concept, task: &mut Self::Task) {
         /* 📄OpenNARS源码：
         if (task.getSentence().isJudgment()) {
             processJudgment(task);
@@ -37,13 +36,18 @@ pub trait ConceptProcess: DerivationContext {
         use SentenceType::*;
         // * 🚩分派处理
         match task.punctuation() {
-            Judgement(..) => self.__process_judgment(task),
-            Question => self.__process_question(task),
+            // 判断
+            Judgement(..) => self.__process_judgment(concept, task),
+            // 问题 | 🚩此处无需使用返回值，故直接`drop`掉（并同时保证类型一致）
+            Question => drop(self.__process_question(concept, task)),
         }
         // ! 不实现`entityObserver.refresh`
     }
 
     /// 模拟`Concept.processJudgment`
+    /// * ⚠️【2024-05-12 17:13:50】此处假定`task`
+    ///   * 具有「父任务」即`parent_task`非空
+    ///   * 可变：需要改变其预算值
     ///
     /// # 📄OpenNARS
     ///
@@ -53,7 +57,7 @@ pub trait ConceptProcess: DerivationContext {
     /// @param task The judgment to be accepted
     /// @param task The task to be processed
     /// @return Whether to continue the processing of the task
-    fn __process_judgment(&mut self, task: &mut Self::Task) {
+    fn __process_judgment(&mut self, concept: &Self::Concept, task: &mut Self::Task) {
         /* 📄OpenNARS源码：
         Sentence judgment = task.getSentence();
         Sentence oldBelief = evaluation(judgment, beliefs);
@@ -81,10 +85,39 @@ pub trait ConceptProcess: DerivationContext {
             addToTable(judgment, beliefs, Parameters.MAXIMUM_BELIEF_LENGTH);
         } */
         let judgement = task.sentence();
-        // let old_belief = Self::__evaluation(judgement, self.__beliefs());
-        // TODO: ❓【2024-05-08 17:43:59】有待解决「需要额外引入的『推理上下文』」问题
-        //   * 💭可能需要把这一系列「process」迁移出去，如`trait ConceptProcess: ReasonContext`
-        todo!("// TODO: 有待实现")
+        let old_belief = self.__evaluation(judgement, concept.__beliefs());
+        if let Some(old_belief) = old_belief {
+            let new_stamp = judgement.stamp();
+            let old_stamp = old_belief.stamp();
+            // 若为「重复任务」——优先级放到最后
+            if new_stamp.equals(old_stamp) {
+                if task.parent_task().unwrap().is_judgement() {
+                    task.budget_mut().dec_priority(Self::ShortFloat::ZERO);
+                }
+                return;
+            } else if <Self as LocalRules>::revisable(judgement, old_belief) {
+                *self.new_stamp_mut() =
+                    <Self::Stamp as StampConcrete>::from_merge(new_stamp, old_stamp, self.time());
+                if self.new_stamp().is_some() {
+                    // 🆕此处复制了「旧信念」以便设置值
+                    // TODO: ❓是否需要这样：有可能后续处在「概念」中的信念被修改了，这里所指向的「信念」却没有
+                    *self.current_belief_mut() = Some(old_belief.clone());
+                    let old_belief = self.current_belief().as_ref().unwrap();
+                    let old_belief = &old_belief.clone();
+                    // ! 📌依靠复制，牺牲性能以**解决引用问题**（不然会引用`self`）
+                    // * ❓↑但，这样会不会受到影响
+                    self.revision(judgement, old_belief, false);
+                }
+            }
+        }
+        if task
+            .budget()
+            .above_threshold(ShortFloat::from_float(DEFAULT_PARAMETERS.budget_threshold))
+        {
+            for question in concept.__questions() {
+                self.try_solution(judgement, question);
+            }
+        }
     }
 
     /// 模拟`Concept.processQuestion`
@@ -99,8 +132,11 @@ pub trait ConceptProcess: DerivationContext {
     ///
     /// @param task The task to be processed
     /// @return Whether to continue the processing of the task
-    fn __process_question(&mut self, task: &mut Self::Task) /* -> <Self::Truth as TruthValue>::E */
-    {
+    fn __process_question(
+        &mut self,
+        concept: &Self::Concept,
+        task: &mut Self::Task,
+    ) -> Self::ShortFloat {
         /* 📄OpenNARS源码：
         Sentence ques = task.getSentence();
         boolean newQuestion = true;
@@ -417,12 +453,14 @@ pub trait ConceptProcess: DerivationContext {
             *self.current_belief_link_mut() = None; // ? 【2024-05-08 15:41:21】这个有意义吗
 
             // 此处设定上下文状态
-            let current_task_link = self.current_task_link().unwrap();
+            let current_task_link = self.current_task_link().as_ref().unwrap();
             let task = current_task_link.target();
             *self.current_task_mut() = task.clone(); // ! 🚩【2024-05-08 16:21:32】目前为「引用计数」需要，暂时如此引入（后续需要解决…）
 
             // ! 🚩【2024-05-08 16:21:32】↓再次获取，避免借用问题
-            if let TermLinkRef::Transform(..) = self.current_task_link().unwrap().type_ref() {
+            if let TermLinkRef::Transform(..) =
+                self.current_task_link().as_ref().unwrap().type_ref()
+            {
                 *self.current_belief_mut() = None;
                 // let current_task_link = self.current_task_link();
                 RuleTables::transform_task(self);

@@ -9,6 +9,8 @@ use narsese::lexical::Task as LexicalTask;
 use std::hash::Hash;
 
 /// 模拟`nars.entity.Task`
+/// * ❓【2024-05-12 19:39:20】仍然不明确其中「父任务」「父信念」的数据形式
+///   * 📝OpenNARS 3.0.4的文档中使用的是「弱引用」
 ///
 /// TODO: 🏗️【2024-05-10 20:37:04】或许后续考虑直接让[`Task`]要求派生自[`Sentence`]与[`Budget`]？
 ///
@@ -60,7 +62,7 @@ pub trait Task: ToDisplayAndBrief {
     /// # 📄OpenNARS
     ///
     /// Task from which the Task is derived, or null if input
-    fn parent_task(&self) -> &Option<Box<Self>>;
+    fn parent_task(&self) -> Option<&Box<Self>>;
     /// [`Task::parent_task`]的可变版本
     /// * 📌只能修改「指向哪个[`Task`]」，不能修改所指向[`Task`]内部的数据
     fn parent_task_mut(&mut self) -> &mut Option<Box<Self>>;
@@ -449,8 +451,8 @@ mod impl_v1 {
         }
 
         #[inline(always)]
-        fn parent_task(&self) -> &Option<Box<Self>> {
-            &self.parent_task
+        fn parent_task(&self) -> Option<&Box<Self>> {
+            self.parent_task.as_ref()
         }
 
         #[inline(always)]
