@@ -118,6 +118,14 @@ macro_once! {
         /// Default expectation for confirmation.
         pub default_creation_expectation: Float = 0.66,
 
+        /// 🆕默认的「输入真值分析性」
+        /// * 🎯减少来自`TruthValue`的硬编码
+        pub default_truth_analytic: bool = false,
+
+        /// 🆕默认的「输入真值频率」
+        /// * 🎯减少来自`StringParser`的硬编码
+        pub default_judgement_frequency: Float = 1.0,
+
         /// # 📄OpenNARS
         ///
         /// Default confidence of input judgement.

@@ -314,16 +314,16 @@ pub trait StampConcrete: Stamp + Clone + Hash + PartialEq {
     /// * 🚩通过「记忆区内部时钟」从用户输入构造
     ///   * 🔗参考OpenNARS`nars.main_nogui.ReasonerBatch.textInputLine`
     ///   * 🔗参考OpenNARS`nars.io.StringParser.parseExperience`
-    /// * ⚠️不同于OpenNARS：此处的`current_serial`直接采用`time`
-    ///   * 📌【2024-05-10 11:53:52】理由：本身意义只是需要「创建时唯一」的单调递增变量
     /// * 🚩【2024-05-10 19:55:39】改名`from_lexical`，实际上并不使用
     ///   * 📌目前总是返回`Ok`（解析成功）
     ///   * 🎯容许后续补充
     /// * 📝OpenNARS 1.5.8并未有「时间戳」的「时态」机制
+    /// * 🚩【2024-05-13 10:04:30】目前恢复独立的`current_serial`参数
+    ///   * 📝且这个参数先增后用
     #[inline(always)]
     #[doc(alias = "from_input")]
-    fn from_lexical(_: LexicalStamp, time: ClockTime) -> Result<Self> {
-        Ok(Self::with_time(time, time))
+    fn from_lexical(_: LexicalStamp, current_serial: ClockTime, time: ClockTime) -> Result<Self> {
+        Ok(Self::with_time(current_serial, time))
     }
 
     /// 🆕自身到「词法」的转换

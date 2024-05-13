@@ -33,7 +33,7 @@ pub enum SentenceType<T: TruthValueConcrete> {
 impl<T: TruthValueConcrete> SentenceType<T> {
     /// 🆕将自身与「标点字符」作转换
     /// * 🎯用于生成[`super::Item`]的（字符串）id
-    fn punctuation_char(&self) -> char {
+    fn punctuation_str(&self) -> &str {
         use symbols::*;
         use SentenceType::*;
         match self {
@@ -52,20 +52,18 @@ impl<T: TruthValueConcrete> SentenceType<T> {
         use symbols::*;
         use SentenceType::*;
         // 取首字符
-        match punctuation.chars().next() {
-            None => Err(anyhow!("标点不能为空")),
-            Some(punctuation) => match punctuation {
-                // 判断
-                JUDGMENT_MARK => Ok(Judgement(<T as TruthValueConcrete>::from_lexical(
-                    truth,
-                    default_values,
-                    is_analytic,
-                )?)),
-                // 问题
-                QUESTION_MARK => Ok(Question),
-                // 其它
-                _ => Err(anyhow!("不支持的标点类型 {punctuation:?} {truth:?}")),
-            },
+        match punctuation.as_str() {
+            "" => Err(anyhow!("标点不能为空")),
+            // 判断
+            JUDGMENT_MARK => Ok(Judgement(<T as TruthValueConcrete>::from_lexical(
+                truth,
+                default_values,
+                is_analytic,
+            )?)),
+            // 问题
+            QUESTION_MARK => Ok(Question),
+            // 其它
+            _ => Err(anyhow!("不支持的标点类型 {punctuation:?} {truth:?}")),
         }
     }
 }
@@ -277,7 +275,7 @@ pub trait Sentence: ToDisplayAndBrief {
             // 词项
             => self.content().to_string()
             // 标点
-            => self.punctuation().punctuation_char()
+            => self.punctuation().punctuation_str()
             => ' '
             // 真值（若有）
             => (truth.to_display_brief())
@@ -308,7 +306,7 @@ pub trait Sentence: ToDisplayAndBrief {
             // 词项
             => self.content().to_string()
             // 标点
-            => self.punctuation().punctuation_char()
+            => self.punctuation().punctuation_str()
             => ' '
             // 真值（若有）
             => (truth.to_display_brief())
@@ -519,6 +517,7 @@ pub trait SentenceConcrete: Sentence + Clone + Hash + PartialEq {
         lexical: LexicalSentence,
         truth_default_values: [<Self::Truth as TruthValue>::E; 2],
         truth_is_analytic: bool,
+        stamp_current_serial: ClockTime,
         stamp_time: ClockTime,
         revisable: bool,
     ) -> Result<Self> {
@@ -539,7 +538,8 @@ pub trait SentenceConcrete: Sentence + Clone + Hash + PartialEq {
             truth_is_analytic,
         )?;
         // 解析时间戳
-        let stamp = <Self::Stamp as StampConcrete>::from_lexical(stamp, stamp_time)?;
+        let stamp =
+            <Self::Stamp as StampConcrete>::from_lexical(stamp, stamp_current_serial, stamp_time)?;
         // 构造
         Ok(Self::new(content, sentence_type, stamp, revisable))
     }
@@ -552,7 +552,7 @@ pub trait SentenceConcrete: Sentence + Clone + Hash + PartialEq {
         LexicalSentence {
             term: self.content().into(),
             // 标点：采用字符串形式
-            punctuation: self.punctuation().punctuation_char().to_string(),
+            punctuation: self.punctuation().punctuation_str().to_string(),
             stamp: self.stamp().to_lexical(),
             // 真值可能有、可能无
             truth: self

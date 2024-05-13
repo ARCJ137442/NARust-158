@@ -3,8 +3,9 @@
 //! * 🎯用于表示词项关键词、展示用前后缀、变量类型、数值分隔符等
 
 // 语句标点
-pub const JUDGMENT_MARK: char = '.';
-pub const QUESTION_MARK: char = '?';
+// * 🚩【2024-05-13 09:38:31】改：统一为字符串（需要判等）
+pub const JUDGMENT_MARK: &str = ".";
+pub const QUESTION_MARK: &str = "?";
 
 /// 🆕词语
 /// * 🚩【2024-04-20 21:53:47】使用空字串作为「词语」的（类型）标识符
