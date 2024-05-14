@@ -1,16 +1,17 @@
-//! 🎯复刻OpenNARS `nars.main_nogui.ReasonerBatch`
+//! 推理器 定义
+//! * 🎯以Rust特征定义「推理器」
 //! * 🚩此处扶正为[`Reasoner`]而非「批处理」
 //!   * 📌更【基础】的类，名称应该更短
-//!
+//! * 📄在OpenNARS 3.x中已更名为 `nars.main.NAR`
 
+use super::*;
 use crate::global::ClockTime;
 use crate::inference::ReasonContext;
 use crate::io::{InputChannel, OutputChannel};
 use crate::storage::{Memory, MemoryRecorder};
-use anyhow::Result;
 use nar_dev_utils::list;
-use narsese::conversion::string::impl_lexical::format_instances::FORMAT_ASCII;
 use navm::cmd::Cmd;
+use navm::output::Output;
 
 /// 模拟`ReasonerBatch`
 ///
@@ -278,7 +279,7 @@ pub trait Reasoner: ReasonContext + Sized {
         // * 🚩处理输入：遍历所有通道，拿到指令
         if self.__walking_steps() == 0 {
             // * 🚩遍历所有通道，拿到要执行的指令（序列）
-            let mut input_cmds = self.handle_inputs();
+            let input_cmds = self.handle_inputs();
             // * 🚩在此过程中执行指令，相当于「在通道中调用`textInputLine`」
             for cmd in input_cmds.into_iter() {
                 self.input_cmd(cmd);
@@ -373,22 +374,22 @@ pub trait Reasoner: ReasonContext + Sized {
             // Cmd::SAV { target, path } => todo!(),
             // Cmd::LOA { target, path } => todo!(),
             // * 🚩重置：推理器复位
-            Cmd::RES { target } => self.reset(),
+            Cmd::RES { .. } => self.reset(),
             // * 🚩Narsese：输入任务（但不进行推理）
             Cmd::NSE(narsese) => {
-                if let Ok(task) = self.parse_task(narsese) {
-                    // * 🚩解析成功⇒记忆区输入任务
-                    self.memory_mut().input_task(task);
-                } else {
-                    // * 🚩解析失败⇒新增输出
-                    // TODO: ❓【2024-05-13 10:39:19】日志系统可能要从「记忆区」移出到「推理器」，「推理上下文」也是
-                    let output = Output::ERROR {
-                        description: format!(
-                            "Narsese任务解析错误：{}",
-                            FORMAT_ASCII.format(&narsese)
-                        ),
-                    };
-                    self.memory_mut().recorder_mut().put(output);
+                match self.parse_task(narsese) {
+                    Ok(task) => {
+                        // * 🚩解析成功⇒记忆区输入任务
+                        self.memory_mut().input_task(task);
+                    }
+                    Err(e) => {
+                        // * 🚩解析失败⇒新增输出
+                        // TODO: ❓【2024-05-13 10:39:19】日志系统可能要从「记忆区」移出到「推理器」，「推理上下文」也是
+                        let output = Output::ERROR {
+                            description: format!("Narsese任务解析错误：{e}",),
+                        };
+                        self.memory_mut().recorder_mut().put(output);
+                    }
                 }
             }
             // Cmd::NEW { target } => todo!(),
@@ -401,7 +402,7 @@ pub trait Reasoner: ReasonContext + Sized {
             // Cmd::INF { source } => todo!(),
             // Cmd::HLP { name } => todo!(),
             // * 🚩【2024-05-13 12:21:37】注释：不做任何事情
-            Cmd::REM { comment } => (),
+            Cmd::REM { .. } => (),
             // * 🚩退出⇒处理完所有输出后直接退出
             Cmd::EXI { reason } => {
                 // * 🚩最后的提示性输出
@@ -466,121 +467,6 @@ pub trait Reasoner: ReasonContext + Sized {
         *self.__timer_mut() += 1;
     }
 }
-
-mod parse_task {
-    use super::*;
-    use crate::{
-        entity::{
-            BudgetValueConcrete, Sentence, SentenceConcrete, SentenceType, ShortFloat,
-            TaskConcrete, TruthValue,
-        },
-        inference::BudgetFunctions,
-        io::symbols::JUDGMENT_MARK,
-        language::Term,
-        nars::DEFAULT_PARAMETERS,
-    };
-    use narsese::lexical::{Sentence as LexicalSentence, Task as LexicalTask};
-
-    pub trait ReasonerParseTask: Reasoner {
-        /// 模拟`StringParser.parseTask`
-        /// * 🚩直接模仿`parseTask`而非`parseExperience`
-        /// * 📌结合自身信息的「词法折叠」
-        /// * 📝OpenNARS在解析时可能会遇到「新词项⇒新建概念」的情形
-        ///   * 🚩因此需要`&mut self`
-        #[doc(alias = "parse_experience")]
-        fn parse_task(&mut self, narsese: LexicalTask) -> Result<Self::Task> {
-            /* 📄OpenNARS源码：
-            StringBuffer buffer = new StringBuffer(s);
-            Task task = null;
-            try {
-                String budgetString = getBudgetString(buffer);
-                String truthString = getTruthString(buffer);
-                String str = buffer.toString().trim();
-                int last = str.length() - 1;
-                char punctuation = str.charAt(last);
-                Stamp stamp = new Stamp(time);
-                TruthValue truth = parseTruth(truthString, punctuation);
-                Term content = parseTerm(str.substring(0, last), memory);
-                Sentence sentence = new Sentence(content, punctuation, truth, stamp);
-                if ((content instanceof Conjunction) && Variable.containVarD(content.getName())) {
-                    sentence.setRevisable(false);
-                }
-                BudgetValue budget = parseBudget(budgetString, punctuation, truth);
-                task = new Task(sentence, budget);
-            } catch (InvalidInputException e) {
-                String message = "ERR: !!! INVALID INPUT: parseTask: " + buffer + " --- " + e.getMessage();
-                System.out.println(message);
-                // showWarning(message);
-            }
-            return task; */
-            // * 🚩判断是要被解析为「判断」还是「问题」
-            let is_judgement = narsese.sentence.punctuation == JUDGMENT_MARK;
-            // * 🚩生成默认真值与默认预算值
-            let float = <<Self::Truth as TruthValue>::E as ShortFloat>::from_float;
-            let zero = <<Self::Truth as TruthValue>::E as ShortFloat>::ZERO;
-            let truth_default_values = match is_judgement {
-                true => [
-                    float(DEFAULT_PARAMETERS.default_judgement_frequency),
-                    float(DEFAULT_PARAMETERS.default_judgement_confidence),
-                ],
-                // * 🚩【2024-05-13 09:44:32】目前「问题」没有真值，所以全部取`0`当占位符
-                false => [zero, zero],
-            };
-            let default_budget = [zero, zero, zero];
-
-            // * 📌因为OpenNARS中「前后解析依赖」，所以总需要解构——真值→预算值，词项→语句→任务
-            let LexicalTask { budget, sentence } = narsese;
-            let LexicalSentence {
-                term,
-                punctuation,
-                stamp,
-                truth,
-            } = sentence;
-
-            // 解析词项
-            let term = Term::try_from(term)?;
-
-            // 解析语句
-            let stamp_current_serial = self.get_stamp_current_serial();
-            let stamp_time = self.clock();
-            let truth_is_analytic = DEFAULT_PARAMETERS.default_truth_analytic;
-            let sentence_revisable = !(term.instanceof_conjunction() && term.contain_var_d());
-            let sentence = <Self::Sentence as SentenceConcrete>::from_lexical(
-                sentence,
-                truth_default_values,
-                truth_is_analytic,
-                stamp_current_serial,
-                stamp_time,
-                sentence_revisable,
-            )?;
-
-            // 解析预算值
-            use SentenceType::*;
-            let (priority, durability, quality) = match sentence.punctuation() {
-                Judgement(truth) => (
-                    float(DEFAULT_PARAMETERS.default_judgement_priority),
-                    float(DEFAULT_PARAMETERS.default_judgement_durability),
-                    <Self::Budget as BudgetFunctions>::truth_to_quality(truth),
-                ),
-                Question => (
-                    float(DEFAULT_PARAMETERS.default_question_priority),
-                    float(DEFAULT_PARAMETERS.default_question_durability),
-                    ShortFloat::ONE,
-                ),
-            };
-            let budget = <Self::Budget as BudgetValueConcrete>::new(priority, durability, quality);
-
-            // 构造任务
-            let task = <Self::Task as TaskConcrete>::from_input(sentence, budget);
-
-            // 返回
-            Ok(task)
-        }
-    }
-    impl<T: Reasoner> ReasonerParseTask for T {}
-}
-use navm::output::Output;
-use parse_task::*;
 
 /// [`Reasoner`]的「具体」版本
 /// * 🎯包括完全假定（字段）的构造函数

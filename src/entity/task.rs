@@ -62,7 +62,7 @@ pub trait Task: ToDisplayAndBrief {
     /// # 📄OpenNARS
     ///
     /// Task from which the Task is derived, or null if input
-    fn parent_task(&self) -> Option<&Box<Self>>;
+    fn parent_task(&self) -> &Option<Box<Self>>;
     /// [`Task::parent_task`]的可变版本
     /// * 📌只能修改「指向哪个[`Task`]」，不能修改所指向[`Task`]内部的数据
     fn parent_task_mut(&mut self) -> &mut Option<Box<Self>>;
@@ -281,6 +281,7 @@ pub trait TaskConcrete: Task + Clone + Sized {
         truth_default_values: [<<Self::Sentence as Sentence>::Truth as TruthValue>::E; 2],
         budget_default_values: [<Self::Budget as BudgetValue>::E; 3],
         truth_is_analytic: bool,
+        stamp_current_serial: ClockTime,
         stamp_time: ClockTime,
         sentence_revisable: bool,
     ) -> Result<Self> {
@@ -291,6 +292,7 @@ pub trait TaskConcrete: Task + Clone + Sized {
             sentence,
             truth_default_values,
             truth_is_analytic,
+            stamp_current_serial,
             stamp_time,
             sentence_revisable,
         )?;
@@ -451,8 +453,8 @@ mod impl_v1 {
         }
 
         #[inline(always)]
-        fn parent_task(&self) -> Option<&Box<Self>> {
-            self.parent_task.as_ref()
+        fn parent_task(&self) -> &Option<Box<Self>> {
+            &self.parent_task
         }
 
         #[inline(always)]
@@ -565,6 +567,7 @@ mod tests {
             // 主参数：文本
             $text:expr $(;
             // 可选参数
+            $(current_serial = $current_serial:expr , )?
             $(time = $time:expr , )?
             $(is_analytic = $is_analytic:expr , )?
             $(revisable = $revisable:expr , )?
@@ -572,6 +575,9 @@ mod tests {
             $(budget_default_values = $budget_default_values:expr , )? )?
         ) => {{
             let lexical = FORMAT_ASCII.parse($text)?.try_into_task_compatible()?;
+            // current_serial
+            let current_serial = CURRENT_SERIAL_DEFAULT;
+            $( let current_serial = $current_serial; )?
             // time
             let time = CURRENT_SERIAL_DEFAULT;
             $( let time = $time; )?
@@ -587,7 +593,7 @@ mod tests {
             // budget_default_values
             let budget_default_values = budget_default_values();
             $( let budget_default_values = $budget_default_values; )?
-            T::from_lexical(lexical, truth_default_values, budget_default_values, is_analytic, time, revisable)?
+            T::from_lexical(lexical, truth_default_values, budget_default_values, is_analytic, current_serial, time, revisable)?
         }};
     }
 

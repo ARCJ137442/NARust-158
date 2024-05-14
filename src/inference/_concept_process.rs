@@ -91,7 +91,7 @@ pub trait ConceptProcess: DerivationContext {
             let old_stamp = old_belief.stamp();
             // 若为「重复任务」——优先级放到最后
             if new_stamp.equals(old_stamp) {
-                if task.parent_task().unwrap().is_judgement() {
+                if task.parent_task().as_ref().unwrap().is_judgement() {
                     task.budget_mut().dec_priority(Self::ShortFloat::ZERO);
                 }
                 return;
