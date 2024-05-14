@@ -26,9 +26,17 @@ use nar_dev_utils::if_return;
 impl Term {
     /// 🆕用于判断是否为「陈述词项」
     /// * 📄OpenNARS `instanceof Statement` 逻辑
+    #[inline(always)]
     pub fn instanceof_statement(&self) -> bool {
+        Self::is_statement_identifier(&self.identifier)
+    }
+
+    /// 🆕抽象出来的「标识符（对应的词项类型）是否『可交换』」
+    /// * 🎯同时用于「词项属性」与「词项转换」
+    ///   * 📄参见[`super::_dialect`]中的`reform_term`函数
+    pub fn is_statement_identifier(identifier: &str) -> bool {
         matches!(
-            self.identifier.as_str(),
+            identifier,
             // 四大主要系词
             INHERITANCE_RELATION
                 | SIMILARITY_RELATION

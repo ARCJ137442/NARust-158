@@ -2,6 +2,7 @@
     "recommendations": [
         "statiolake.vscode-rustfmt",
         "rust-lang.rust-analyzer",
-        "nyxiative.rust-and-friends"
+        "nyxiative.rust-and-friends",
+        "pest.pest-ide-tools"
     ]
 }

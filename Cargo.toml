@@ -1,6 +1,6 @@
 [package]
 name = "narust-158"
-version = "0.0.3"
+version = "0.0.4"
 edition = "2021"
 description = """
 OpenNARS 1.5.8的Rust复刻
@@ -36,3 +36,29 @@ features = [
 [dependencies.navm]
 version = "0.15"
 features = ["bundled"]
+
+# 用于方言解析的词法解析器
+[dependencies.pest]
+version = "2.7.10"
+optional = true
+
+# 用于方言解析的词法解析器
+[dependencies.pest_derive]
+version = "2.7.10"
+optional = true
+
+[features]
+# 默认 / 所有
+default = ["all"]
+all = [
+    "dialect_parser"
+]
+
+# 「方言解析器」
+# * 💡最初启发自「Narsese呈现」中简单的「名称+符号+括号」语法
+# * 📌目前使用`pest`解析器实现
+# * ⚠️对NARS实现可有可无，若不需要可禁用
+dialect_parser = [
+    # 📌依赖`pest`解析器
+    "dep:pest", "dep:pest_derive"
+]

@@ -97,6 +97,23 @@ impl Term {
             }
         }
     }
+
+    /// 尝试从「词法Narsese」转换
+    /// * 🚩【2024-05-15 02:32:28】直接使用[`TryFoldInto::try_fold_into`]的相应实现
+    #[inline(always)]
+    pub fn from_lexical(lexical: TermLexical) -> Result<Self> {
+        lexical.try_fold_into(&())
+    }
+
+    /// 尝试从「方言」转换
+    /// * 🎯支持「方言解析」
+    /// * 📌【2024-05-15 02:33:13】目前仍只有「从字符串到词项」这一种形式
+    /// * 🆕附加功能，与核心「数据算法」「推理控制」无关
+    #[inline(always)]
+    #[cfg(feature = "dialect_parser")]
+    pub fn from_dialect(input: &str) -> Result<Self> {
+        super::_dialect::parse_term(input)
+    }
 }
 
 /// 词项⇒词法Narsese

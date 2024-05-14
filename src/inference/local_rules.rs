@@ -152,6 +152,8 @@ pub trait LocalRules: DerivationContext {
         if ((budget != null) && budget.aboveThreshold()) {
             memory.activatedTask(budget, belief, task.getParentBelief());
         } */
+        // TODO: 先完成功能，后续再重构——重构时就无需担心「要随之改变功能」
+        // * 💡先把「推理逻辑」固定下来
     }
 
     /// 模拟`LocalRules.solutionQuality`

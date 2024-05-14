@@ -138,6 +138,12 @@ mod construct;
 // 【内建】与其它类型相互转换
 mod _conversion;
 
+// 【内建】方言解析器
+#[cfg(feature = "dialect_parser")]
+pub mod _dialect;
+#[cfg(feature = "dialect_parser")]
+pub use _dialect as dialect;
+
 // 【内建】实现 / 属性
 mod _property;
 
