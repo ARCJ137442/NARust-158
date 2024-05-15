@@ -2,6 +2,22 @@
 //! * ✅【2024-05-04 23:10:35】基本完成功能
 //! * ✅【2024-05-05 12:13:53】基本完成单元测试
 
+// * 📝【2024-05-15 18:37:01】实际运行中的案例（复合词项の词项链模板）：
+// * 🔬复现方法：仅输入"<(&&,A,B) ==> D>."
+// * ⚠️其中的内容并不完整：只列出一些有代表性的示例
+// * 📄【概念】"D"
+// *   <~ "<(&&,A,B) ==> D>" i=[1] # 4=COMPOUND_STATEMENT " _@(T4-2) <(&&,A,B) ==> D>"
+// * 📄【概念】"(&&,A,B)"
+// *   ~> "A"                i=[0] # 2=COMPOUND           " @(T1-1)_ A"
+// *   ~> "B"                i=[1] # 2=COMPOUND           " @(T1-2)_ B"
+// *   <~ "<(&&,A,B) ==> D>" i=[0] # 4=COMPOUND_STATEMENT " _@(T4-1) <(&&,A,B) ==> D>"
+// * 📄【概念】"<(&&,A,B) ==> D>"
+// *   ~> "(&&,A,B)" i=[0]   # 4=COMPOUND_STATEMENT " @(T3-1)_ (&&,A,B)"
+// *   ~> "A"        i=[0,0] # 6=COMPOUND_CONDITION " @(T5-1-1)_ A"
+// *   ~> "B"        i=[0,1] # 6=COMPOUND_CONDITION " @(T5-1-2)_ B"
+// *   ~> "D"        i=[1]   # 4=COMPOUND_STATEMENT " @(T3-2)_ D"
+// *   ~T> null      i=null  # 0=SELF               " _@(T0) <(&&,A,B) ==> D>. %1.00;0.90%"
+
 use super::Item;
 use crate::{global::RC, io::symbols, language::Term, ToDisplayAndBrief};
 
@@ -373,8 +389,17 @@ pub trait TermLink: Item {
 /// * 🚩将原先的「词项链」变成真正的「[词项](Term)链」
 /// * 🚩在原有的「词项链」基础上增加
 pub trait TermLinkConcrete: TermLink<Target = Term> + Sized {
-    /// 模拟 `new TermLink(Term t, short p, int... indices)`
+    /// 🆕内部构造函数
     /// * 🚩需要「词项」「链接」「预算值」
+    fn __new(
+        budget: Self::Budget,
+        target: impl Into<RC<Self::Target>>,
+        type_: TermLinkType,
+    ) -> Self;
+
+    /// 模拟 `new TermLink(Term t, short p, int... indices)`
+    /// * 📌一个`type_`参数集成了`p`、`indices`两个参数
+    /// * 💫【2024-05-15 17:43:58】目前仍难以理清其逻辑
     ///
     /// # 📄OpenNARS
     ///
@@ -385,11 +410,46 @@ pub trait TermLinkConcrete: TermLink<Target = Term> + Sized {
     /// @param t       Target Term
     /// @param p       Link type
     /// @param indices Component indices in compound, may be 1 to 4
-    fn new(
-        budget: Self::Budget,
-        target: impl Into<RC<Self::Target>>,
-        type_ref: TermLinkType,
-    ) -> Self;
+    fn new_template(budget: Self::Budget, target: Self::Target, mut type_: TermLinkType) -> Self {
+        /* 📄OpenNARS源码：
+        super(null);
+        target = t;
+        type = p;
+        assert (type % 2 == 0); // template types all point to compound, though the target is component
+        if (type == TermLink.COMPOUND_CONDITION) { // the first index is 0 by default
+            index = new short[indices.length + 1];
+            index[0] = 0;
+            for (int i = 0; i < indices.length; i++) {
+                index[i + 1] = (short) indices[i];
+            }
+        } else {
+            index = new short[indices.length];
+            for (int i = 0; i < index.length; i++) {
+                index[i] = (short) indices[i];
+            }
+        } */
+        // * 🚩先修改
+        use TermLinkType::*;
+        match type_ {
+            CompoundCondition(ref mut indexes) => {
+                // * 📝OpenNARS逻辑：在数组前加个0
+                indexes.insert(0, 0);
+                // let mut new_indexes = vec![0; indexes.len() + 1];
+                // for i in 0..indexes.len() {
+                //     new_indexes[i + 1] = indexes[i];
+                // }
+                // *indexes = new_indexes;
+            }
+            Compound(..) | CompoundStatement(..) | Transform(..) => {
+                // * 📝OpenNARS逻辑：直接拷贝（就是转换类型，但此处不需要）
+                // * 🚩不做任何事
+            }
+            // * 📄`<(&&, A, B) --> C>` → `B` @ [0, 1]
+            _ => panic!("// ! ⚠️词项链「模板」均基于复合词项，而非其它（作为其元素就是作为其元素）"),
+        }
+        // * 🚩再创建
+        Self::__new(budget, RC::new(target), type_)
+    }
 
     // TODO: 复现其它构造函数
     // TODO: 模拟 `new TermLink(String s, BudgetValue v)`
@@ -420,7 +480,7 @@ mod impl_v1 {
         /// 构造函数
         /// * 📌包含「预算」「目标词项」「类型」
         /// * 🚩其key是自行计算的
-        fn new(budget: B, target: impl Into<RC<Term>>, type_ref: TermLinkType) -> Self {
+        fn __new(budget: B, target: impl Into<RC<Term>>, type_ref: TermLinkType) -> Self {
             let target = target.into();
             Self {
                 key: Self::_generate_key(&target, type_ref.to_ref()),
@@ -497,12 +557,12 @@ mod tests {
     /// * 🎯展示 [`TL::key`]
     #[test]
     fn new() -> AResult {
-        let tl = TL::new(
+        let tl = TL::new_template(
             Budget::from_floats(0.5, 0.5, 0.5),
             Term::new_word("term"),
             TermLinkType::SELF,
         );
-        let tl2 = TL::new(
+        let tl2 = TL::new_template(
             Budget::from_floats(0.1, 0.5, 1.0),
             test_term!("<(*, {A, B}) --> C>"),
             // ? `<(*, {A, B}) --> C>` => A
@@ -521,7 +581,7 @@ mod tests {
     #[test]
     fn _set_key() -> AResult {
         // 新建词项链
-        let mut tl = TL::new(
+        let mut tl = TL::new_template(
             Budget::from_floats(0.5, 0.5, 0.5),
             Term::new_word("term"),
             TermLinkType::SELF,
@@ -548,7 +608,7 @@ mod tests {
         // 新建词项
         let term = Term::from_str("<{(*, A), B, C} ==> <D --> E>>")?;
         // 装入词项链
-        let tl = TL::new(Budget::default(), term.clone(), TermLinkType::SELF);
+        let tl = TL::new_template(Budget::default(), term.clone(), TermLinkType::SELF);
         // 应该一致
         assert_eq!(term, *tl.target());
         // 完成
@@ -575,7 +635,7 @@ mod tests {
             '2' as usize,
         ]);
         // 装入词项链
-        let tl = TL::new(Budget::default(), Term::from_str("term")?, link.clone());
+        let tl = TL::new_template(Budget::default(), Term::from_str("term")?, link.clone());
         // 应该一致
         assert_eq!(link, tl.type_ref());
         // 转换后应该一致

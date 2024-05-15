@@ -2,6 +2,7 @@
 //! * 🎯分开存放[「概念」](crate::entity::Concept)中与「推导上下文」有关的方法
 //! * 📄仿自OpenNARS 3.0.4
 
+use self::language::Term;
 use super::DerivationContext;
 use crate::{entity::*, global::Float, inference::*, nars::DEFAULT_PARAMETERS, storage::*, *};
 use navm::output::Output;
@@ -22,7 +23,7 @@ pub trait ConceptProcess: DerivationContext {
     /// called in Memory.immediateProcess only
     ///
     /// @param task The task to be processed
-    fn direct_process(&mut self, concept: &Self::Concept, task: &mut Self::Task) {
+    fn direct_process(&mut self, concept: &mut Self::Concept, task: &mut Self::Task) {
         /* 📄OpenNARS源码：
         if (task.getSentence().isJudgment()) {
             processJudgment(task);
@@ -39,6 +40,7 @@ pub trait ConceptProcess: DerivationContext {
             // 判断
             Judgement(..) => self.__process_judgment(concept, task),
             // 问题 | 🚩此处无需使用返回值，故直接`drop`掉（并同时保证类型一致）
+            // * 📌【2024-05-15 17:08:44】此处因为需要「将新问题添加到『问题列表』中」而使用可变引用
             Question => drop(self.__process_question(concept, task)),
         }
         // ! 不实现`entityObserver.refresh`
@@ -134,7 +136,7 @@ pub trait ConceptProcess: DerivationContext {
     /// @return Whether to continue the processing of the task
     fn __process_question(
         &mut self,
-        concept: &Self::Concept,
+        concept: &mut Self::Concept,
         task: &mut Self::Task,
     ) -> Self::ShortFloat {
         /* 📄OpenNARS源码：
@@ -164,15 +166,49 @@ pub trait ConceptProcess: DerivationContext {
         } else {
             return 0.5f;
         } */
+        // * 🚩复刻逻辑 in 借用规则：先寻找答案，再插入问题
         let mut question = task.sentence();
-        let mut new_question = true;
-        for self_question in concept.__questions() {
+        let mut is_new_question = true;
+        // * 🚩找到自身「问题列表」中与「任务」相同的「问题」
+        for task in concept.__questions() {
             // TODO: 【2024-05-12 23:42:08】有待进一步实现
+            let task_question = task.sentence();
+            if question == task_question {
+                question = task_question;
+                is_new_question = false;
+                break;
+            }
         }
-        todo!("// TODO: 有待实现")
+        // * 🚩先尝试回答
+        let result;
+        let new_answer = self.__evaluation(question, concept.__beliefs());
+        if let Some(new_answer) = new_answer {
+            LocalRules::try_solution(self, new_answer, task);
+            result = new_answer.truth().unwrap().expectation(); // ! 保证里边都是「判断」
+        } else {
+            result = 0.5;
+        }
+        // * 🚩再插入问题
+        {
+            // * 🚩新问题⇒加入「概念」已有的「问题列表」中（有限大小缓冲区）
+            if is_new_question {
+                // * ⚠️此处复制了「任务」以解决「所有权分配」问题
+                concept.__questions_mut().push(task.clone());
+            }
+            // * 🚩有限大小缓冲区：若加入后大小溢出，则「先进先出」（在Rust语境下任务被销毁）
+            // TODO: 后续要实现一个「固定大小缓冲区队列」？
+            if concept.__questions().len() > DEFAULT_PARAMETERS.maximum_questions_length {
+                concept.__questions_mut().remove(0);
+            }
+        }
+        // * 🚩最后返回生成的返回值
+        Self::ShortFloat::from_float(result)
     }
 
     /// 模拟`Concept.linkToTask`
+    /// * ⚠️【2024-05-15 17:20:47】涉及大量共享引用
+    ///   * 💫共享引用策源地：如何在无GC语言中尽可能减少这类共享引用，是个问题
+    ///     * ❗特别是在「任务」还分散在各个「概念」的「任务链」中的情况
     ///
     /// # 📄OpenNARS
     ///
@@ -209,6 +245,10 @@ pub trait ConceptProcess: DerivationContext {
                 }
             }
         } */
+        let task_budget = task.budget();
+        // TODO: 词项链/任务链「模板」机制
+        // * 💫【2024-05-15 17:38:16】循环引用，频繁修改、结构相异……
+        // let task_link = TaskLinkConcrete::new();
         todo!("// TODO: 有待实现")
     }
 
@@ -346,6 +386,102 @@ pub trait ConceptProcess: DerivationContext {
             }
         } */
         todo!("// TODO: 有待实现")
+    }
+
+    /// 模拟`CompoundTerm.prepareComponentLinks`
+    /// * 🚩返回一个「准备好的词项链模板列表」
+    /// * 📝尚未实装：需要在构造函数中预先加载
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// Build TermLink templates to constant components and sub-components
+    ///
+    /// The compound type determines the link type; the component type determines
+    /// whether to build the link.
+    ///
+    /// @return A list of TermLink templates
+    fn prepare_component_link_templates(self_term: &Term) -> Vec<Self::TermLink> {
+        /* 📄OpenNARS源码：
+        ArrayList<TermLink> componentLinks = new ArrayList<>();
+        short type = (self instanceof Statement) ? TermLink.COMPOUND_STATEMENT : TermLink.COMPOUND; // default
+        prepareComponentLinks(self, componentLinks, type, self);
+        return componentLinks; */
+        let mut component_links = vec![];
+        // * 🚩【2024-05-15 19:13:40】因为此处与「索引」绑定，故使用默认值当索引
+        // * 💫不可能完全照搬了
+        let link_type = match self_term.instanceof_statement() {
+            true => TermLinkType::CompoundStatement(vec![]),
+            false => TermLinkType::Compound(vec![]),
+        };
+        // * 🚩朝里边添加词项链模板
+        Self::__prepare_component_link_templates(
+            self_term,
+            &mut component_links,
+            &link_type,
+            self_term,
+        );
+        component_links
+    }
+
+    /// 模拟`CompoundTerm.prepareComponentLinks`
+    /// * 📌【2024-05-15 18:07:27】目前考虑直接使用值，而非共享引用
+    /// * 📝【2024-05-15 18:05:01】OpenNARS在这方面做得相对复杂
+    /// * 💫【2024-05-15 18:05:06】目前尚未理清其中原理
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// Collect TermLink templates into a list, go down one level except in
+    /// special cases
+    ///
+    /// @param componentLinks The list of TermLink templates built so far
+    /// @param type           The type of TermLink to be built
+    /// @param term           The CompoundTerm for which the links are built
+    fn __prepare_component_link_templates(
+        self_term: &Term,
+        component_links: &mut Vec<Self::TermLink>,
+        type_: &TermLinkType,
+        term: &Term,
+    ) -> Vec<Self::TermLink> {
+        /* 📄OpenNARS源码：
+        for (int i = 0; i < term.size(); i++) { // first level components
+            final Term t1 = term.componentAt(i);
+            if (t1.isConstant()) {
+                componentLinks.add(new TermLink(t1, type, i));
+            }
+            if (((self instanceof Equivalence) || ((self instanceof Implication) && (i == 0)))
+                    && ((t1 instanceof Conjunction) || (t1 instanceof Negation))) {
+                prepareComponentLinks(((CompoundTerm) t1), componentLinks, TermLink.COMPOUND_CONDITION,
+                        (CompoundTerm) t1);
+            } else if (t1 instanceof CompoundTerm) {
+                for (int j = 0; j < ((CompoundTerm) t1).size(); j++) { // second level components
+                    final Term t2 = ((CompoundTerm) t1).componentAt(j);
+                    if (t2.isConstant()) {
+                        if ((t1 instanceof Product) || (t1 instanceof ImageExt) || (t1 instanceof ImageInt)) {
+                            if (type == TermLink.COMPOUND_CONDITION) {
+                                componentLinks.add(new TermLink(t2, TermLink.TRANSFORM, 0, i, j));
+                            } else {
+                                componentLinks.add(new TermLink(t2, TermLink.TRANSFORM, i, j));
+                            }
+                        } else {
+                            componentLinks.add(new TermLink(t2, type, i, j));
+                        }
+                    }
+                    if ((t2 instanceof Product) || (t2 instanceof ImageExt) || (t2 instanceof ImageInt)) {
+                        for (int k = 0; k < ((CompoundTerm) t2).size(); k++) {
+                            final Term t3 = ((CompoundTerm) t2).componentAt(k);
+                            if (t3.isConstant()) { // third level
+                                if (type == TermLink.COMPOUND_CONDITION) {
+                                    componentLinks.add(new TermLink(t3, TermLink.TRANSFORM, 0, i, j, k));
+                                } else {
+                                    componentLinks.add(new TermLink(t3, TermLink.TRANSFORM, i, j, k));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } */
+        todo!("// TODO: 待实现")
     }
 
     /// 模拟`Concept.insertTermLink`

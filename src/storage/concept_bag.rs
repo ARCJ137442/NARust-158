@@ -28,7 +28,7 @@ pub trait ConceptBag: BagConcrete<Self::Concept> {
     fn key_from_term(term: &Term) -> <Self::Concept as Item>::Key;
 }
 
-/// TODO: 初代实现（等待[`Concept`]）
+/// 初代实现
 mod impl_v1 {
     use super::*;
     use crate::storage::{BagKeyV1, BagV1};
@@ -43,9 +43,6 @@ mod impl_v1 {
             term.name()
         }
     }
-
-    // TODO: type别名 ConceptV1
 }
-pub use impl_v1::*;
 
 // * ✅单元测试参见`super::Bag`

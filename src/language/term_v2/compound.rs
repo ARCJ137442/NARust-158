@@ -365,6 +365,8 @@ impl Term {
         }
         result
     }
+
+    // ! ℹ️有关`CompoundTerm.prepareComponentLinks`已迁移至`Concept`中
 }
 
 /// 单元测试

@@ -2,7 +2,10 @@
 //! * ✅【2024-05-06 00:13:26】基本功能复刻完成
 
 use super::{Item, Task, TermLink, TermLinkConcrete};
-use crate::{entity::Sentence, global::ClockTime, nars::DEFAULT_PARAMETERS, ToDisplayAndBrief};
+use crate::{
+    entity::Sentence, global::ClockTime, language::Term, nars::DEFAULT_PARAMETERS,
+    ToDisplayAndBrief,
+};
 
 /// 模拟`nars.entity.TaskLink`
 ///
@@ -136,7 +139,13 @@ pub trait TaskLink: TermLink<Target = Self::Task> {
 /// 「任务链」的具体类型
 /// * 🎯【2024-05-06 11:19:52】作为[`TermLinkConcrete`]的对应物
 pub trait TaskLinkConcrete: TaskLink {
-    // TODO: 增加构造函数
+    /// 模拟`new TaskLink(Task t, TermLink template, BudgetValue v)`
+    fn new(
+        t: Self::Task,
+        template: &impl TermLinkConcrete<Target = Term, Key = Self::Key, Budget = Self::Budget>,
+    ) {
+        todo!()
+    }
 }
 
 /// 初代实现
