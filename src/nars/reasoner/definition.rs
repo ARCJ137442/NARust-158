@@ -58,12 +58,22 @@ pub trait Reasoner: ReasonContext + Sized {
     /// 模拟`ReasonerBatch.inputChannels`
     /// * 🚩可变
     /// * 🚩【2024-05-13 00:20:08】此处模仿OpenNARS做法，但使用`Box<dyn 特征>`实现动态分发
+    /// * 📝【2024-05-15 11:37:44】Rust中对所有特征对象都最好显式指定「对象生命周期」
+    ///   * 📌目前`&self`和`&Vec`周期一致，而`dyn XXXChannel`和`'this`周期一致
+    ///     * 📍这意味着：内部「通道」的生命周期，与自身结构的生命周期一致
+    ///   * ❌【2024-05-15 11:38:41】不在`&self`处添加约束`'this`：`self`整个对象与「引用」的生命周期是不同的
     ///
     /// # 📄OpenNARS
     ///
-    fn input_channels(&self) -> &Vec<Box<dyn InputChannel<Reasoner = Self>>>;
+    fn input_channels<'this>(&self) -> &Vec<Box<dyn InputChannel<Reasoner = Self> + 'this>>
+    where
+        Self: 'this;
     /// [`Reasoner::input_channels`]的可变版本
-    fn input_channels_mut(&mut self) -> &mut Vec<Box<dyn InputChannel<Reasoner = Self>>>;
+    fn input_channels_mut<'this>(
+        &mut self,
+    ) -> &mut Vec<Box<dyn InputChannel<Reasoner = Self> + 'this>>
+    where
+        Self: 'this;
 
     /// 模拟`ReasonerBatch.outputChannels`
     /// * 🚩可变
@@ -71,9 +81,15 @@ pub trait Reasoner: ReasonContext + Sized {
     ///
     /// # 📄OpenNARS
     ///
-    fn output_channels(&self) -> &Vec<Box<dyn OutputChannel<Reasoner = Self>>>;
+    fn output_channels<'this>(&self) -> &Vec<Box<dyn OutputChannel<Reasoner = Self> + 'this>>
+    where
+        Self: 'this;
     /// [`Reasoner::output_channels`]的可变版本
-    fn output_channels_mut(&mut self) -> &mut Vec<Box<dyn OutputChannel<Reasoner = Self>>>;
+    fn output_channels_mut<'this>(
+        &mut self,
+    ) -> &mut Vec<Box<dyn OutputChannel<Reasoner = Self> + 'this>>
+    where
+        Self: 'this;
 
     /// 模拟`ReasonerBatch.clock`、`ReasonerBatch.getTime`
     /// * 🚩读取公有，修改私有
@@ -189,7 +205,12 @@ pub trait Reasoner: ReasonContext + Sized {
     ///
     /// 🈚
     #[inline]
-    fn add_output_channel(&mut self, channel: Box<dyn OutputChannel<Reasoner = Self>>) {
+    fn add_output_channel<'this, 'channel: 'this>(
+        &'this mut self,
+        channel: Box<dyn OutputChannel<Reasoner = Self> + 'channel>,
+    ) where
+        Self: 'this,
+    {
         self.output_channels_mut().push(channel);
     }
 

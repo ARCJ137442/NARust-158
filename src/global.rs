@@ -7,7 +7,7 @@ pub type Float = f64;
 
 /// 有关对Java「引用计数类型」的复刻
 mod rc {
-    use std::rc::Rc;
+    use std::{cell::RefCell, rc::Rc};
 
     /// 全局引用计数类型
     /// * 🚩【2024-05-04 16:51:11】目前尚未做多线程兼容，此处仅考虑单线程，
@@ -17,8 +17,38 @@ mod rc {
     /// 全局引用计数类型，可变版本
     /// * 📄[`RC`]的可变版本
     /// * 📝据[`Rc`]文档，实际上`&mut Rc<T>`也可以通过`get_mut`实现可变
-    ///   * 🚩【2024-05-08 15:52:05】故目前暂无需要引入[`std::cell::RefCell`]
-    pub type RCMut<T> = Rc<T>;
+    ///   * ❌但这只能在`Rc`只有**唯一一个引用**时才有效
+    /// * 🚩【2024-05-15 11:52:37】目前仍然需要探索`RefCell`方案
+    pub type RCMut<T> = Rc<RefCell<T>>;
+
+    /// 通用的「共享引用」接口
+    ///
+    /// TODO: 【2024-05-15 11:54:32】🚧有待调整
+    ///   * ⚠️RefCell的`borrow`返回一个新结构，会导致「返回临时引用」问题
+    pub trait GlobalRc<T>: Sized {
+        /// 创建
+        fn new_(value: T) -> Self;
+
+        /// 获取不可变引用
+        fn get_(&self) -> &T;
+
+        /// 获取可变引用
+        fn mut_(&mut self) -> Option<&mut T>;
+    }
+
+    impl<T> GlobalRc<T> for RCMut<T> {
+        fn new_(value: T) -> Self {
+            Rc::new(RefCell::new(value))
+        }
+
+        fn get_(&self) -> &T {
+            todo!()
+        }
+
+        fn mut_(&mut self) -> Option<&mut T> {
+            todo!()
+        }
+    }
 }
 pub use rc::*;
 
