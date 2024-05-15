@@ -1,6 +1,6 @@
 //! 虚拟机运行时
 //!
-//! TODO: 对接实际内容
+//! * ✅【2024-05-15 16:57:37】初代全功能实现
 
 use crate::{
     global::{GlobalRc, GlobalRcMut, RCMut},
@@ -21,6 +21,7 @@ pub struct Runtime<R: ReasonerConcrete> {
     o_channel: RCMut<ChannelOut<R>>,
 }
 
+/// 自身实现
 impl<'this: 'reasoner, 'reasoner, R: ReasonerConcrete + 'reasoner> Runtime<R>
 where
     Self: 'this,
@@ -28,9 +29,9 @@ where
     /// 构造函数
     /// * 🚩【2024-05-15 10:40:49】暂不允许「直接由推理器创建」
     ///   * 📌需要更精细地控制「内部推理器」的状态与成员
-    pub fn new(hyper_parameters: Parameters) -> Self {
+    pub fn new(name: impl Into<String>, hyper_parameters: Parameters) -> Self {
         // * 🚩创建推理器
-        let mut reasoner = R::new();
+        let mut reasoner = R::__new(name.into(), hyper_parameters);
 
         // * 🚩创建并加入通道
         let o_channel = RCMut::new_(ChannelOut::new());
@@ -47,7 +48,7 @@ where
     }
 }
 
-/// 实现[`VmRuntime`]
+/// 实现[虚拟机运行时](VmRuntime)
 impl<R: ReasonerConcrete> VmRuntime for Runtime<R> {
     fn input_cmd(&mut self, cmd: Cmd) -> Result<()> {
         Reasoner::input_cmd(&mut self.reasoner, cmd);
@@ -55,19 +56,27 @@ impl<R: ReasonerConcrete> VmRuntime for Runtime<R> {
     }
 
     fn fetch_output(&mut self) -> Result<Output> {
-        todo!()
+        self.o_channel
+            .mut_()
+            .fetch()
+            .ok_or(anyhow::anyhow!("没有输出"))
     }
 
     fn try_fetch_output(&mut self) -> Result<Option<Output>> {
-        todo!()
+        Ok(self.o_channel.mut_().fetch())
     }
 
     fn status(&self) -> &navm::vm::VmStatus {
-        todo!()
+        // * 🚩【2024-05-15 16:39:12】始终在运行
+        // * ❓貌似Rust版本并不一定要像Java版本那样区分「在运行」与「不在运行」——随时输入随时处理
+        &navm::vm::VmStatus::Running
     }
 
     fn terminate(&mut self) -> Result<()> {
-        todo!()
+        // * 🚩重置推理器
+        self.reasoner.reset();
+        // * 🚩返回
+        Ok(())
     }
 }
 

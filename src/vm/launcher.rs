@@ -1,7 +1,7 @@
 //! 虚拟机启动器
 //! * 🚩【2024-05-15 10:35:59】启动器依赖运行时（及其实现）
 //!
-//! TODO: 【2024-05-15 10:37:42】随「推理器」完善后修改、润色、完善
+//! * ✅【2024-05-15 17:01:58】完成初代实现：名称、超参数
 
 use super::Runtime;
 use crate::nars::{Parameters, ReasonerConcrete};
@@ -11,20 +11,23 @@ use std::marker::PhantomData;
 
 /// 虚拟机启动器
 /// * 🎯作为启动虚拟机的配置与脚手架
-///
-/// TODO: 🏗️后续可引入诸如「启动参数」等
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct Launcher<R: ReasonerConcrete> {
-    /// 类型标注
+    /// 「推理器」类型标注`R`
     _marker: PhantomData<R>,
+    /// 虚拟机名称
+    /// * 🚩即「推理器名称」
+    name: String,
     /// 超参数
     hyper_parameters: Parameters,
 }
 
 impl<R: ReasonerConcrete> Launcher<R> {
     /// 构造函数
-    pub fn new(hyper_parameters: Parameters) -> Self {
+    pub fn new(name: impl Into<String>, hyper_parameters: Parameters) -> Self {
         Self {
             _marker: PhantomData,
+            name: name.into(),
             hyper_parameters,
         }
     }
@@ -36,7 +39,7 @@ impl<R: ReasonerConcrete> VmLauncher for Launcher<R> {
 
     fn launch(self) -> Result<Self::Runtime> {
         // * 🚩创建新运行时
-        let runtime = Runtime::new(self.hyper_parameters);
+        let runtime = Runtime::new(self.name, self.hyper_parameters);
         // * 🚩返回
         Ok(runtime)
     }

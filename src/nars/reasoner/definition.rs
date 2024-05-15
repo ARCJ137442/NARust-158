@@ -8,6 +8,7 @@ use super::*;
 use crate::global::ClockTime;
 use crate::inference::ReasonContext;
 use crate::io::{InputChannel, OutputChannel};
+use crate::nars::{Parameters, DEFAULT_PARAMETERS};
 use crate::storage::{Memory, MemoryRecorder};
 use nar_dev_utils::list;
 use navm::cmd::Cmd;
@@ -19,8 +20,6 @@ use navm::output::Output;
 ///
 /// 🈚
 pub trait Reasoner: ReasonContext + Sized {
-    // TODO: 复刻功能
-
     /// 模拟`Stamp.currentSerial`
     /// * 📝OpenNARS中要保证「每个新创的时间戳都有一个序列号，且这个序列号唯一」
     /// * ⚠️同一个时间也可能有多个时间戳被创建
@@ -494,6 +493,8 @@ pub trait Reasoner: ReasonContext + Sized {
 pub trait ReasonerConcrete: Reasoner + Sized {
     /// 🆕完全参数初始化
     /// * 🎯统一使用「默认实现」定义OpenNARS中的函数
+    /// * 🚩【2024-05-15 16:40:41】现在新增「超参数」设定
+    ///   * 🎯以备后续「引用解耦」
     ///
     /// # 📄OpenNARS 参考源码
     ///
@@ -505,7 +506,7 @@ pub trait ReasonerConcrete: Reasoner + Sized {
     ///     outputChannels = new ArrayList<>();
     /// }
     /// ```
-    fn __new(name: String) -> Self;
+    fn __new(name: String, parameters: Parameters) -> Self;
 
     /// 🆕当无参初始化时的默认名称
     const DEFAULT_NAME: &'static str = "Reasoner";
@@ -525,12 +526,14 @@ pub trait ReasonerConcrete: Reasoner + Sized {
 
     /// 模拟`new ReasonerBatch(String name)`
     /// * 📌带参初始化
+    /// * 🚩【2024-05-15 16:41:23】目前使用「默认参数」初始化
+    ///   * 📌后续可调
     ///
     /// # 📄OpenNARS
     ///
     /// 🈚
     #[inline]
     fn with_name(name: &str) -> Self {
-        Self::__new(name.into())
+        Self::__new(name.into(), DEFAULT_PARAMETERS)
     }
 }
