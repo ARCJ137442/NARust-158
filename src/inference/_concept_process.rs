@@ -205,6 +205,55 @@ pub trait ConceptProcess: DerivationContext {
         Self::ShortFloat::from_float(result)
     }
 
+    /// 模拟`Concept.evaluation`
+    /// * 📝实际上不依赖实例，是个静态方法
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// Evaluate a query against beliefs (and desires in the future)
+    ///
+    /// @param query The question to be processed
+    /// @param list  The list of beliefs to be used
+    /// @return The best candidate belief selected
+    fn __evaluation<'l>(
+        &mut self,
+        query: &Self::Sentence,
+        list: &'l [Self::Sentence],
+    ) -> Option<&'l Self::Sentence> {
+        /* 📄OpenNARS源码：
+        if (list == null) {
+            return null;
+        }
+        float currentBest = 0;
+        float beliefQuality;
+        Sentence candidate = null;
+        for (Sentence judgment : list) {
+            beliefQuality = LocalRules.solutionQuality(query, judgment);
+            if (beliefQuality > currentBest) {
+                currentBest = beliefQuality;
+                candidate = judgment;
+            }
+        }
+        return candidate; */
+        /* let mut current_best: Float = 0.0;
+        let mut candidate = None;
+        for judgement in list {
+            let belief_quality =
+                <Self as LocalRules>::solution_quality(Some(query), judgement).to_float();
+            if belief_quality > current_best {
+                current_best = belief_quality;
+                candidate = Some(judgement);
+            }
+        } */
+        // ! ⚠️【2024-05-16 00:42:47】使用迭代器的方法有所不同：若有多个相等，则最后一个会被选中（而非最先一个）
+        // * ✅【2024-05-16 00:43:35】解决方案：迭代器逆向遍历
+        let candidate = list
+            .iter()
+            .rev() // * 🚩【2024-05-16 00:44:00】逆向遍历以保证「相同质量⇒最先一个」
+            .max_by_key(|judgement| <Self as LocalRules>::solution_quality(Some(query), judgement));
+        candidate
+    }
+
     /// 模拟`Concept.linkToTask`
     /// * ⚠️【2024-05-15 17:20:47】涉及大量共享引用
     ///   * 💫共享引用策源地：如何在无GC语言中尽可能减少这类共享引用，是个问题
@@ -288,43 +337,6 @@ pub trait ConceptProcess: DerivationContext {
         } else if (i == table.size()) {
             table.add(newSentence);
         } */
-        todo!("// TODO: 有待实现")
-    }
-
-    /// 模拟`Concept.evaluation`
-    /// * 📝实际上不依赖实例，是个静态方法
-    ///
-    /// # 📄OpenNARS
-    ///
-    /// Evaluate a query against beliefs (and desires in the future)
-    ///
-    /// @param query The question to be processed
-    /// @param list  The list of beliefs to be used
-    /// @return The best candidate belief selected
-    fn __evaluation<'l>(
-        &mut self,
-        query: &Self::Sentence,
-        list: &'l [Self::Sentence],
-    ) -> Option<&'l Self::Sentence> {
-        /* 📄OpenNARS源码：
-        if (list == null) {
-            return null;
-        }
-        float currentBest = 0;
-        float beliefQuality;
-        Sentence candidate = null;
-        for (Sentence judgment : list) {
-            beliefQuality = LocalRules.solutionQuality(query, judgment);
-            if (beliefQuality > currentBest) {
-                currentBest = beliefQuality;
-                candidate = judgment;
-            }
-        }
-        return candidate; */
-        let current_best: Float = 0.0;
-        for judgement in list {
-            let belief_quality = <Self as LocalRules>::solution_quality(Some(query), judgement);
-        }
         todo!("// TODO: 有待实现")
     }
 
@@ -529,6 +541,7 @@ pub trait ConceptProcess: DerivationContext {
             let new_stamp =
                 Self::Stamp::from_merge(task_sentence.stamp(), belief.stamp(), self.time());
             if new_stamp.is_some() {
+                // * 📝实际逻辑即「有共有证据⇒不要推理」
                 // ? 实际上又不要这个时间戳，实际上就是要了个「判断是否重复」的逻辑
                 let belief2 = belief.clone();
                 return Some(belief2);
@@ -624,6 +637,7 @@ pub trait ConceptProcess: DerivationContext {
                         ),
                     });
                     *self.current_belief_link_mut() = Some(term_link);
+                    // * 🔥启动推理
                     RuleTables::reason(self);
                 }
             }
