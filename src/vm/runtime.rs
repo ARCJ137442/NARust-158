@@ -3,7 +3,7 @@
 //! TODO: 对接实际内容
 
 use crate::{
-    global::{GlobalRc, RCMut},
+    global::{GlobalRc, GlobalRcMut, RCMut},
     nars::{Parameters, Reasoner, ReasonerConcrete},
 };
 use anyhow::Result;
@@ -83,7 +83,6 @@ mod channels {
     use super::*;
     use crate::io::{Channel, OutputChannel};
     use std::collections::VecDeque;
-    use std::ops::Deref;
 
     #[derive(Debug, Clone)]
     pub struct ChannelOut<R: ReasonerConcrete> {
@@ -110,13 +109,7 @@ mod channels {
         /// * 🚩先进先出
         /// * 🚩【2024-05-15 11:16:05】对错误采取「打印错误并失败」的处理方法
         pub fn fetch_rc(this: &mut RCMut<Self>) -> Option<Output> {
-            match this.mut_() {
-                Some(channel) => channel.fetch(),
-                None => {
-                    eprintln!("ChannelOut<R> is not initialized");
-                    None
-                }
-            }
+            this.mut_().fetch()
         }
     }
 
@@ -155,10 +148,11 @@ mod channels {
     /// 对Rc<RefCell>自身实现
     impl<R: ReasonerConcrete> OutputChannel for RCMut<ChannelOut<R>> {
         fn next_output(&mut self, reasoner: &mut Self::Reasoner, outputs: &[Output]) {
-            match self.mut_() {
-                Some(channel) => channel.next_output(reasoner, outputs),
-                None => eprintln!("ChannelOut<R> is not initialized | outputs = {outputs:?}"),
-            }
+            self.mut_().next_output(reasoner, outputs)
+            // match self.mut_() {
+            //     Some(channel) => channel.next_output(reasoner, outputs),
+            //     None => eprintln!("ChannelOut<R> is not initialized | outputs = {outputs:?}"),
+            // }
         }
     }
 }

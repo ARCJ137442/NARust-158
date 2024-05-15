@@ -5,9 +5,20 @@
 /// 全局浮点数类型
 pub type Float = f64;
 
+/// 全局「时钟数」类型
+/// * 🎯NARS内部推理时间
+/// * 🎯时间戳[`crate::entity::Stamp`]
+/// * 🚩【2024-05-04 17:41:49】目前设定为无符号整数，对标OpenNARS中的`long`长整数类型
+///   * 📝OpenNARS中也是将其作为无符号整数（非负整数）用的
+pub type ClockTime = usize;
+
 /// 有关对Java「引用计数类型」的复刻
 mod rc {
-    use std::{cell::RefCell, rc::Rc};
+    use std::{
+        cell::RefCell,
+        ops::{Deref, DerefMut},
+        rc::Rc,
+    };
 
     /// 全局引用计数类型
     /// * 🚩【2024-05-04 16:51:11】目前尚未做多线程兼容，此处仅考虑单线程，
@@ -19,45 +30,107 @@ mod rc {
     /// * 📝据[`Rc`]文档，实际上`&mut Rc<T>`也可以通过`get_mut`实现可变
     ///   * ❌但这只能在`Rc`只有**唯一一个引用**时才有效
     /// * 🚩【2024-05-15 11:52:37】目前仍然需要探索`RefCell`方案
-    pub type RCMut<T> = Rc<RefCell<T>>;
+    pub type RCMut<T> = RcMut<T>;
 
     /// 通用的「共享引用」接口
-    ///
-    /// TODO: 【2024-05-15 11:54:32】🚧有待调整
-    ///   * ⚠️RefCell的`borrow`返回一个新结构，会导致「返回临时引用」问题
-    pub trait GlobalRc<T>: Sized {
+    /// * ✅【2024-05-15 16:07:34】通过「封装`struct`」解决了「共享可变性 or 可变共享」的歧义问题
+    pub trait GlobalRc<'this, T>: Sized
+    where
+        Self: 'this,
+    {
+        /// 获取到的「引用」类型
+        type Ref: Deref<Target = T> + 'this;
+
         /// 创建
         fn new_(value: T) -> Self;
 
         /// 获取不可变引用
-        fn get_(&self) -> &T;
+        fn get_(&'this self) -> Self::Ref;
+    }
+
+    /// 通用的「共享可变引用」接口
+    /// * 📌[`GlobalRc`]的可变版本
+    pub trait GlobalRcMut<'this, T>: GlobalRc<'this, T> {
+        /// 获取到的「可变引用」类型
+        type RefMut: DerefMut<Target = T> + 'this;
 
         /// 获取可变引用
-        fn mut_(&mut self) -> Option<&mut T>;
+        fn mut_(&'this mut self) -> Self::RefMut;
     }
 
-    impl<T> GlobalRc<T> for RCMut<T> {
+    /// 对[`Rc`]实现不可变共享引用
+    impl<'this, T> GlobalRc<'this, T> for std::rc::Rc<T>
+    where
+        Self: 'this,
+    {
+        type Ref = &'this T;
+
+        #[inline(always)]
         fn new_(value: T) -> Self {
-            Rc::new(RefCell::new(value))
+            Rc::new(value)
         }
 
-        fn get_(&self) -> &T {
-            todo!()
-        }
-
-        fn mut_(&mut self) -> Option<&mut T> {
-            todo!()
+        #[inline(always)]
+        fn get_(&'this self) -> Self::Ref {
+            self.as_ref()
         }
     }
+
+    /// 实现「可变共享引用」
+    /// * 🎯提供一个内部实现
+    ///   * 🚩通过全局常量予以公开
+    ///   * 💭【2024-05-15 16:08:54】后续将实现「[`Arc`]无缝替代」
+    mod rc_mut {
+        use super::*;
+
+        /// 「可变共享引用」包装类型
+        /// * 🎯终结「到底是『T的可变共享引用』还是『RefCell<T>的不可变共享引用』」的问题
+        ///   * 🚩【2024-05-15 16:03:39】直接选前者
+        #[derive(Debug)]
+        pub struct RcMut<T>(Rc<RefCell<T>>);
+
+        /// 手动实现[`Clone`]复制
+        /// * 🚩直接复制内部[`Rc`]
+        impl<T> Clone for RcMut<T> {
+            fn clone(&self) -> Self {
+                Self(self.0.clone())
+            }
+        }
+
+        /// 对包装类型[`RcMut`]实现不可变共享引用
+        impl<'this, T> GlobalRc<'this, T> for RcMut<T>
+        where
+            Self: 'this,
+        {
+            type Ref = std::cell::Ref<'this, T>;
+
+            #[inline(always)]
+            fn new_(value: T) -> Self {
+                Self(Rc::new(RefCell::new(value)))
+            }
+
+            #[inline(always)]
+            fn get_(&'this self) -> Self::Ref {
+                self.0.borrow()
+            }
+        }
+
+        /// 对包装类型[`RcMut`]实现可变共享引用
+        impl<'this, T> GlobalRcMut<'this, T> for RcMut<T>
+        where
+            Self: 'this,
+        {
+            type RefMut = std::cell::RefMut<'this, T>;
+
+            #[inline(always)]
+            fn mut_(&'this mut self) -> Self::RefMut {
+                self.0.borrow_mut()
+            }
+        }
+    }
+    pub use rc_mut::*;
 }
 pub use rc::*;
-
-/// 全局「时钟数」类型
-/// * 🎯NARS内部推理时间
-/// * 🎯时间戳[`crate::entity::Stamp`]
-/// * 🚩【2024-05-04 17:41:49】目前设定为无符号整数，对标OpenNARS中的`long`长整数类型
-///   * 📝OpenNARS中也是将其作为无符号整数（非负整数）用的
-pub type ClockTime = usize;
 
 /// 测试用
 #[cfg(test)]
