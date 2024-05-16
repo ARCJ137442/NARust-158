@@ -557,12 +557,12 @@ mod tests {
     /// * 🎯展示 [`TL::key`]
     #[test]
     fn new() -> AResult {
-        let tl = TL::new_template(
+        let tl = TL::__new(
             Budget::from_floats(0.5, 0.5, 0.5),
             Term::new_word("term"),
             TermLinkType::SELF,
         );
-        let tl2 = TL::new_template(
+        let tl2 = TL::__new(
             Budget::from_floats(0.1, 0.5, 1.0),
             test_term!("<(*, {A, B}) --> C>"),
             // ? `<(*, {A, B}) --> C>` => A
@@ -581,7 +581,7 @@ mod tests {
     #[test]
     fn _set_key() -> AResult {
         // 新建词项链
-        let mut tl = TL::new_template(
+        let mut tl = TL::__new(
             Budget::from_floats(0.5, 0.5, 0.5),
             Term::new_word("term"),
             TermLinkType::SELF,
@@ -608,7 +608,7 @@ mod tests {
         // 新建词项
         let term = Term::from_str("<{(*, A), B, C} ==> <D --> E>>")?;
         // 装入词项链
-        let tl = TL::new_template(Budget::default(), term.clone(), TermLinkType::SELF);
+        let tl = TL::__new(Budget::default(), term.clone(), TermLinkType::SELF);
         // 应该一致
         assert_eq!(term, *tl.target());
         // 完成
@@ -635,7 +635,7 @@ mod tests {
             '2' as usize,
         ]);
         // 装入词项链
-        let tl = TL::new_template(Budget::default(), Term::from_str("term")?, link.clone());
+        let tl = TL::__new(Budget::default(), Term::from_str("term")?, link.clone());
         // 应该一致
         assert_eq!(link, tl.type_ref());
         // 转换后应该一致

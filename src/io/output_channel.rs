@@ -9,36 +9,6 @@ use navm::output::Output;
 /// # 📄OpenNARS
 ///
 /// An interface to be implemented in all output channel
-///
-/// # 用例
-///
-/// ```rust
-/// use narust_158::io::{Channel, OutputChannel};
-/// use navm::output::Output;
-///
-/// pub struct C;
-/// impl Channel for C {
-///     fn need_remove(&self) -> bool {
-///         false
-///     }
-/// }
-/// impl OutputChannel for C {
-///     fn next_output(&mut self, outputs: &[Output]) {
-///         println!("{:?}", outputs);
-///     }
-/// }
-///
-/// let mut c = C;
-/// let o = vec![Output::COMMENT { content: "out".to_string() }];
-/// c.next_output(&o);
-/// assert!(!c.need_remove());
-/// let dyn_c: &mut dyn OutputChannel = &mut c;
-/// dyn_c.next_output(&o);
-/// assert!(!dyn_c.need_remove()); // 变为动态引用之后，具体类型被抹除，但超特征方法仍然可以引用
-/// let mut box_c: Box<dyn OutputChannel> = Box::new(c);
-/// box_c.next_output(&o);
-/// assert!(!box_c.need_remove()); // 变为「装箱的特征对象」也一样
-/// ```
 pub trait OutputChannel: Channel {
     /// 模拟`OutputChannel.nextOutput`
     /// * ⚠️看似「不可变」，实际上**有副作用**

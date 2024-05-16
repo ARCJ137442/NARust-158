@@ -12,37 +12,6 @@ use navm::cmd::Cmd;
 ///
 /// An interface to be implemented in all input channels
 /// to get the input for the next moment from an input channel
-///
-/// # 用例
-///
-/// ```rust
-/// use narust_158::io::{Channel, InputChannel};
-/// use navm::cmd::Cmd;
-///
-/// pub struct C;
-/// impl Channel for C {
-///     fn need_remove(&self) -> bool {
-///         false
-///     }
-/// }
-/// impl InputChannel for C {
-///     fn next_input(&mut self) -> (bool, Vec<Cmd>) {
-///         (true, vec![])
-///     }
-/// }
-///
-/// let mut c = C;
-/// assert_eq!(c.next_input(), (true, vec![]));
-/// assert!(!c.need_remove());
-/// let dyn_c: &mut dyn InputChannel = &mut c;
-/// dyn_c.next_input();
-/// assert_eq!(dyn_c.next_input(), (true, vec![]));
-/// assert!(!dyn_c.need_remove()); // 变为动态引用之后，具体类型被抹除，但超特征方法仍然可以引用
-/// let mut box_c: Box<dyn InputChannel> = Box::new(c);
-/// box_c.next_input();
-/// assert_eq!(box_c.next_input(), (true, vec![]));
-/// assert!(!box_c.need_remove()); // 变为「装箱的特征对象」也一样
-/// ```
 pub trait InputChannel: Channel {
     /// 模拟`InputChannel.nextInput`
     /// * ⚠️看似「不可变」，实际上**有副作用**
