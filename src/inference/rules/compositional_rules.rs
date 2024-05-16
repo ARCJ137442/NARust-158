@@ -2,8 +2,10 @@
 //! * 📄有关「类型声明」参见[「推理上下文」](super::reason_context)
 //!
 //! * ✅【2024-05-12 00:47:43】初步复现方法API
+//!
+//! TODO: 🚧完成具体实现
 
-use super::DerivationContext;
+use crate::inference::DerivationContext;
 use crate::{entity::*, inference::*, language::Term};
 
 /// 模拟`CompositionalRules`

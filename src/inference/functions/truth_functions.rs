@@ -1,8 +1,8 @@
 //! 🎯复刻OpenNARS `nars.inference.TruthFunctions`
 
+use super::UtilityFunctions;
 use crate::entity::ShortFloat;
 use crate::entity::TruthValueConcrete;
-use crate::inference::utility_functions::UtilityFunctions;
 
 /// 真值函数
 /// * 🚩【2024-05-02 20:46:50】不同于OpenNARS中「直接创建新值」，此处许多「真值函数」仅改变自身

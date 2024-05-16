@@ -4,8 +4,10 @@
 //!   * 🚩【2024-05-06 22:28:30】最新方法：上下文+特征追加
 //!     * 📄参见[「推理上下文」](super::reason_context)
 //! * ✅基本完成「特征方法」API：函数签名、返回值、参数类型
+//!
+//! TODO: 🚧完成具体实现
 
-use super::DerivationContext;
+use crate::inference::DerivationContext;
 use crate::{entity::*, language::*, storage::*};
 
 /// 🆕三段论位置

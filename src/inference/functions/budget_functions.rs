@@ -1,6 +1,7 @@
 //! 🎯复刻OpenNARS `nars.inference.BudgetFunctions`
 
-use super::{DerivationContext, UtilityFunctions};
+use super::UtilityFunctions;
+use crate::inference::DerivationContext;
 use crate::{entity::*, global::Float, language::Term, storage::Memory};
 
 /// 预算函数
@@ -477,6 +478,10 @@ pub trait BudgetFunctions: BudgetValueConcrete {
     ///   * 📝之所以OpenNARS要传入「记忆区」「真值」是因为需要「获取其中某个词项/任务」
     /// * 🚩【2024-05-12 15:55:37】目前在实现「记忆区」「推导上下文」的API之下，可以按逻辑无损复刻
     ///   * ❓后续是否要将「记忆区」的引用代入「推导上下文」
+    /// 
+    /// TODO: ❓【2024-05-16 14:06:51】是否真有必要在此引入「记忆区」与「推导上下文」
+    ///   * ❓是否考虑功能分离，如：将一部分功能放入控制部分
+    ///   * 📌一个原则基点：预算函数只考虑「计算」功能，不惨和「推理控制」的事儿
     ///
     /// # 📄OpenNARS
     ///

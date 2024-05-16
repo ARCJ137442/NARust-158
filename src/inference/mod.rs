@@ -1,5 +1,10 @@
 //! NARS中有关「推理」的内容
 //! * 🚩【2024-05-02 15:54:15】计划通过「全有默认实现的模板特征」作为功能实现方法
+//! * ♻️【2024-05-16 14:01:02】将混杂的推理控制过程分类放置
+//!   * 🚩与「上下文」有关的放在一块：推理上下文、推导上下文……
+//!   * 🚩与「概念」「记忆区」有关的放在一块：概念处理、记忆区处理……
+//!   * 🚩与「推理规则」有关的放在一块：本地规则、三段论规则……
+//!   * 🚩与「推理函数」有关的放在一块：真值函数、预算函数……
 //!
 //! # 📄OpenNARS
 //!
@@ -23,39 +28,18 @@
 //! In each case, there may be multiple applicable rules, which will be applied in parallel. For each rule, each conclusion is formed in three stages, to determine (1) the content (as a Term), (2) the truth-value, and (3) the budget-value, roughly in that order.
 
 nar_dev_utils::mods! {
-    // 🆕推理上下文 [`ReasonContext`](_reason_context::ReasonContext)
-    pub use _reason_context;
-
-    // 🆕推导上下文 [`DerivationContext`](_derivation_context::DerivationContext)
-    pub use _derivation_context;
+    // 🆕上下文
+    pub use _context;
 
     // 🆕概念处理 [`ConceptProcess`](_concept_process::DerivationContext)
-    pub use _concept_process;
+    pub use _concept;
 
     // 🆕记忆区处理 [`MemoryProcess`](_memory_process::DerivationContext)
-    pub use _memory_process;
+    pub use _memory;
 
-    // 规则表 `RuleTables`
-    pub use rule_tables;
+    // ♻️数值函数
+    pub use functions;
 
-    // 本地规则 `LocalRules`
-    pub use local_rules;
-
-    // 三段论规则 `SyllogisticRules`
-    pub use syllogistic_rules;
-
-    // 组合规则 `CompositionalRules`
-    pub use compositional_rules;
-
-    // 结构规则 `StructuralRules`
-    pub use structural_rules;
-
-    // 实用函数 `UtilityFunctions`
-    pub use utility_functions;
-
-    // 预算值函数 `BudgetFunctions`
-    pub use budget_functions;
-
-    // 真值函数 `TruthFunctions`
-    pub use truth_functions;
+    // ♻️具体规则
+    pub use rules;
 }

@@ -1,6 +1,8 @@
 //! 🎯复刻OpenNARS `nars.inference.LocalRules`
 //! * 📄有关「类型声明」参见[「推理上下文」](super::reason_context)
 //! * ✅【2024-05-07 18:51:30】初步实现方法API（函数签名、文档、源码附注）
+//!
+//! TODO: 🚧完成具体实现
 
 use crate::{entity::*, inference::*, io::symbols::VAR_QUERY, language::variable::unify_two};
 
