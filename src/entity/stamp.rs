@@ -117,6 +117,16 @@ pub trait Stamp: ToDisplayAndBrief + PartialEq {
             => STAMP_CLOSER
         )
     }
+
+    /// 🆕判断两个「时间戳」是否含有相同证据
+    /// * 🎯用于「概念处理」中的「获取信念」，并反映到后续「推理上下文」的分派中
+    ///   * 🎯深层目的：防止重复推理
+    /// * 🚩包含相同证据基⇒返回空值
+    fn have_common_evidence(&self, second: &impl Stamp) -> bool {
+        self.evidential_base()
+            .iter()
+            .any(|i| second.evidential_base().contains(i))
+    }
 }
 
 /// [`Vec`]集合判等
@@ -265,10 +275,8 @@ pub trait StampConcrete: Stamp + Clone + Hash + PartialEq {
             return new Stamp(second, first, time);
         } */
         // * 🚩本质逻辑是：包含相同证据基⇒返回空值
-        for i in first.evidential_base() {
-            if second.evidential_base().contains(i) {
-                return None;
-            }
+        if first.have_common_evidence(second) {
+            return None;
         }
         match first.base_length() > second.base_length() {
             true => Some(Self::__from_merge(first, second, time)),

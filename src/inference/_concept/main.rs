@@ -20,6 +20,8 @@ pub trait ConceptProcess: DerivationContext {
 
     /// 模拟`Concept.getBelief`
     /// * 📝OpenNARS用在「组合规则」与「推理上下文构建」中
+    /// * 🚩【2024-05-16 18:43:40】因为是「赋值『新时间戳』到上下文」，故需要`self`可变
+    ///   * ⁉️获取信念要改变上下文，这的确像是「推理过程」的一部分
     ///
     /// # 📄OpenNARS
     ///
@@ -31,7 +33,7 @@ pub trait ConceptProcess: DerivationContext {
     ///
     /// @param task The selected task
     /// @return The selected isBelief
-    fn get_belief(&self, concept: &Self::Concept, task: &Self::Task) -> Option<Self::Sentence> {
+    fn get_belief(&mut self, concept: &Self::Concept, task: &Self::Task) -> Option<Self::Sentence> {
         /* 📄OpenNARS源码：
         Sentence taskSentence = task.getSentence();
         for (Sentence belief : beliefs) {
@@ -53,6 +55,8 @@ pub trait ConceptProcess: DerivationContext {
                 let belief2 = belief.clone();
                 return Some(belief2);
             }
+            // * 🚩必须赋值，无论是否有
+            *self.new_stamp_mut() = new_stamp;
         }
         None
     }
