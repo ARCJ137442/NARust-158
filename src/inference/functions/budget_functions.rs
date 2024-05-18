@@ -1,7 +1,7 @@
 //! 🎯复刻OpenNARS `nars.inference.BudgetFunctions`
 
 use super::UtilityFunctions;
-use crate::inference::DerivationContext;
+use crate::inference::{DerivationContextReason, ReasonContext};
 use crate::{entity::*, global::Float, language::Term, storage::Memory};
 
 /// 预算函数
@@ -9,6 +9,9 @@ use crate::{entity::*, global::Float, language::Term, storage::Memory};
 ///   * 📝本身复制值也没多大性能损耗
 ///   * 📌「直接创建新值」会更方便后续调用
 ///     * 📄减少无谓的`.clone()`
+///
+/// TODO: 【2024-05-17 15:36:31】🚧后续仍然需要考虑以「推理器」而非
+/// * ❗太多与「推导上下文」「推理上下文」耦合的函数了
 pub trait BudgetFunctions: BudgetValueConcrete {
     /* ----------------------- Belief evaluation ----------------------- */
 
@@ -134,8 +137,16 @@ pub trait BudgetFunctions: BudgetValueConcrete {
 
     /// 模拟`BudgetFunctions.revise`
     /// * 🚩现在从「推导上下文」中解放出来
-    ///   * ⚠️要求上下文的「词项链」「任务链」必须非空
-    ///     * 若分别传入，会有「多个不可变引用」问题
+    /// * 📌重新将「回馈到 词项链/任务链」合并成一个参数（以便后续判断）
+    /// * 📝OpenNARS的调用情况：
+    ///   * 从「直接推理」`match`调用的没feedback
+    ///   * 从「概念推理」`match`调用的有feedback
+    /// * 🚩【2024-05-18 02:20:39】参考上文笔记，故只需
+    ///   * 在「直接推理」调用时，传入`None`
+    ///   * 在「概念推理」调用时，传入`Some(两个可变引用)`
+    /// * ❌【2024-05-18 10:07:33】↑否决上述方案：会在调用者处发生借用问题（多个可变引用）
+    ///   * 🚩【2024-05-18 10:08:53】目前解决方案：拆分成「直接推理」「概念推理」两个版本
+    ///   * 「概念推理」版本参见[`BudgetFunctions::revise_reason`]
     ///
     /// # 📄OpenNARS
     ///
@@ -145,12 +156,12 @@ pub trait BudgetFunctions: BudgetValueConcrete {
     /// @param bTruth The truth value of the belief
     /// @param truth  The truth value of the conclusion of revision
     /// @return The budget for the new task
-    fn revise(
+    #[doc(alias = "revise")]
+    fn revise_direct(
         t_truth: &impl TruthValue<E = Self::E>,
         b_truth: &impl TruthValue<E = Self::E>,
         truth: &impl TruthValue<E = Self::E>,
-        feedback_to_links: bool,
-        context: &mut impl DerivationContext<ShortFloat = Self::E, Budget = Self>,
+        current_task_budget: &mut Self,
     ) -> Self {
         /* 📄OpenNARS源码：
         float difT = truth.getExpDifAbs(tTruth);
@@ -172,19 +183,44 @@ pub trait BudgetFunctions: BudgetValueConcrete {
         float quality = truthToQuality(truth);
         return new BudgetValue(priority, durability, quality); */
         let dif_t = Self::E::from_float(truth.expectation_abs_dif(t_truth));
-        let task = context.current_task_mut().budget_mut();
+        let task = current_task_budget;
         task.dec_priority(!dif_t);
         task.dec_durability(!dif_t);
-        if feedback_to_links {
-            let t_link = context.current_task_link_mut().as_mut().unwrap();
+        // * 🚩在「直接推理」中无需「反馈到链接」
+        let dif = truth.confidence() - t_truth.confidence().max(b_truth.confidence());
+        let priority = dif | task.priority();
+        let durability = Self::E::arithmetical_average([dif, task.durability()]);
+        let quality = Self::truth_to_quality(truth);
+        Self::new(priority, durability, quality)
+    }
+
+    /// 模拟`BudgetFunctions.revise`(feedback == true)
+    /// * 🎯[「修正规则」](BudgetFunctions::revise_direct)的「概念推理」版本
+    /// * 📄文档&笔记 参见[`BudgetFunctions::revise_direct`]
+    fn revise_reason<C>(
+        t_truth: &impl TruthValue<E = Self::E>,
+        b_truth: &impl TruthValue<E = Self::E>,
+        truth: &impl TruthValue<E = Self::E>,
+        context: &mut impl DerivationContextReason<C>,
+    ) -> Self
+    where
+        C: ReasonContext<ShortFloat = Self::E, Budget = Self>,
+    {
+        let dif_t = Self::E::from_float(truth.expectation_abs_dif(t_truth));
+        let task = context.current_task_mut();
+        task.dec_priority(!dif_t);
+        task.dec_durability(!dif_t);
+        {
+            // * 🚩在「概念推理」中必须「向任务链、信念链（词项链）反馈」
+            let t_link = context.current_task_link_mut();
             t_link.dec_priority(!dif_t);
             t_link.dec_durability(!dif_t);
-            let b_link = context.current_belief_link_mut().as_mut().unwrap();
+            let b_link = context.current_belief_link_mut();
             let dif_b = Self::E::from_float(truth.expectation_abs_dif(b_truth));
             b_link.dec_priority(!dif_b);
             b_link.dec_durability(!dif_b);
         }
-        let task = context.current_task();
+        let task = context.current_task(); // * 🚩再次借用：避免借用问题
         let dif = truth.confidence() - t_truth.confidence().max(b_truth.confidence());
         let priority = dif | task.priority();
         let durability = Self::E::arithmetical_average([dif, task.durability()]);
@@ -349,12 +385,15 @@ pub trait BudgetFunctions: BudgetValueConcrete {
     ///
     /// @param truth The truth value of the conclusion
     /// @return The budget value of the conclusion
-    fn forward(
+    fn forward<C>(
         truth: &impl TruthValue<E = Self::E>,
         // * 🚩【2024-05-12 15:48:37】↓对标`memory`
-        context: &mut impl DerivationContext<ShortFloat = Self::E, Budget = Self>,
+        context: &mut impl DerivationContextReason<C>,
         memory: &impl Memory<ShortFloat = Self::E>,
-    ) -> Self {
+    ) -> Self
+    where
+        C: ReasonContext<ShortFloat = Self::E, Budget = Self>,
+    {
         /* 📄OpenNARS源码：
         return budgetInference(truthToQuality(truth), 1, memory); */
         Self::__budget_inference(Self::truth_to_quality(truth), 1, context, memory)
@@ -370,12 +409,15 @@ pub trait BudgetFunctions: BudgetValueConcrete {
     /// @param truth  The truth value of the belief deriving the conclusion
     /// @param memory Reference to the memory
     /// @return The budget value of the conclusion
-    fn backward(
+    fn backward<C>(
         truth: &impl TruthValue<E = Self::E>,
         // * 🚩【2024-05-12 15:48:37】↓对标`memory`
-        context: &mut impl DerivationContext<ShortFloat = Self::E, Budget = Self>,
+        context: &mut impl DerivationContextReason<C>,
         memory: &impl Memory<ShortFloat = Self::E>,
-    ) -> Self {
+    ) -> Self
+    where
+        C: ReasonContext<ShortFloat = Self::E, Budget = Self>,
+    {
         /* 📄OpenNARS源码：
         return budgetInference(truthToQuality(truth), 1, memory); */
         Self::__budget_inference(Self::truth_to_quality(truth), 1, context, memory)
@@ -392,12 +434,15 @@ pub trait BudgetFunctions: BudgetValueConcrete {
     /// @param truth  The truth value of the belief deriving the conclusion
     /// @param memory Reference to the memory
     /// @return The budget value of the conclusion
-    fn backward_weak(
+    fn backward_weak<C>(
         truth: &impl TruthValue<E = Self::E>,
         // * 🚩【2024-05-12 15:48:37】↓对标`memory`
-        context: &mut impl DerivationContext<ShortFloat = Self::E, Budget = Self>,
+        context: &mut impl DerivationContextReason<C>,
         memory: &impl Memory<ShortFloat = Self::E>,
-    ) -> Self {
+    ) -> Self
+    where
+        C: ReasonContext<ShortFloat = Self::E, Budget = Self>,
+    {
         /* 📄OpenNARS源码：
         return budgetInference(w2c(1) * truthToQuality(truth), 1, memory); */
         Self::__budget_inference(
@@ -420,13 +465,16 @@ pub trait BudgetFunctions: BudgetValueConcrete {
     /// @param content The content of the conclusion
     /// @param memory  Reference to the memory
     /// @return The budget of the conclusion
-    fn compound_forward(
+    fn compound_forward<C>(
         truth: &impl TruthValue<E = Self::E>,
         content: &Term,
         // * 🚩【2024-05-12 15:48:37】↓对标`memory`
-        context: &mut impl DerivationContext<ShortFloat = Self::E, Budget = Self>,
+        context: &mut impl DerivationContextReason<C>,
         memory: &impl Memory<ShortFloat = Self::E>,
-    ) -> Self {
+    ) -> Self
+    where
+        C: ReasonContext<ShortFloat = Self::E, Budget = Self>,
+    {
         /* 📄OpenNARS源码：
         return budgetInference(truthToQuality(truth), content.getComplexity(), memory); */
         Self::__budget_inference(
@@ -446,12 +494,15 @@ pub trait BudgetFunctions: BudgetValueConcrete {
     /// @param content The content of the conclusion
     /// @param memory  Reference to the memory
     /// @return The budget of the conclusion
-    fn compound_backward(
+    fn compound_backward<C>(
         content: &Term,
         // * 🚩【2024-05-12 15:48:37】↓对标`memory`
-        context: &mut impl DerivationContext<ShortFloat = Self::E, Budget = Self>,
+        context: &mut impl DerivationContextReason<C>,
         memory: &impl Memory<ShortFloat = Self::E>,
-    ) -> Self {
+    ) -> Self
+    where
+        C: ReasonContext<ShortFloat = Self::E, Budget = Self>,
+    {
         /* 📄OpenNARS源码：
         return budgetInference(1, content.getComplexity(), memory); */
         Self::__budget_inference(Self::E::ONE, content.complexity(), context, memory)
@@ -460,12 +511,15 @@ pub trait BudgetFunctions: BudgetValueConcrete {
     /// 模拟`BudgetFunctions.compoundBackwardWeak`
     ///
     /// # 📄OpenNARS
-    fn compound_backward_weak(
+    fn compound_backward_weak<C>(
         content: &Term,
         // * 🚩【2024-05-12 15:48:37】↓对标`memory`
-        context: &mut impl DerivationContext<ShortFloat = Self::E, Budget = Self>,
+        context: &mut impl DerivationContextReason<C>,
         memory: &impl Memory<ShortFloat = Self::E>,
-    ) -> Self {
+    ) -> Self
+    where
+        C: ReasonContext<ShortFloat = Self::E, Budget = Self>,
+    {
         /* 📄OpenNARS源码：
         return budgetInference(w2c(1), content.getComplexity(), memory); */
         Self::__budget_inference(Self::E::w2c(1.0), content.complexity(), context, memory)
@@ -478,10 +532,12 @@ pub trait BudgetFunctions: BudgetValueConcrete {
     ///   * 📝之所以OpenNARS要传入「记忆区」「真值」是因为需要「获取其中某个词项/任务」
     /// * 🚩【2024-05-12 15:55:37】目前在实现「记忆区」「推导上下文」的API之下，可以按逻辑无损复刻
     ///   * ❓后续是否要将「记忆区」的引用代入「推导上下文」
-    /// 
-    /// TODO: ❓【2024-05-16 14:06:51】是否真有必要在此引入「记忆区」与「推导上下文」
-    ///   * ❓是否考虑功能分离，如：将一部分功能放入控制部分
-    ///   * 📌一个原则基点：预算函数只考虑「计算」功能，不惨和「推理控制」的事儿
+    /// * 📝【2024-05-17 15:41:10】经OpenNARS基本论证：`t`不可能为`null`
+    ///   * 📌「直接推理（任务+概念）」从来不会调用此函数
+    ///     * 📄证据：`processJudgement`与`processQuestion`均除了本地规则「修正/问答」外没调用别的
+    ///   * 🚩【2024-05-18 01:58:44】故因此只会从「概念推理」被调用，
+    ///   * ✅使用[`DerivationContextReason`]解决
+    ///
     ///
     /// # 📄OpenNARS
     ///
@@ -491,12 +547,15 @@ pub trait BudgetFunctions: BudgetValueConcrete {
     /// @param complexity Syntactic complexity of the conclusion
     /// @param memory     Reference to the memory
     /// @return Budget of the conclusion task
-    fn __budget_inference(
+    fn __budget_inference<C>(
         qual: Self::E,
         complexity: usize,
-        context: &mut impl DerivationContext<ShortFloat = Self::E, Budget = Self>,
+        context: &mut impl DerivationContextReason<C>,
         memory: &impl Memory<ShortFloat = Self::E>,
-    ) -> Self {
+    ) -> Self
+    where
+        C: ReasonContext<ShortFloat = Self::E, Budget = Self>,
+    {
         /* 📄OpenNARS源码：
         Item t = memory.currentTaskLink;
         if (t == null) {
@@ -514,15 +573,12 @@ pub trait BudgetFunctions: BudgetValueConcrete {
             bLink.incDurability(quality);
         }
         return new BudgetValue(priority, durability, quality); */
-        let t_budget = match context.current_task_link() {
-            Some(t_link) => t_link.budget(),
-            None => context.current_task().budget(),
-        };
+        let t_budget = context.current_task_link().budget();
         let mut priority = t_budget.priority();
         let mut durability =
             Self::E::from_float(t_budget.durability().to_float() / complexity as Float);
         let quality = Self::E::from_float(qual.to_float() / complexity as Float);
-        let b_link = context.current_belief_link_mut().as_mut().unwrap();
+        let b_link = context.current_belief_link_mut();
         let activation = memory.get_concept_activation(b_link.target());
         priority = priority | b_link.priority();
         durability = durability & b_link.durability();

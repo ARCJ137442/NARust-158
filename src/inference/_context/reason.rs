@@ -96,3 +96,41 @@ pub trait ReasonContext {
         Concept = Self::Concept,
     >;
 }
+
+/// 【内部】批量实现「推理上下文」特征
+/// * 🚩用其中已有的「推理上下文」类型进行「委托式实现」
+///
+/// ## 形式
+///
+/// ```rs
+/// impl_reason_context_from_generics {
+///     【用于索引的「推理上下文」类型】 in [【`impl`中的泛型参数】]
+///     for 【要自动实现「推理上下文」的类型】 => ReasonContext
+/// }
+/// ```
+#[macro_export]
+macro_rules! impl_reason_context_from_generics {
+    (
+        $(
+            $context_type:ident in [ $($generic_impl:tt)* ]
+            for $impl_from:ty => $impl_for:ty
+        )*
+    ) => {
+        $(
+            /// 委托式实现：默认实现「推理上下文」以便使用其中的方法
+            impl<$($generic_impl)*> $impl_for for $impl_from {
+                type ShortFloat = $context_type::ShortFloat;
+                type Truth = $context_type::Truth;
+                type Stamp = $context_type::Stamp;
+                type Sentence = $context_type::Sentence;
+                type Key = $context_type::Key;
+                type Budget = $context_type::Budget;
+                type Task = $context_type::Task;
+                type TermLink = $context_type::TermLink;
+                type TaskLink = $context_type::TaskLink;
+                type Concept = $context_type::Concept;
+                type Memory = $context_type::Memory;
+            }
+        )*
+    };
+}

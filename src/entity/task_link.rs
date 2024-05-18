@@ -1,7 +1,7 @@
 //! 🎯复刻OpenNARS `nars.entity.TaskLink`
 //! * ✅【2024-05-06 00:13:26】基本功能复刻完成
 
-use super::{Item, Task, TermLink, TermLinkConcrete};
+use super::{Item, Task, TermLink, TermLinkConcrete, TermLinkType};
 use crate::{
     entity::Sentence, global::ClockTime, language::Term, nars::DEFAULT_PARAMETERS,
     ToDisplayAndBrief,
@@ -27,22 +27,26 @@ pub trait TaskLink: TermLink<Target = Self::Task> {
 
     /// 模拟`TaskLink.recordedLinks`
     /// * 🚩此处使用[`Self::Key`]代替OpenNARS中的`String`
+    /// * 📝OpenNARS中，一旦被创建，长度不会更改
+    ///   * 🚩【2024-05-18 11:30:57】故使用`Box<[T]>`作为实际数据类型
     ///
     /// # 📄OpenNARS
     ///
     /// Remember the TermLinks that has been used recently with this TaskLink
     fn __recorded_links(&self) -> &[Self::Key];
     /// [`TaskLink::__recorded_links`]的可变版本
-    fn __recorded_links_mut(&mut self) -> &mut [&mut Self::Key];
+    fn __recorded_links_mut(&mut self) -> &mut Box<[Self::Key]>;
 
     /// 模拟`TaskLink.recordingTime`
+    /// * 📝OpenNARS中，一旦被创建，长度不会更改
+    ///   * 🚩【2024-05-18 11:30:57】故使用`Box<[T]>`作为实际数据类型
     ///
     /// # 📄OpenNARS
     ///
     /// Remember the time when each TermLink is used with this TaskLink
     fn __recording_time(&self) -> &[ClockTime];
     /// [`TaskLink::__recording_time`]的可变版本
-    fn __recording_time_mut(&mut self) -> &mut [&mut ClockTime];
+    fn __recording_time_mut(&mut self) -> &mut Box<[ClockTime]>;
 
     /// 模拟`TaskLink.counter`
     /// * 🚩【2024-05-05 22:51:50】因此变量并未在外部被使用，故现设置为私有变量
@@ -120,15 +124,15 @@ pub trait TaskLink: TermLink<Target = Self::Task> {
                 {
                     true => return false,
                     false => {
-                        *self.__recording_time_mut()[next] = current_time;
+                        self.__recording_time_mut()[next] = current_time;
                         return true;
                     }
                 }
             }
         }
         let next = self.__counter() % DEFAULT_PARAMETERS.term_link_record_length;
-        *self.__recorded_links_mut()[next] = link_key.clone(); // ? 检查「新近」后，增加到自身记忆中？
-        *self.__recording_time_mut()[next] = current_time;
+        self.__recorded_links_mut()[next] = link_key.clone(); // ? 检查「新近」后，增加到自身记忆中？
+        self.__recording_time_mut()[next] = current_time;
         if self.__counter() < DEFAULT_PARAMETERS.term_link_record_length {
             *self.__counter_mut() += 1;
         }
@@ -138,13 +142,39 @@ pub trait TaskLink: TermLink<Target = Self::Task> {
 
 /// 「任务链」的具体类型
 /// * 🎯【2024-05-06 11:19:52】作为[`TermLinkConcrete`]的对应物
-pub trait TaskLinkConcrete: TaskLink {
+pub trait TaskLinkConcrete: TaskLink + Sized {
+    /// 🆕完全参数的构造函数
+    ///
+    /// TODO: 后续有待斟酌里边`target`的类型
+    fn __new(
+        // * 📌作为[`Item`]的参数
+        key: Self::Key,
+        budget: Self::Budget,
+        // * 📌作为[`TermLink`]的参数
+        term_link_type: TermLinkType,
+        // * 📌独有参数
+        target: &Self::Task,
+        recorded_links: Box<[Self::Key]>,
+        recording_time: Box<[ClockTime]>,
+        counter: usize,
+    ) -> Self;
+
     /// 模拟`new TaskLink(Task t, TermLink template, BudgetValue v)`
+    /// * 📝OpenNARS只有这一个公开的构造函数
     fn new(
-        t: Self::Task,
+        target: &Self::Task,
         template: &impl TermLinkConcrete<Target = Term, Key = Self::Key, Budget = Self::Budget>,
-    ) {
-        todo!()
+    ) -> Self {
+        /* 📄OpenNARS源码：
+        super("", v, template == null ? TermLink.SELF : template.getType(),
+                template == null ? null : template.getIndices());
+        targetTask = t;
+        recordedLinks = new String[Parameters.TERM_LINK_RECORD_LENGTH];
+        recordingTime = new long[Parameters.TERM_LINK_RECORD_LENGTH];
+        counter = 0;
+        super.setKey(); // as defined in TermLink
+        key += t.getKey(); */
+        todo!("// TODO: 【2024-05-18 11:35:03】有待实现")
     }
 }
 
@@ -157,16 +187,18 @@ mod impl_v1 {
         global::RC,
         storage::BagKeyV1,
     };
-    use std::fmt::Display;
 
     /// 词项链 初代实现
     /// * 🚩目前不限制其中「预算值」的类型
     #[derive(Debug, Clone, PartialEq, Eq)]
     pub struct TaskLinkV1<T: TaskConcrete> {
+        // * 📌作为[`Item`]的字段
         key: T::Key,
         budget: T::Budget,
-        target: RC<T>,
+        // * 📌作为「词项链」的字段
         type_ref: TermLinkType,
+        // * 📌独有字段
+        target: RC<T>,
         // TODO: 再增加字段，完成初代实现
     }
 
@@ -232,7 +264,7 @@ mod impl_v1 {
             todo!()
         }
 
-        fn __recorded_links_mut(&mut self) -> &mut [&mut Self::Key] {
+        fn __recorded_links_mut(&mut self) -> &mut Box<[Self::Key]> {
             todo!()
         }
 
@@ -240,7 +272,7 @@ mod impl_v1 {
             todo!()
         }
 
-        fn __recording_time_mut(&mut self) -> &mut [&mut ClockTime] {
+        fn __recording_time_mut(&mut self) -> &mut Box<[ClockTime]> {
             todo!()
         }
 
@@ -253,7 +285,25 @@ mod impl_v1 {
         }
     }
 
-    impl<T> TaskLinkConcrete for TaskLinkV1<T> where T: TaskConcrete<Key = BagKeyV1> {}
+    impl<T> TaskLinkConcrete for TaskLinkV1<T>
+    where
+        T: TaskConcrete<Key = BagKeyV1>,
+    {
+        fn __new(
+            // * 📌作为[`Item`]的参数
+            key: Self::Key,
+            budget: Self::Budget,
+            // * 📌作为[`TermLink`]的参数
+            term_link_type: TermLinkType,
+            // * 📌独有参数
+            target: &Self::Task,
+            recorded_links: Box<[Self::Key]>,
+            recording_time: Box<[ClockTime]>,
+            counter: usize,
+        ) -> Self {
+            todo!()
+        }
+    }
 }
 pub use impl_v1::*;
 

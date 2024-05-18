@@ -6,21 +6,21 @@ use crate::{
     entity::{
         BudgetValueConcrete, Sentence, SentenceConcrete, SentenceType, ShortFloat, TaskConcrete,
     },
-    inference::BudgetFunctions,
+    inference::{BudgetFunctions, ReasonContext},
     io::symbols::JUDGMENT_MARK,
     nars::DEFAULT_PARAMETERS,
 };
 use anyhow::Result;
 use narsese::lexical::Task as LexicalTask;
 
-pub trait ReasonerParseTask: Reasoner {
+pub trait ReasonerParseTask<C: ReasonContext>: Reasoner<C> {
     /// 模拟`StringParser.parseTask`
     /// * 🚩直接模仿`parseTask`而非`parseExperience`
     /// * 📌结合自身信息的「词法折叠」
     /// * 📝OpenNARS在解析时可能会遇到「新词项⇒新建概念」的情形
     ///   * 🚩因此需要`&mut self`
     #[doc(alias = "parse_experience")]
-    fn parse_task(&mut self, narsese: LexicalTask) -> Result<Self::Task> {
+    fn parse_task(&mut self, narsese: LexicalTask) -> Result<C::Task> {
         /* 📄OpenNARS源码：
         StringBuffer buffer = new StringBuffer(s);
         Task task = null;
@@ -65,7 +65,7 @@ pub trait ReasonerParseTask: Reasoner {
         let stamp_current_serial = self.get_stamp_current_serial();
         let stamp_time = self.clock();
         let truth_is_analytic = DEFAULT_PARAMETERS.default_truth_analytic;
-        let mut sentence: Self::Sentence = SentenceConcrete::from_lexical(
+        let mut sentence: C::Sentence = SentenceConcrete::from_lexical(
             sentence,
             truth_default_values,
             truth_is_analytic,
@@ -82,7 +82,7 @@ pub trait ReasonerParseTask: Reasoner {
             Judgement(truth) => (
                 ShortFloat::from_float(DEFAULT_PARAMETERS.default_judgement_priority),
                 ShortFloat::from_float(DEFAULT_PARAMETERS.default_judgement_durability),
-                <Self::Budget as BudgetFunctions>::truth_to_quality(truth),
+                <C::Budget as BudgetFunctions>::truth_to_quality(truth),
             ),
             Question => (
                 ShortFloat::from_float(DEFAULT_PARAMETERS.default_question_priority),
@@ -91,7 +91,7 @@ pub trait ReasonerParseTask: Reasoner {
             ),
         };
         let default_budget = [priority, durability, quality];
-        let budget: Self::Budget = BudgetValueConcrete::from_lexical(budget, default_budget)?;
+        let budget: C::Budget = BudgetValueConcrete::from_lexical(budget, default_budget)?;
 
         // 构造任务
         let task = TaskConcrete::from_input(sentence, budget);
@@ -102,4 +102,4 @@ pub trait ReasonerParseTask: Reasoner {
 }
 
 /// 通过「批量实现」自动加功能
-impl<T: Reasoner> ReasonerParseTask for T {}
+impl<C: ReasonContext, T: Reasoner<C>> ReasonerParseTask<C> for T {}

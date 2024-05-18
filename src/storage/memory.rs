@@ -5,102 +5,8 @@
 //! * ✅【2024-05-08 15:46:28】目前已初步实现方法API，并完成部分方法模拟
 //! * ✅【2024-05-08 17:17:41】目前已初步完成所有方法的模拟
 
-use crate::{
-    entity::*, inference::*, language::Term, nars::DEFAULT_PARAMETERS, storage::*,
-    ToDisplayAndBrief,
-};
-use narsese::api::NarseseValue;
-use std::collections::VecDeque;
-
-/// 有关「记忆区报告」或「记忆区记录」
-/// * 🎯记忆区输出信息
-/// * 🚩【2024-05-06 09:35:37】复用[`navm`]中的「NAVM输出」
-mod report {
-    use navm::output::Output;
-    use std::collections::VecDeque;
-
-    /// 🆕记忆区记忆者
-    /// * 📄等价于OpenNARS`nars.inference.IInferenceRecorder`
-    pub trait MemoryRecorder {
-        /// 缓存的输出缓冲区
-        /// * 🚩【2024-05-07 20:09:49】目前使用[`VecDeque`]队列实现
-        fn cached_outputs(&self) -> &VecDeque<Output>;
-        /// [`MemoryRecorder::cached_outputs`]的可变版本
-        fn __cached_outputs_mut(&mut self) -> &mut VecDeque<Output>;
-
-        /// 长度大小
-        #[inline]
-        fn len_output(&self) -> usize {
-            self.cached_outputs().len()
-        }
-
-        /// 是否为空
-        #[inline]
-        fn no_output(&self) -> bool {
-            self.cached_outputs().is_empty()
-        }
-
-        /// 置入NAVM输出（在末尾）
-        #[inline]
-        fn put(&mut self, output: Output) {
-            self.__cached_outputs_mut().push_back(output)
-        }
-
-        /// 取出NAVM输出（在开头）
-        /// * ⚠️可能没有（空缓冲区）
-        #[inline]
-        fn take(&mut self) -> Option<Output> {
-            self.__cached_outputs_mut().pop_front()
-        }
-
-        /// 清空
-        /// * 🎯用于推理器「向外输出并清空内部结果」备用
-        ///   * 🚩【2024-05-13 02:13:21】现在直接用`while let Some(output) = self.take()`型语法
-        #[inline]
-        fn clear(&mut self) {
-            self.__cached_outputs_mut().clear()
-        }
-    }
-
-    /// 🆕[`MemoryRecorder`]的具体特征
-    /// * ✅统一的构造函数
-    pub trait MemoryRecorderConcrete: MemoryRecorder + Sized {
-        /// 🆕构造函数
-        /// * 🚩构造一个空的「记忆区记录者」
-        fn new() -> Self;
-    }
-
-    /// 「记忆区记录器」初代实现
-    /// * 🚩使用「NAVM输出」表示
-    #[derive(Debug, Clone, Default)]
-    pub struct MemoryRecorderV1 {
-        /// 输出缓冲区
-        cached_outputs: VecDeque<Output>,
-    }
-
-    /// 实现「记忆区记录器」（字段对应）
-    impl MemoryRecorder for MemoryRecorderV1 {
-        fn cached_outputs(&self) -> &VecDeque<Output> {
-            &self.cached_outputs
-        }
-
-        fn __cached_outputs_mut(&mut self) -> &mut VecDeque<Output> {
-            &mut self.cached_outputs
-        }
-    }
-
-    impl MemoryRecorderConcrete for MemoryRecorderV1 {
-        // 构造函数
-        // * 🚩默认构造空数组
-        #[inline]
-        fn new() -> Self {
-            Self::default()
-        }
-    }
-}
-use super::{ConceptBag, NovelTaskBag};
-use navm::output::Output;
-pub use report::*;
+use super::ConceptBag;
+use crate::{entity::*, inference::*, language::Term, nars::DEFAULT_PARAMETERS, storage::*};
 
 /// 模拟`nars.entity.Memory`
 /// * 🚩直接通过「要求[『推理上下文』](ReasonContext)」获得完整的「类型约束」
@@ -119,20 +25,17 @@ pub trait Memory: ReasonContext<Memory = Self> + Sized {
     /// * 🚩【2024-05-07 20:04:25】必须与绑定的「概念」类型一致
     type ConceptBag: ConceptBag<Concept = Self::Concept>;
 
-    /// 绑定的「任务袋」类型
-    /// * 🚩【2024-05-07 20:04:25】必须与「概念」中的「任务」一致
-    /// * 🎯对应`Self::novel_tasks`
-    type NovelTaskBag: NovelTaskBag<Task = Self::Task>;
-
-    /// 绑定的「记录者」类型
-    type Recorder: MemoryRecorderConcrete;
-
     // 字段 //
 
     // ! ❌【2024-05-07 19:59:14】暂不迁移`reasoner`引用：拆解其用途如「时钟」「音量」等属性
     // * 📝OpenNARS中`Memory`用到`reasoner`的地方：`initTimer`、`getTime`(Reasoner.time)、`silenceValue`、`updateTimer`
 
     /* ---------- Long-term storage for multiple cycles ---------- */
+
+    /* 📝诸多方法现已外迁至「推理器」中
+     * newTasks
+     * novelTasks
+     */
 
     /// 模拟`Memory.concepts`
     /// * 🚩私有+读写
@@ -143,27 +46,6 @@ pub trait Memory: ReasonContext<Memory = Self> + Sized {
     fn __concepts(&self) -> &Self::ConceptBag;
     /// [`Memory::concepts`]的可变版本
     fn __concepts_mut(&mut self) -> &mut Self::ConceptBag;
-
-    /// 模拟`Memory.novelTasks`
-    /// * 🚩私有+读写
-    ///
-    /// # 📄OpenNARS
-    ///
-    /// New tasks with novel composed terms, for delayed and selective processing
-    fn __novel_tasks(&self) -> &Self::NovelTaskBag;
-    /// [`Memory::novel_tasks`]的可变版本
-    fn __novel_tasks_mut(&mut self) -> &mut Self::NovelTaskBag;
-
-    /// 模拟`Memory.recorder`、`getRecorder`、`setRecorder`
-    /// * 🚩🆕【2024-05-07 20:08:35】目前使用新定义的[`MemoryRecorder`]类型
-    /// * 📝OpenNARS中`Memory`用到`recorder`的地方：`init`、`inputTask`、`activatedTask`
-    ///
-    /// # 📄OpenNARS
-    ///
-    /// Inference record text to be written into a log file
-    fn recorder(&self) -> &Self::Recorder;
-    /// [`Memory::recorder`]的可变版本
-    fn recorder_mut(&mut self) -> &mut Self::Recorder;
 
     /// 模拟`Memory.beliefForgettingRate`、`Memory.getBeliefForgettingRate`
     /// * 🚩模拟方法：作为变量属性，在每个[「概念」](Concept)构造时作为参数传入
@@ -195,21 +77,6 @@ pub trait Memory: ReasonContext<Memory = Self> + Sized {
         self.__concepts()._forget_rate()
     }
 
-    /// 模拟`Memory.newTasks`
-    /// * 🚩读写：OpenNARS中要读写对象
-    /// * 📝虽然OpenNARS中被认作是「短期工作空间」，但实际上是个长期的工作空间
-    ///   * 📝并且，只在「记忆区」内部被使用，用作「立即推理」
-    ///   * 🚩【2024-05-12 14:38:58】决议：两头都有
-    ///     * 在「记忆区回收上下文」时从「上下文的『新任务』接收」
-    ///
-    /// # 📄OpenNARS
-    ///
-    /// List of new tasks accumulated in one cycle, to be processed in the next cycle
-    fn __new_tasks(&self) -> &[Self::Task];
-    /// [`Memory::__new_tasks`]的可变版本
-    /// * 🚩【2024-05-07 21:13:39】暂时用[`VecDeque`]代替
-    fn __new_tasks_mut(&mut self) -> &mut VecDeque<Self::Task>;
-
     /* ---------- Constructor ---------- */
 
     /// 模拟`Memory.init`
@@ -227,14 +94,11 @@ pub trait Memory: ReasonContext<Memory = Self> + Sized {
         randomNumber = new Random(1);
         recorder.append("\n-----RESET-----\n"); */
         self.__concepts_mut().init();
-        self.__novel_tasks_mut().init();
-        self.__new_tasks_mut().clear();
+        // self.__novel_tasks_mut().init(); // ! 🚩【2024-05-18 10:59:35】现已迁移到「推理器」
+        // self.__new_tasks_mut().clear(); // ! 🚩【2024-05-18 10:59:35】现已迁移到「推理器」
         // exportStrings.clear();
         // reasoner.initTimer();
         // randomNumber = new Random(1);
-        self.recorder_mut().put(Output::INFO {
-            message: "-----RESET-----".into(),
-        })
     }
 
     /* ---------- conversion utilities ---------- */
@@ -387,53 +251,10 @@ pub trait Memory: ReasonContext<Memory = Self> + Sized {
         }
     }
 
-    /* ---------- new task entries ---------- */
-    /*
-     * There are several types of new tasks, all added into the
-     * newTasks list, to be processed in the next workCycle.
-     * Some of them are reported and/or logged.
+    /* 📝诸多方法现均被置入「推理器」而非「记忆区」中
+     * report
+     * input_task
      */
-
-    /// 模拟`Memory.inputTask`
-    /// * 🚩【2024-05-07 22:51:11】在此对[`BudgetValue::above_threshold`]引入[「预算阈值」超参数](crate::nars::Parameters::budget_threshold)
-    ///
-    /// TODO: 🏗️【2024-05-13 10:41:12】后续可能要放到推理器中
-    /// # 📄OpenNARS
-    ///
-    /// Input task processing. Invoked by the outside or inside environment.
-    /// Outside: StringParser (input); Inside: Operator (feedback). Input tasks
-    /// with low priority are ignored, and the others are put into task buffer.
-    ///
-    /// @param task The input task
-    fn input_task(&mut self, task: Self::Task) {
-        /* 📄OpenNARS源码：
-        if (task.getBudget().aboveThreshold()) {
-            recorder.append("!!! Perceived: " + task + "\n");
-            report(task.getSentence(), ReportType.IN); // report input
-            newTasks.add(task); // wait to be processed in the next workCycle
-        } else {
-            recorder.append("!!! Neglected: " + task + "\n");
-        } */
-        let budget_threshold = DEFAULT_PARAMETERS.budget_threshold;
-        // * ✅【2024-05-07 23:22:54】现在通过重命名「真值」「预算值」的相应方法，不再有命名冲突（`from_float`→`from_floats`）
-        let budget_threshold = Self::ShortFloat::from_float(budget_threshold);
-        if task.budget().above_threshold(budget_threshold) {
-            // ? 💭【2024-05-07 22:57:48】实际上只需要输出`IN`即可：日志系统不必照着OpenNARS的来
-            // * 🚩此处两个输出合而为一
-            let narsese = NarseseValue::from_task(task.to_lexical());
-            self.recorder_mut().put(Output::IN {
-                content: format!("!!! Perceived: {}", task.to_display_long()),
-                narsese: Some(narsese),
-            });
-            // * 📝只追加到「新任务」里边，并不进行推理
-            self.__new_tasks_mut().push_back(task);
-        } else {
-            // 此时还是输出一个「被忽略」好
-            self.recorder_mut().put(Output::COMMENT {
-                content: format!("!!! Neglected: {}", task.to_display_long()),
-            });
-        }
-    }
 
     /* 📝诸多方法现均被置入「推理上下文」而非「记忆区」中
      * activated_task
@@ -472,10 +293,9 @@ pub trait Memory: ReasonContext<Memory = Self> + Sized {
 pub trait MemoryConcrete: Memory + Sized {
     /// 🆕包含所有参数的内部构造函数
     fn __new(
-        recorder: Self::Recorder,
         concepts: Self::ConceptBag,
-        novel_tasks: Self::NovelTaskBag,
-        new_tasks: VecDeque<Self::Task>,
+        // novel_tasks: Self::NovelTaskBag, // * 🚩【2024-05-18 11:08:40】已外迁至「推理器」中
+        // new_tasks: VecDeque<Self::Task>, // * 🚩【2024-05-18 11:17:19】已外迁至「推理器」中
         belief_forgetting_rate: usize,
         task_forgetting_rate: usize,
         // concept_forgetting_rate: usize, // * 🚩【2024-05-07 20:35:46】目前直接存到「概念袋」中
@@ -504,20 +324,13 @@ pub trait MemoryConcrete: Memory + Sized {
         newTasks = new LinkedList<>();
         exportStrings = new ArrayList<>(); */
         Self::__new(
-            <Self::Recorder as MemoryRecorderConcrete>::new(),
-            <Self::ConceptBag as BagConcrete<Self::Concept>>::new(
+            BagConcrete::new(
                 // * 🚩复刻`nars.storage.ConceptBag.capacity`
                 DEFAULT_PARAMETERS.concept_bag_size,
                 // * 🚩复刻`nars.storage.ConceptBag.forgetRate`
                 concept_forgetting_rate,
             ),
-            <Self::NovelTaskBag as BagConcrete<Self::Task>>::new(
-                // * 🚩复刻`nars.storage.NovelTaskBag.capacity`
-                DEFAULT_PARAMETERS.task_buffer_size,
-                // * 🚩复刻`nars.storage.NovelTaskBag.forgetRate`
-                DEFAULT_PARAMETERS.new_task_forgetting_cycle,
-            ),
-            VecDeque::new(), // TODO: 🏗️【2024-05-07 21:09:58】日后是否可独立成一个`add`、`size`、`get`的特征？
+            // VecDeque::new(),
             belief_forgetting_rate,
             task_forgetting_rate,
         )

@@ -19,18 +19,18 @@ use crate::{entity::*, inference::*, language::Term};
 ///
 /// Forward inference only, except the last group (dependent variable
 /// introduction) can also be used backward.
-pub trait CompositionalRules: DerivationContext {
+pub trait CompositionalRules<C: ReasonContext> {
     /// 模拟`CompositionalRules.IntroVarSameSubjectOrPredicate`
     ///
     /// # 📄OpenNARS
     ///
     /// 🈚
     fn intro_var_same_subject_or_predicate(
-        original_main_sentence: &Self::Sentence,
-        sub_sentence: &Self::Sentence,
+        original_main_sentence: &C::Sentence,
+        sub_sentence: &C::Sentence,
         component: &Term,
         content: &Term,
-        memory: &mut Self::Memory,
+        memory: &mut C::Memory,
     ) {
         /* 📄OpenNARS源码：
         Sentence cloned = (Sentence) originalMainSentence.clone();
@@ -95,7 +95,7 @@ pub trait CompositionalRules: DerivationContext {
         task_statement: &Term,
         belief_statement: &Term,
         index: SyllogismPosition,
-        memory: &mut Self::Memory,
+        memory: &mut C::Memory,
     ) {
         /* 📄OpenNARS源码：
         if ((!memory.currentTask.getSentence().isJudgment()) || (taskContent.getClass() != beliefContent.getClass())) {
@@ -182,8 +182,8 @@ pub trait CompositionalRules: DerivationContext {
         statement: &Term,
         subject: &Term,
         predicate: &Term,
-        truth: &Self::Truth,
-        memory: &mut Self::Memory,
+        truth: &C::Truth,
+        memory: &mut C::Memory,
     ) {
         /* 📄OpenNARS源码：
          */
@@ -207,7 +207,7 @@ pub trait CompositionalRules: DerivationContext {
         term1: &Term,
         index: SyllogismPosition,
         compound_task: bool,
-        memory: &mut Self::Memory,
+        memory: &mut C::Memory,
     ) {
         /* 📄OpenNARS源码：
         if ((compound instanceof Statement) || (compound instanceof ImageExt) || (compound instanceof ImageInt)) {
@@ -310,7 +310,7 @@ pub trait CompositionalRules: DerivationContext {
         compound: &Term,
         component: &Term,
         compound_task: bool,
-        memory: &mut Self::Memory,
+        memory: &mut C::Memory,
     ) {
         /* 📄OpenNARS源码：
         Task task = memory.currentTask;
@@ -383,7 +383,7 @@ pub trait CompositionalRules: DerivationContext {
         task_statement: &Term,
         belief_statement: &Term,
         index: SyllogismPosition,
-        memory: &mut Self::Memory,
+        memory: &mut C::Memory,
     ) {
         /* 📄OpenNARS源码：
         TruthValue truthT = memory.currentTask.getSentence().getTruth();
@@ -477,7 +477,7 @@ pub trait CompositionalRules: DerivationContext {
         premise1_statement: &Term,
         premise2_statement: &Term,
         old_compound: &Term,
-        memory: &mut Self::Memory,
+        memory: &mut C::Memory,
     ) {
         /* 📄OpenNARS源码：
         Task task = memory.currentTask;
@@ -569,7 +569,7 @@ pub trait CompositionalRules: DerivationContext {
 }
 
 /// 自动实现，以便添加方法
-impl<T: DerivationContext> CompositionalRules for T {}
+impl<C: ReasonContext, T: DerivationContext<C>> CompositionalRules<C> for T {}
 
 /// TODO: 单元测试
 #[cfg(test)]

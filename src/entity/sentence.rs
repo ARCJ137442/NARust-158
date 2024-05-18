@@ -558,7 +558,7 @@ pub trait SentenceConcrete: Sentence + Clone + Hash + PartialEq {
             truth: self
                 .truth()
                 .map(TruthValueConcrete::to_lexical)
-                .unwrap_or(vec![]),
+                .unwrap_or_default(), // * 没有真值则创建一个空数组
         }
     }
 }

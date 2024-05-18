@@ -4,6 +4,7 @@
 
 use crate::{
     global::{GlobalRc, GlobalRcMut, RCMut},
+    inference::ReasonContext,
     nars::{Parameters, Reasoner, ReasonerConcrete},
 };
 use anyhow::Result;
@@ -12,17 +13,18 @@ use navm::{cmd::Cmd, output::Output, vm::VmRuntime};
 /// 虚拟机运行时
 /// * 🎯包装一个虚拟机，以跳出孤儿规则的限制
 #[derive(Debug, Clone)]
-pub struct Runtime<R: ReasonerConcrete> {
+pub struct Runtime<C: ReasonContext, R: ReasonerConcrete<C>> {
     /// 内部推理器字段
     reasoner: R,
     /// 输出通道的共享引用
     /// * 🎯避免「运行时→推理器→通道→运行时」的循环引用
     /// * 🚩「缓存的输出」亦包含在内
-    o_channel: RCMut<ChannelOut<R>>,
+    o_channel: RCMut<ChannelOut<C, R>>,
 }
 
 /// 自身实现
-impl<'this: 'reasoner, 'reasoner, R: ReasonerConcrete + 'reasoner> Runtime<R>
+impl<'this: 'reasoner, 'reasoner, C: ReasonContext, R: ReasonerConcrete<C> + 'reasoner>
+    Runtime<C, R>
 where
     Self: 'this,
 {
@@ -31,7 +33,7 @@ where
     ///   * 📌需要更精细地控制「内部推理器」的状态与成员
     pub fn new(name: impl Into<String>, hyper_parameters: Parameters) -> Self {
         // * 🚩创建推理器
-        let mut reasoner = R::__new(name.into(), hyper_parameters);
+        let mut reasoner = R::with_name_and_parameters(name.into(), hyper_parameters);
 
         // * 🚩创建并加入通道
         let o_channel = RCMut::new_(ChannelOut::new());
@@ -49,7 +51,11 @@ where
 }
 
 /// 实现[虚拟机运行时](VmRuntime)
-impl<R: ReasonerConcrete> VmRuntime for Runtime<R> {
+impl<C, R> VmRuntime for Runtime<C, R>
+where
+    C: ReasonContext,
+    R: ReasonerConcrete<C>,
+{
     fn input_cmd(&mut self, cmd: Cmd) -> Result<()> {
         Reasoner::input_cmd(&mut self.reasoner, cmd);
         Ok(())
@@ -93,17 +99,25 @@ mod channels {
     use crate::io::{Channel, OutputChannel};
     use std::collections::VecDeque;
 
+    /// 初代通用`OutputChannel`实现
+    /// * 🚩【2024-05-17 17:01:54】没有「初代输入通道」：暂时不需要
     #[derive(Debug, Clone)]
-    pub struct ChannelOut<R: ReasonerConcrete> {
-        _marker: std::marker::PhantomData<R>,
+    pub struct ChannelOut<C, R>
+    where
+        C: ReasonContext,
+        R: ReasonerConcrete<C>,
+    {
+        _marker_c: std::marker::PhantomData<C>,
+        _marker_r: std::marker::PhantomData<R>,
         cached_outputs: VecDeque<Output>,
     }
 
-    impl<R: ReasonerConcrete> ChannelOut<R> {
+    impl<C: ReasonContext, R: ReasonerConcrete<C>> ChannelOut<C, R> {
         /// 构造函数
         pub fn new() -> Self {
             Self {
-                _marker: std::marker::PhantomData,
+                _marker_c: std::marker::PhantomData,
+                _marker_r: std::marker::PhantomData,
                 cached_outputs: VecDeque::new(),
             }
         }
@@ -122,14 +136,15 @@ mod channels {
         }
     }
 
-    impl<R: ReasonerConcrete> Default for ChannelOut<R> {
+    impl<C: ReasonContext, R: ReasonerConcrete<C>> Default for ChannelOut<C, R> {
         fn default() -> Self {
             Self::new()
         }
     }
 
-    impl<R: ReasonerConcrete> Channel for ChannelOut<R> {
-        type Reasoner = R;
+    impl<C: ReasonContext, R: ReasonerConcrete<C>> Channel for ChannelOut<C, R> {
+        type Context = C;
+        // type Reasoner = R;
 
         /// 始终无需移除
         fn need_remove(&self) -> bool {
@@ -138,15 +153,16 @@ mod channels {
     }
 
     /// 对自身实现
-    impl<R: ReasonerConcrete> OutputChannel for ChannelOut<R> {
-        fn next_output(&mut self, _reasoner: &mut Self::Reasoner, outputs: &[Output]) {
+    impl<C: ReasonContext, R: ReasonerConcrete<C>> OutputChannel for ChannelOut<C, R> {
+        fn next_output(&mut self /* , _reasoner: &mut Self::Reasoner */, outputs: &[Output]) {
             // * 🚩（复制并）存入自身缓存中
             self.cached_outputs.extend(outputs.iter().cloned());
         }
     }
 
-    impl<R: ReasonerConcrete> Channel for RCMut<ChannelOut<R>> {
-        type Reasoner = R;
+    impl<C: ReasonContext, R: ReasonerConcrete<C>> Channel for RCMut<ChannelOut<C, R>> {
+        type Context = C;
+        // type Reasoner = R;
 
         /// 委托到内部值
         fn need_remove(&self) -> bool {
@@ -155,9 +171,9 @@ mod channels {
     }
 
     /// 对Rc<RefCell>自身实现
-    impl<R: ReasonerConcrete> OutputChannel for RCMut<ChannelOut<R>> {
-        fn next_output(&mut self, reasoner: &mut Self::Reasoner, outputs: &[Output]) {
-            self.mut_().next_output(reasoner, outputs)
+    impl<C: ReasonContext, R: ReasonerConcrete<C>> OutputChannel for RCMut<ChannelOut<C, R>> {
+        fn next_output(&mut self /* , reasoner: &mut Self::Reasoner */, outputs: &[Output]) {
+            self.mut_().next_output(/* reasoner, */ outputs)
             // match self.mut_() {
             //     Some(channel) => channel.next_output(reasoner, outputs),
             //     None => eprintln!("ChannelOut<R> is not initialized | outputs = {outputs:?}"),

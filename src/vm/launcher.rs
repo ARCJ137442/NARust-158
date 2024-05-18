@@ -4,7 +4,10 @@
 //! * ✅【2024-05-15 17:01:58】完成初代实现：名称、超参数
 
 use super::Runtime;
-use crate::nars::{Parameters, ReasonerConcrete};
+use crate::{
+    inference::ReasonContext,
+    nars::{Parameters, ReasonerConcrete},
+};
 use anyhow::Result;
 use navm::vm::VmLauncher;
 use std::marker::PhantomData;
@@ -12,9 +15,15 @@ use std::marker::PhantomData;
 /// 虚拟机启动器
 /// * 🎯作为启动虚拟机的配置与脚手架
 #[derive(Debug, Clone, Default, PartialEq)]
-pub struct Launcher<R: ReasonerConcrete> {
+pub struct Launcher<C, R>
+where
+    C: ReasonContext,
+    R: ReasonerConcrete<C>,
+{
     /// 「推理器」类型标注`R`
-    _marker: PhantomData<R>,
+    _marker_r: PhantomData<R>,
+    /// 「推理器」类型标注`C`
+    _marker_c: PhantomData<C>,
     /// 虚拟机名称
     /// * 🚩即「推理器名称」
     name: String,
@@ -22,11 +31,12 @@ pub struct Launcher<R: ReasonerConcrete> {
     hyper_parameters: Parameters,
 }
 
-impl<R: ReasonerConcrete> Launcher<R> {
+impl<C: ReasonContext, R: ReasonerConcrete<C>> Launcher<C, R> {
     /// 构造函数
     pub fn new(name: impl Into<String>, hyper_parameters: Parameters) -> Self {
         Self {
-            _marker: PhantomData,
+            _marker_c: PhantomData,
+            _marker_r: PhantomData,
             name: name.into(),
             hyper_parameters,
         }
@@ -34,8 +44,8 @@ impl<R: ReasonerConcrete> Launcher<R> {
 }
 
 /// 虚拟机启动器
-impl<R: ReasonerConcrete> VmLauncher for Launcher<R> {
-    type Runtime = Runtime<R>;
+impl<C: ReasonContext, R: ReasonerConcrete<C>> VmLauncher for Launcher<C, R> {
+    type Runtime = Runtime<C, R>;
 
     fn launch(self) -> Result<Self::Runtime> {
         // * 🚩创建新运行时

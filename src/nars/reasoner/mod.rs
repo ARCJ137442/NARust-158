@@ -9,4 +9,6 @@ nar_dev_utils::mods! {
     pub use parse_task;
     // 功能：推理循环
     pub use work_cycle;
+    // 功能：输出报告
+    pub use report;
 }

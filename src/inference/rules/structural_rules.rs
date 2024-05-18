@@ -18,7 +18,7 @@ use crate::{entity::*, global::Float, inference::*, language::Term, nars::DEFAUL
 /// # 📄OpenNARS
 ///
 /// Single-premise inference rules involving compound terms. Input are one sentence (the premise) and one TermLink (indicating a component)
-pub trait StructuralRules: DerivationContext {
+pub trait StructuralRules<C: ReasonContext> {
     /// 模拟`StructuralRules.RELIANCE`
     const __RELIANCE: Float = DEFAULT_PARAMETERS.reliance;
 
@@ -45,7 +45,7 @@ pub trait StructuralRules: DerivationContext {
         index: usize,
         statement: &Term,
         side: SyllogismPosition,
-        memory: &mut Self::Memory,
+        memory: &mut C::Memory,
     ) {
         /* 📄OpenNARS源码：
         if (compound.equals(statement.componentAt(side))) {
@@ -111,7 +111,7 @@ pub trait StructuralRules: DerivationContext {
     ///
     /// @param statement The premise
     /// @param memory    Reference to the memory
-    fn structural_decompose2(statement: &Term, memory: &mut Self::Memory) {
+    fn structural_decompose2(statement: &Term, memory: &mut C::Memory) {
         /* 📄OpenNARS源码：
         Term subj = statement.getSubject();
         Term pred = statement.getPredicate();
@@ -186,7 +186,7 @@ pub trait StructuralRules: DerivationContext {
         compound: &Term,
         index: usize,
         statement: &Term,
-        memory: &mut Self::Memory,
+        memory: &mut C::Memory,
     ) {
         /* 📄OpenNARS源码：
         if (!memory.currentTask.getSentence().isJudgment()) {
@@ -242,7 +242,7 @@ pub trait StructuralRules: DerivationContext {
         compound: &Term,
         index: usize,
         statement: &Term,
-        memory: &mut Self::Memory,
+        memory: &mut C::Memory,
     ) {
         /* 📄OpenNARS源码：
         if (!memory.currentTask.getSentence().isJudgment()) {
@@ -297,8 +297,8 @@ pub trait StructuralRules: DerivationContext {
     fn __structural_statement(
         subject: &Term,
         predicate: &Term,
-        truth: &Self::Truth,
-        memory: &mut Self::Memory,
+        truth: &C::Truth,
+        memory: &mut C::Memory,
     ) {
         /* 📄OpenNARS源码：
         Task task = memory.currentTask;
@@ -328,7 +328,7 @@ pub trait StructuralRules: DerivationContext {
         compound: &Term,
         statement: &Term,
         side: SyllogismPosition,
-        memory: &mut Self::Memory,
+        memory: &mut C::Memory,
     ) {
         /* 📄OpenNARS源码：
         if (compound.size() > 1) {
@@ -387,8 +387,8 @@ pub trait StructuralRules: DerivationContext {
         inh: &Term,
         old_content: &Term,
         indices: &[usize],
-        task: &Self::Task,
-        memory: &mut Self::Memory,
+        task: &C::Task,
+        memory: &mut C::Memory,
     ) {
         /* 📄OpenNARS源码：
         Term subject = inh.getSubject();
@@ -485,7 +485,7 @@ pub trait StructuralRules: DerivationContext {
     /// @param subject   The subject term
     /// @param predicate The predicate term
     /// @param memory    Reference to the memory
-    fn __transform_subject_pi(subject: &Term, predicate: &Term, memory: &mut Self::Memory) {
+    fn __transform_subject_pi(subject: &Term, predicate: &Term, memory: &mut C::Memory) {
         /* 📄OpenNARS源码：
         TruthValue truth = memory.currentTask.getSentence().getTruth();
         BudgetValue budget;
@@ -542,7 +542,7 @@ pub trait StructuralRules: DerivationContext {
     /// @param subject   The subject term
     /// @param predicate The predicate term
     /// @param memory    Reference to the memory
-    fn __transform_predicate_pi(subject: &Term, predicate: &Term, memory: &mut Self::Memory) {
+    fn __transform_predicate_pi(subject: &Term, predicate: &Term, memory: &mut C::Memory) {
         /* 📄OpenNARS源码：
         TruthValue truth = memory.currentTask.getSentence().getTruth();
         BudgetValue budget;
@@ -605,7 +605,7 @@ pub trait StructuralRules: DerivationContext {
         compound: &Term,
         component: &Term,
         compound_task: bool,
-        memory: &mut Self::Memory,
+        memory: &mut C::Memory,
     ) {
         /* 📄OpenNARS源码：
         if (!component.isConstant()) {
@@ -643,7 +643,7 @@ pub trait StructuralRules: DerivationContext {
     ///
     /// @param content The premise
     /// @param memory  Reference to the memory
-    fn transform_negation(content: &Term, memory: &mut Self::Memory) {
+    fn transform_negation(content: &Term, memory: &mut C::Memory) {
         /* 📄OpenNARS源码：
         Task task = memory.currentTask;
         Sentence sentence = task.getSentence();
@@ -669,7 +669,7 @@ pub trait StructuralRules: DerivationContext {
     ///
     /// @param statement The premise
     /// @param memory    Reference to the memory
-    fn contraposition(statement: &Term, memory: &mut Self::Memory) {
+    fn contraposition(statement: &Term, memory: &mut C::Memory) {
         /* 📄OpenNARS源码：
         Term subj = statement.getSubject();
         Term pred = statement.getPredicate();
@@ -694,7 +694,7 @@ pub trait StructuralRules: DerivationContext {
 }
 
 /// 自动实现，以便添加方法
-impl<T: DerivationContext> StructuralRules for T {}
+impl<C: ReasonContext, T: DerivationContext<C>> StructuralRules<C> for T {}
 
 /// TODO: 单元测试
 #[cfg(test)]

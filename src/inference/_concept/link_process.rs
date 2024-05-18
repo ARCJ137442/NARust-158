@@ -13,7 +13,7 @@ use crate::{entity::*, inference::*, language::Term, storage::*};
 
 ///
 /// * 🚩因为`<Self as LocalRules>::solution_quality`要求[`Sized`]
-pub trait ConceptProcessLink: DerivationContext {
+pub trait ConceptProcessLink<C: ReasonContext>: DerivationContext<C> {
     /// 模拟`Concept.linkToTask`
     /// * ⚠️【2024-05-15 17:20:47】涉及大量共享引用
     ///   * 💫共享引用策源地：如何在无GC语言中尽可能减少这类共享引用，是个问题
@@ -28,7 +28,7 @@ pub trait ConceptProcessLink: DerivationContext {
     ///
     /// @param task    The task to be linked
     /// @param cont
-    fn __link_to_task(&mut self, task: &mut Self::Task) {
+    fn __link_to_task(&mut self, task: &mut C::Task) {
         /* 📄OpenNARS源码：
         BudgetValue taskBudget = task.getBudget();
         TaskLink taskLink = new TaskLink(task, null, taskBudget); // link type: SELF
@@ -76,7 +76,7 @@ pub trait ConceptProcessLink: DerivationContext {
     /// called only from Memory.continuedProcess
     ///
     /// @param taskLink The termLink to be inserted
-    fn insert_task_link(&mut self, task_link: Self::TaskLink) {
+    fn insert_task_link(&mut self, task_link: C::TaskLink) {
         /* 📄OpenNARS源码：
         BudgetValue taskBudget = taskLink.getBudget();
         taskLinks.putIn(taskLink);
@@ -93,7 +93,7 @@ pub trait ConceptProcessLink: DerivationContext {
     /// called only from Memory.continuedProcess
     ///
     /// @param taskBudget The BudgetValue of the task
-    fn build_term_links(&mut self, task_budget: &Self::Budget) {
+    fn build_term_links(&mut self, task_budget: &C::Budget) {
         /* 📄OpenNARS源码：
         Term t;
         Concept concept;
@@ -133,7 +133,7 @@ pub trait ConceptProcessLink: DerivationContext {
     /// whether to build the link.
     ///
     /// @return A list of TermLink templates
-    fn prepare_component_link_templates(self_term: &Term) -> Vec<Self::TermLink> {
+    fn prepare_component_link_templates(self_term: &Term) -> Vec<C::TermLink> {
         /* 📄OpenNARS源码：
         ArrayList<TermLink> componentLinks = new ArrayList<>();
         short type = (self instanceof Statement) ? TermLink.COMPOUND_STATEMENT : TermLink.COMPOUND; // default
@@ -171,10 +171,10 @@ pub trait ConceptProcessLink: DerivationContext {
     /// @param term           The CompoundTerm for which the links are built
     fn __prepare_component_link_templates(
         self_term: &Term,
-        component_links: &mut Vec<Self::TermLink>,
+        component_links: &mut Vec<C::TermLink>,
         type_: &TermLinkType,
         term: &Term,
-    ) -> Vec<Self::TermLink> {
+    ) -> Vec<C::TermLink> {
         /* 📄OpenNARS源码：
         for (int i = 0; i < term.size(); i++) { // first level components
             final Term t1 = term.componentAt(i);
@@ -226,7 +226,7 @@ pub trait ConceptProcessLink: DerivationContext {
     /// called from buildTermLinks only
     ///
     /// @param termLink The termLink to be inserted
-    fn insert_term_link(&mut self, term_link: Self::TermLink, concept: &mut Self::Concept) {
+    fn insert_term_link(&mut self, term_link: C::TermLink, concept: &mut C::Concept) {
         /* 📄OpenNARS源码：
         termLinks.putIn(termLink); */
         concept.__term_links_mut().put_in(term_link);
@@ -234,7 +234,7 @@ pub trait ConceptProcessLink: DerivationContext {
 }
 
 /// 自动实现，以便添加方法
-impl<T: DerivationContext> ConceptProcessLink for T {}
+impl<C: ReasonContext, T: DerivationContext<C>> ConceptProcessLink<C> for T {}
 
 /// TODO: 单元测试
 #[cfg(test)]

@@ -6,7 +6,7 @@
 //! TODO: 完成具体实现
 
 use crate::inference::DerivationContext;
-use crate::{entity::*, inference::*, language::Term};
+use crate::{inference::*, language::Term};
 
 /// 🆕表示「三段论侧」
 /// * 🎯使用枚举对标以下推理中的`side`参数
@@ -40,7 +40,7 @@ pub enum SyllogismSide {
 /// # 📄OpenNARS
 ///
 /// Syllogisms: Inference rules based on the transitivity of the relation.
-pub trait SyllogisticRules: DerivationContext {
+pub trait SyllogisticRules<C: ReasonContext> {
     // --------------- rules used in both first-tense inference and higher-tense inference ---------------
 
     /// 模拟`SyllogisticRules.dedExe`
@@ -60,9 +60,9 @@ pub trait SyllogisticRules: DerivationContext {
     fn ded_exe(
         term1: &Term,
         term2: &Term,
-        sentence: &Self::Sentence,
-        belief: &Self::Sentence,
-        memory: &mut Self::Memory,
+        sentence: &C::Sentence,
+        belief: &C::Sentence,
+        memory: &mut C::Memory,
     ) {
         /* 📄OpenNARS源码：
         if (Statement.invalidStatement(term1, term2)) {
@@ -106,10 +106,10 @@ pub trait SyllogisticRules: DerivationContext {
     fn abd_ind_com(
         term1: &Term,
         term2: &Term,
-        task_sentence: &Self::Sentence,
-        belief: &Self::Sentence,
+        task_sentence: &C::Sentence,
+        belief: &C::Sentence,
         figure: &SyllogismFigure,
-        memory: &mut Self::Memory,
+        memory: &mut C::Memory,
     ) {
         /* 📄OpenNARS源码：
         if (Statement.invalidStatement(term1, term2) || Statement.invalidPair(term1.getName(), term2.getName())) {
@@ -159,10 +159,10 @@ pub trait SyllogisticRules: DerivationContext {
     fn analogy(
         subject: &Term,
         predicate: &Term,
-        asym: &Self::Sentence,
-        sym: &Self::Sentence,
+        asym: &C::Sentence,
+        sym: &C::Sentence,
         figure: SyllogismFigure,
-        memory: &mut Self::Memory,
+        memory: &mut C::Memory,
     ) {
         /* 📄OpenNARS源码：
         if (Statement.invalidStatement(subj, pred)) {
@@ -204,10 +204,10 @@ pub trait SyllogisticRules: DerivationContext {
     fn resemblance(
         subject: &Term,
         predicate: &Term,
-        belief: &Self::Sentence,
-        sentence: &Self::Sentence,
+        belief: &C::Sentence,
+        sentence: &C::Sentence,
         figure: SyllogismFigure,
-        memory: &mut Self::Memory,
+        memory: &mut C::Memory,
     ) {
         /* 📄OpenNARS源码：
         if (Statement.invalidStatement(term1, term2)) {
@@ -244,10 +244,10 @@ pub trait SyllogisticRules: DerivationContext {
     /// @param side         The location of s2 in s1
     /// @param memory       Reference to the memory
     fn detachment(
-        main_sentence: &Self::Sentence,
-        sub_sentence: &Self::Sentence,
+        main_sentence: &C::Sentence,
+        sub_sentence: &C::Sentence,
         side: SyllogismSide,
-        memory: &mut Self::Memory,
+        memory: &mut C::Memory,
     ) {
         /* 📄OpenNARS源码：
         Statement statement = (Statement) mainSentence.getContent();
@@ -313,11 +313,11 @@ pub trait SyllogisticRules: DerivationContext {
     /// @param side     The location of the shared term in premise2: 0 for subject, 1 for predicate, -1 for the whole term
     /// @param memory   Reference to the memory
     fn conditional_ded_ind(
-        premise1: &Self::Sentence,
+        premise1: &C::Sentence,
         index: SyllogismPosition,
         premise2: &Term,
         side: SyllogismSide,
-        memory: &mut Self::Memory,
+        memory: &mut C::Memory,
     ) {
         /* 📄OpenNARS源码：
         Task task = memory.currentTask;
@@ -403,11 +403,11 @@ pub trait SyllogisticRules: DerivationContext {
     /// @param side     The location of the shared term in premise2: 0 for subject, 1 for predicate, -1 for the whole term
     /// @param memory   Reference to the memory
     fn conditional_ana(
-        premise1: &Self::Sentence,
+        premise1: &C::Sentence,
         index: SyllogismPosition,
         premise2: &Term,
         side: SyllogismSide,
-        memory: &mut Self::Memory,
+        memory: &mut C::Memory,
     ) {
         /* 📄OpenNARS源码：
         Task task = memory.currentTask;
@@ -561,8 +561,8 @@ pub trait SyllogisticRules: DerivationContext {
     fn eliminate_var_dep(
         compound: &Term,
         component: &Term,
-        compound_task: &Self::Task,
-        memory: &mut Self::Memory,
+        compound_task: &C::Task,
+        memory: &mut C::Memory,
     ) {
         /* 📄OpenNARS源码：
         Term content = CompoundTerm.reduceComponents(compound, component, memory);
@@ -587,7 +587,7 @@ pub trait SyllogisticRules: DerivationContext {
 }
 
 /// 自动实现，以便添加方法
-impl<T: DerivationContext> SyllogisticRules for T {}
+impl<C: ReasonContext, T: DerivationContext<C>> SyllogisticRules<C> for T {}
 
 /// TODO: 单元测试
 #[cfg(test)]

@@ -7,18 +7,24 @@
 //!   * 📌单前提结论(当前任务之标点) from 结构规则
 //!   * 📌单前提结论 from 本地规则、结构规则
 //! * 📝该处逻辑均在OpenNARS中用作「产生（并存储）导出结论」
-//!   TODO: 后续或考虑完全基于「推导上下文」
 //!
 //! * ✅【2024-05-12 16:10:24】基本迁移完所有功能
+//! * ♻️【2024-05-17 21:53:40】目前完全基于「推导上下文」工作
 
 use crate::{entity::*, inference::*, language::Term, nars::DEFAULT_PARAMETERS, *};
 use narsese::api::NarseseValue;
 use navm::output::Output;
 
 /// 记忆区处理：整理与「记忆区」有关的操作
-/// * 🚩目前以「记忆区」为中心，以便从「记忆区」处添加方法
+/// * 🚩【2024-05-17 21:44:00】目前完全基于「推理推导上下文」
+///   * 📝OpenNARS中，这里头的所有方法均会在「推理周期」中被调用
+///     * 📌其中有「概念推理」阶段，亦有「直接推理」阶段
+///       * ⚠️这意味着要对所有「推理上下文」支持
+///     * 📄在「直接推理」阶段，需要对「修正规则」予以支持
 /// * 🚩【2024-05-12 15:00:59】因为`RuleTables::transform_task(self);`，要求[`Sized`]
-pub trait MemoryDerivationProcess: DerivationContext {
+/// * 🚩【2024-05-17 22:54:49】通过【参数隔离】未实现的特征字段，实现「降低特征约束要求」「直接推理/概念推理 通用」的目的
+///   * 📄隔离`current_task`以无需获取`current_task`
+pub trait MemoryDerivationProcess<C: ReasonContext>: DerivationContext<C> {
     /// 模拟`Memory.activatedTask`
     /// * 📝OpenNARS中仅用于「本地规则」
     ///
@@ -31,9 +37,10 @@ pub trait MemoryDerivationProcess: DerivationContext {
     /// @param candidateBelief The belief to be used in future inference, for forward/backward correspondence
     fn activated_task(
         &mut self,
-        budget: &Self::Budget,
-        sentence: Self::Sentence,
-        candidate_belief: Self::Sentence,
+        budget: &C::Budget,
+        sentence: C::Sentence,
+        current_task: &C::Task,
+        candidate_belief: C::Sentence,
     ) {
         /* 📄OpenNARS源码：
         Task task = new Task(sentence, budget, currentTask, sentence, candidateBelief);
@@ -47,10 +54,11 @@ pub trait MemoryDerivationProcess: DerivationContext {
             }
         }
         newTasks.add(task); */
-        let task = <Self::Task as TaskConcrete>::from_activate(
+        let task = TaskConcrete::from_activate(
             sentence.clone(),
             budget.clone(),
-            self.current_task().clone(),
+            // TODO: 【2024-05-17 21:52:33】↓后续这俩不能用`clone`，要变成一个「链接」的形式
+            current_task.clone(),
             sentence.clone(),
             candidate_belief,
         );
@@ -81,7 +89,7 @@ pub trait MemoryDerivationProcess: DerivationContext {
     /// Derived task comes from the inference rules.
     ///
     /// @param task the derived task
-    fn derived_task(&mut self, task: Self::Task) {
+    fn derived_task(&mut self, task: C::Task) {
         /* 📄OpenNARS源码：
         if (task.getBudget().aboveThreshold()) {
             recorder.append("!!! Derived: " + task + "\n");
@@ -96,7 +104,7 @@ pub trait MemoryDerivationProcess: DerivationContext {
             recorder.append("!!! Ignored: " + task + "\n");
         } */
         let budget_threshold = DEFAULT_PARAMETERS.budget_threshold;
-        let budget_threshold = Self::ShortFloat::from_float(budget_threshold);
+        let budget_threshold = C::ShortFloat::from_float(budget_threshold);
         let budget_summary = task.summary().to_float();
         // * 🚩🆕【2024-05-08 14:45:59】合并条件：预算值在阈值之上 && 达到（日志用的）音量水平
         if task.above_threshold(budget_threshold) && budget_summary > self.silence_percent() {
@@ -129,9 +137,10 @@ pub trait MemoryDerivationProcess: DerivationContext {
     /// @param newBudget  The budget value in task
     fn double_premise_task_revisable(
         &mut self,
+        current_task: &C::Task,
         new_content: Term,
-        new_truth: Self::Truth,
-        new_budget: Self::Budget,
+        new_truth: C::Truth,
+        new_budget: C::Budget,
     ) {
         /* 📄OpenNARS源码：
         if (newContent != null) {
@@ -139,20 +148,21 @@ pub trait MemoryDerivationProcess: DerivationContext {
             Task newTask = new Task(newSentence, newBudget, currentTask, currentBelief);
             derivedTask(newTask);
         } */
-        let mut new_punctuation = self.current_task().sentence().punctuation().clone();
+        let mut new_punctuation = current_task.sentence().punctuation().clone();
         // * 🆕🚩【2024-05-08 11:52:03】需要以此将「真值」插入「语句类型/标点」中（「问题」可能没有真值）
         if let SentenceType::Judgement(truth) = &mut new_punctuation {
             *truth = new_truth;
         }
-        let new_sentence = <Self::Sentence as SentenceConcrete>::new_revisable(
+        let new_sentence = SentenceConcrete::new_revisable(
             new_content,
             new_punctuation,
             self.new_stamp().as_ref().unwrap().clone(),
         );
-        let new_task = <Self::Task as TaskConcrete>::from_derive(
+        let new_task = TaskConcrete::from_derive(
             new_sentence,
             new_budget,
-            Some(self.current_task().clone()),
+            // TODO: 【2024-05-17 21:52:33】↓后续这俩不能用`clone`，要变成一个「链接」的形式
+            Some(current_task.clone()),
             self.current_belief().clone(),
         );
         self.derived_task(new_task);
@@ -174,9 +184,10 @@ pub trait MemoryDerivationProcess: DerivationContext {
     /// @param revisable  Whether the sentence is revisable
     fn double_premise_task(
         &mut self,
+        current_task: &C::Task,
         new_content: Term,
-        new_truth: Self::Truth,
-        new_budget: Self::Budget,
+        new_truth: C::Truth,
+        new_budget: C::Budget,
         revisable: bool,
     ) {
         /* 📄OpenNARS源码：
@@ -187,21 +198,22 @@ pub trait MemoryDerivationProcess: DerivationContext {
             Task newTask = new Task(newSentence, newBudget, currentTask, currentBelief);
             derivedTask(newTask);
         } */
-        let mut new_punctuation = self.current_task().sentence().punctuation().clone();
+        let mut new_punctuation = current_task.sentence().punctuation().clone();
         // * 🆕🚩【2024-05-08 11:52:03】需要以此将「真值」插入「语句类型/标点」中（「问题」可能没有真值）
         if let SentenceType::Judgement(truth) = &mut new_punctuation {
             *truth = new_truth;
         }
-        let new_sentence = <Self::Sentence as SentenceConcrete>::new(
+        let new_sentence = SentenceConcrete::new(
             new_content,
             new_punctuation,
             self.new_stamp().as_ref().unwrap().clone(),
             revisable, // * 📌【2024-05-08 11:57:19】就这里是新增的
         );
-        let new_task = <Self::Task as TaskConcrete>::from_derive(
+        let new_task = TaskConcrete::from_derive(
             new_sentence,
             new_budget,
-            Some(self.current_task().clone()),
+            // TODO: 【2024-05-17 21:52:33】↓后续这俩不能用`clone`，要变成一个「链接」的形式
+            Some(current_task.clone()),
             self.current_belief().clone(),
         );
         self.derived_task(new_task);
@@ -219,15 +231,17 @@ pub trait MemoryDerivationProcess: DerivationContext {
     /// @param newBudget  The budget value in task
     fn single_premise_task_current(
         &mut self,
+        current_task: &C::Task,
         new_content: Term,
-        new_truth: Self::Truth,
-        new_budget: Self::Budget,
+        new_truth: C::Truth,
+        new_budget: C::Budget,
     ) {
         /* 📄OpenNARS源码：
         singlePremiseTask(newContent, currentTask.getSentence().getPunctuation(), newTruth, newBudget); */
         self.single_premise_task(
+            current_task,
             new_content,
-            self.current_task().sentence().punctuation().clone(),
+            current_task.sentence().punctuation().clone(),
             new_truth,
             new_budget,
         );
@@ -248,10 +262,11 @@ pub trait MemoryDerivationProcess: DerivationContext {
     /// @param newBudget   The budget value in task
     fn single_premise_task(
         &mut self,
+        current_task: &C::Task,
         new_content: Term,
-        punctuation: SentenceType<Self::Truth>,
-        new_truth: Self::Truth,
-        new_budget: Self::Budget,
+        punctuation: SentenceType<C::Truth>,
+        new_truth: C::Truth,
+        new_budget: C::Budget,
     ) {
         /* 📄OpenNARS源码：
         Task parentTask = currentTask.getParentTask();
@@ -268,38 +283,39 @@ pub trait MemoryDerivationProcess: DerivationContext {
         Task newTask = new Task(newSentence, newBudget, currentTask, null);
         derivedTask(newTask); */
         // 判重
-        let parent_task = self.current_task().parent_task();
+        let parent_task = current_task.parent_task();
         if let Some(parent_task) = parent_task {
             if *parent_task.content() == new_content {
                 return;
             }
         }
         // 产生「新标点」与「新真值」
-        let mut new_punctuation = self.current_task().sentence().punctuation().clone();
+        let mut new_punctuation = current_task.sentence().punctuation().clone();
         // * 🆕🚩【2024-05-08 11:52:03】需要以此将「真值」插入「语句类型/标点」中（「问题」可能没有真值）
         if let SentenceType::Judgement(truth) = &mut new_punctuation {
             *truth = new_truth;
         }
         // 产生「新时间戳」
-        let task_sentence = self.current_task().sentence();
+        let task_sentence = current_task.sentence();
         // * 🆕🚩【2024-05-08 14:40:12】此处通过「先决定『旧时间戳』再构造」避免了重复代码与非必要`unwrap`
         let old_stamp = match (task_sentence.is_judgement(), self.current_belief()) {
             (true, _) | (_, None) => task_sentence.stamp(), // * 📄对应`taskSentence.isJudgment() || currentBelief == null`
             (_, Some(belief)) => belief.stamp(),
         };
-        let new_stamp = <Self::Stamp as StampConcrete>::with_old(old_stamp, self.time());
+        let new_stamp = StampConcrete::with_old(old_stamp, self.time());
         // 语句、任务
-        let new_sentence = <Self::Sentence as SentenceConcrete>::new(
+        let new_sentence = SentenceConcrete::new(
             new_content,
             punctuation,
             self.new_stamp().as_ref().unwrap().clone(),
             task_sentence.revisable(), // * 📌【2024-05-08 11:57:19】就这里是新增的
         );
         *self.new_stamp_mut() = Some(new_stamp); // ! 🚩【2024-05-08 15:36:57】必须放在后边：借用检查不通过
-        let new_task = <Self::Task as TaskConcrete>::from_derive(
+        let new_task = TaskConcrete::from_derive(
             new_sentence,
             new_budget,
-            Some(self.current_task().clone()),
+            // TODO: 【2024-05-17 21:52:33】↓后续这俩不能用`clone`，要变成一个「链接」的形式
+            Some(current_task.clone()),
             None,
         );
         self.derived_task(new_task);
@@ -307,7 +323,7 @@ pub trait MemoryDerivationProcess: DerivationContext {
 }
 
 /// 自动实现，以便添加方法
-impl<T: DerivationContext> MemoryDerivationProcess for T {}
+impl<C: ReasonContext, T: DerivationContext<C>> MemoryDerivationProcess<C> for T {}
 
 /// TODO: 单元测试
 #[cfg(test)]

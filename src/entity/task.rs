@@ -58,6 +58,8 @@ pub trait Task: ToDisplayAndBrief {
 
     /// 模拟`Task.parentTask`、`Task.getParentTask`
     /// * 🚩【2024-05-05 20:51:48】目前对「共享引用」使用「引用计数」处理
+    /// * 🚩【2024-05-17 16:13:50】目前先改回「可空非共享引用」形式
+    ///   TODO: 后续仍然要根据实际情况调整：指向「记忆区」中「任务」的唯一链接
     ///
     /// # 📄OpenNARS
     ///
@@ -65,10 +67,18 @@ pub trait Task: ToDisplayAndBrief {
     fn parent_task(&self) -> &Option<Box<Self>>;
     /// [`Task::parent_task`]的可变版本
     /// * 📌只能修改「指向哪个[`Task`]」，不能修改所指向[`Task`]内部的数据
+    /// * 📝OpenNARS中的用法是「一旦构造，不再改变」
+    ///   TODO: 后续可能不再需要此字段
     fn parent_task_mut(&mut self) -> &mut Option<Box<Self>>;
 
     /// 模拟`Task.parentBelief`、`Task.getParentBelief`
     /// * 🚩【2024-05-05 20:51:48】目前对「共享引用」使用「引用计数」处理
+    /// * 🚩【2024-05-17 16:13:50】目前先改回「可空非共享引用」形式
+    ///   TODO: 后续仍然要根据实际情况调整：指向「记忆区」中「任务」的唯一链接
+    /// * 📝OpenNARS只在「本地规则/问答`trySolution`」中使用
+    ///   * 💭实质上是为「本地规则」服务的
+    ///   * 📌上游：`LocalRules.trySolution`、`LocalRules.match`/`Concept.processJudgement`/`Concept.processQuestion`
+    ///   * 📌下游：`Memory.activatedTask`、`new Task(..., solution)`
     ///
     /// # 📄OpenNARS
     ///
@@ -76,6 +86,8 @@ pub trait Task: ToDisplayAndBrief {
     fn parent_belief(&self) -> &Option<Self::Sentence>;
     /// [`Task::parent_belief`]的可变版本
     /// * 📌只能修改「指向哪个[`Sentence`]」，不能修改所指向[`Sentence`]内部的数据
+    /// * 📝OpenNARS中的用法是「一旦构造，不再改变」
+    ///   TODO: 后续可能不再需要此字段
     fn parent_belief_mut(&mut self) -> &mut Option<Self::Sentence>;
 
     /// 模拟`Task.bestSolution`

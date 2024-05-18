@@ -7,8 +7,8 @@
 //!
 //! TODO: 🚧完成具体实现
 
-use crate::inference::DerivationContext;
-use crate::{entity::*, language::*, storage::*};
+use crate::inference::{DerivationContextDirect, DerivationContextReason, ReasonContext};
+use crate::{entity::*, language::*};
 
 /// 🆕三段论位置
 /// * 🎯用于表征[`RuleTables::index_to_figure`]推导出的「三段论子类型」
@@ -104,7 +104,7 @@ pub mod syllogistic_figures {
 /// * 🚩【2024-05-12 14:13:18】目前学习OpenNARS 3.0.4的组织形式——其中所有对「记忆区」的引用，都将由「推理上下文」取代
 ///   * 📄包括「读写词项/任务」「缓存产生的输出（并随后交给记忆区）」等
 ///   * 🚩后续的所有`memory`参数，均将由`self`取代
-pub trait RuleTables: DerivationContext {
+pub trait RuleTables<C: ReasonContext>: DerivationContextReason<C> {
     /// 模拟`RuleTables.reason`
     /// * 🚩【2024-05-08 16:36:34】仅保留「记忆区」单个参数
     ///   * 📌情况：该函数只在[`Memory::__fire_concept`]调用，且其中的`task_link`也固定为「当前任务链」
@@ -257,11 +257,9 @@ pub trait RuleTables: DerivationContext {
                         break;
                 }
         } */
+        // * 🚩【2024-05-17 22:03:57】现在这俩都一定有值了
         let task_link = self.current_task_link();
-        let term_link = self
-            .current_belief_link()
-            .as_ref()
-            .expect("此处必须有：在调用前设定了非空值");
+        let term_link = self.current_belief_link();
         todo!("// TODO: 有待实现")
     }
 
@@ -278,7 +276,7 @@ pub trait RuleTables: DerivationContext {
     /// @param taskTerm   The content of task
     /// @param beliefTerm The content of belief
     /// @param memory     Reference to the memory
-    fn __syllogisms(task_link: &Self::TermLink, term_link: &Self::TermLink) {
+    fn __syllogisms(task_link: &C::TermLink, term_link: &C::TermLink) {
         /* 📄OpenNARS源码：
         Sentence taskSentence = memory.currentTask.getSentence();
         Sentence belief = memory.currentBelief;
@@ -367,8 +365,8 @@ pub trait RuleTables: DerivationContext {
     /// @param memory   Reference to the memory
     fn __asymmetric_asymmetric(
         &mut self,
-        sentence: &Self::Sentence,
-        belief: &Self::Sentence,
+        sentence: &C::Sentence,
+        belief: &C::Sentence,
         figure: SyllogismFigure,
     ) {
         /* 📄OpenNARS源码：
@@ -447,8 +445,8 @@ pub trait RuleTables: DerivationContext {
     /// @param memory Reference to the memory
     fn __asymmetric_symmetric(
         &mut self,
-        asymmetric: &Self::Sentence,
-        symmetric: &Self::Sentence,
+        asymmetric: &C::Sentence,
+        symmetric: &C::Sentence,
         figure: SyllogismFigure,
     ) {
         /* 📄OpenNARS源码：
@@ -517,8 +515,8 @@ pub trait RuleTables: DerivationContext {
     /// @param memory       Reference to the memory
     fn __symmetric_symmetric(
         &mut self,
-        belief: &Self::Sentence,
-        task_sentence: &Self::Sentence,
+        belief: &C::Sentence,
+        task_sentence: &C::Sentence,
         figure: SyllogismFigure,
     ) {
         /* 📄OpenNARS源码：
@@ -567,8 +565,8 @@ pub trait RuleTables: DerivationContext {
     /// @param memory               Reference to the memory
     fn __detachment_with_var(
         &mut self,
-        original_main_sentence: &Self::Sentence,
-        sub_sentence: &Self::Sentence,
+        original_main_sentence: &C::Sentence,
+        sub_sentence: &C::Sentence,
         index: usize,
     ) {
         /* 📄OpenNARS源码：
@@ -737,13 +735,22 @@ pub trait RuleTables: DerivationContext {
         // } */
         todo!("// TODO: 有待实现")
     }
+}
 
+/// 自动实现，以便添加方法
+impl<C: ReasonContext, T: DerivationContextReason<C>> RuleTables<C> for T {}
+
+/// 规则表@「直接推理」
+/// * 🎯只适用于非`RuleTables.reason`的过程
+/// * 🎯直接对标[`DerivationContextDirect`]
+pub trait RuleTablesDirect<C: ReasonContext>: DerivationContextDirect<C> {
     /* ----- inference with one TaskLink only ----- */
 
     /// 模拟`RuleTables.transformTask`
     /// * 🚩【2024-05-08 16:36:34】仅保留「记忆区」单个参数
     ///   * 📌情况：该函数只在[`Memory::__fire_concept`]调用，且其中的`task_link`也固定为「当前任务链」
     ///   * 📌原因：同时传入「自身可变引用」与「自身不可变引用」⇒借用错误
+    /// * 🚩【2024-05-18 01:04:04】该方法仅用于「直接推理」
     ///
     /// # 📄OpenNARS
     ///
@@ -752,7 +759,7 @@ pub trait RuleTables: DerivationContext {
     ///
     /// @param tLink  The task link
     /// @param memory Reference to the memory
-    fn transform_task(/* task_link: &Self::TaskLink,  */ &mut self) {
+    fn transform_task(/* task_link: &C::TaskLink,  */ &mut self) {
         /* 📄OpenNARS源码：
         CompoundTerm content = (CompoundTerm) memory.currentTask.getContent().clone();
         short[] indices = tLink.getIndices();
@@ -773,13 +780,13 @@ pub trait RuleTables: DerivationContext {
         if (inh instanceof Inheritance) {
             StructuralRules.transformProductImage((Inheritance) inh, content, indices, memory);
         } */
-        let task_link = self.current_task_link();
+        let task_link = self.current_task_link().as_ref().unwrap();
         todo!("// TODO: 有待实现")
     }
 }
 
 /// 自动实现，以便添加方法
-impl<T: DerivationContext> RuleTables for T {}
+impl<C: ReasonContext, T: DerivationContextDirect<C>> RuleTablesDirect<C> for T {}
 
 /// TODO: 单元测试
 #[cfg(test)]

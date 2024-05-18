@@ -5,21 +5,60 @@
 //! * 📄在OpenNARS 3.x中已更名为 `nars.main.NAR`
 
 use super::*;
+use crate::entity::{BudgetValue, Item, ShortFloat, TaskConcrete};
 use crate::global::ClockTime;
-use crate::inference::ReasonContext;
+use crate::inference::{DerivationContextDirect, DerivationContextReason, ReasonContext};
 use crate::io::{InputChannel, OutputChannel};
 use crate::nars::{Parameters, DEFAULT_PARAMETERS};
-use crate::storage::{Memory, MemoryRecorder};
+use crate::storage::{BagConcrete, Memory, NovelTaskBag};
+use crate::ToDisplayAndBrief;
 use nar_dev_utils::list;
+use narsese::api::NarseseValue;
 use navm::cmd::Cmd;
 use navm::output::Output;
+use std::collections::VecDeque;
 
 /// 模拟`ReasonerBatch`
+/// * 🚩【2024-05-17 16:48:52】现在直接就是「具体类型」，并且采用泛型而非「关联类型」的方法
+///   * ⚠️避免在绑定「推导上下文」类型中遇到一堆「类型重绑定」
+///     * 📄如`Task = Self::Task`
+/// * 🚩【2024-05-17 17:11:34】因为`parse_task`需要[`Sized`]
 ///
 /// # 📄OpenNARS
 ///
 /// 🈚
-pub trait Reasoner: ReasonContext + Sized {
+pub trait Reasoner<C: ReasonContext>: Sized {
+    /// 绑定的「记录者」类型
+    /// * 🚩【2024-05-17 14:57:13】迁移自原「记忆区」的「记录者」
+    ///   * 🎯能在「推导上下文」构建之前完成「报告/输出」的工作
+    type Recorder: MemoryRecorderConcrete;
+
+    /// 模拟`Memory.recorder`、`getRecorder`、`setRecorder`
+    /// * 🚩🆕【2024-05-07 20:08:35】目前使用新定义的[`MemoryRecorder`]类型
+    /// * 📝OpenNARS中`Memory`用到`recorder`的地方：`init`、`inputTask`、`activatedTask`
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// Inference record text to be written into a log file
+    fn recorder(&self) -> &Self::Recorder;
+    /// [`Memory::recorder`]的可变版本
+    fn recorder_mut(&mut self) -> &mut Self::Recorder;
+
+    /// 🆕缓存一条「推理输出」
+    /// * 📌功能迁移自OpenNARS`Memory.report`
+    /// * 📝【2024-05-17 16:27:34】对原先【堆在「记忆区」处】的报告作分离处理
+    ///   * 🚩一些「报告」直接在推理器处存储即可
+    ///   * 🚩另一些「在推理过程中积累的新报告」则交由后续「吸收上下文」时处理
+    #[inline(always)]
+    fn report(&mut self, output: Output) {
+        self.recorder_mut().put(output);
+    }
+
+    /// 绑定的「推导上下文」类型
+    type DerivationContextReason: DerivationContextReason<C>;
+    /// 绑定的「直接推理上下文」类型
+    type DerivationContextDirect: DerivationContextDirect<C, Target = Self::DerivationContextReason>;
+
     /// 模拟`Stamp.currentSerial`
     /// * 📝OpenNARS中要保证「每个新创的时间戳都有一个序列号，且这个序列号唯一」
     /// * ⚠️同一个时间也可能有多个时间戳被创建
@@ -50,9 +89,9 @@ pub trait Reasoner: ReasonContext + Sized {
     /// # 📄OpenNARS
     ///
     /// The memory of the reasoner
-    fn memory(&self) -> &Self::Memory;
+    fn memory(&self) -> &C::Memory;
     /// [`Reasoner::memory`]的可变版本
-    fn memory_mut(&mut self) -> &mut Self::Memory;
+    fn memory_mut(&mut self) -> &mut C::Memory;
 
     /// 模拟`ReasonerBatch.inputChannels`
     /// * 🚩可变
@@ -64,13 +103,15 @@ pub trait Reasoner: ReasonContext + Sized {
     ///
     /// # 📄OpenNARS
     ///
-    fn input_channels<'this>(&self) -> &Vec<Box<dyn InputChannel<Reasoner = Self> + 'this>>
+    fn input_channels<'this>(
+        &self,
+    ) -> &Vec<Box<dyn InputChannel<Context = C /* , Reasoner = Self */> + 'this>>
     where
         Self: 'this;
     /// [`Reasoner::input_channels`]的可变版本
     fn input_channels_mut<'this>(
         &mut self,
-    ) -> &mut Vec<Box<dyn InputChannel<Reasoner = Self> + 'this>>
+    ) -> &mut Vec<Box<dyn InputChannel<Context = C /* , Reasoner = Self */> + 'this>>
     where
         Self: 'this;
 
@@ -80,13 +121,15 @@ pub trait Reasoner: ReasonContext + Sized {
     ///
     /// # 📄OpenNARS
     ///
-    fn output_channels<'this>(&self) -> &Vec<Box<dyn OutputChannel<Reasoner = Self> + 'this>>
+    fn output_channels<'this>(
+        &self,
+    ) -> &Vec<Box<dyn OutputChannel<Context = C /* , Reasoner = Self */> + 'this>>
     where
         Self: 'this;
     /// [`Reasoner::output_channels`]的可变版本
     fn output_channels_mut<'this>(
         &mut self,
-    ) -> &mut Vec<Box<dyn OutputChannel<Reasoner = Self> + 'this>>
+    ) -> &mut Vec<Box<dyn OutputChannel<Context = C /* , Reasoner = Self */> + 'this>>
     where
         Self: 'this;
 
@@ -183,7 +226,11 @@ pub trait Reasoner: ReasonContext + Sized {
         *self.__walking_steps_mut() = 0;
         *self.__clock_mut() = 0;
         self.memory_mut().init();
-        // ! ❌无需`Stamp.init();`——没有`currentSerial`
+        // 添加记录
+        self.recorder_mut().put(Output::INFO {
+            message: "-----RESET-----".into(),
+        });
+        *self.__stamp_current_serial() = 0;
     }
 
     /// 模拟`ReasonerBatch.addInputChannel`
@@ -193,7 +240,10 @@ pub trait Reasoner: ReasonContext + Sized {
     ///
     /// 🈚
     #[inline]
-    fn add_input_channel(&mut self, channel: Box<dyn InputChannel<Reasoner = Self>>) {
+    fn add_input_channel(
+        &mut self,
+        channel: Box<dyn InputChannel<Context = C /* , Reasoner = Self */>>,
+    ) {
         self.input_channels_mut().push(channel);
     }
 
@@ -206,7 +256,7 @@ pub trait Reasoner: ReasonContext + Sized {
     #[inline]
     fn add_output_channel<'this, 'channel: 'this>(
         &'this mut self,
-        channel: Box<dyn OutputChannel<Reasoner = Self> + 'channel>,
+        channel: Box<dyn OutputChannel<Context = C /* , Reasoner = Self */> + 'channel>,
     ) where
         Self: 'this,
     {
@@ -331,7 +381,7 @@ pub trait Reasoner: ReasonContext + Sized {
             // * 📝Java的逻辑运算符也是短路的——此处使用预先条件以避免运算
             // * ❓这是否意味着，一次只有一个通道能朝OpenNARS输入
             if !reasoner_should_run {
-                let (run, cmds) = channel_in.next_input(self);
+                let (run, cmds) = channel_in.next_input(/* self */);
                 reasoner_should_run = run;
                 // * 🆕直接用其输出扩展
                 // * 💭但实际上只有一次
@@ -350,7 +400,7 @@ pub trait Reasoner: ReasonContext + Sized {
     fn handle_outputs(&mut self) {
         let outputs = list![
             {output}
-            while let Some(output) = (self.memory_mut().recorder_mut().take())
+            while let Some(output) = (self.recorder_mut().take())
         ];
         if !outputs.is_empty() {
             // * 🚩先将自身通道中的元素挪出（在此过程中筛除），再从此临时通道中计算与获取输入（以便引用自身）
@@ -364,7 +414,7 @@ pub trait Reasoner: ReasonContext + Sized {
             // * 🚩遍历（并可引用自身）
             for channel_out in channels.iter_mut() {
                 // * 🚩在此过程中解读输出
-                channel_out.next_output(self, &outputs);
+                channel_out.next_output(/* self,  */ &outputs);
             }
             // * 🚩放回
             self.output_channels_mut().extend(channels);
@@ -399,8 +449,9 @@ pub trait Reasoner: ReasonContext + Sized {
             Cmd::NSE(narsese) => {
                 match self.parse_task(narsese) {
                     Ok(task) => {
-                        // * 🚩解析成功⇒记忆区输入任务
-                        self.memory_mut().input_task(task);
+                        // * 🚩解析成功⇒输入任务
+                        // * 🚩【2024-05-17 16:28:53】现在无需输入任务
+                        self.input_task(task);
                     }
                     Err(e) => {
                         // * 🚩解析失败⇒新增输出
@@ -408,7 +459,7 @@ pub trait Reasoner: ReasonContext + Sized {
                         let output = Output::ERROR {
                             description: format!("Narsese任务解析错误：{e}",),
                         };
-                        self.memory_mut().recorder_mut().put(output);
+                        self.recorder_mut().put(output);
                     }
                 }
             }
@@ -426,7 +477,7 @@ pub trait Reasoner: ReasonContext + Sized {
             // * 🚩退出⇒处理完所有输出后直接退出
             Cmd::EXI { reason } => {
                 // * 🚩最后的提示性输出
-                self.memory_mut().recorder_mut().put(Output::INFO {
+                self.recorder_mut().put(Output::INFO {
                     message: format!("NARust exited with reason {reason:?}"),
                 });
                 // * 🚩处理所有输出
@@ -442,7 +493,7 @@ pub trait Reasoner: ReasonContext + Sized {
                 let output = Output::ERROR {
                     description: format!("未知的NAVM指令：{}", cmd),
                 };
-                self.memory_mut().recorder_mut().put(output);
+                self.recorder_mut().put(output);
             }
         }
     }
@@ -486,15 +537,105 @@ pub trait Reasoner: ReasonContext + Sized {
     fn tick_timer(&mut self) {
         *self.__timer_mut() += 1;
     }
+
+    /* ---------- Long-term storage for multiple cycles ---------- */
+
+    /// 模拟`Memory.newTasks`
+    /// * 🚩读写：OpenNARS中要读写对象
+    ///   * 🚩【2024-05-12 14:38:58】决议：两头都有
+    ///     * 在「记忆区回收上下文」时从「上下文的『新任务』接收」
+    /// * 📝虽然OpenNARS中被认作是「短期工作空间」，但实际上是个长期的工作空间
+    ///   * 📝并且，只在「记忆区」内部被使用，用于「直接推理」
+    ///   * 📌实际上是在「直接推理」中被取出任务（与`novel_tasks`一致）
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// List of new tasks accumulated in one cycle, to be processed in the next cycle
+    fn __new_tasks(&self) -> &[C::Task];
+    /// [`Reasoner::__new_tasks`]的可变版本
+    /// * 🚩【2024-05-07 21:13:39】暂时用[`VecDeque`]代替：需要FIFO功能
+    fn __new_tasks_mut(&mut self) -> &mut VecDeque<C::Task>;
+
+    /// 绑定的「任务袋」类型
+    /// * 🚩【2024-05-07 20:04:25】必须与「概念」中的「任务」一致
+    /// * 🎯对应[`Reasoner::__novel_tasks`]
+    /// * 🚩【2024-05-18 11:07:56】现从「记忆区」中迁移出来
+    type NovelTaskBag: NovelTaskBag<Task = C::Task>;
+
+    /// 模拟`Memory.novelTasks`
+    /// * 📌新近任务
+    /// * 🚩私有+读写
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// New tasks with novel composed terms, for delayed and selective processing
+    fn __novel_tasks(&self) -> &Self::NovelTaskBag;
+    /// [`Memory::novel_tasks`]的可变版本
+    fn __novel_tasks_mut(&mut self) -> &mut Self::NovelTaskBag;
+
+    /* ---------- new task entries ---------- */
+    /*
+     * There are several types of new tasks, all added into the
+     * newTasks list, to be processed in the next workCycle.
+     * Some of them are reported and/or logged.
+     */
+
+    /// 模拟`Memory.inputTask`
+    /// * 🚩【2024-05-07 22:51:11】在此对[`BudgetValue::above_threshold`]引入[「预算阈值」超参数](crate::nars::Parameters::budget_threshold)
+    /// * 🚩【2024-05-17 15:01:06】自「记忆区」迁移而来
+    ///
+    /// TODO: ❓后续是否有必要迁移到独立的代码中去，比如「推理器主控」中
+    ///   * 🎯功能分离
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// Input task processing. Invoked by the outside or inside environment.
+    /// Outside: StringParser (input); Inside: Operator (feedback). Input tasks
+    /// with low priority are ignored, and the others are put into task buffer.
+    ///
+    /// @param task The input task
+    fn input_task(&mut self, task: C::Task) {
+        /* 📄OpenNARS源码：
+        if (task.getBudget().aboveThreshold()) {
+            recorder.append("!!! Perceived: " + task + "\n");
+            report(task.getSentence(), ReportType.IN); // report input
+            newTasks.add(task); // wait to be processed in the next workCycle
+        } else {
+            recorder.append("!!! Neglected: " + task + "\n");
+        } */
+        let budget_threshold = DEFAULT_PARAMETERS.budget_threshold;
+        // * ✅【2024-05-07 23:22:54】现在通过重命名「真值」「预算值」的相应方法，不再有命名冲突（`from_float`→`from_floats`）
+        let budget_threshold = C::ShortFloat::from_float(budget_threshold);
+        if task.budget().above_threshold(budget_threshold) {
+            // ? 💭【2024-05-07 22:57:48】实际上只需要输出`IN`即可：日志系统不必照着OpenNARS的来
+            // * 🚩此处两个输出合而为一
+            let narsese = NarseseValue::from_task(task.to_lexical());
+            self.recorder_mut().put(Output::IN {
+                content: format!("!!! Perceived: {}", task.to_display_long()),
+                narsese: Some(narsese),
+            });
+            // * 📝只追加到「新任务」里边，并不进行推理
+            self.__new_tasks_mut().push_back(task);
+        } else {
+            // 此时还是输出一个「被忽略」好
+            self.recorder_mut().put(Output::COMMENT {
+                content: format!("!!! Neglected: {}", task.to_display_long()),
+            });
+        }
+    }
 }
 
 /// [`Reasoner`]的「具体」版本
 /// * 🎯包括完全假定（字段）的构造函数
-pub trait ReasonerConcrete: Reasoner + Sized {
+pub trait ReasonerConcrete<C: ReasonContext>: Reasoner<C> + Sized {
     /// 🆕完全参数初始化
     /// * 🎯统一使用「默认实现」定义OpenNARS中的函数
     /// * 🚩【2024-05-15 16:40:41】现在新增「超参数」设定
     ///   * 🎯以备后续「引用解耦」
+    /// * 📌会创建一个空白的「推理记录者」
+    ///   * 🚩需要初始化各种「默认参数」
+    ///
+    /// TODO: 【2024-05-18 11:19:15】❓是否要传入「记忆区」的构造函数
     ///
     /// # 📄OpenNARS 参考源码
     ///
@@ -506,10 +647,26 @@ pub trait ReasonerConcrete: Reasoner + Sized {
     ///     outputChannels = new ArrayList<>();
     /// }
     /// ```
-    fn __new(name: String, parameters: Parameters) -> Self;
+    fn __new(
+        name: String,
+        parameters: Parameters,
+        new_tasks: VecDeque<C::Task>,
+        novel_tasks: Self::NovelTaskBag,
+    ) -> Self;
+
+    /// 🆕构造一个**默认**的「新近任务（袋）」
+    /// * 🚩构造一个空容器，使用自身参数
+    fn __new_novel_tasks(parameters: &Parameters) -> Self::NovelTaskBag {
+        BagConcrete::new(
+            // * 🚩复刻`nars.storage.NovelTaskBag.capacity`
+            parameters.task_buffer_size,
+            // * 🚩复刻`nars.storage.NovelTaskBag.forgetRate`
+            parameters.new_task_forgetting_cycle,
+        )
+    }
 
     /// 🆕当无参初始化时的默认名称
-    const DEFAULT_NAME: &'static str = "Reasoner";
+    const DEFAULT_NAME: &'static str = "NARust Reasoner";
 
     /// 模拟`new ReasonerBatch()`
     /// * 📌无参初始化（使用默认名称）
@@ -533,7 +690,22 @@ pub trait ReasonerConcrete: Reasoner + Sized {
     ///
     /// 🈚
     #[inline]
-    fn with_name(name: &str) -> Self {
-        Self::__new(name.into(), DEFAULT_PARAMETERS)
+    fn with_name(name: impl Into<String>) -> Self {
+        Self::with_name_and_parameters(name.into(), DEFAULT_PARAMETERS)
+    }
+
+    /// 🆕带参初始化（名称+超参数）
+    /// * 🎯用于「名称&超参数 外其它参数的默认初始化」
+    ///   * 📄在「允许自定义名称与超参数」的同时，无需传入其它「应该被默认的参数集」
+    #[inline]
+    fn with_name_and_parameters(name: impl Into<String>, parameters: Parameters) -> Self {
+        Self::__new(
+            // * 📌需要自定义的参数
+            name.into(),
+            parameters,
+            // * 📌需要默认值的参数
+            VecDeque::new(), // TODO: 🏗️【2024-05-07 21:09:58】日后是否可独立成一个`add`、`size`、`get`的特征？
+            Self::__new_novel_tasks(&parameters), // * 🚩新近任务袋：空
+        )
     }
 }
