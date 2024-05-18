@@ -11,4 +11,8 @@ nar_dev_utils::mods! {
     pub use work_cycle;
     // 功能：输出报告
     pub use report;
+    // 功能：直接推理
+    pub use direct_process;
+    // 功能：概念推理
+    pub use concept_process;
 }

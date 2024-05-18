@@ -227,7 +227,7 @@ pub trait Reasoner<C: ReasonContext>: Sized {
         *self.__clock_mut() = 0;
         self.memory_mut().init();
         // 添加记录
-        self.recorder_mut().put(Output::INFO {
+        self.report(Output::INFO {
             message: "-----RESET-----".into(),
         });
         *self.__stamp_current_serial() = 0;
@@ -459,7 +459,7 @@ pub trait Reasoner<C: ReasonContext>: Sized {
                         let output = Output::ERROR {
                             description: format!("Narsese任务解析错误：{e}",),
                         };
-                        self.recorder_mut().put(output);
+                        self.report(output);
                     }
                 }
             }
@@ -477,7 +477,7 @@ pub trait Reasoner<C: ReasonContext>: Sized {
             // * 🚩退出⇒处理完所有输出后直接退出
             Cmd::EXI { reason } => {
                 // * 🚩最后的提示性输出
-                self.recorder_mut().put(Output::INFO {
+                self.report(Output::INFO {
                     message: format!("NARust exited with reason {reason:?}"),
                 });
                 // * 🚩处理所有输出
@@ -493,7 +493,7 @@ pub trait Reasoner<C: ReasonContext>: Sized {
                 let output = Output::ERROR {
                     description: format!("未知的NAVM指令：{}", cmd),
                 };
-                self.recorder_mut().put(output);
+                self.report(output);
             }
         }
     }
@@ -610,7 +610,7 @@ pub trait Reasoner<C: ReasonContext>: Sized {
             // ? 💭【2024-05-07 22:57:48】实际上只需要输出`IN`即可：日志系统不必照着OpenNARS的来
             // * 🚩此处两个输出合而为一
             let narsese = NarseseValue::from_task(task.to_lexical());
-            self.recorder_mut().put(Output::IN {
+            self.report(Output::IN {
                 content: format!("!!! Perceived: {}", task.to_display_long()),
                 narsese: Some(narsese),
             });
@@ -618,7 +618,7 @@ pub trait Reasoner<C: ReasonContext>: Sized {
             self.__new_tasks_mut().push_back(task);
         } else {
             // 此时还是输出一个「被忽略」好
-            self.recorder_mut().put(Output::COMMENT {
+            self.report(Output::COMMENT {
                 content: format!("!!! Neglected: {}", task.to_display_long()),
             });
         }
