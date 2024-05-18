@@ -76,20 +76,20 @@ pub trait ReasonerWorkCycle<C: ReasonContext>: Reasoner<C> {
 
         // 本地直接推理 //
         // * 🚩此处保留OpenNARS的做法，不把`no_result`判断放到「预处理」中
-        let need_concept_process = self.__direct_process(&mut context);
+        let need_concept_process = self.direct_process(&mut context);
 
         // 过渡阶段 //
         // * 🎯准备选择概念、任务链、词项链
         // * ⚠️在其中也进行部分推理：NAL-4「结构转换」
         let mut result = match need_concept_process {
-            true => self.__preprocess_concept_reason(context),
+            true => self.preprocess_concept_reason(context),
             false => OnlyDirect(context),
         };
 
         // 概念高级推理 //
         if let ContextReady(ref mut context, ref mut term_links_to_process) = result {
             // * 🚩正式开始「概念推理」
-            self.__process_concept(context, term_links_to_process);
+            self.process_concept(context, term_links_to_process);
         }
 
         // 最终吸收上下文 //

@@ -254,6 +254,12 @@ pub trait Memory: ReasonContext<Memory = Self> + Sized {
     /* 📝诸多方法现均被置入「推理器」而非「记忆区」中
      * report
      * input_task
+     * work_cycle
+     * __process_new_task
+     * __process_novel_task
+     * __process_concept
+     * __fire_concept
+     * __immediate_process
      */
 
     /* 📝诸多方法现均被置入「推理上下文」而非「记忆区」中
@@ -263,12 +269,6 @@ pub trait Memory: ReasonContext<Memory = Self> + Sized {
      * double_premise_task
      * single_premise_task_current
      * single_premise_task
-     * work_cycle
-     * __process_new_task
-     * __process_novel_task
-     * __process_concept
-     * __fire_concept
-     * __immediate_process
      */
 
     /* ---------- display ---------- */

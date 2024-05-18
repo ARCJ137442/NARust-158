@@ -16,7 +16,7 @@ pub trait ReasonerConceptProcess<C: ReasonContext>: Reasoner<C> {
     /// 🆕在「直接推理」与「概念推理」之间的「过渡部分」
     /// * 🚩选择概念、选择任务链、选择预备词项链
     /// * 🚩【2024-05-18 00:49:01】需要传入整个上下文所有权，以便在其中构建「推理上下文」
-    fn __preprocess_concept_reason(
+    fn preprocess_concept_reason(
         &mut self,
         mut context: Self::DerivationContextDirect,
     ) -> DirectProcessResult<
@@ -130,7 +130,7 @@ pub trait ReasonerConceptProcess<C: ReasonContext>: Reasoner<C> {
     /// # 📄OpenNARS
     ///
     /// Select a concept to fire.
-    fn __process_concept(
+    fn process_concept(
         &mut self,
         context: &mut Self::DerivationContextReason,
         term_links_to_process: &mut Vec<C::TermLink>,
