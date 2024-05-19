@@ -365,11 +365,6 @@ impl<T: Task> Sentence for T {
     fn revisable(&self) -> bool {
         self.sentence().revisable()
     }
-
-    #[inline(always)]
-    fn revisable_mut(&mut self) -> &mut bool {
-        self.sentence_mut().revisable_mut()
-    }
 }
 
 /// 自动实现「Item」

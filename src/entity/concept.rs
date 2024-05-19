@@ -6,7 +6,23 @@ use super::{
     BudgetValue, Item, SentenceConcrete, StampConcrete, TaskConcrete, TaskLinkConcrete,
     TermLinkConcrete, TruthValueConcrete,
 };
-use crate::{entity::*, global::Float, language::Term, storage::*, ToDisplayAndBrief};
+use crate::{
+    entity::*, global::Float, language::Term, nars::DEFAULT_PARAMETERS, storage::*,
+    ToDisplayAndBrief,
+};
+
+/// 「概念」的所有可变字段
+/// * 🎯证明「这些字段都不会相互冲突」
+/// * ❌【2024-05-19 10:21:40】不能直接反向引用「概念」，会导致「概念」需要[`Sized`]
+pub struct ConceptFieldsMut<'s, TaskLinkBag, TermLinkBag, Task, Sentence> {
+    pub task_links: &'s mut TaskLinkBag,
+    pub term_links: &'s mut TermLinkBag,
+    // pub term_link_templates: &'s mut [TermLink],
+    pub questions: &'s mut Vec<Task>,
+    pub beliefs: &'s mut Vec<Sentence>,
+    // pub beliefs: &'s mut [Sentence],
+}
+
 /// 模拟`nars.entity.Concept`
 /// * 🚩【2024-05-04 17:28:30】「概念」首先能被作为「Item」使用
 pub trait Concept: Item {
@@ -53,6 +69,14 @@ pub trait Concept: Item {
     /// * 🎯每个实现中只会实现一种类型，用于统一多个函数的参数
     type TaskLinkBag: TaskLinkBag<Link = Self::TaskLink>;
 
+    /// 🆕获取所有可变引用
+    /// * 🎯关键在于告诉编译器「能获取到这些值，证明在外部同时修改是没问题的」
+    ///   * 📌亦即「可并行修改」
+    /// * 🚩用法：获取⇒解构⇒分别使用
+    fn fields_mut(
+        &mut self,
+    ) -> ConceptFieldsMut<'_, Self::TaskLinkBag, Self::TermLinkBag, Self::Task, Self::Sentence>;
+
     /// 模拟`Concept.term`、`Concept.getTerm`
     /// * 🚩只读：OpenNARS仅在构造函数中赋值
     ///
@@ -77,7 +101,11 @@ pub trait Concept: Item {
     /// Task links for indirect processing
     fn __task_links(&self) -> &Self::TaskLinkBag;
     /// [`Concept::__task_links`]的可变版本
-    fn __task_links_mut(&mut self) -> &mut Self::TaskLinkBag;
+    /// * 🚩【2024-05-19 10:23:01】现在通过「所有可变引用」可将「获取所有可变引用的一部分」作为默认实现
+    #[inline(always)]
+    fn __task_links_mut(&mut self) -> &mut Self::TaskLinkBag {
+        self.fields_mut().task_links
+    }
 
     /// 模拟`Concept.termLinks`
     /// * 🚩私有：未对外暴露直接的公开接口
@@ -87,7 +115,11 @@ pub trait Concept: Item {
     /// Term links between the term and its components and compounds
     fn __term_links(&self) -> &Self::TermLinkBag;
     /// [`Concept::__term_links`]的可变版本
-    fn __term_links_mut(&mut self) -> &mut Self::TermLinkBag;
+    /// * 🚩【2024-05-19 10:23:01】现在通过「所有可变引用」可将「获取所有可变引用的一部分」作为默认实现
+    #[inline(always)]
+    fn __term_links_mut(&mut self) -> &mut Self::TermLinkBag {
+        self.fields_mut().term_links
+    }
 
     /// 模拟`Concept.termLinkTemplates`、`Concept.getTermLinkTemplates`
     /// * 🚩只读：仅在构造函数中被赋值
@@ -117,7 +149,11 @@ pub trait Concept: Item {
     fn __questions(&self) -> &[Self::Task];
     /// [`Concept::questions`]的可变版本
     /// * 🚩【2024-05-06 11:49:15】目前使用[`Vec`]：追加、插入、移除
-    fn __questions_mut(&mut self) -> &mut Vec<Self::Task>;
+    /// * 🚩【2024-05-19 10:23:01】现在通过「所有可变引用」可将「获取所有可变引用的一部分」作为默认实现
+    #[inline(always)]
+    fn __questions_mut(&mut self) -> &mut Vec<Self::Task> {
+        self.fields_mut().questions
+    }
 
     /// 模拟`Concept.questions`
     /// * 🚩内部读写：仅在内部被使用
@@ -130,7 +166,18 @@ pub trait Concept: Item {
     fn __beliefs(&self) -> &[Self::Sentence];
     /// [`Concept::beliefs`]的可变版本
     /// * 🚩【2024-05-06 11:49:15】目前使用[`Vec`]：追加、插入、移除
-    fn __beliefs_mut(&mut self) -> &mut Vec<Self::Sentence>;
+    /// * 🚩【2024-05-19 10:23:01】现在通过「所有可变引用」可将「获取所有可变引用的一部分」作为默认实现
+    #[inline(always)]
+    fn __beliefs_mut(&mut self) -> &mut Vec<Self::Sentence> {
+        self.fields_mut().beliefs
+    }
+
+    // /// 🆕获取「信念」与「任务」
+    // /// * 🎯用于在「处理判断/问题」时表示「信念、问题互不影响」
+    // fn __beliefs_and_questions(&self) -> (&[Self::Sentence], &[Self::Task]);
+    // * 💡【2024-05-18 20:25:25】似乎可以利用特殊的「引用结构」来强制要求「互不干扰的字段」
+    //   * 🚩配套方法：当要获取多个确定是「互不干扰」的字段时，通过「获取引用并立即解构」的方式获取
+    //   * ✅其它「获取单字段」的方法，可以使用这种「字段要求」作为「默认参数」行使
 
     // ! ❌【2024-05-06 11:37:01】不实现`Concept.memory`（仅用于内部「袋」的容量获取）
     // ! ❌【2024-05-06 11:37:01】不实现`Concept.entityObserver`
@@ -147,6 +194,19 @@ pub trait Concept: Item {
      * insert_term_link
      * get_belief
      */
+
+    /// 🆕将新的「问题」放进自身的「问题集」中
+    /// * 🎯最初从[`Concept.processQuestion`](crate::nars::ReasonerDirectProcess::__process_question)中调用
+    /// * 🚩有限大小缓冲区：若加入后大小溢出，则「先进先出」（在Rust语境下任务被销毁）
+    ///
+    /// TODO: 后续要实现一个「固定大小缓冲区队列」？
+    fn __add_new_question(&mut self, question_task: Self::Task) {
+        // * 🚩新问题⇒加入「概念」已有的「问题列表」中（有限大小缓冲区）
+        self.__questions_mut().push(question_task);
+        if self.__questions().len() > DEFAULT_PARAMETERS.maximum_questions_length {
+            self.__questions_mut().remove(0);
+        }
+    }
 
     /* ---------- access local information ---------- */
 

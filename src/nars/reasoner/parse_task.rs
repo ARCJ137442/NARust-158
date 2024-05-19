@@ -4,14 +4,16 @@
 use super::*;
 use crate::{
     entity::{
-        BudgetValueConcrete, Sentence, SentenceConcrete, SentenceType, ShortFloat, TaskConcrete,
+        BudgetValueConcrete, Sentence, SentenceConcrete, SentenceType, ShortFloat, StampConcrete,
+        TaskConcrete,
     },
     inference::{BudgetFunctions, ReasonContext},
     io::symbols::JUDGMENT_MARK,
+    language::Term,
     nars::DEFAULT_PARAMETERS,
 };
 use anyhow::Result;
-use narsese::lexical::Task as LexicalTask;
+use narsese::lexical::{Sentence as LexicalSentence, Task as LexicalTask};
 
 pub trait ReasonerParseTask<C: ReasonContext>: Reasoner<C> {
     /// 模拟`StringParser.parseTask`
@@ -59,22 +61,46 @@ pub trait ReasonerParseTask<C: ReasonContext>: Reasoner<C> {
         };
 
         // * 📌因为OpenNARS中「前后解析依赖」，所以总需要解构——真值→预算值，词项→语句→任务
-        let LexicalTask { budget, sentence } = narsese;
+        let LexicalTask {
+            budget,
+            sentence:
+                LexicalSentence {
+                    term,
+                    punctuation,
+                    stamp,
+                    truth,
+                },
+        } = narsese;
 
-        // * 🚩解析语句：先解析出「语句」再设置其中的「可修正」属性
+        // * 🚩解析词项
+        let content = Term::try_from(term)?;
+
+        // * 🚩解析语句：解析「语句」新有的内容，再通过解析出的词项组装
+
+        // 根据解析出的词项设置「是否可修正」
+        // ! 📝这段代码在不同版本间有争议
+        // * 📄OpenNARS 3.0.4不再使用`setRevisable`方法，使之变成了【仅构造时可修改】的变量
+        let revisable = !(content.instanceof_conjunction() && content.contain_var_d());
+
+        // 时间戳
         let stamp_current_serial = self.get_stamp_current_serial();
         let stamp_time = self.clock();
+        let stamp =
+            <C::Stamp as StampConcrete>::from_lexical(stamp, stamp_current_serial, stamp_time)?;
+
+        // 标点 & 真值
         let truth_is_analytic = DEFAULT_PARAMETERS.default_truth_analytic;
-        let mut sentence: C::Sentence = SentenceConcrete::from_lexical(
-            sentence,
+        let sentence_type = SentenceType::from_lexical(
+            punctuation,
+            truth,
             truth_default_values,
             truth_is_analytic,
-            stamp_current_serial,
-            stamp_time,
-            false, // ! 🚩暂时设置为`false`，后续要通过「解析出来的词项」判断「是否可修正」
         )?;
-        let term = sentence.content();
-        *sentence.revisable_mut() = !(term.instanceof_conjunction() && term.contain_var_d());
+
+        // 构造语句
+        let sentence: C::Sentence = SentenceConcrete::new(content, sentence_type, stamp, revisable);
+
+        // * 🚩解析任务
 
         // 解析预算值：先计算出「默认预算值」再参与「词法解析」（覆盖）
         use SentenceType::*;

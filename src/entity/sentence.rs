@@ -179,7 +179,9 @@ pub trait Sentence: ToDisplayAndBrief {
     fn stamp_mut(&mut self) -> &mut Self::Stamp;
 
     /// 模拟`Sentence.revisable`、`Sentence.getRevisable`
-    /// * ⚠️读写：需要设置其中的值
+    /// * 📝OpenNARS只在「解析任务」时会设置值
+    ///   * 🎯使用目的：「包含因变量的合取」不可被修正
+    ///   * 🚩【2024-05-19 13:01:57】故无需让其可变，构造后只读即可
     ///
     /// # 📄OpenNARS
     ///
@@ -191,13 +193,13 @@ pub trait Sentence: ToDisplayAndBrief {
     ///
     /// 🈚
     fn revisable(&self) -> bool;
-    /// 模拟`Sentence.setRevisable`
-    /// * 📌[`Sentence::revisable`]的可变版本
-    ///
-    /// # 📄OpenNARS
-    ///
-    /// 🈚
-    fn revisable_mut(&mut self) -> &mut bool;
+    // /// 模拟`Sentence.setRevisable`
+    // /// * 📌[`Sentence::revisable`]的可变版本
+    // ///
+    // /// # 📄OpenNARS
+    // ///
+    // /// 🈚
+    // fn revisable_mut(&mut self) -> &mut bool;
 
     /// 模拟`Sentence.cloneContent`
     /// * 🚩拷贝内部词项
@@ -651,10 +653,6 @@ mod impl_v1 {
 
         fn revisable(&self) -> bool {
             self.revisable
-        }
-
-        fn revisable_mut(&mut self) -> &mut bool {
-            &mut self.revisable
         }
     }
 

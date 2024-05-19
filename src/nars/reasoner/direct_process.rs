@@ -10,6 +10,12 @@
 //! * 🚩【2024-05-17 21:35:04】目前直接基于「推理器」而非「记忆区」
 //! * ⚠️【2024-05-18 01:25:09】目前这里所参考的「OpenNARS源码」已基本没有「函数对函数」的意义
 //!   * 📌许多代码、逻辑均已重构重组
+//!
+//! ## 🚩【2024-05-18 14:48:57】有关「复制以防止借用问题」的几个原则
+//!
+//! * 📌从「词项」到「语句」均为「可复制」的，但只应在「不复制会导致借用问题」时复制
+//! * 📌「任务」「概念」一般不应被复制
+//! * 📌要被修改的对象**不应**被复制：OpenNARS将修改这些量，以便在后续被使用
 
 use crate::{entity::*, inference::*, nars::*, storage::*, *};
 use navm::output::Output;
@@ -134,15 +140,23 @@ pub trait ReasonerDirectProcess<C: ReasonContext>: Reasoner<C> {
         // ! 🚩【2024-05-08 16:07:06】此处不得不使用大量`clone`以解决借用问题；后续可能是性能瓶颈
         let current_term = task.content().clone();
         let budget = task.budget().clone();
-        if let Some(current_concept) = self.memory_mut().get_concept_or_create(&current_term) {
+        let current_concept = self.memory_mut().get_concept_or_create(&current_term);
+        if let Some(current_concept) = current_concept {
             let key = current_concept.____key_cloned(); // ! 此处亦需复制，以免借用问题
             self.memory_mut().activate_concept(&key, &budget);
+            // TODO: 【2024-05-19 13:52:32】可能需要不同的「推理上下文」，或者对「直接推理上下文」进行更多可空性、可变性假定？
+            // TODO: 【2024-05-19 13:49:01】解决「当前概念」的引用问题——不能拿出，但又需要
+            // *context.current_concept_mut() = Some(current_concept);
+            Self::__direct_process_concept(context);
+            todo!("// TODO: 【2024-05-19 11:22:27】修缮并对接概念的「直接处理」，解决借用问题")
         }
     }
 
     /* ---------- direct processing of tasks ---------- */
 
     /// 模拟`Concept.directProcess`
+    /// * 📌经OpenNARS断言：原先传入的「任务」就是「推理上下文」的「当前任务」
+    /// * 📝在其被唯一使用的地方，传入的`task`只有可能是`memory.context.currentTask`
     ///
     /// # 📄OpenNARS
     ///
@@ -155,8 +169,8 @@ pub trait ReasonerDirectProcess<C: ReasonContext>: Reasoner<C> {
     /// @param task The task to be processed
     fn __direct_process_concept(
         context: &mut Self::DerivationContextDirect,
-        concept: &mut C::Concept,
-        task: &mut C::Task,
+        // concept: &mut C::Concept,
+        // task: &mut C::Task,
     ) {
         /* 📄OpenNARS源码：
         if (task.getSentence().isJudgment()) {
@@ -168,14 +182,16 @@ pub trait ReasonerDirectProcess<C: ReasonContext>: Reasoner<C> {
             linkToTask(task);
         }
         entityObserver.refresh(displayContent()); */
+        let task = context.current_task().as_ref().unwrap();
+
         use SentenceType::*;
         // * 🚩分派处理
         match task.punctuation() {
             // 判断
-            Judgement(..) => Self::__process_judgment(context, concept, task),
+            Judgement(..) => Self::__process_judgment(context),
             // 问题 | 🚩此处无需使用返回值，故直接`drop`掉（并同时保证类型一致）
             // * 📌【2024-05-15 17:08:44】此处因为需要「将新问题添加到『问题列表』中」而使用可变引用
-            Question => drop(Self::__process_question(context, concept, task)),
+            Question => Self::__process_question(context),
         }
         // ! 不实现`entityObserver.refresh`
     }
@@ -184,6 +200,9 @@ pub trait ReasonerDirectProcess<C: ReasonContext>: Reasoner<C> {
     /// * ⚠️【2024-05-12 17:13:50】此处假定`task`
     ///   * 具有「父任务」即`parent_task`非空
     ///   * 可变：需要改变其预算值
+    /// * 📝【2024-05-18 19:33:26】经OpenNARS确认，此处传入的「任务」就是「当前任务」
+    ///   * 📌同理：此处所传入的「概念」就是「当前概念」
+    ///   * 🚩故均可省去
     ///
     /// # 📄OpenNARS
     ///
@@ -193,11 +212,7 @@ pub trait ReasonerDirectProcess<C: ReasonContext>: Reasoner<C> {
     /// @param task The judgment to be accepted
     /// @param task The task to be processed
     /// @return Whether to continue the processing of the task
-    fn __process_judgment(
-        context: &mut Self::DerivationContextDirect,
-        concept: &C::Concept,
-        task: &mut C::Task,
-    ) {
+    fn __process_judgment(context: &mut Self::DerivationContextDirect) {
         /* 📄OpenNARS源码：
         Sentence judgment = task.getSentence();
         Sentence oldBelief = evaluation(judgment, beliefs);
@@ -224,22 +239,27 @@ pub trait ReasonerDirectProcess<C: ReasonContext>: Reasoner<C> {
             }
             addToTable(judgment, beliefs, Parameters.MAXIMUM_BELIEF_LENGTH);
         } */
+        let mut task = context.current_task_mut().take().unwrap();
+        let concept = context.current_concept_mut().take().unwrap();
         let judgement = task.sentence();
+
+        // * 🚩找到旧信念，并尝试修正
         let old_belief = Self::__evaluation(judgement, concept.__beliefs());
         if let Some(old_belief) = old_belief {
             let new_stamp = judgement.stamp();
             let old_stamp = old_belief.stamp();
-            // 若为「重复任务」——优先级放到最后
+            // * 🚩时间戳上重复⇒优先级沉底，避免重复推理
             if new_stamp.equals(old_stamp) {
                 if task.parent_task().as_ref().unwrap().is_judgement() {
                     task.budget_mut().dec_priority(C::ShortFloat::ZERO);
                 }
                 return;
-            } else if <Self::DerivationContextDirect as LocalRules<C>>::revisable(
-                judgement, old_belief,
-            ) {
+            }
+            // * 🚩不重复 && 可修正 ⇒ 修正
+            else if Self::DerivationContextDirect::revisable(judgement, old_belief) {
+                // * 🚩尝试构建新时间戳，并随后使用这个「新时间戳」修正信念（若有）
                 *context.new_stamp_mut() =
-                    <C::Stamp as StampConcrete>::from_merge(new_stamp, old_stamp, context.time());
+                    StampConcrete::from_merge(new_stamp, old_stamp, context.time());
                 if context.new_stamp().is_some() {
                     // 🆕此处复制了「旧信念」以便设置值
                     // TODO: ❓是否需要这样：有可能后续处在「概念」中的信念被修改了，这里所指向的「信念」却没有
@@ -248,6 +268,7 @@ pub trait ReasonerDirectProcess<C: ReasonContext>: Reasoner<C> {
                     let old_belief = &old_belief.clone();
                     // ! 📌依靠复制，牺牲性能以**解决引用问题**（不然会引用`context`）
                     // * ❓↑但，这样会不会受到影响
+                    // * 🚩修正规则开始
                     LocalRulesDirect::revision(context, judgement, old_belief);
                 }
             }
@@ -267,6 +288,11 @@ pub trait ReasonerDirectProcess<C: ReasonContext>: Reasoner<C> {
     ///   * 🚩【2024-05-06 11:59:00】实际上并没有用，故不再返回
     /// * 📝OpenNARS仅在「直接处理」时用到它
     ///   * 🚩【2024-05-06 11:59:54】实际上直接变为私有方法，也不会妨碍到具体运行
+    /// * 🚩【2024-05-18 19:26:28】弃用返回值
+    ///   * 📄在OpenNARS 3.1.0/3.1.2、PyNARS中均不见使用
+    /// * 🚩【2024-05-18 19:33:26】经OpenNARS确认，此处传入的「任务」就是「当前任务」
+    ///   * 🚩故可省去
+    /// * 🚩复刻逻辑 in 借用规则：先寻找答案，再插入问题
     ///
     /// # 📄OpenNARS
     ///
@@ -274,11 +300,9 @@ pub trait ReasonerDirectProcess<C: ReasonContext>: Reasoner<C> {
     ///
     /// @param task The task to be processed
     /// @return Whether to continue the processing of the task
-    fn __process_question(
-        context: &mut Self::DerivationContextDirect,
-        concept: &mut C::Concept,
-        task: &mut C::Task,
-    ) -> C::ShortFloat {
+    fn __process_question(context: &mut Self::DerivationContextDirect)
+    /* -> C::ShortFloat */
+    {
         /* 📄OpenNARS源码：
         Sentence ques = task.getSentence();
         boolean newQuestion = true;
@@ -306,43 +330,50 @@ pub trait ReasonerDirectProcess<C: ReasonContext>: Reasoner<C> {
         } else {
             return 0.5f;
         } */
-        // * 🚩复刻逻辑 in 借用规则：先寻找答案，再插入问题
-        let mut question = task.sentence();
-        let mut is_new_question = true;
-        // * 🚩找到自身「问题列表」中与「任务」相同的「问题」
-        for task in concept.__questions() {
-            // TODO: 【2024-05-12 23:42:08】有待进一步实现
-            let task_question = task.sentence();
-            if question == task_question {
-                question = task_question;
-                is_new_question = false;
-                break;
-            }
-        }
+
+        // ! 🚩从中拿出参数 | 📌必定有
+        // * 🚩【2024-05-18 19:42:33】此处将「任务」拿出上下文，以转移所有权
+        let mut task = context.current_task_mut().take().unwrap();
+        let mut concept = context.current_concept_mut().take().unwrap();
+
+        // * 🚩找到自身「问题列表」中与「任务」相同的「问题」，并在找到时重定向
+        let ConceptFieldsMut {
+            // * 🚩🆕【2024-05-19 11:19:33】现在直接通过「可变引用结构」设计模式，实现了「同时可变借用多个不同属性」
+            questions,
+            beliefs,
+            ..
+        } = concept.fields_mut();
+        let existed_question = Self::find_existed_question(task.sentence(), questions.iter_mut());
+        let is_new_question = existed_question.is_some();
+        let question_task = match existed_question {
+            Some(existed) => existed,
+            None => &mut task,
+        };
         // * 🚩先尝试回答
-        let result;
-        let new_answer = Self::__evaluation(question, concept.__beliefs());
+        // let result;
+        let new_answer = Self::__evaluation(question_task.sentence(), beliefs);
         if let Some(new_answer) = new_answer {
-            LocalRules::try_solution(context, new_answer, task);
-            result = new_answer.truth().unwrap().expectation(); // ! 保证里边都是「判断」
-        } else {
-            result = 0.5;
-        }
-        // * 🚩再插入问题
-        {
-            // * 🚩新问题⇒加入「概念」已有的「问题列表」中（有限大小缓冲区）
-            if is_new_question {
-                // * ⚠️此处复制了「任务」以解决「所有权分配」问题
-                concept.__questions_mut().push(task.clone());
-            }
-            // * 🚩有限大小缓冲区：若加入后大小溢出，则「先进先出」（在Rust语境下任务被销毁）
-            // TODO: 后续要实现一个「固定大小缓冲区队列」？
-            if concept.__questions().len() > DEFAULT_PARAMETERS.maximum_questions_length {
-                concept.__questions_mut().remove(0);
-            }
+            // ! 此处需要对「任务」进行可变借用，以便修改任务的真值/预算值
+            LocalRules::try_solution(context, new_answer, question_task);
+            // result = new_answer.truth().unwrap().expectation(); // ! 保证里边都是「判断」
+        } /* else {
+              result = 0.5;
+          } */
+        // * 🚩再根据「是否为新问题」插入问题
+        if is_new_question {
+            concept.__add_new_question(task);
         }
         // * 🚩最后返回生成的返回值
-        C::ShortFloat::from_float(result)
+        // C::ShortFloat::from_float(result)
+    }
+
+    /// 🆕在「推理上下文」的「问题列表」中找到「已有的问题」
+    /// * 🚩【2024-05-18 15:12:18】此处需要可变引用：因为调用者处需要
+    fn find_existed_question<'l>(
+        task_sentence: &C::Sentence,
+        mut question_tasks: impl Iterator<Item = &'l mut C::Task>,
+    ) -> Option<&'l mut C::Task> {
+        question_tasks.find(|task| task.sentence() == task_sentence)
     }
 
     /// 模拟`Concept.evaluation`
