@@ -22,8 +22,7 @@ use navm::output::Output;
 /// ! ⚠️【2024-05-19 10:28:03】后续可能会因为「共享引用」等问题重写其内部字段类型
 pub struct DerivationContextFieldsMut<'s, C: ReasonContext> {
     // * 🚩推理用变量
-    pub current_belief: &'s mut Option<C::Sentence>,
-    pub new_stamp: &'s mut Option<C::Stamp>,
+    // 🈚：根据新的对「推理上下文」之分析
     // * 🚩输出用变量
     pub new_tasks: &'s mut Vec<C::Task>,
     pub new_outputs: &'s mut Vec<Output>,
@@ -73,48 +72,7 @@ pub trait DerivationContext<C: ReasonContext>: ReasonContext + Sized {
     /// * 🎯目前仅只读
     fn memory(&self) -> &C::Memory;
 
-    /// 模拟`Memory.currentBelief`
-    /// * 🚩【2024-05-08 11:49:37】为强调「引用」需要，此处返回[`RC`]而非引用
-    /// * 🚩经OpenNARS`long_term_stability.nal`测试，仍有可能为空
-    ///   * 🚩【2024-05-08 14:33:03】见[`Memory::single_premise_task`]
-    /// * 📝【2024-05-17 17:34:53】经OpenNARS研究：多个⇒需要可变版本
-    ///   * 📝OpenNARS的`Concept.fire`中的确可空，不论是在「开始推理」还是「转换」还是「正式开始」时
-    ///   * 📝OpenNARS的`Concept.fire`中需要「一个任务链同多个词项链做推理」
-    ///
-    /// # 📄OpenNARS
-    ///
-    /// The selected belief
-    fn current_belief(&self) -> &Option<C::Sentence>;
-    /// [`Memory::current_belief`]的可变版本
-    /// * 🚩【2024-05-19 10:23:01】现在通过「所有可变引用」可将「获取所有可变引用的一部分」作为默认实现
-    #[inline(always)]
-    fn current_belief_mut<'s>(&'s mut self) -> &mut Option<C::Sentence>
-    where
-        C: 's,
-    {
-        self.fields_mut().current_belief
-    }
-
-    /// 模拟`Memory.newStamp`
-    /// * 🚩【2024-05-12 17:49:18】即便此处可空，也不应是`Option<&>`而应该是`&Option<>`
-    ///   * 📌理由：方便复制，性能开销少（不会新创`Option`）且转换容易（[`Option::as_ref`]）
-    /// * ⚠️在推理开始时，此值可能为空
-    ///   * 📄【2024-05-12 19:34:42】已经过`long_term_stability.nal`测试
-    ///
-    /// # 📄OpenNARS
-    ///
-    fn new_stamp(&self) -> &Option<C::Stamp>;
-    /// [`Memory::new_stamp`]的可变版本
-    /// * 🚩【2024-05-19 10:23:01】现在通过「所有可变引用」可将「获取所有可变引用的一部分」作为默认实现
-    #[inline(always)]
-    fn new_stamp_mut<'s>(&'s mut self) -> &'s mut Option<C::Stamp>
-    where
-        C: 's,
-    {
-        self.fields_mut().new_stamp
-    }
-
-    // ! ❌【2024-05-07 21:16:10】不复刻`Memory.exportStrings`：🆕使用新的输出系统，不用OpenNARS那一套
+    // ! ❌【2024-05-07 21:16:10】不复刻`Memory.exportStrings`：🆕使用`new_outputs`代替之
 
     // ! ❌【2024-05-07 21:26:49】暂不使用
     // 📄OpenNARS："TODO unused"
@@ -164,11 +122,7 @@ pub trait DerivationContext<C: ReasonContext>: ReasonContext + Sized {
     ///   * 📌【2024-05-12 14:55:34】妥协：不仅会影响「输出」或「输入」，而且仍然影响推理过程
     ///
     #[doc(alias = "get_silence_value")]
-    fn silence_value(&self) -> usize {
-        /* 📄OpenNARS源码：
-        return reasoner.getTime(); */
-        todo!("// TODO: 后续要迁移")
-    }
+    fn silence_value(&self) -> usize;
 
     /// 🆕简化`self.silence_value() as Float / 100 as Float`逻辑
     /// * 🎯统一表示「音量」的百分比（静音の度）
@@ -231,10 +185,11 @@ pub struct DerivationContextReasonFieldsMut<'s, C: ReasonContext> {
     // * 🚩推理用变量
     pub current_concept: &'s mut C::Concept,
     pub current_task_link: &'s mut C::TaskLink,
-    // * 🚩输出用变量
     pub current_task: &'s mut C::Task,
     pub current_belief_link: &'s mut C::TermLink,
-    // current_belief: &'s mut C::Sentence,
+    pub current_belief: &'s mut Option<C::Sentence>,
+    // * 🚩输出用变量
+    pub new_stamp: &'s mut Option<C::Stamp>,
 }
 
 /// 「推导上下文」的「概念推理版本」
@@ -354,6 +309,47 @@ pub trait DerivationContextReason<C: ReasonContext>: DerivationContext<C> {
     {
         DerivationContextReason::fields_mut(self).current_belief_link
     }
+
+    /// 模拟`Memory.currentBelief`
+    /// * 🚩【2024-05-08 11:49:37】为强调「引用」需要，此处返回[`RC`]而非引用
+    /// * 🚩经OpenNARS`long_term_stability.nal`测试，仍有可能为空
+    ///   * 🚩【2024-05-08 14:33:03】见[`Memory::single_premise_task`]
+    /// * 📝【2024-05-17 17:34:53】经OpenNARS研究：多个⇒需要可变版本
+    ///   * 📝OpenNARS的`Concept.fire`中的确可空，不论是在「开始推理」还是「转换」还是「正式开始」时
+    ///   * 📝OpenNARS的`Concept.fire`中需要「一个任务链同多个词项链做推理」
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// The selected belief
+    fn current_belief(&self) -> &Option<C::Sentence>;
+    /// [`Memory::current_belief`]的可变版本
+    /// * 🚩【2024-05-19 10:23:01】现在通过「所有可变引用」可将「获取所有可变引用的一部分」作为默认实现
+    #[inline(always)]
+    fn current_belief_mut<'s>(&'s mut self) -> &mut Option<C::Sentence>
+    where
+        C: 's,
+    {
+        DerivationContextReason::fields_mut(self).current_belief
+    }
+
+    /// 模拟`Memory.newStamp`
+    /// * 🚩【2024-05-12 17:49:18】即便此处可空，也不应是`Option<&>`而应该是`&Option<>`
+    ///   * 📌理由：方便复制，性能开销少（不会新创`Option`）且转换容易（[`Option::as_ref`]）
+    /// * ⚠️在推理开始时，此值可能为空
+    ///   * 📄【2024-05-12 19:34:42】已经过`long_term_stability.nal`测试
+    ///
+    /// # 📄OpenNARS
+    ///
+    fn new_stamp(&self) -> &Option<C::Stamp>;
+    /// [`Memory::new_stamp`]的可变版本
+    /// * 🚩【2024-05-19 10:23:01】现在通过「所有可变引用」可将「获取所有可变引用的一部分」作为默认实现
+    #[inline(always)]
+    fn new_stamp_mut<'s>(&'s mut self) -> &'s mut Option<C::Stamp>
+    where
+        C: 's,
+    {
+        DerivationContextReason::fields_mut(self).new_stamp
+    }
 }
 
 /// 直接推导上下文
@@ -373,10 +369,9 @@ pub trait DerivationContextDirect<C: ReasonContext>: DerivationContext<C> {
 
     /// 构造函数
     /// * 🎯在「推理循环」中自动构造
-    /// * 🚩默认为全空
+    /// * 🚩默认为全空，但需要一些来自推理器的超参数
     ///
-    /// TODO: 【2024-05-17 16:48:12】后续仍需添加参数
-    fn new() -> Self;
+    fn new(memory: &C::Memory, time: ClockTime, silence_value: usize) -> Self;
 
     /// 消耗自身以构建「推导上下文」
     /// * 🎯核心功能：创建推导上下文所必须
@@ -384,12 +379,7 @@ pub trait DerivationContextDirect<C: ReasonContext>: DerivationContext<C> {
     ///   * 📌核心逻辑：
     ///     * 预先检查，检查失败⇒返回`Err(self)`；
     ///     * 否则⇒解构并构建，并且一定成功
-    fn build(
-        self,
-        memory: &C::Memory,
-        time: ClockTime,
-        silence_value: usize,
-    ) -> Result<Self::Target, Self>;
+    fn to_concept_reason_context(self) -> Result<Self::Target, Self>;
 
     // TODO: 【2024-05-17 17:57:39】添加字段的可选版本
 
@@ -525,6 +515,15 @@ mod impl_v1 {
     /// 初代「直接推理上下文」
     /// * 🎯用于「直接推理」也用于「构建『概念推理上下文』」
     pub struct DerivationContextDirectV1<'s, C: ReasonContext> {
+        /* ========从「构造函数」中来======== */
+        /// 记忆区
+        pub memory: &'s C::Memory,
+        /// 当前时间
+        pub time: ClockTime,
+        /// 当前「静默值」
+        pub silence_value: usize,
+
+        /* ========从「直接推导上下文」中来======== */
         /// 当前词项
         pub current_term: Option<&'s Term>,
         /// 当前概念
@@ -540,7 +539,19 @@ mod impl_v1 {
         /// * 🚩【2024-05-17 14:47:40】目前按值存储：特征需要如此
         ///   * ⚠️后续仍有可能按「推理规则」的形式更改
         pub current_belief: Option<C::Sentence>,
-        // ! 无需「新时间戳」：这是在「正式推理」过程中产生的新值
+        // ! 无需「新时间戳」：这是在「概念推理」过程中产生的新值
+
+        /* ========缓存的「推导结果」变量======== */
+        /// 新派生的任务
+        pub new_tasks: Vec<C::Task>,
+        /// 新产生的输出
+        pub new_outputs: Vec<Output>,
+        /// 新时间戳
+        /// * 📌可空：创建与使用距离较远之情况
+        ///   * 📝OpenNARS中：在推理过程中创建，在「最终得出结论」时使用（构造新语句/新任务）
+        ///     * 📌但总是不会为`null`：在「语句」中并未检查到构造时`stamp == null`的情况
+        /// * 🚩【2024-05-17 14:49:33】作为「推理产物」放在「推导结果变量」中
+        pub new_stamp: Option<C::Stamp>,
     }
 
     // 批量实现「推导上下文」
@@ -552,107 +563,147 @@ mod impl_v1 {
         for DerivationContextDirectV1<'s, C> => ReasonContext
     }
 
-    /// 实现「推导上下文」
-    impl<C: ReasonContext> DerivationContext<C> for DerivationContextReasonV1<'_, C> {
-        fn fields_mut(&mut self) -> DerivationContextFieldsMut<'_, C> {
-            DerivationContextFieldsMut {
-                current_belief: &mut self.current_belief,
-                new_stamp: &mut self.new_stamp,
-                new_tasks: &mut self.new_tasks,
-                new_outputs: &mut self.new_outputs,
-            }
-        }
-        fn time(&self) -> ClockTime {
-            self.time
-        }
+    /// 对「概念推理上下文」的实现
+    mod impl_reason {
+        use super::*;
 
-        fn memory(&self) -> &C::Memory {
-            self.memory
-        }
-
-        fn new_tasks(&self) -> &[C::Task] {
-            &self.new_tasks
-        }
-
-        fn current_belief(&self) -> &Option<C::Sentence> {
-            &self.current_belief
-        }
-
-        fn new_stamp(&self) -> &Option<C::Stamp> {
-            &self.new_stamp
-        }
-
-        fn new_outputs(&self) -> &[Output] {
-            &self.new_outputs
-        }
-    }
-
-    /// 实现「概念推理上下文」
-    impl<C: ReasonContext> DerivationContextReason<C> for DerivationContextReasonV1<'_, C> {
-        fn fields_mut(&mut self) -> DerivationContextReasonFieldsMut<'_, C> {
-            DerivationContextReasonFieldsMut {
-            // * 🚩作为「推导上下文」的所有字段（必须内联以避免借用整个`self`）
-                context: DerivationContextFieldsMut {
-                    current_belief: &mut self.current_belief,
-                    new_stamp: &mut self.new_stamp,
+        /// 实现「推导上下文」
+        impl<C: ReasonContext> DerivationContext<C> for DerivationContextReasonV1<'_, C> {
+            fn fields_mut(&mut self) -> DerivationContextFieldsMut<'_, C> {
+                DerivationContextFieldsMut {
                     new_tasks: &mut self.new_tasks,
                     new_outputs: &mut self.new_outputs,
-                },
-                // * 🚩↓此处特殊：直接传字段即可
-                current_concept: self.current_concept,
-                current_task_link: &mut self.current_task_link,
-                current_task: &mut self.current_task,
-                current_belief_link: &mut self.current_belief_link,
+                }
+            }
+
+            fn time(&self) -> ClockTime {
+                self.time
+            }
+
+            fn silence_value(&self) -> usize {
+                self.silence_value
+            }
+
+            fn memory(&self) -> &C::Memory {
+                self.memory
+            }
+
+            fn new_tasks(&self) -> &[C::Task] {
+                &self.new_tasks
+            }
+
+            fn new_outputs(&self) -> &[Output] {
+                &self.new_outputs
             }
         }
 
-        fn current_concept(&self) -> &C::Concept {
-            self.current_concept
-        }
+        /// 实现「概念推理上下文」
+        impl<C: ReasonContext> DerivationContextReason<C> for DerivationContextReasonV1<'_, C> {
+            fn fields_mut(&mut self) -> DerivationContextReasonFieldsMut<'_, C> {
+                DerivationContextReasonFieldsMut {
+                    // * 🚩作为「推导上下文」的所有字段（必须内联以避免借用整个`self`）
+                    context: DerivationContextFieldsMut {
+                        new_tasks: &mut self.new_tasks,
+                        new_outputs: &mut self.new_outputs,
+                    },
+                    // * 🚩↓此处特殊：直接传字段即可
+                    current_concept: self.current_concept,
+                    current_task_link: &mut self.current_task_link,
+                    current_task: &mut self.current_task,
+                    current_belief_link: &mut self.current_belief_link,
+                    current_belief: &mut self.current_belief,
+                    new_stamp: &mut self.new_stamp,
+                }
+            }
 
-        // * 📝下面这些「可变字段实现」若后续更改了字段类型，直接删除即可，莫为此多耗时间
-        // * 🚩直接使用默认实现
-        fn current_concept_mut<'s>(&'s mut self) -> &'s mut C::Concept
-        where
-            C: 's,
-        {
-            self.current_concept
-        }
+            fn current_concept(&self) -> &C::Concept {
+                self.current_concept
+            }
 
-        fn current_task_link(&self) -> &C::TaskLink {
-            &self.current_task_link
-        }
+            // * 📝下面这些「可变字段实现」若后续更改了字段类型，直接删除即可，莫为此多耗时间
+            // * 🚩直接使用默认实现
+            fn current_concept_mut<'s>(&'s mut self) -> &'s mut C::Concept
+            where
+                C: 's,
+            {
+                self.current_concept
+            }
 
-        fn current_task_link_mut<'s>(&'s mut self) -> &'s mut <C as ReasonContext>::TaskLink
-        where
-            C: 's,
-        {
-            &mut self.current_task_link
-        }
+            fn current_task_link(&self) -> &C::TaskLink {
+                &self.current_task_link
+            }
 
-        fn current_task(&self) -> &C::Task {
-            &self.current_task
-        }
+            fn current_task_link_mut<'s>(&'s mut self) -> &'s mut <C as ReasonContext>::TaskLink
+            where
+                C: 's,
+            {
+                &mut self.current_task_link
+            }
 
-        fn current_task_mut<'s>(&'s mut self) -> &'s mut <C as ReasonContext>::Task
-        where
-            C: 's,
-        {
-            &mut self.current_task
-        }
+            fn current_task(&self) -> &C::Task {
+                &self.current_task
+            }
 
-        fn current_belief_link(&self) -> &C::TermLink {
-            &self.current_belief_link
-        }
+            fn current_task_mut<'s>(&'s mut self) -> &'s mut <C as ReasonContext>::Task
+            where
+                C: 's,
+            {
+                &mut self.current_task
+            }
 
-        fn current_belief_link_mut<'s>(&'s mut self) -> &'s mut <C as ReasonContext>::TermLink
-        where
-            C: 's,
-        {
-            &mut self.current_belief_link
+            fn current_belief_link(&self) -> &C::TermLink {
+                &self.current_belief_link
+            }
+
+            fn current_belief_link_mut<'s>(&'s mut self) -> &'s mut <C as ReasonContext>::TermLink
+            where
+                C: 's,
+            {
+                &mut self.current_belief_link
+            }
+
+            fn current_belief(&self) -> &Option<C::Sentence> {
+                &self.current_belief
+            }
+
+            fn new_stamp(&self) -> &Option<C::Stamp> {
+                &self.new_stamp
+            }
         }
     }
 
-    // TODO: 实现「推理上下文构建者」
+    mod impl_direct {
+        use super::*;
+
+        /// 实现「推导上下文」
+        impl<C: ReasonContext> DerivationContext<C> for DerivationContextDirectV1<'_, C> {
+            fn fields_mut(&mut self) -> DerivationContextFieldsMut<'_, C> {
+                DerivationContextFieldsMut {
+                    new_tasks: &mut self.new_tasks,
+                    new_outputs: &mut self.new_outputs,
+                }
+            }
+
+            fn time(&self) -> ClockTime {
+                self.time
+            }
+
+            fn silence_value(&self) -> usize {
+                self.silence_value
+            }
+
+            fn memory(&self) -> &C::Memory {
+                self.memory
+            }
+
+            fn new_tasks(&self) -> &[C::Task] {
+                &self.new_tasks
+            }
+
+            fn new_outputs(&self) -> &[Output] {
+                &self.new_outputs
+            }
+        }
+    }
 }
 pub use impl_v1::*;

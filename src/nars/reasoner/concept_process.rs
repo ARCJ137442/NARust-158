@@ -64,7 +64,8 @@ pub trait ReasonerConceptProcess<C: ReasonContext>: Reasoner<C> {
                 let direct_process_result = if let TermLinkRef::Transform(..) =
                     context.current_task_link().as_ref().unwrap().type_ref()
                 {
-                    *context.current_belief_mut() = None;
+                    // TODO: 【2024-05-20 11:28:59】💫貌似「直接推理」不该用到，但未经OpenNARS验证
+                    // *context.current_belief_mut() = None;
                     // let current_task_link = self.current_task_link();
                     context.transform_task();
                     // * 🚩【2024-05-17 22:05:21】没进入真正的`reason`，没有上下文结果
@@ -73,8 +74,7 @@ pub trait ReasonerConceptProcess<C: ReasonContext>: Reasoner<C> {
                 // * 🚩过了所有特殊情况，开始准备「概念推理」
                 else {
                     // * 尝试构建
-                    let build_result =
-                        context.build(self.memory(), self.clock(), self.silence_value());
+                    let build_result = context.to_concept_reason_context();
                     match build_result {
                         Ok(context_reason) => {
                             // * 💭【2024-05-18 01:31:54】按OpenNARS原意，不论是否有，总归是能产生`Vec`的
