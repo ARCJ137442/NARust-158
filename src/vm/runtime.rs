@@ -4,8 +4,8 @@
 
 use crate::{
     global::{GlobalRc, GlobalRcMut, RCMut},
-    inference::ReasonContext,
     nars::{Parameters, Reasoner, ReasonerConcrete},
+    types::TypeContext,
 };
 use anyhow::Result;
 use navm::{cmd::Cmd, output::Output, vm::VmRuntime};
@@ -13,7 +13,7 @@ use navm::{cmd::Cmd, output::Output, vm::VmRuntime};
 /// 虚拟机运行时
 /// * 🎯包装一个虚拟机，以跳出孤儿规则的限制
 #[derive(Debug, Clone)]
-pub struct Runtime<C: ReasonContext, R: ReasonerConcrete<C>> {
+pub struct Runtime<C: TypeContext, R: ReasonerConcrete<C>> {
     /// 内部推理器字段
     reasoner: R,
     /// 输出通道的共享引用
@@ -23,8 +23,7 @@ pub struct Runtime<C: ReasonContext, R: ReasonerConcrete<C>> {
 }
 
 /// 自身实现
-impl<'this: 'reasoner, 'reasoner, C: ReasonContext, R: ReasonerConcrete<C> + 'reasoner>
-    Runtime<C, R>
+impl<'this: 'reasoner, 'reasoner, C: TypeContext, R: ReasonerConcrete<C> + 'reasoner> Runtime<C, R>
 where
     Self: 'this,
 {
@@ -53,7 +52,7 @@ where
 /// 实现[虚拟机运行时](VmRuntime)
 impl<C, R> VmRuntime for Runtime<C, R>
 where
-    C: ReasonContext,
+    C: TypeContext,
     R: ReasonerConcrete<C>,
 {
     fn input_cmd(&mut self, cmd: Cmd) -> Result<()> {
@@ -104,7 +103,7 @@ mod channels {
     #[derive(Debug, Clone)]
     pub struct ChannelOut<C, R>
     where
-        C: ReasonContext,
+        C: TypeContext,
         R: ReasonerConcrete<C>,
     {
         _marker_c: std::marker::PhantomData<C>,
@@ -112,7 +111,7 @@ mod channels {
         cached_outputs: VecDeque<Output>,
     }
 
-    impl<C: ReasonContext, R: ReasonerConcrete<C>> ChannelOut<C, R> {
+    impl<C: TypeContext, R: ReasonerConcrete<C>> ChannelOut<C, R> {
         /// 构造函数
         pub fn new() -> Self {
             Self {
@@ -136,13 +135,13 @@ mod channels {
         }
     }
 
-    impl<C: ReasonContext, R: ReasonerConcrete<C>> Default for ChannelOut<C, R> {
+    impl<C: TypeContext, R: ReasonerConcrete<C>> Default for ChannelOut<C, R> {
         fn default() -> Self {
             Self::new()
         }
     }
 
-    impl<C: ReasonContext, R: ReasonerConcrete<C>> Channel for ChannelOut<C, R> {
+    impl<C: TypeContext, R: ReasonerConcrete<C>> Channel for ChannelOut<C, R> {
         type Context = C;
         // type Reasoner = R;
 
@@ -153,14 +152,14 @@ mod channels {
     }
 
     /// 对自身实现
-    impl<C: ReasonContext, R: ReasonerConcrete<C>> OutputChannel for ChannelOut<C, R> {
+    impl<C: TypeContext, R: ReasonerConcrete<C>> OutputChannel for ChannelOut<C, R> {
         fn next_output(&mut self /* , _reasoner: &mut Self::Reasoner */, outputs: &[Output]) {
             // * 🚩（复制并）存入自身缓存中
             self.cached_outputs.extend(outputs.iter().cloned());
         }
     }
 
-    impl<C: ReasonContext, R: ReasonerConcrete<C>> Channel for RCMut<ChannelOut<C, R>> {
+    impl<C: TypeContext, R: ReasonerConcrete<C>> Channel for RCMut<ChannelOut<C, R>> {
         type Context = C;
         // type Reasoner = R;
 
@@ -171,7 +170,7 @@ mod channels {
     }
 
     /// 对Rc<RefCell>自身实现
-    impl<C: ReasonContext, R: ReasonerConcrete<C>> OutputChannel for RCMut<ChannelOut<C, R>> {
+    impl<C: TypeContext, R: ReasonerConcrete<C>> OutputChannel for RCMut<ChannelOut<C, R>> {
         fn next_output(&mut self /* , reasoner: &mut Self::Reasoner */, outputs: &[Output]) {
             self.mut_().next_output(/* reasoner, */ outputs)
             // match self.mut_() {

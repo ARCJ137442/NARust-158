@@ -9,11 +9,11 @@
 //!
 //! * ♻️【2024-05-16 18:07:08】初步独立成模块功能
 
-use crate::{entity::*, inference::*, language::Term, storage::*};
+use crate::{control::*, entity::*, inference::*, language::Term, storage::*, types::TypeContext};
 
 ///
 /// * 🚩因为`<Self as LocalRules>::solution_quality`要求[`Sized`]
-pub trait ConceptProcessLink<C: ReasonContext>: DerivationContext<C> {
+pub trait ConceptProcessLink<C: TypeContext>: DerivationContext<C> {
     /// 模拟`Concept.linkToTask`
     /// * ⚠️【2024-05-15 17:20:47】涉及大量共享引用
     ///   * 💫共享引用策源地：如何在无GC语言中尽可能减少这类共享引用，是个问题
@@ -234,7 +234,7 @@ pub trait ConceptProcessLink<C: ReasonContext>: DerivationContext<C> {
 }
 
 /// 自动实现，以便添加方法
-impl<C: ReasonContext, T: DerivationContext<C>> ConceptProcessLink<C> for T {}
+impl<C: TypeContext, T: DerivationContext<C>> ConceptProcessLink<C> for T {}
 
 /// TODO: 单元测试
 #[cfg(test)]

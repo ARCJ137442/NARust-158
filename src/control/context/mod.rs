@@ -1,14 +1,14 @@
-//! 有关推理中「上下文」的
+//! 🆕新的「推理上下文」类型
 //! * 🎯用于统一在NARS推理中采用的「推理对象」的特征实现
 //! * 🎯提供实际推理控制所用到的、单周期内有效的「临时推理结构」
 //! * ✨允许「相同的上层接口，不同的底层实现」
 
-// 推理上下文
-// * 🎯用于统一类型
-mod reason;
-pub use reason::*;
-
-// 推导上下文
-// * 🎯用于实际推理周期
-mod derivation;
-pub use derivation::*;
+nar_dev_utils::mods! {
+    // 定义
+    pub use definition;
+    // 导出（输出、任务）
+    pub use derivation;
+    // TODO: 直接推理
+    // TODO: 转换推理
+    // TODO: 概念推理
+}

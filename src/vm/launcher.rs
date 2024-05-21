@@ -5,8 +5,8 @@
 
 use super::Runtime;
 use crate::{
-    inference::ReasonContext,
     nars::{Parameters, ReasonerConcrete},
+    types::TypeContext,
 };
 use anyhow::Result;
 use navm::vm::VmLauncher;
@@ -17,7 +17,7 @@ use std::marker::PhantomData;
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Launcher<C, R>
 where
-    C: ReasonContext,
+    C: TypeContext,
     R: ReasonerConcrete<C>,
 {
     /// 「推理器」类型标注`R`
@@ -31,7 +31,7 @@ where
     hyper_parameters: Parameters,
 }
 
-impl<C: ReasonContext, R: ReasonerConcrete<C>> Launcher<C, R> {
+impl<C: TypeContext, R: ReasonerConcrete<C>> Launcher<C, R> {
     /// 构造函数
     pub fn new(name: impl Into<String>, hyper_parameters: Parameters) -> Self {
         Self {
@@ -44,7 +44,7 @@ impl<C: ReasonContext, R: ReasonerConcrete<C>> Launcher<C, R> {
 }
 
 /// 虚拟机启动器
-impl<C: ReasonContext, R: ReasonerConcrete<C>> VmLauncher for Launcher<C, R> {
+impl<C: TypeContext, R: ReasonerConcrete<C>> VmLauncher for Launcher<C, R> {
     type Runtime = Runtime<C, R>;
 
     fn launch(self) -> Result<Self::Runtime> {

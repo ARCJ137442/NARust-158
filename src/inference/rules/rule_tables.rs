@@ -2,13 +2,12 @@
 //! * ❓【2024-05-06 21:59:43】是否一定要按照OpenNARS中「全静态方法类」来实现
 //!   * 🚩🆕【2024-05-06 21:59:59】目前决定：用更Rusty的方式——模块内全局函数
 //!   * 🚩【2024-05-06 22:28:30】最新方法：上下文+特征追加
-//!     * 📄参见[「推理上下文」](super::reason_context)
+//!     * 📄参见[「推理上下文」](super::type_context)
 //! * ✅基本完成「特征方法」API：函数签名、返回值、参数类型
 //!
 //! TODO: 🚧完成具体实现
 
-use crate::inference::{DerivationContextDirect, DerivationContextReason, ReasonContext};
-use crate::{entity::*, language::*};
+use crate::{control::*, entity::*, language::*, types::TypeContext};
 
 /// 🆕三段论位置
 /// * 🎯用于表征[`RuleTables::index_to_figure`]推导出的「三段论子类型」
@@ -104,7 +103,7 @@ pub mod syllogistic_figures {
 /// * 🚩【2024-05-12 14:13:18】目前学习OpenNARS 3.0.4的组织形式——其中所有对「记忆区」的引用，都将由「推理上下文」取代
 ///   * 📄包括「读写词项/任务」「缓存产生的输出（并随后交给记忆区）」等
 ///   * 🚩后续的所有`memory`参数，均将由`self`取代
-pub trait RuleTables<C: ReasonContext>: DerivationContextReason<C> {
+pub trait RuleTables<C: TypeContext>: DerivationContextReason<C> {
     /// 模拟`RuleTables.reason`
     /// * 🚩【2024-05-08 16:36:34】仅保留「记忆区」单个参数
     ///   * 📌情况：该函数只在[`Memory::__fire_concept`]调用，且其中的`task_link`也固定为「当前任务链」
@@ -738,55 +737,15 @@ pub trait RuleTables<C: ReasonContext>: DerivationContextReason<C> {
 }
 
 /// 自动实现，以便添加方法
-impl<C: ReasonContext, T: DerivationContextReason<C>> RuleTables<C> for T {}
+impl<C: TypeContext, T: DerivationContextReason<C>> RuleTables<C> for T {}
 
 /// 规则表@「直接推理」
 /// * 🎯只适用于非`RuleTables.reason`的过程
 /// * 🎯直接对标[`DerivationContextDirect`]
-pub trait RuleTablesDirect<C: ReasonContext>: DerivationContextDirect<C> {
-    /* ----- inference with one TaskLink only ----- */
-
-    /// 模拟`RuleTables.transformTask`
-    /// * 🚩【2024-05-08 16:36:34】仅保留「记忆区」单个参数
-    ///   * 📌情况：该函数只在[`Memory::__fire_concept`]调用，且其中的`task_link`也固定为「当前任务链」
-    ///   * 📌原因：同时传入「自身可变引用」与「自身不可变引用」⇒借用错误
-    /// * 🚩【2024-05-18 01:04:04】该方法仅用于「直接推理」
-    ///
-    /// # 📄OpenNARS
-    ///
-    /// The TaskLink is of type TRANSFORM, and the conclusion is an equivalent
-    /// transformation
-    ///
-    /// @param tLink  The task link
-    /// @param memory Reference to the memory
-    fn transform_task(/* task_link: &C::TaskLink,  */ &mut self) {
-        /* 📄OpenNARS源码：
-        CompoundTerm content = (CompoundTerm) memory.currentTask.getContent().clone();
-        short[] indices = tLink.getIndices();
-        Term inh = null;
-        if ((indices.length == 2) || (content instanceof Inheritance)) { // <(*, term, #) --> #>
-            inh = content;
-        } else if (indices.length == 3) { // <<(*, term, #) --> #> ==> #>
-            inh = content.componentAt(indices[0]);
-        } else if (indices.length == 4) { // <(&&, <(*, term, #) --> #>, #) ==> #>
-            Term component = content.componentAt(indices[0]);
-            if ((component instanceof Conjunction)
-                    && (((content instanceof Implication) && (indices[0] == 0)) || (content instanceof Equivalence))) {
-                inh = ((CompoundTerm) component).componentAt(indices[1]);
-            } else {
-                return;
-            }
-        }
-        if (inh instanceof Inheritance) {
-            StructuralRules.transformProductImage((Inheritance) inh, content, indices, memory);
-        } */
-        let task_link = self.current_task_link().as_ref().unwrap();
-        todo!("// TODO: 有待实现")
-    }
-}
+pub trait RuleTablesDirect<C: TypeContext>: DerivationContextDirect<C> {}
 
 /// 自动实现，以便添加方法
-impl<C: ReasonContext, T: DerivationContextDirect<C>> RuleTablesDirect<C> for T {}
+impl<C: TypeContext, T: DerivationContextDirect<C>> RuleTablesDirect<C> for T {}
 
 /// TODO: 单元测试
 #[cfg(test)]

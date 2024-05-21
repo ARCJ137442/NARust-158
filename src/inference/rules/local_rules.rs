@@ -1,10 +1,13 @@
 //! 🎯复刻OpenNARS `nars.inference.LocalRules`
-//! * 📄有关「类型声明」参见[「推理上下文」](super::reason_context)
+//! * 📄有关「类型声明」参见[「推理上下文」](super::type_context)
 //! * ✅【2024-05-07 18:51:30】初步实现方法API（函数签名、文档、源码附注）
 //!
 //! TODO: 🚧完成具体实现
 
-use crate::{entity::*, inference::*, io::symbols::VAR_QUERY, language::variable::unify_two};
+use crate::{
+    control::*, entity::*, inference::*, io::symbols::VAR_QUERY, language::variable::unify_two,
+    types::TypeContext,
+};
 
 /// 模拟`LocalRules`
 /// * 📝有关「内部思考」「内省」的规则
@@ -26,7 +29,7 @@ use crate::{entity::*, inference::*, io::symbols::VAR_QUERY, language::variable:
 /// judgments; satisfy: between a Sentence and a Question/Goal; merge: between
 /// items of the same type and stamp; conversion: between different inheritance
 /// relations.
-pub trait LocalRules<C: ReasonContext>: DerivationContext<C> {
+pub trait LocalRules<C: TypeContext>: DerivationContext<C> {
     /// 模拟`LocalRules.revisable`
     /// * 📝【2024-05-18 02:03:21】OpenNARS在「直接推理」「概念推理」中均涉及
     ///
@@ -258,10 +261,10 @@ pub trait LocalRules<C: ReasonContext>: DerivationContext<C> {
 }
 
 /// 自动实现，以便添加方法
-impl<C: ReasonContext, T: DerivationContext<C>> LocalRules<C> for T {}
+impl<C: TypeContext, T: DerivationContext<C>> LocalRules<C> for T {}
 
 /// 「本地规则」的「直接推理」版本
-pub trait LocalRulesDirect<C: ReasonContext>: DerivationContextDirect<C> {
+pub trait LocalRulesDirect<C: TypeContext>: DerivationContextDirect<C> {
     /// 模拟`LocalRules.revision`
     /// * ⚠️【2024-05-18 02:09:47】OpenNARS在「直接推理」「概念推理」均用到
     ///   * 📌「直接推理」在`processJudgement`中用到，其中`feedbackToLinks == false`
@@ -290,7 +293,7 @@ pub trait LocalRulesDirect<C: ReasonContext>: DerivationContextDirect<C> {
         let old_truth = old_belief.truth().unwrap();
         let truth = new_truth.revision(old_truth);
         // ! 此处真的要修改词项链、任务链
-        let current_task_budget = self.current_task_mut().as_mut().unwrap().budget_mut();
+        let current_task_budget = self.current_task_mut().budget_mut();
         let budget = <C::Budget as BudgetFunctions>::revise_direct(
             new_truth,
             old_truth,
@@ -299,15 +302,15 @@ pub trait LocalRulesDirect<C: ReasonContext>: DerivationContextDirect<C> {
         );
         let content = new_belief.content();
         // self.double_premise_task_revisable(content.clone(), truth, budget);
-        todo!("// TODO: 【2024-05-17 21:58:40】待修复「推导上下文在『结论导出』方面不通用」的问题")
+        todo!("// TODO: 【2024-05-17 21:58:40】待修复「推理上下文在『结论导出』方面不通用」的问题")
     }
 }
 
 /// 自动实现，以便添加方法
-impl<C: ReasonContext, T: DerivationContextDirect<C>> LocalRulesDirect<C> for T {}
+impl<C: TypeContext, T: DerivationContextDirect<C>> LocalRulesDirect<C> for T {}
 
 /// 「本地规则」的「概念推理」版本
-pub trait LocalRulesReason<C: ReasonContext>: DerivationContextReason<C> {
+pub trait LocalRulesReason<C: TypeContext>: DerivationContextReason<C> {
     /* -------------------- same contents -------------------- */
 
     /// 模拟`LocalRules.match`
@@ -374,12 +377,12 @@ pub trait LocalRulesReason<C: ReasonContext>: DerivationContextReason<C> {
             <C::Budget as BudgetFunctions>::revise_reason(new_truth, old_truth, &truth, self);
         let content = new_belief.content();
         // self.double_premise_task_revisable(content.clone(), truth, budget);
-        todo!("// TODO: 【2024-05-17 21:58:40】待修复「推导上下文在『结论导出』方面不通用」的问题")
+        todo!("// TODO: 【2024-05-17 21:58:40】待修复「推理上下文在『结论导出』方面不通用」的问题")
     }
 }
 
 /// 自动实现，以便添加方法
-impl<C: ReasonContext, T: DerivationContextReason<C>> LocalRulesReason<C> for T {}
+impl<C: TypeContext, T: DerivationContextReason<C>> LocalRulesReason<C> for T {}
 
 /// TODO: 单元测试
 #[cfg(test)]

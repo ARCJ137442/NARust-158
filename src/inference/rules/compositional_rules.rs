@@ -1,12 +1,11 @@
 //! 🎯复刻OpenNARS `nars.inference.CompositionalRules`
-//! * 📄有关「类型声明」参见[「推理上下文」](super::reason_context)
+//! * 📄有关「类型声明」参见[「推理上下文」](super::type_context)
 //!
 //! * ✅【2024-05-12 00:47:43】初步复现方法API
 //!
 //! TODO: 🚧完成具体实现
 
-use crate::inference::DerivationContext;
-use crate::{entity::*, inference::*, language::Term};
+use crate::{control::*, entity::*, inference::*, language::Term, types::TypeContext};
 
 /// 模拟`CompositionalRules`
 /// * 📝这些规则基本与「复合词项」的有关
@@ -19,7 +18,7 @@ use crate::{entity::*, inference::*, language::Term};
 ///
 /// Forward inference only, except the last group (dependent variable
 /// introduction) can also be used backward.
-pub trait CompositionalRules<C: ReasonContext> {
+pub trait CompositionalRules<C: TypeContext> {
     /// 模拟`CompositionalRules.IntroVarSameSubjectOrPredicate`
     ///
     /// # 📄OpenNARS
@@ -365,6 +364,8 @@ pub trait CompositionalRules<C: ReasonContext> {
             budget = BudgetFunctions.compoundForward(truth, content, memory);
             memory.doublePremiseTask(content, truth, budget);
         } */
+        // TODO: `memory.currentTask = contentTask;`这行现已过时：实际上只需将参数传入下游，就可避免打破「当前任务=当前任务链目标」的僵局
+        // * 📄参见OpenNARS`decomposeStatement`，以最新版为准
     }
 
     /* --------------- rules used for variable introduction --------------- */
@@ -569,7 +570,7 @@ pub trait CompositionalRules<C: ReasonContext> {
 }
 
 /// 自动实现，以便添加方法
-impl<C: ReasonContext, T: DerivationContext<C>> CompositionalRules<C> for T {}
+impl<C: TypeContext, T: DerivationContext<C>> CompositionalRules<C> for T {}
 
 /// TODO: 单元测试
 #[cfg(test)]

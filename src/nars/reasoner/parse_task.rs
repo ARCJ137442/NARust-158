@@ -7,15 +7,16 @@ use crate::{
         BudgetValueConcrete, Sentence, SentenceConcrete, SentenceType, ShortFloat, StampConcrete,
         TaskConcrete,
     },
-    inference::{BudgetFunctions, ReasonContext},
+    inference::BudgetFunctions,
     io::symbols::JUDGMENT_MARK,
     language::Term,
     nars::DEFAULT_PARAMETERS,
+    types::TypeContext,
 };
 use anyhow::Result;
 use narsese::lexical::{Sentence as LexicalSentence, Task as LexicalTask};
 
-pub trait ReasonerParseTask<C: ReasonContext>: Reasoner<C> {
+pub trait ReasonerParseTask<C: TypeContext>: Reasoner<C> {
     /// 模拟`StringParser.parseTask`
     /// * 🚩直接模仿`parseTask`而非`parseExperience`
     /// * 📌结合自身信息的「词法折叠」
@@ -128,4 +129,4 @@ pub trait ReasonerParseTask<C: ReasonContext>: Reasoner<C> {
 }
 
 /// 通过「批量实现」自动加功能
-impl<C: ReasonContext, T: Reasoner<C>> ReasonerParseTask<C> for T {}
+impl<C: TypeContext, T: Reasoner<C>> ReasonerParseTask<C> for T {}

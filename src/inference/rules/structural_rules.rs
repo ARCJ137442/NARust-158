@@ -1,12 +1,14 @@
 //! 🎯复刻OpenNARS `nars.inference.StructuralRules`
-//! * 📄有关「类型声明」参见[「推理上下文」](super::reason_context)
+//! * 📄有关「类型声明」参见[「推理上下文」](super::type_context)
 //!
 //! * ✅【2024-05-11 15:10:00】初步复现方法API
 //!
 //! TODO: 🚧完成具体实现
 
-use crate::inference::DerivationContext;
-use crate::{entity::*, global::Float, inference::*, language::Term, nars::DEFAULT_PARAMETERS};
+use crate::{
+    control::*, entity::*, global::Float, inference::*, language::Term, nars::DEFAULT_PARAMETERS,
+    types::TypeContext,
+};
 
 /// 模拟`StructuralRules`
 /// * 📝这些规则均是有关「复合词项」的规则
@@ -18,7 +20,7 @@ use crate::{entity::*, global::Float, inference::*, language::Term, nars::DEFAUL
 /// # 📄OpenNARS
 ///
 /// Single-premise inference rules involving compound terms. Input are one sentence (the premise) and one TermLink (indicating a component)
-pub trait StructuralRules<C: ReasonContext> {
+pub trait StructuralRules<C: TypeContext> {
     /// 模拟`StructuralRules.RELIANCE`
     const __RELIANCE: Float = DEFAULT_PARAMETERS.reliance;
 
@@ -366,226 +368,7 @@ pub trait StructuralRules<C: ReasonContext> {
         memory.singlePremiseTask(content, truth, budget); */
     }
 
-    /* -------------------- products and images transform -------------------- */
-    // TODO: 【2024-05-11 14:55:48】确认并理清其中`relation_index`与`placeholder_index`的关系（是否等价？是否可以直接拿来用？）
-
-    /// 模拟`StructuralRules.transformProductImage`
-    ///
-    /// # 📄OpenNARS
-    ///
-    /// Equivalent transformation between products and images
-    /// {<(*, S, M) --> P>, S@(*, S, M)} |- <S --> (/, P, _, M)>
-    /// {<S --> (/, P, _, M)>, P@(/, P, _, M)} |- <(*, S, M) --> P>
-    /// {<S --> (/, P, _, M)>, M@(/, P, _, M)} |- <M --> (/, P, S, _)>
-    ///
-    /// @param inh        An Inheritance statement
-    /// @param oldContent The whole content
-    /// @param indices    The indices of the TaskLink
-    /// @param task       The task
-    /// @param memory     Reference to the memory
-    fn transform_product_image(
-        inh: &Term,
-        old_content: &Term,
-        indices: &[usize],
-        task: &C::Task,
-        memory: &mut C::Memory,
-    ) {
-        /* 📄OpenNARS源码：
-        Term subject = inh.getSubject();
-        Term predicate = inh.getPredicate();
-        if (inh.equals(oldContent)) {
-            if (subject instanceof CompoundTerm) {
-                transformSubjectPI((CompoundTerm) subject, predicate, memory);
-            }
-            if (predicate instanceof CompoundTerm) {
-                transformPredicatePI(subject, (CompoundTerm) predicate, memory);
-            }
-            return;
-        }
-        short index = indices[indices.length - 1];
-        short side = indices[indices.length - 2];
-        CompoundTerm comp = (CompoundTerm) inh.componentAt(side);
-        if (comp instanceof Product) {
-            if (side == 0) {
-                subject = comp.componentAt(index);
-                predicate = ImageExt.make((Product) comp, inh.getPredicate(), index, memory);
-            } else {
-                subject = ImageInt.make((Product) comp, inh.getSubject(), index, memory);
-                predicate = comp.componentAt(index);
-            }
-        } else if ((comp instanceof ImageExt) && (side == 1)) {
-            if (index == ((ImageExt) comp).getRelationIndex()) {
-                subject = Product.make(comp, inh.getSubject(), index, memory);
-                predicate = comp.componentAt(index);
-            } else {
-                subject = comp.componentAt(index);
-                predicate = ImageExt.make((ImageExt) comp, inh.getSubject(), index, memory);
-            }
-        } else if ((comp instanceof ImageInt) && (side == 0)) {
-            if (index == ((ImageInt) comp).getRelationIndex()) {
-                subject = comp.componentAt(index);
-                predicate = Product.make(comp, inh.getPredicate(), index, memory);
-            } else {
-                subject = ImageInt.make((ImageInt) comp, inh.getPredicate(), index, memory);
-                predicate = comp.componentAt(index);
-            }
-        } else {
-            return;
-        }
-        Inheritance newInh = Inheritance.make(subject, predicate, memory);
-        Term content = null;
-        if (indices.length == 2) {
-            content = newInh;
-        } else if ((oldContent instanceof Statement) && (indices[0] == 1)) {
-            content = Statement.make((Statement) oldContent, oldContent.componentAt(0), newInh, memory);
-        } else {
-            ArrayList<Term> componentList;
-            Term condition = oldContent.componentAt(0);
-            if (((oldContent instanceof Implication) || (oldContent instanceof Equivalence))
-                    && (condition instanceof Conjunction)) {
-                componentList = ((CompoundTerm) condition).cloneComponents();
-                componentList.set(indices[1], newInh);
-                Term newCond = CompoundTerm.make((CompoundTerm) condition, componentList, memory);
-                content = Statement.make((Statement) oldContent, newCond, ((Statement) oldContent).getPredicate(),
-                        memory);
-            } else {
-                componentList = oldContent.cloneComponents();
-                componentList.set(indices[0], newInh);
-                if (oldContent instanceof Conjunction) {
-                    content = CompoundTerm.make(oldContent, componentList, memory);
-                } else if ((oldContent instanceof Implication) || (oldContent instanceof Equivalence)) {
-                    content = Statement.make((Statement) oldContent, componentList.get(0), componentList.get(1),
-                            memory);
-                }
-            }
-        }
-        if (content == null) {
-            return;
-        }
-        Sentence sentence = memory.currentTask.getSentence();
-        TruthValue truth = sentence.getTruth();
-        BudgetValue budget;
-        if (sentence.isQuestion()) {
-            budget = BudgetFunctions.compoundBackward(content, memory);
-        } else {
-            budget = BudgetFunctions.compoundForward(truth, content, memory);
-        }
-        memory.singlePremiseTask(content, truth, budget); */
-    }
-
-    /// 模拟`StructuralRules.transformSubjectPI`
-    ///
-    /// # 📄OpenNARS
-    ///
-    /// Equivalent transformation between products and images when the subject is a compound
-    /// {<(*, S, M) --> P>, S@(*, S, M)} |- <S --> (/, P, _, M)>
-    /// {<S --> (/, P, _, M)>, P@(/, P, _, M)} |- <(*, S, M) --> P>
-    /// {<S --> (/, P, _, M)>, M@(/, P, _, M)} |- <M --> (/, P, S, _)>
-    ///
-    /// @param subject   The subject term
-    /// @param predicate The predicate term
-    /// @param memory    Reference to the memory
-    fn __transform_subject_pi(subject: &Term, predicate: &Term, memory: &mut C::Memory) {
-        /* 📄OpenNARS源码：
-        TruthValue truth = memory.currentTask.getSentence().getTruth();
-        BudgetValue budget;
-        Inheritance inheritance;
-        Term newSubj, newPred;
-        if (subject instanceof Product) {
-            Product product = (Product) subject;
-            for (short i = 0; i < product.size(); i++) {
-                newSubj = product.componentAt(i);
-                newPred = ImageExt.make(product, predicate, i, memory);
-                inheritance = Inheritance.make(newSubj, newPred, memory);
-                if (inheritance != null) {
-                    if (truth == null) {
-                        budget = BudgetFunctions.compoundBackward(inheritance, memory);
-                    } else {
-                        budget = BudgetFunctions.compoundForward(truth, inheritance, memory);
-                    }
-                    memory.singlePremiseTask(inheritance, truth, budget);
-                }
-            }
-        } else if (subject instanceof ImageInt) {
-            ImageInt image = (ImageInt) subject;
-            int relationIndex = image.getRelationIndex();
-            for (short i = 0; i < image.size(); i++) {
-                if (i == relationIndex) {
-                    newSubj = image.componentAt(relationIndex);
-                    newPred = Product.make(image, predicate, relationIndex, memory);
-                } else {
-                    newSubj = ImageInt.make((ImageInt) image, predicate, i, memory);
-                    newPred = image.componentAt(i);
-                }
-                inheritance = Inheritance.make(newSubj, newPred, memory);
-                if (inheritance != null) {
-                    if (truth == null) {
-                        budget = BudgetFunctions.compoundBackward(inheritance, memory);
-                    } else {
-                        budget = BudgetFunctions.compoundForward(truth, inheritance, memory);
-                    }
-                    memory.singlePremiseTask(inheritance, truth, budget);
-                }
-            }
-        } */
-    }
-
-    /// 模拟`StructuralRules.transformPredicatePI`
-    ///
-    /// # 📄OpenNARS
-    ///
-    /// Equivalent transformation between products and images when the predicate is a compound
-    /// {<(*, S, M) --> P>, S@(*, S, M)} |- <S --> (/, P, _, M)>
-    /// {<S --> (/, P, _, M)>, P@(/, P, _, M)} |- <(*, S, M) --> P>
-    /// {<S --> (/, P, _, M)>, M@(/, P, _, M)} |- <M --> (/, P, S, _)>
-    ///
-    /// @param subject   The subject term
-    /// @param predicate The predicate term
-    /// @param memory    Reference to the memory
-    fn __transform_predicate_pi(subject: &Term, predicate: &Term, memory: &mut C::Memory) {
-        /* 📄OpenNARS源码：
-        TruthValue truth = memory.currentTask.getSentence().getTruth();
-        BudgetValue budget;
-        Inheritance inheritance;
-        Term newSubj, newPred;
-        if (predicate instanceof Product) {
-            Product product = (Product) predicate;
-            for (short i = 0; i < product.size(); i++) {
-                newSubj = ImageInt.make(product, subject, i, memory);
-                newPred = product.componentAt(i);
-                inheritance = Inheritance.make(newSubj, newPred, memory);
-                if (inheritance != null) {
-                    if (truth == null) {
-                        budget = BudgetFunctions.compoundBackward(inheritance, memory);
-                    } else {
-                        budget = BudgetFunctions.compoundForward(truth, inheritance, memory);
-                    }
-                    memory.singlePremiseTask(inheritance, truth, budget);
-                }
-            }
-        } else if (predicate instanceof ImageExt) {
-            ImageExt image = (ImageExt) predicate;
-            int relationIndex = image.getRelationIndex();
-            for (short i = 0; i < image.size(); i++) {
-                if (i == relationIndex) {
-                    newSubj = Product.make(image, subject, relationIndex, memory);
-                    newPred = image.componentAt(relationIndex);
-                } else {
-                    newSubj = image.componentAt(i);
-                    newPred = ImageExt.make((ImageExt) image, subject, i, memory);
-                }
-                inheritance = Inheritance.make(newSubj, newPred, memory);
-                if (inheritance != null) { // jmv <<<<<
-                    if (truth == null) {
-                        budget = BudgetFunctions.compoundBackward(inheritance, memory);
-                    } else {
-                        budget = BudgetFunctions.compoundForward(truth, inheritance, memory);
-                    }
-                    memory.singlePremiseTask(inheritance, truth, budget);
-                }
-            }
-        } */
-    }
+    // ! 🚩【2024-05-21 22:03:09】目前有关NAL-4「单任务转换」的规则，均迁移至`transform_rules`中
 
     /* --------------- Disjunction and Conjunction transform --------------- */
 
@@ -694,7 +477,7 @@ pub trait StructuralRules<C: ReasonContext> {
 }
 
 /// 自动实现，以便添加方法
-impl<C: ReasonContext, T: DerivationContext<C>> StructuralRules<C> for T {}
+impl<C: TypeContext, T: DerivationContext<C>> StructuralRules<C> for T {}
 
 /// TODO: 单元测试
 #[cfg(test)]

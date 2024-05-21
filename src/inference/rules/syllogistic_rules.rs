@@ -1,12 +1,11 @@
 //! 🎯复刻OpenNARS `nars.inference.SyllogisticRules`
-//! * 📄有关「类型声明」参见[「推理上下文」](super::reason_context)
+//! * 📄有关「类型声明」参见[「推理上下文」](super::type_context)
 //!
 //! * ✅【2024-05-11 10:08:34】初步复现方法API
 //!
 //! TODO: 完成具体实现
 
-use crate::inference::DerivationContext;
-use crate::{inference::*, language::Term};
+use crate::{control::*, inference::*, language::Term, types::TypeContext};
 
 /// 🆕表示「三段论侧」
 /// * 🎯使用枚举对标以下推理中的`side`参数
@@ -40,7 +39,7 @@ pub enum SyllogismSide {
 /// # 📄OpenNARS
 ///
 /// Syllogisms: Inference rules based on the transitivity of the relation.
-pub trait SyllogisticRules<C: ReasonContext> {
+pub trait SyllogisticRules<C: TypeContext> {
     // --------------- rules used in both first-tense inference and higher-tense inference ---------------
 
     /// 模拟`SyllogisticRules.dedExe`
@@ -587,7 +586,7 @@ pub trait SyllogisticRules<C: ReasonContext> {
 }
 
 /// 自动实现，以便添加方法
-impl<C: ReasonContext, T: DerivationContext<C>> SyllogisticRules<C> for T {}
+impl<C: TypeContext, T: DerivationContext<C>> SyllogisticRules<C> for T {}
 
 /// TODO: 单元测试
 #[cfg(test)]

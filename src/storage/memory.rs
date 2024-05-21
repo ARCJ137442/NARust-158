@@ -6,17 +6,20 @@
 //! * ✅【2024-05-08 17:17:41】目前已初步完成所有方法的模拟
 
 use super::ConceptBag;
-use crate::{entity::*, inference::*, language::Term, nars::DEFAULT_PARAMETERS, storage::*};
+use crate::{
+    entity::*, inference::*, language::Term, nars::DEFAULT_PARAMETERS, storage::*,
+    types::TypeContext,
+};
 
 /// 模拟`nars.entity.Memory`
-/// * 🚩直接通过「要求[『推理上下文』](ReasonContext)」获得完整的「类型约束」
+/// * 🚩直接通过「要求[『推理上下文』](TypeContext)」获得完整的「类型约束」
 ///   * ✅一并解决「上下文各种完全限定语法」的语法噪音问题
 /// * 🚩【2024-05-08 16:34:15】因为"<as [`RuleTables`]>"的需要，增加约束[`Sized`]
 ///
 /// # 📄OpenNARS
 ///
 /// The memory of the system.
-pub trait Memory: ReasonContext<Memory = Self> + Sized {
+pub trait Memory: TypeContext<Memory = Self> + Sized {
     // /// 绑定的「概念」类型
     // type Concept: ConceptConcrete;
 

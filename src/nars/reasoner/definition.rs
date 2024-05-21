@@ -4,14 +4,7 @@
 //!   * 📌更【基础】的类，名称应该更短
 //! * 📄在OpenNARS 3.x中已更名为 `nars.main.NAR`
 
-use super::*;
-use crate::entity::{BudgetValue, Item, ShortFloat, TaskConcrete};
-use crate::global::ClockTime;
-use crate::inference::{DerivationContextDirect, DerivationContextReason, ReasonContext};
-use crate::io::{InputChannel, OutputChannel};
-use crate::nars::{Parameters, DEFAULT_PARAMETERS};
-use crate::storage::{BagConcrete, Memory, NovelTaskBag};
-use crate::ToDisplayAndBrief;
+use crate::{control::*, entity::*, global::*, io::*, nars::*, storage::*, types::*, *};
 use nar_dev_utils::list;
 use narsese::api::NarseseValue;
 use navm::cmd::Cmd;
@@ -20,17 +13,17 @@ use std::collections::VecDeque;
 
 /// 模拟`ReasonerBatch`
 /// * 🚩【2024-05-17 16:48:52】现在直接就是「具体类型」，并且采用泛型而非「关联类型」的方法
-///   * ⚠️避免在绑定「推导上下文」类型中遇到一堆「类型重绑定」
+///   * ⚠️避免在绑定「推理上下文」类型中遇到一堆「类型重绑定」
 ///     * 📄如`Task = Self::Task`
 /// * 🚩【2024-05-17 17:11:34】因为`parse_task`需要[`Sized`]
 ///
 /// # 📄OpenNARS
 ///
 /// 🈚
-pub trait Reasoner<C: ReasonContext>: Sized {
+pub trait Reasoner<C: TypeContext>: Sized {
     /// 绑定的「记录者」类型
     /// * 🚩【2024-05-17 14:57:13】迁移自原「记忆区」的「记录者」
-    ///   * 🎯能在「推导上下文」构建之前完成「报告/输出」的工作
+    ///   * 🎯能在「推理上下文」构建之前完成「报告/输出」的工作
     type Recorder: MemoryRecorderConcrete;
 
     /// 模拟`Memory.recorder`、`getRecorder`、`setRecorder`
@@ -54,10 +47,10 @@ pub trait Reasoner<C: ReasonContext>: Sized {
         self.recorder_mut().put(output);
     }
 
-    /// 绑定的「推导上下文」类型
+    /// 绑定的「推理上下文」类型
     type DerivationContextReason: DerivationContextReason<C>;
     /// 绑定的「直接推理上下文」类型
-    type DerivationContextDirect: DerivationContextDirect<C, Target = Self::DerivationContextReason>;
+    type DerivationContextDirect: DerivationContextDirect<C>;
 
     /// 模拟`Stamp.currentSerial`
     /// * 📝OpenNARS中要保证「每个新创的时间戳都有一个序列号，且这个序列号唯一」
@@ -168,7 +161,7 @@ pub trait Reasoner<C: ReasonContext>: Sized {
     /// 模拟`ReasonerBatch.walkingSteps`
     /// * 🚩私有
     /// * 🚩【2024-05-13 00:15:49】目前挪到前边来，将与「时钟」有关的都放一起
-    /// * 📝实际上是一个基于「预备要推理循环次数」的「缓存量」
+    /// * 📝实际上是一个基于「预备要工作周期次数」的「缓存量」
     ///   * 🚩接收各处的[`Reasoner::walk`]调用
     ///   * 🚩随后在统一的[`Reasoner::tick`]中执行
     ///
@@ -465,7 +458,7 @@ pub trait Reasoner<C: ReasonContext>: Sized {
             }
             // Cmd::NEW { target } => todo!(),
             // Cmd::DEL { target } => todo!(),
-            // * 🚩推理循环：添加「预备循环计数」
+            // * 🚩工作周期：添加「预备循环计数」
             Cmd::CYC(cycles) => self.walk(cycles),
             // * 🚩音量：设置音量
             Cmd::VOL(volume) => *self.__silence_value_mut() = volume,
@@ -627,7 +620,7 @@ pub trait Reasoner<C: ReasonContext>: Sized {
 
 /// [`Reasoner`]的「具体」版本
 /// * 🎯包括完全假定（字段）的构造函数
-pub trait ReasonerConcrete<C: ReasonContext>: Reasoner<C> + Sized {
+pub trait ReasonerConcrete<C: TypeContext>: Reasoner<C> + Sized {
     /// 🆕完全参数初始化
     /// * 🎯统一使用「默认实现」定义OpenNARS中的函数
     /// * 🚩【2024-05-15 16:40:41】现在新增「超参数」设定
@@ -699,7 +692,7 @@ pub trait ReasonerConcrete<C: ReasonContext>: Reasoner<C> + Sized {
     ///   * 📄在「允许自定义名称与超参数」的同时，无需传入其它「应该被默认的参数集」
     #[inline]
     fn with_name_and_parameters(name: impl Into<String>, parameters: Parameters) -> Self {
-        Self::__new(
+        ReasonerConcrete::__new(
             // * 📌需要自定义的参数
             name.into(),
             parameters,

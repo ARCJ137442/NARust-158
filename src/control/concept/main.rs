@@ -9,20 +9,19 @@
 //!
 //! * ♻️【2024-05-16 18:07:08】初步独立成模块功能
 
-use crate::global::ClockTime;
-use crate::{entity::*, inference::*};
+use crate::{control::*, entity::*, global::ClockTime, types::TypeContext};
 
 /// 有关「概念」的处理
 /// * 🎯分离NARS控制机制中有关「概念」的部分
 /// * 📌此处均有关「直接推理」
 ///   * 📝OpenNARS中均由`Memory.immediateProcess`调用
-pub trait ConceptProcessDirect<C: ReasonContext>: DerivationContextDirect<C> {
+pub trait ConceptProcessDirect<C: TypeContext>: DerivationContextDirect<C> {
     /* ---------- direct processing of tasks ---------- */
 
     /// 模拟`Concept.getBelief`
-    /// * 📝OpenNARS用在「组合规则」与「推导上下文构建」中
-    ///   * ✅「组合规则」中就是正常使用「推导上下文」：其「概念」就是「推理上下文」中使用到的「当前概念」
-    ///   * ⚠️「推导上下文构建」中要同时获取「&mut 推导上下文」与「&概念」
+    /// * 📝OpenNARS用在「组合规则」与「推理上下文构建」中
+    ///   * ✅「组合规则」中就是正常使用「推理上下文」：其「概念」就是「推理上下文」中使用到的「当前概念」
+    ///   * ⚠️「推理上下文构建」中要同时获取「&mut 推理上下文」与「&概念」
     ///     * 🚩【2024-05-17 15:07:02】因此全部解耦：直接传引用
     /// * 🚩【2024-05-16 18:43:40】因为是「赋值『新时间戳』到上下文」，故需要`self`可变
     ///
@@ -107,7 +106,7 @@ pub trait ConceptProcessDirect<C: ReasonContext>: DerivationContextDirect<C> {
 }
 
 /// 自动实现，以便添加方法
-impl<C: ReasonContext, T: DerivationContextDirect<C>> ConceptProcessDirect<C> for T {}
+impl<C: TypeContext, T: DerivationContextDirect<C>> ConceptProcessDirect<C> for T {}
 
 /// TODO: 单元测试
 #[cfg(test)]

@@ -1,8 +1,9 @@
 //! 🎯复刻OpenNARS `nars.inference.BudgetFunctions`
 
 use super::UtilityFunctions;
-use crate::inference::{DerivationContextReason, ReasonContext};
-use crate::{entity::*, global::Float, language::Term, storage::Memory};
+use crate::{
+    control::*, entity::*, global::Float, language::Term, storage::Memory, types::TypeContext,
+};
 
 /// 预算函数
 /// * 🚩【2024-05-03 14:48:13】现在仍依照OpenNARS原意「直接创建新值」
@@ -11,7 +12,7 @@ use crate::{entity::*, global::Float, language::Term, storage::Memory};
 ///     * 📄减少无谓的`.clone()`
 ///
 /// TODO: 【2024-05-17 15:36:31】🚧后续仍然需要考虑以「推理器」而非
-/// * ❗太多与「推导上下文」「推理上下文」耦合的函数了
+/// * ❗太多与「推理上下文」「推理上下文」耦合的函数了
 pub trait BudgetFunctions: BudgetValueConcrete {
     /* ----------------------- Belief evaluation ----------------------- */
 
@@ -136,7 +137,7 @@ pub trait BudgetFunctions: BudgetValueConcrete {
     }
 
     /// 模拟`BudgetFunctions.revise`
-    /// * 🚩现在从「推导上下文」中解放出来
+    /// * 🚩现在从「推理上下文」中解放出来
     /// * 📌重新将「回馈到 词项链/任务链」合并成一个参数（以便后续判断）
     /// * 📝OpenNARS的调用情况：
     ///   * 从「直接推理」`match`调用的没feedback
@@ -204,7 +205,7 @@ pub trait BudgetFunctions: BudgetValueConcrete {
         context: &mut impl DerivationContextReason<C>,
     ) -> Self
     where
-        C: ReasonContext<ShortFloat = Self::E, Budget = Self>,
+        C: TypeContext<ShortFloat = Self::E, Budget = Self>,
     {
         let dif_t = Self::E::from_float(truth.expectation_abs_dif(t_truth));
         let task = context.current_task_mut();
@@ -392,7 +393,7 @@ pub trait BudgetFunctions: BudgetValueConcrete {
         memory: &impl Memory<ShortFloat = Self::E>,
     ) -> Self
     where
-        C: ReasonContext<ShortFloat = Self::E, Budget = Self>,
+        C: TypeContext<ShortFloat = Self::E, Budget = Self>,
     {
         /* 📄OpenNARS源码：
         return budgetInference(truthToQuality(truth), 1, memory); */
@@ -416,7 +417,7 @@ pub trait BudgetFunctions: BudgetValueConcrete {
         memory: &impl Memory<ShortFloat = Self::E>,
     ) -> Self
     where
-        C: ReasonContext<ShortFloat = Self::E, Budget = Self>,
+        C: TypeContext<ShortFloat = Self::E, Budget = Self>,
     {
         /* 📄OpenNARS源码：
         return budgetInference(truthToQuality(truth), 1, memory); */
@@ -441,7 +442,7 @@ pub trait BudgetFunctions: BudgetValueConcrete {
         memory: &impl Memory<ShortFloat = Self::E>,
     ) -> Self
     where
-        C: ReasonContext<ShortFloat = Self::E, Budget = Self>,
+        C: TypeContext<ShortFloat = Self::E, Budget = Self>,
     {
         /* 📄OpenNARS源码：
         return budgetInference(w2c(1) * truthToQuality(truth), 1, memory); */
@@ -473,7 +474,7 @@ pub trait BudgetFunctions: BudgetValueConcrete {
         memory: &impl Memory<ShortFloat = Self::E>,
     ) -> Self
     where
-        C: ReasonContext<ShortFloat = Self::E, Budget = Self>,
+        C: TypeContext<ShortFloat = Self::E, Budget = Self>,
     {
         /* 📄OpenNARS源码：
         return budgetInference(truthToQuality(truth), content.getComplexity(), memory); */
@@ -501,7 +502,7 @@ pub trait BudgetFunctions: BudgetValueConcrete {
         memory: &impl Memory<ShortFloat = Self::E>,
     ) -> Self
     where
-        C: ReasonContext<ShortFloat = Self::E, Budget = Self>,
+        C: TypeContext<ShortFloat = Self::E, Budget = Self>,
     {
         /* 📄OpenNARS源码：
         return budgetInference(1, content.getComplexity(), memory); */
@@ -518,7 +519,7 @@ pub trait BudgetFunctions: BudgetValueConcrete {
         memory: &impl Memory<ShortFloat = Self::E>,
     ) -> Self
     where
-        C: ReasonContext<ShortFloat = Self::E, Budget = Self>,
+        C: TypeContext<ShortFloat = Self::E, Budget = Self>,
     {
         /* 📄OpenNARS源码：
         return budgetInference(w2c(1), content.getComplexity(), memory); */
@@ -530,8 +531,8 @@ pub trait BudgetFunctions: BudgetValueConcrete {
     /// * 🚩【2024-05-02 21:22:22】此处脱离与「词项链」「任务链」的关系，仅看其「预算」部分
     ///   * 📝OpenNARS源码本质上还是在强调「预算」而非（继承其上的）「词项」「记忆区」
     ///   * 📝之所以OpenNARS要传入「记忆区」「真值」是因为需要「获取其中某个词项/任务」
-    /// * 🚩【2024-05-12 15:55:37】目前在实现「记忆区」「推导上下文」的API之下，可以按逻辑无损复刻
-    ///   * ❓后续是否要将「记忆区」的引用代入「推导上下文」
+    /// * 🚩【2024-05-12 15:55:37】目前在实现「记忆区」「推理上下文」的API之下，可以按逻辑无损复刻
+    ///   * ❓后续是否要将「记忆区」的引用代入「推理上下文」
     /// * 📝【2024-05-17 15:41:10】经OpenNARS基本论证：`t`不可能为`null`
     ///   * 📌「直接推理（任务+概念）」从来不会调用此函数
     ///     * 📄证据：`processJudgement`与`processQuestion`均除了本地规则「修正/问答」外没调用别的
@@ -554,7 +555,7 @@ pub trait BudgetFunctions: BudgetValueConcrete {
         memory: &impl Memory<ShortFloat = Self::E>,
     ) -> Self
     where
-        C: ReasonContext<ShortFloat = Self::E, Budget = Self>,
+        C: TypeContext<ShortFloat = Self::E, Budget = Self>,
     {
         /* 📄OpenNARS源码：
         Item t = memory.currentTaskLink;

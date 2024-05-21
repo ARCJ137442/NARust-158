@@ -1,10 +1,12 @@
 //! NARS中有关「推理」的内容
 //! * 🚩【2024-05-02 15:54:15】计划通过「全有默认实现的模板特征」作为功能实现方法
 //! * ♻️【2024-05-16 14:01:02】将混杂的推理控制过程分类放置
-//!   * 🚩与「上下文」有关的放在一块：推理上下文、推导上下文……
+//!   * 🚩与「上下文」有关的放在一块：推理上下文、推理上下文……
 //!   * 🚩与「概念」「记忆区」有关的放在一块：概念处理、记忆区处理……
 //!   * 🚩与「推理规则」有关的放在一块：本地规则、三段论规则……
 //!   * 🚩与「推理函数」有关的放在一块：真值函数、预算函数……
+//! * 🚩【2024-05-22 01:35:53】现在将与「推理周期」有关的「推理控制机制」移至[`crate::control`]中
+//!   * 📌目前将只留下纯粹的「推理规则」与「推导函数」
 //!
 //! # 📄OpenNARS
 //!
@@ -28,15 +30,6 @@
 //! In each case, there may be multiple applicable rules, which will be applied in parallel. For each rule, each conclusion is formed in three stages, to determine (1) the content (as a Term), (2) the truth-value, and (3) the budget-value, roughly in that order.
 
 nar_dev_utils::mods! {
-    // 🆕上下文
-    pub use _context;
-
-    // 🆕概念处理 [`ConceptProcess`](_concept_process::DerivationContext)
-    pub use _concept;
-
-    // 🆕记忆区处理 [`MemoryProcess`](_memory_process::DerivationContext)
-    pub use _memory;
-
     // ♻️数值函数
     pub use functions;
 

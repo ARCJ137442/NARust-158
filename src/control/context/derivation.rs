@@ -1,4 +1,4 @@
-//! 基于「推导上下文」对「记忆区」有关「导出结论」的操作
+//! 基于「推理上下文」对「记忆区」有关「导出结论」的操作
 //! * 🎯将其中有关「导出结论」的代码摘录出来
 //!   * 📌任务激活 from 本地规则（问答）
 //!   * 📌导出任务(内部) from 单前提结论、双前提结论
@@ -9,14 +9,17 @@
 //! * 📝该处逻辑均在OpenNARS中用作「产生（并存储）导出结论」
 //!
 //! * ✅【2024-05-12 16:10:24】基本迁移完所有功能
-//! * ♻️【2024-05-17 21:53:40】目前完全基于「推导上下文」工作
+//! * ♻️【2024-05-17 21:53:40】目前完全基于「推理上下文」工作
 
-use crate::{entity::*, inference::*, language::Term, nars::DEFAULT_PARAMETERS, *};
+use crate::{
+    control::*, entity::*, inference::*, language::Term, nars::DEFAULT_PARAMETERS,
+    types::TypeContext, *,
+};
 use narsese::api::NarseseValue;
 use navm::output::Output;
 
 /// 记忆区处理：整理与「记忆区」有关的操作
-/// * 🚩【2024-05-17 21:44:00】目前完全基于「推理推导上下文」
+/// * 🚩【2024-05-17 21:44:00】目前完全基于「推理推理上下文」
 ///   * 📝OpenNARS中，这里头的所有方法均会在「推理周期」中被调用
 ///     * 📌其中有「概念推理」阶段，亦有「直接推理」阶段
 ///       * ⚠️这意味着要对所有「推理上下文」支持
@@ -24,7 +27,7 @@ use navm::output::Output;
 /// * 🚩【2024-05-12 15:00:59】因为`RuleTables::transform_task(self);`，要求[`Sized`]
 /// * 🚩【2024-05-17 22:54:49】通过【参数隔离】未实现的特征字段，实现「降低特征约束要求」「直接推理/概念推理 通用」的目的
 ///   * 📄隔离`current_task`以无需获取`current_task`
-pub trait MemoryDerivationProcess<C: ReasonContext>: DerivationContext<C> {
+pub trait MemoryDerivationProcess<C: TypeContext>: DerivationContext<C> {
     /// 模拟`Memory.activatedTask`
     /// * 📝OpenNARS中仅用于「本地规则」
     ///
@@ -67,7 +70,7 @@ pub trait MemoryDerivationProcess<C: ReasonContext>: DerivationContext<C> {
             content: format!("!!! Activated: {}", task.to_display_long()),
         });
         // 问题⇒尝试输出
-        // * 🚩决议：有关「静音音量」的问题，交由「记忆区」而非「推导上下文」决定
+        // * 🚩决议：有关「静音音量」的问题，交由「记忆区」而非「推理上下文」决定
         if let SentenceType::Question = sentence.punctuation() {
             let s = task.budget().summary().to_float();
             if s > self.silence_percent() {
@@ -78,7 +81,7 @@ pub trait MemoryDerivationProcess<C: ReasonContext>: DerivationContext<C> {
                 });
             }
         }
-        // 追加到「推导上下文」的「新任务」
+        // 追加到「推理上下文」的「新任务」
         self.__new_tasks_mut().push(task);
     }
 
@@ -323,7 +326,7 @@ pub trait MemoryDerivationProcess<C: ReasonContext>: DerivationContext<C> {
 }
 
 /// 自动实现，以便添加方法
-impl<C: ReasonContext, T: DerivationContext<C>> MemoryDerivationProcess<C> for T {}
+impl<C: TypeContext, T: DerivationContext<C>> MemoryDerivationProcess<C> for T {}
 
 /// TODO: 单元测试
 #[cfg(test)]
