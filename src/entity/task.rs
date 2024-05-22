@@ -6,7 +6,7 @@ use crate::{global::ClockTime, storage::BagKey, ToDisplayAndBrief};
 use anyhow::Result;
 use nar_dev_utils::join;
 use narsese::lexical::Task as LexicalTask;
-use std::hash::Hash;
+use std::ops::Deref;
 
 /// 模拟`nars.entity.Task`
 /// * ❓【2024-05-12 19:39:20】仍然不明确其中「父任务」「父信念」的数据形式
@@ -57,19 +57,19 @@ pub trait Task: ToDisplayAndBrief {
     fn __budget_mut(&mut self) -> &mut Self::Budget;
 
     /// 模拟`Task.parentTask`、`Task.getParentTask`
-    /// * 🚩【2024-05-05 20:51:48】目前对「共享引用」使用「引用计数」处理
-    /// * 🚩【2024-05-17 16:13:50】目前先改回「可空非共享引用」形式
-    ///   TODO: 后续仍然要根据实际情况调整：指向「记忆区」中「任务」的唯一链接
+    /// * 📝OpenNARS中仅在「直接推理」与「单前提结论」中使用
+    ///   * 📄「直接推理」中的用法：识别时间戳「是否重复」⇒优先级沉底
+    ///     * `task.getParentTask().getSentence().isJudgment()`
+    ///   * 📄「单前提结论」中的用法：「结论」与「父任务」相同⇒不产生结论
+    ///     * `if (parentTask != null && newContent.equals(parentTask.getContent())) return;`
+    ///   * 🎯总目标：避免【重复推理】
+    /// * 🚩【2024-05-22 16:40:04】故仅需只读，且与「是否需要共享引用」无关
+    ///   * ✅最后只要是一个「可以被解引用」的返回值就行
     ///
     /// # 📄OpenNARS
     ///
     /// Task from which the Task is derived, or null if input
-    fn parent_task(&self) -> &Option<Box<Self>>;
-    /// [`Task::parent_task`]的可变版本
-    /// * 📌只能修改「指向哪个[`Task`]」，不能修改所指向[`Task`]内部的数据
-    /// * 📝OpenNARS中的用法是「一旦构造，不再改变」
-    ///   TODO: 后续可能不再需要此字段
-    fn parent_task_mut(&mut self) -> &mut Option<Box<Self>>;
+    fn parent_task(&self) -> Option<impl Deref<Target = Self>>;
 
     /// 模拟`Task.parentBelief`、`Task.getParentBelief`
     /// * 🚩【2024-05-05 20:51:48】目前对「共享引用」使用「引用计数」处理
@@ -392,11 +392,16 @@ impl<T: Task> Item for T {
 /// 初代实现
 mod impl_v1 {
     use super::*;
-    use crate::{__impl_to_display_and_display, storage::BagKeyV1};
+    use crate::{
+        __impl_to_display_and_display,
+        global::{RefCount, RC},
+        storage::BagKeyV1,
+    };
     use std::fmt::Debug;
 
     /// [`Task`]的初代实现
-    #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+    /// * ❌【2024-05-22 16:43:35】因`RC`不支持[`Hash`]，故放弃自动派生[`Hash`]
+    #[derive(Debug, Clone, PartialEq, Eq)]
     pub struct TaskV1<S, K, B>
     where
         S: SentenceConcrete,
@@ -406,7 +411,7 @@ mod impl_v1 {
         sentence: S,
         key: K,
         budget: B,
-        parent_task: Option<Box<Self>>,
+        parent_task: Option<RC<Self>>,
         parent_belief: Option<S>,
         best_solution: Option<S>,
     }
@@ -460,13 +465,8 @@ mod impl_v1 {
         }
 
         #[inline(always)]
-        fn parent_task(&self) -> &Option<Box<Self>> {
-            &self.parent_task
-        }
-
-        #[inline(always)]
-        fn parent_task_mut(&mut self) -> &mut Option<Box<Self>> {
-            &mut self.parent_task
+        fn parent_task(&self) -> Option<impl Deref<Target = Self>> {
+            self.parent_task.as_ref().map(RefCount::get_)
         }
 
         #[inline(always)]
@@ -509,7 +509,7 @@ mod impl_v1 {
                 key: s.to_key_string(),
                 sentence: s,
                 budget: b,
-                parent_task: parent_task.map(Box::new),
+                parent_task: parent_task.map(RC::new_),
                 parent_belief,
                 best_solution: solution,
             }
@@ -670,4 +670,6 @@ mod tests {
         // 完成
         ok!()
     }
+
+    // TODO: 继续有关「父任务」「父信念」的内容
 }

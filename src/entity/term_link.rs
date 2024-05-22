@@ -19,7 +19,8 @@
 // *   ~T> null      i=null  # 0=SELF               " _@(T0) <(&&,A,B) ==> D>. %1.00;0.90%"
 
 use super::Item;
-use crate::{global::RC, io::symbols, language::Term, ToDisplayAndBrief};
+use crate::{io::symbols, language::Term, ToDisplayAndBrief};
+use std::ops::{Deref, DerefMut};
 
 /// 实现与「词项链类型」相关的结构
 /// * 🎯复刻OpenNARS `TermLink.type`与`TermLink.index`
@@ -223,19 +224,24 @@ mod link_type {
     }
 
     /// 从引用类型中转换
-    impl From<TermLinkRef<'_>> for TermLinkType {
-        fn from(value: TermLinkRef<'_>) -> Self {
+    impl From<&TermLinkRef<'_>> for TermLinkType {
+        fn from(value: &TermLinkRef<'_>) -> Self {
             use TermLinkRef::*;
             match value {
                 SELF => Self::SELF,
                 Component => Self::Component,
-                Compound(vec) => Self::Compound(vec.to_owned()),
+                Compound(vec) => Self::Compound(vec.to_vec()),
                 ComponentStatement => Self::ComponentStatement,
-                CompoundStatement(vec) => Self::CompoundStatement(vec.to_owned()),
+                CompoundStatement(vec) => Self::CompoundStatement(vec.to_vec()),
                 ComponentCondition => Self::ComponentCondition,
-                CompoundCondition(vec) => Self::CompoundCondition(vec.to_owned()),
-                Transform(vec) => Self::Transform(vec.to_owned()),
+                CompoundCondition(vec) => Self::CompoundCondition(vec.to_vec()),
+                Transform(vec) => Self::Transform(vec.to_vec()),
             }
+        }
+    }
+    impl From<TermLinkRef<'_>> for TermLinkType {
+        fn from(value: TermLinkRef<'_>) -> Self {
+            Self::from(&value)
         }
     }
 
@@ -332,7 +338,8 @@ pub trait TermLink: Item {
             key += target;
         } */
         // 🆕直接生成并赋值
-        *self.__key_mut() = Self::_generate_key(self.target(), self.type_ref());
+        let key = Self::_generate_key(&*self.target(), self.type_ref());
+        *self.__key_mut() = key;
     }
 
     /// 🆕模拟[`Item::key`]的可变版本
@@ -342,10 +349,11 @@ pub trait TermLink: Item {
     /// 模拟`TermLink.target`
     /// * 📝链接所归属的词项
     /// * 📝链接「At」的起点
-    /// * 🚩对外只读
     /// * 🚩🆕对于「任务链」，OpenNARS中会返回`null`，此处不采取这种做法
     ///   * 🚩【2024-05-04 23:04:54】目前做法：直接取[`TaskLink::target_task`]中包含的[`Task::term`]属性
     ///   * 📌这样能保证「总是有值」，可以在「生成key」中省去一次判空
+    /// * 📝OpenNARS中该值可变
+    ///   * 📄参考`BudgetFunctions.solutionEval`：对「任务链」要取「当前任务」进而要修改「当前任务」的预算值
     ///
     /// # 📄OpenNARS
     ///
@@ -353,7 +361,8 @@ pub trait TermLink: Item {
     /// - Get the target of the link
     ///
     /// @return The Term pointed by the link
-    fn target(&self) -> &Self::Target;
+    fn target(&self) -> impl Deref<Target = Self::Target>;
+    fn target_mut(&mut self) -> impl DerefMut<Target = Self::Target>;
 
     /// 模拟`TermLink.type`
     /// * 🚩【2024-05-04 22:42:10】回避Rust关键字`type`
@@ -391,11 +400,7 @@ pub trait TermLink: Item {
 pub trait TermLinkConcrete: TermLink<Target = Term> + Sized {
     /// 🆕内部构造函数
     /// * 🚩需要「词项」「链接」「预算值」
-    fn __new(
-        budget: Self::Budget,
-        target: impl Into<RC<Self::Target>>,
-        type_: TermLinkType,
-    ) -> Self;
+    fn __new(budget: Self::Budget, target: impl Into<Term>, type_: TermLinkType) -> Self;
 
     /// 模拟 `new TermLink(Term t, short p, int... indices)`
     /// * 📌一个`type_`参数集成了`p`、`indices`两个参数
@@ -448,7 +453,7 @@ pub trait TermLinkConcrete: TermLink<Target = Term> + Sized {
             _ => panic!("// ! ⚠️词项链「模板」均基于复合词项，而非其它（作为其元素就是作为其元素）"),
         }
         // * 🚩再创建
-        Self::__new(budget, RC::new(target), type_)
+        Self::__new(budget, target, type_)
     }
 
     // TODO: 复现其它构造函数
@@ -463,11 +468,12 @@ mod impl_v1 {
 
     /// 词项链 初代实现
     /// * 🚩目前不限制其中「预算值」的类型
-    #[derive(Debug, Clone, PartialEq, Eq)]
+    #[derive(Debug, Clone)]
+    /// * ❌【2024-05-22 16:26:39】为保证对[`RcCell`]与[`ArcMutex`]的无缝兼容，不能自动派生[`PartialEq`]
     pub struct TermLinkV1<B: BudgetValueConcrete> {
         key: String,
         budget: B,
-        target: RC<Term>,
+        target: Term,
         type_ref: TermLinkType,
     }
 
@@ -480,10 +486,12 @@ mod impl_v1 {
         /// 构造函数
         /// * 📌包含「预算」「目标词项」「类型」
         /// * 🚩其key是自行计算的
-        fn __new(budget: B, target: impl Into<RC<Term>>, type_ref: TermLinkType) -> Self {
+        fn __new(budget: B, target: impl Into<Term>, type_ref: TermLinkType) -> Self {
             let target = target.into();
+            let key = Self::_generate_key(&target, type_ref.to_ref());
+            let target = target;
             Self {
-                key: Self::_generate_key(&target, type_ref.to_ref()),
+                key,
                 budget,
                 target,
                 type_ref,
@@ -511,18 +519,27 @@ mod impl_v1 {
     impl<B: BudgetValueConcrete> TermLink for TermLinkV1<B> {
         type Target = Term;
 
-        fn target(&self) -> &Self::Target {
-            &self.target
+        #[inline(always)]
+        fn target(&self) -> impl Deref<Target = Self::Target> {
+            &self.target // * ✅直接的「不可变引用」也实现了`Deref`
         }
 
+        #[inline(always)]
+        fn target_mut(&mut self) -> impl DerefMut<Target = Self::Target> {
+            &mut self.target // * ✅直接的「可变引用」也实现了`DerefMut`
+        }
+
+        #[inline(always)]
         fn type_ref(&self) -> TermLinkRef {
             self.type_ref.to_ref()
         }
 
+        #[inline(always)]
         fn __key_mut(&mut self) -> &mut String {
             &mut self.key
         }
 
+        #[inline(always)]
         fn _generate_key(target: &Self::Target, type_ref: TermLinkRef) -> Self::Key {
             use symbols::*;
             let (at1, at2) = match type_ref.is_to_component() {

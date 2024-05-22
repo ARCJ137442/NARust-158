@@ -2,7 +2,7 @@
 
 use super::UtilityFunctions;
 use crate::{
-    control::*, entity::*, global::Float, language::Term, storage::Memory, types::TypeContext,
+    control::*, entity::*, global::*, language::Term, storage::Memory, types::TypeContext,
 };
 
 /// 预算函数
@@ -580,7 +580,7 @@ pub trait BudgetFunctions: BudgetValueConcrete {
             Self::E::from_float(t_budget.durability().to_float() / complexity as Float);
         let quality = Self::E::from_float(qual.to_float() / complexity as Float);
         let b_link = context.current_belief_link_mut();
-        let activation = memory.get_concept_activation(b_link.target());
+        let activation = memory.get_concept_activation(&b_link.target());
         priority = priority | b_link.priority();
         durability = durability & b_link.durability();
         let target_activation = activation;

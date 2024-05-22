@@ -3,7 +3,7 @@
 //! * ✅【2024-05-15 16:57:37】初代全功能实现
 
 use crate::{
-    global::{GlobalRc, GlobalRcMut, RCMut},
+    global::{RefCount, RC},
     nars::{Parameters, Reasoner, ReasonerConcrete},
     types::TypeContext,
 };
@@ -19,7 +19,7 @@ pub struct Runtime<C: TypeContext, R: ReasonerConcrete<C>> {
     /// 输出通道的共享引用
     /// * 🎯避免「运行时→推理器→通道→运行时」的循环引用
     /// * 🚩「缓存的输出」亦包含在内
-    o_channel: RCMut<ChannelOut<C, R>>,
+    o_channel: RC<ChannelOut<C, R>>,
 }
 
 /// 自身实现
@@ -35,7 +35,7 @@ where
         let mut reasoner = R::with_name_and_parameters(name.into(), hyper_parameters);
 
         // * 🚩创建并加入通道
-        let o_channel = RCMut::new_(ChannelOut::new());
+        let o_channel = RC::new_(ChannelOut::new());
         let b = Box::new(o_channel.clone());
         reasoner.add_output_channel(b); // * ✅解决：在「推理器」中细化生命周期约束，现在不再报错与要求`'static`
 
@@ -95,7 +95,10 @@ where
 ///     * ✅单线程不会导致借用问题
 mod channels {
     use super::*;
-    use crate::io::{Channel, OutputChannel};
+    use crate::{
+        global::RefCount,
+        io::{Channel, OutputChannel},
+    };
     use std::collections::VecDeque;
 
     /// 初代通用`OutputChannel`实现
@@ -130,7 +133,7 @@ mod channels {
         /// 从「共享引用」中拉取缓存的输出
         /// * 🚩先进先出
         /// * 🚩【2024-05-15 11:16:05】对错误采取「打印错误并失败」的处理方法
-        pub fn fetch_rc(this: &mut RCMut<Self>) -> Option<Output> {
+        pub fn fetch_rc(this: &mut RC<Self>) -> Option<Output> {
             this.mut_().fetch()
         }
     }
@@ -159,7 +162,7 @@ mod channels {
         }
     }
 
-    impl<C: TypeContext, R: ReasonerConcrete<C>> Channel for RCMut<ChannelOut<C, R>> {
+    impl<C: TypeContext, R: ReasonerConcrete<C>> Channel for RC<ChannelOut<C, R>> {
         type Context = C;
         // type Reasoner = R;
 
@@ -170,7 +173,7 @@ mod channels {
     }
 
     /// 对Rc<RefCell>自身实现
-    impl<C: TypeContext, R: ReasonerConcrete<C>> OutputChannel for RCMut<ChannelOut<C, R>> {
+    impl<C: TypeContext, R: ReasonerConcrete<C>> OutputChannel for RC<ChannelOut<C, R>> {
         fn next_output(&mut self /* , reasoner: &mut Self::Reasoner */, outputs: &[Output]) {
             self.mut_().next_output(/* reasoner, */ outputs)
             // match self.mut_() {

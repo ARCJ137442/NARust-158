@@ -18,124 +18,124 @@ mod rc {
         cell::RefCell,
         ops::{Deref, DerefMut},
         rc::Rc,
+        sync::{Arc, Mutex},
     };
 
+    /// 基于[`Rc`]与[`RefCell`]的可变共享引用
+    pub type RcCell<T> = Rc<RefCell<T>>;
+    /// 基于[`Arc`]与[`Mutex`]的可变共享引用
+    pub type ArcMutex<T> = Arc<Mutex<T>>;
+
     /// 全局引用计数类型
-    /// * 🚩【2024-05-04 16:51:11】目前尚未做多线程兼容，此处仅考虑单线程，
-    ///   * 故暂且使用 [`std::rc::Rc`] 而非 [`std::sync::Arc`]
-    pub type RC<T> = Rc<T>;
+    /// * 🚩【2024-05-22 14:27:34】现在默认为「可变共享引用」，暂不细分「不可变」与「可变」
+    ///   * 📌目前使用情况主要在「任务链」与「任务袋」中，这些情况
+    pub type RC<T> = RcCell<T>;
 
-    /// 全局引用计数类型，可变版本
-    /// * 📄[`RC`]的可变版本
-    /// * 📝据[`Rc`]文档，实际上`&mut Rc<T>`也可以通过`get_mut`实现可变
-    ///   * ❌但这只能在`Rc`只有**唯一一个引用**时才有效
-    /// * 🚩【2024-05-15 11:52:37】目前仍然需要探索`RefCell`方案
-    pub type RCMut<T> = RcMut<T>;
+    /// 统一[`Rc`]与[`Arc`]的「可变共享引用」特征
+    /// * 🎯统一「可变共享引用」：只要保证「只调用特征方法」即可「无缝切换[`Rc`]与[`Arc`]」
+    /// * 📝实际上不需要一个专门的特征去表示「引用」，直接使用[`Deref`]系列即可
+    /// * 📝为解决「获取引用时，引用的生命周期不超过自身的生命周期」的问题，只能在「特征方法」处用`impl`而不能用「带生命周期的关联类型」
+    ///   * 📌`-> Self::Ref + 'r`不合法：具体类型不能直接加生命周期约束
+    ///   * 📌对于[`Rc`]、[`Arc`]获取引用的[`Ref`]等类型，不能在关联类型中明确指定生命周期
+    ///     * 📝这样会将整个引用的生命周期限定死，导致在使用中出现「活不久」编译报错
+    /// * 🚩【2024-05-22 15:32:30】目前暂不打算支持「弱引用」类型
+    ///   * 📌目前主要用于「任务链→任务→任务」，任务之间具有树状引用结构，同时「任务链」单向指向任务
+    pub trait RefCount<T>: Sized + Clone {
+        /// 特征方法：获取不可变引用
+        /// * 🚩可能是包装类型：[`Rc`]等需要一个特别的「代理类型」封装内部引用
+        fn get_<'r, 's: 'r>(&'s self) -> impl Deref<Target = T> + 'r;
 
-    /// 通用的「共享引用」接口
-    /// * ✅【2024-05-15 16:07:34】通过「封装`struct`」解决了「共享可变性 or 可变共享」的歧义问题
-    pub trait GlobalRc<'this, T>: Sized
-    where
-        Self: 'this,
-    {
-        /// 获取到的「引用」类型
-        type Ref: Deref<Target = T> + 'this;
+        /// 特征方法：获取可变引用（包装类型）
+        /// * 🚩可能是包装类型：[`Rc`]等需要一个特别的「代理类型」封装内部引用
+        fn mut_<'r, 's: 'r>(&'s mut self) -> impl DerefMut<Target = T> + 'r;
 
-        /// 创建
-        fn new_(value: T) -> Self;
+        /// 特征方法：构造函数
+        /// * 🎯从实际值中构造一个「可变共享引用」
+        fn new_(t: T) -> Self;
 
-        /// 获取不可变引用
-        fn get_(&'this self) -> Self::Ref;
+        /// 特征方法：强引用数目
+        /// * 🎯统一表示「强引用数」
+        fn n_strong_(&self) -> usize;
+
+        /// 特征方法：弱引用数目
+        /// * 🎯统一表示「弱引用数」
+        fn n_weak_(&self) -> usize;
+
+        /// 默认特征方法：返回内部元素的拷贝
+        /// * 🚩约束：仅在内部元素支持[`Clone`]时使用
+        fn clone_(&self) -> T
+        where
+            T: Clone,
+        {
+            self.get_().clone()
+        }
     }
 
-    /// 通用的「共享可变引用」接口
-    /// * 📌[`GlobalRc`]的可变版本
-    pub trait GlobalRcMut<'this, T>: GlobalRc<'this, T> {
-        /// 获取到的「可变引用」类型
-        type RefMut: DerefMut<Target = T> + 'this;
+    // impls //
 
-        /// 获取可变引用
-        fn mut_(&'this mut self) -> Self::RefMut;
-    }
-
-    /// 对[`Rc`]实现不可变共享引用
-    impl<'this, T> GlobalRc<'this, T> for std::rc::Rc<T>
-    where
-        Self: 'this,
-    {
-        type Ref = &'this T;
+    /// 对[`Rc<RefCell<T>>`](Rc)实现
+    impl<T> RefCount<T> for RcCell<T> {
+        #[inline(always)]
+        fn get_<'r, 's: 'r>(&'s self) -> impl Deref<Target = T> + 'r {
+            RefCell::borrow(self)
+        }
 
         #[inline(always)]
-        fn new_(value: T) -> Self {
-            Rc::new(value)
+        fn mut_<'r, 's: 'r>(&'s mut self) -> impl DerefMut<Target = T> + 'r {
+            RefCell::borrow_mut(self)
         }
 
         #[inline(always)]
-        fn get_(&'this self) -> Self::Ref {
-            self.as_ref()
+        fn new_(t: T) -> Self {
+            Rc::new(RefCell::new(t))
+        }
+
+        #[inline(always)]
+        fn n_strong_(&self) -> usize {
+            Rc::strong_count(self)
+        }
+
+        #[inline(always)]
+        fn n_weak_(&self) -> usize {
+            Rc::weak_count(self)
         }
     }
 
-    /// 实现「可变共享引用」
-    /// * 🎯提供一个内部实现
-    ///   * 🚩通过全局常量予以公开
-    ///   * 💭【2024-05-15 16:08:54】后续将实现「[`Arc`]无缝替代」
-    mod rc_mut {
-        use super::*;
-
-        /// 「可变共享引用」包装类型
-        /// * 🎯终结「到底是『T的可变共享引用』还是『RefCell<T>的不可变共享引用』」的问题
-        ///   * 🚩【2024-05-15 16:03:39】直接选前者
-        #[derive(Debug)]
-        pub struct RcMut<T>(Rc<RefCell<T>>);
-
-        /// 手动实现[`Clone`]复制
-        /// * 🚩直接复制内部[`Rc`]
-        impl<T> Clone for RcMut<T> {
-            fn clone(&self) -> Self {
-                Self(self.0.clone())
-            }
+    /// 对[`Arc<Mutex<T>>`](Arc)实现
+    impl<T> RefCount<T> for ArcMutex<T> {
+        #[inline(always)]
+        fn get_<'r, 's: 'r>(&'s self) -> impl Deref<Target = T> + 'r {
+            // * ❓或许后续可以考虑使用`get_try`等
+            self.lock().expect("互斥锁已中毒")
         }
 
-        /// 对包装类型[`RcMut`]实现不可变共享引用
-        impl<'this, T> GlobalRc<'this, T> for RcMut<T>
-        where
-            Self: 'this,
-        {
-            type Ref = std::cell::Ref<'this, T>;
-
-            #[inline(always)]
-            fn new_(value: T) -> Self {
-                Self(Rc::new(RefCell::new(value)))
-            }
-
-            #[inline(always)]
-            fn get_(&'this self) -> Self::Ref {
-                self.0.borrow()
-            }
+        #[inline(always)]
+        fn mut_<'r, 's: 'r>(&'s mut self) -> impl DerefMut<Target = T> + 'r {
+            self.lock().expect("互斥锁已中毒")
         }
 
-        /// 对包装类型[`RcMut`]实现可变共享引用
-        impl<'this, T> GlobalRcMut<'this, T> for RcMut<T>
-        where
-            Self: 'this,
-        {
-            type RefMut = std::cell::RefMut<'this, T>;
+        #[inline(always)]
+        fn new_(t: T) -> Self {
+            Arc::new(Mutex::new(t))
+        }
 
-            #[inline(always)]
-            fn mut_(&'this mut self) -> Self::RefMut {
-                self.0.borrow_mut()
-            }
+        #[inline(always)]
+        fn n_strong_(&self) -> usize {
+            Arc::strong_count(self)
+        }
+
+        #[inline(always)]
+        fn n_weak_(&self) -> usize {
+            Arc::weak_count(self)
         }
     }
-    pub use rc_mut::*;
 }
 pub use rc::*;
 
 /// 测试用
 #[cfg(test)]
 pub mod tests {
-    use super::RC;
+    use super::*;
 
     /// 测试用类型，增强[`anyhow::Result`]
     pub type AResult<T = ()> = anyhow::Result<T>;
@@ -151,12 +151,112 @@ pub mod tests {
         };
     }
 
-    #[test]
-    fn t() {
-        let mut rc = RC::new(0);
+    /// 测试 / 通用
+    /// * 🎯只用特征方法，不影响用法地兼容[`Rc`]与[`Arc`]
+    fn test_rc<R: std::fmt::Debug + RefCount<i32>>() {
+        // * 🚩创建一个可变共享引用，并展示
+        let mut rc = R::new_(0);
         dbg!(rc.clone());
-        let r = RC::get_mut(&mut rc).expect("需要引用");
+        // * 🚩修改引用，断言，并展示
+        let mut r = rc.mut_();
         *r += 1;
-        dbg!(rc.clone());
+        assert_eq!(*r, 1);
+        // * 🚩释放引用
+        drop(r);
+
+        // * 🚩复制这个可变共享引用，验证「多个不可变引用同时存在」
+        let rc2 = dbg!(rc.clone());
+
+        // ! ⚠️此处不能同时获取：对`Mutex`会导致线程死锁
+        let value = *rc.get_();
+        let value2 = *rc2.get_();
+        assert_eq!(value, value2);
+    }
+
+    /// 测试 / [`Rc`] & [`Arc`]
+    /// * 🎯两种类型的无缝切换
+    #[test]
+    fn tests_ref_count() {
+        test_rc::<RcCell<i32>>();
+        test_rc::<ArcMutex<i32>>();
+    }
+
+    // 实例测试 //
+
+    /// 🎯控制使用的「共享可变引用」类型
+    /// * ✅【2024-05-22 12:38:32】现在可以无缝在[`Rc`]与[`Arc`]之间切换
+    type R<T> = ArcMutex<T>;
+
+    #[derive(Debug, Clone)]
+    struct Task {
+        pub content: String,
+        parent: Option<R<Task>>,
+    }
+
+    impl Task {
+        pub fn new(content: impl Into<String>, parent_task: Option<&R<Task>>) -> Self {
+            Self {
+                content: content.into(),
+                parent: parent_task.map(R::clone),
+            }
+        }
+
+        pub fn new_rc(content: impl Into<String>, parent_task: Option<&R<Task>>) -> R<Self> {
+            R::new_(Self::new(content, parent_task))
+        }
+
+        pub fn parent(&self) -> Option<R<Task>> {
+            self.parent.clone()
+        }
+
+        /// 设置父任务
+        /// * 📝因为其所产生的引用是[自身类型](Task)（且引用目标就是[自身类型](Task)），
+        ///   * 有可能发生循环引用
+        /// * 📝但若禁止在构造后修改此处的值，则不会有事——不可能在构造时传入自身
+        pub fn set_parent(&mut self, parent: &R<Task>) -> &mut R<Task> {
+            self.parent.insert(parent.clone())
+        }
+
+        /// 🆕删除父任务
+        /// * 🎯用于解除循环引用
+        pub fn delete_parent(&mut self) -> Option<R<Task>> {
+            self.parent.take()
+        }
+    }
+
+    /// 任务 / 更改父任务
+    #[test]
+    fn test_set_parent() {
+        let task_i = Task::new_rc("input.", None);
+        let task_j = Task::new_rc("JnPut.", Some(&task_i));
+        let mut task_k = Task::new_rc("KnPut.", Some(&task_i));
+        // let r = task_k.borrow_mut(); // ! 启用这行，删掉dbg，就会引发借用panic
+        task_k.mut_().set_parent(&task_j);
+        dbg!(task_i, task_j, task_k);
+        // * ♻️Dropped: task_k
+        // * ♻️Dropped: task_j
+        // * ♻️Dropped: task_i
+    }
+
+    /// 任务 / 循环引用
+    #[test]
+    fn test_recursive() {
+        let mut task_i = Task::new_rc("recursive.", None);
+        // let task_j = Task::new_rc("j from i.", Some(&task_i)); // ! 尝试链接到「自引用任务」会爆栈
+        // let task_k = Task::new_rc("k from j.", Some(&task_j));
+        // * 🚩设置递归
+        let task_i_self = task_i.clone();
+        task_i.mut_().set_parent(&task_i_self);
+
+        // * 🚩检验递归
+        // ! ⚠️若将`parent`内联，则会造成「重复锁定」导致「线程死锁」
+        let parent = task_i.get_().parent().unwrap();
+        assert_eq!(parent.get_().content, "recursive.");
+
+        // * 🚩删除递归
+        task_i.mut_().delete_parent(); // ! 必须先删除循环引用，才能正常删除整体
+        dbg!(task_i.n_strong_(), task_i.n_weak_());
+
+        // * ♻️Dropped: task_i
     }
 }

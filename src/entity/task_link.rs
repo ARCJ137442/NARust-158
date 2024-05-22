@@ -3,7 +3,10 @@
 
 use super::{Item, Task, TermLink, TermLinkConcrete, TermLinkType};
 use crate::{
-    entity::Sentence, global::ClockTime, language::Term, nars::DEFAULT_PARAMETERS,
+    entity::Sentence,
+    global::{ClockTime, RefCount, RC},
+    language::Term,
+    nars::DEFAULT_PARAMETERS,
     ToDisplayAndBrief,
 };
 
@@ -153,7 +156,7 @@ pub trait TaskLinkConcrete: TaskLink + Sized {
         // * 📌作为[`TermLink`]的参数
         term_link_type: TermLinkType,
         // * 📌独有参数
-        target: &Self::Task,
+        target: RC<Self::Task>,
         recorded_links: Box<[Self::Key]>,
         recording_time: Box<[ClockTime]>,
         counter: usize,
@@ -161,10 +164,14 @@ pub trait TaskLinkConcrete: TaskLink + Sized {
 
     /// 模拟`new TaskLink(Task t, TermLink template, BudgetValue v)`
     /// * 📝OpenNARS只有这一个公开的构造函数
-    fn new(
-        target: &Self::Task,
-        template: &impl TermLinkConcrete<Target = Term, Key = Self::Key, Budget = Self::Budget>,
-    ) -> Self {
+    fn new<SelfTermLink>(
+        target: RC<Self::Task>,
+        template: Option<&SelfTermLink>,
+        budget: Self::Budget,
+    ) -> Self
+    where
+        SelfTermLink: TermLinkConcrete<Target = Term, Key = Self::Key, Budget = Self::Budget>,
+    {
         /* 📄OpenNARS源码：
         super("", v, template == null ? TermLink.SELF : template.getType(),
                 template == null ? null : template.getIndices());
@@ -174,7 +181,23 @@ pub trait TaskLinkConcrete: TaskLink + Sized {
         counter = 0;
         super.setKey(); // as defined in TermLink
         key += t.getKey(); */
-        todo!("// TODO: 【2024-05-18 11:35:03】有待实现")
+        let term_link_type = match template {
+            Some(link_t) => TermLinkType::from(link_t.type_ref()),
+            None => TermLinkType::SELF,
+        };
+        let recorded_links: Box<[Self::Key]> = Default::default();
+        let recording_time: Box<[ClockTime]> = Default::default();
+        let counter = 0;
+        let key = Self::_generate_key(&target.get_(), term_link_type.to_ref());
+        Self::__new(
+            key,
+            budget,
+            term_link_type,
+            target,
+            recorded_links,
+            recording_time,
+            counter,
+        )
     }
 }
 
@@ -184,13 +207,15 @@ mod impl_v1 {
     use crate::{
         __impl_to_display_and_display,
         entity::{sentence::Sentence, Item, TaskConcrete, TermLinkRef, TermLinkType, TermLinkV1},
-        global::RC,
+        global::{RefCount, RC},
         storage::BagKeyV1,
     };
+    use std::ops::{Deref, DerefMut};
 
     /// 词项链 初代实现
     /// * 🚩目前不限制其中「预算值」的类型
-    #[derive(Debug, Clone, PartialEq, Eq)]
+    /// * ❌【2024-05-22 16:26:39】为保证对[`RcCell`]与[`ArcMutex`]的无缝兼容，不能自动派生[`PartialEq`]
+    #[derive(Debug, Clone)]
     pub struct TaskLinkV1<T: TaskConcrete> {
         // * 📌作为[`Item`]的字段
         key: T::Key,
@@ -235,8 +260,14 @@ mod impl_v1 {
     {
         type Target = T;
 
-        fn target(&self) -> &Self::Target {
-            &self.target
+        #[inline(always)]
+        fn target(&self) -> impl Deref<Target = Self::Target> {
+            self.target.get_()
+        }
+
+        #[inline(always)]
+        fn target_mut(&mut self) -> impl DerefMut<Target = Self::Target> {
+            self.target.mut_()
         }
 
         fn type_ref(&self) -> TermLinkRef {
@@ -296,7 +327,7 @@ mod impl_v1 {
             // * 📌作为[`TermLink`]的参数
             term_link_type: TermLinkType,
             // * 📌独有参数
-            target: &Self::Task,
+            target: RC<Self::Task>,
             recorded_links: Box<[Self::Key]>,
             recording_time: Box<[ClockTime]>,
             counter: usize,
