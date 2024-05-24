@@ -340,7 +340,7 @@ pub trait LocalRulesReason<C: TypeContext>: DerivationContextReason<C> {
         let sentence = task.sentence();
         match sentence.punctuation() {
             // 判断⇒若能修订，转换到「修订」
-            SentenceType::Judgement(..) => {
+            SentenceType::Judgement { .. } => {
                 if <Self as LocalRules<C>>::revisable(sentence, belief) {
                     self.revision(sentence, belief);
                 }

@@ -17,56 +17,108 @@ use narsese::lexical::{
 };
 use std::hash::{Hash, Hasher};
 
-/// 模拟`nars.entity.Sentence.punctuation`和OpenNARS`nars.entity.Sentence.truth`
-/// * 🚩枚举分立「判断」「问题」，并且容纳其中有差异的方面
-/// * 🎯应对「判断有真值，问题无真值」的情况
-#[doc(alias = "Punctuation")]
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum SentenceType<T: TruthValueConcrete> {
-    /// 🆕「判断」有真值
-    Judgement(T),
-    /// 🆕「问题」无真值
-    Question,
-    // ! 其它类型暂且不表
-}
+/// 语句类型 / 标点
+/// * 📌标点 + 真值 + 可被修正
+mod punctuation {
+    use super::*;
 
-impl<T: TruthValueConcrete> SentenceType<T> {
-    /// 🆕将自身与「标点字符」作转换
-    /// * 🎯用于生成[`super::Item`]的（字符串）id
-    fn punctuation_str(&self) -> &str {
-        use symbols::*;
-        use SentenceType::*;
-        match self {
-            Judgement(_) => JUDGMENT_MARK,
-            Question => QUESTION_MARK,
+    /// 模拟`nars.entity.Sentence.punctuation`和OpenNARS`nars.entity.Sentence.truth`
+    /// * 🚩枚举分立「判断」「问题」，并且容纳其中有差异的方面
+    /// * 🎯应对「判断有真值，问题无真值」的情况
+    #[doc(alias = "Punctuation")]
+    #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+    pub enum SentenceType<T: TruthValueConcrete> {
+        /// 🆕「判断」有真值
+        /// * 🚩`revisable`表示是否可被修正
+        ///   * 📝根据OpenNARS表述，只有「判断」才要考虑「是否可被修正」
+        Judgement { truth: T, revisable: bool },
+        /// 🆕「问题」无真值
+        Question,
+        // ! 其它类型暂且不表
+    }
+
+    impl<T: TruthValueConcrete> SentenceType<T> {
+        /// 🆕将自身与「标点字符」作转换
+        /// * 🎯用于生成[`super::Item`]的（字符串）id
+        pub fn punctuation_str(&self) -> &str {
+            use symbols::*;
+            use SentenceType::*;
+            match self {
+                Judgement { .. } => JUDGMENT_MARK,
+                Question => QUESTION_MARK,
+            }
+        }
+
+        /// 🆕从「词法标点」与「词法真值」转换
+        /// * 📜默认可被修正
+        pub fn from_lexical_revisable(
+            punctuation: LexicalPunctuation,
+            truth: LexicalTruth,
+            default_values: [<T as TruthValue>::E; 2],
+            is_analytic: bool,
+        ) -> Result<Self> {
+            Self::from_lexical(punctuation, truth, default_values, is_analytic, true)
+        }
+
+        /// 🆕从「词法标点」与「词法真值」转换
+        pub fn from_lexical(
+            punctuation: LexicalPunctuation,
+            truth: LexicalTruth,
+            default_values: [<T as TruthValue>::E; 2],
+            is_analytic: bool,
+            revisable: bool,
+        ) -> Result<Self> {
+            use symbols::*;
+            use SentenceType::*;
+            // 取首字符
+            match punctuation.as_str() {
+                "" => Err(anyhow!("标点不能为空")),
+                // 判断
+                JUDGMENT_MARK => {
+                    let truth = <T as TruthValueConcrete>::from_lexical(
+                        truth,
+                        default_values,
+                        is_analytic,
+                    )?;
+                    Ok(Judgement {
+                        truth,
+                        // * 🚩【2024-05-24 12:04:45】默认是「可被修正的」
+                        revisable,
+                    })
+                }
+                // 问题
+                QUESTION_MARK => Ok(Question),
+                // 其它
+                _ => Err(anyhow!("不支持的标点类型 {punctuation:?} {truth:?}")),
+            }
         }
     }
 
-    /// 🆕从「词法标点」与「词法真值」转换
-    pub fn from_lexical(
-        punctuation: LexicalPunctuation,
-        truth: LexicalTruth,
-        default_values: [<T as TruthValue>::E; 2],
-        is_analytic: bool,
-    ) -> Result<Self> {
-        use symbols::*;
-        use SentenceType::*;
-        // 取首字符
-        match punctuation.as_str() {
-            "" => Err(anyhow!("标点不能为空")),
-            // 判断
-            JUDGMENT_MARK => Ok(Judgement(<T as TruthValueConcrete>::from_lexical(
-                truth,
-                default_values,
-                is_analytic,
-            )?)),
-            // 问题
-            QUESTION_MARK => Ok(Question),
-            // 其它
-            _ => Err(anyhow!("不支持的标点类型 {punctuation:?} {truth:?}")),
-        }
+    /// 快捷构造宏
+    #[macro_export]
+    macro_rules! punctuation {
+        // TODO: 【2024-05-24 12:19:45】🚧简化单元测试
+        // 问题
+        (?) => {
+            SentenceType::Question
+        };
+        // 判断 + 真值
+        (. % $($truth:tt)*) => {
+            SentenceType::Judgement {
+                truth: $crate::truth!($($truth)*),
+                revisable: true,
+            }
+        };
+        // 判断 + 真值 + 可被修正
+        (. $revisable:tt % $($truth:tt)*) => {
+            SentenceType::Judgement {
+                truth: $crate::truth!($($truth)*),
+                revisable: $revisable,
+            }
+        };
     }
 }
+pub use punctuation::*;
 
 /// 模拟`nars.entity.Sentence`
 /// * 📌【2024-05-10 20:17:04】此处不加入对[`PartialEq`]的要求：会将要求传播到上层的「词项链」「任务链」
@@ -153,17 +205,19 @@ pub trait Sentence: ToDisplayAndBrief {
     /// @return Truth value, null for question
     fn truth(&self) -> Option<&Self::Truth> {
         // 直接匹配
+        use SentenceType::*;
         match self.punctuation() {
-            SentenceType::Judgement(truth) => Some(truth),
-            SentenceType::Question => None,
+            Judgement { truth, .. } => Some(truth),
+            Question => None,
         }
     }
     /// [`Sentence::truth`]的可变版本
     fn truth_mut(&mut self) -> Option<&mut Self::Truth> {
         // 直接匹配
+        use SentenceType::*;
         match self.punctuation_mut() {
-            SentenceType::Judgement(truth) => Some(truth),
-            SentenceType::Question => None,
+            Judgement { truth, .. } => Some(truth),
+            Question => None,
         }
     }
 
@@ -182,6 +236,9 @@ pub trait Sentence: ToDisplayAndBrief {
     /// * 📝OpenNARS只在「解析任务」时会设置值
     ///   * 🎯使用目的：「包含因变量的合取」不可被修正
     ///   * 🚩【2024-05-19 13:01:57】故无需让其可变，构造后只读即可
+    /// * 🚩【2024-05-24 12:05:54】现在将「是否可修正」放进「判断」标点中
+    ///   * 📝根据OpenNARS逻辑，只有「判断」才有「是否可被修正」属性
+    ///   * ✅现在无需再依靠具体结构来实现了
     ///
     /// # 📄OpenNARS
     ///
@@ -192,7 +249,15 @@ pub trait Sentence: ToDisplayAndBrief {
     /// ## `getRevisable`
     ///
     /// 🈚
-    fn revisable(&self) -> bool;
+    fn revisable(&self) -> bool {
+        matches!(
+            self.punctuation(),
+            SentenceType::Judgement {
+                revisable: true,
+                ..
+            }
+        )
+    }
     // /// 模拟`Sentence.setRevisable`
     // /// * 📌[`Sentence::revisable`]的可变版本
     // ///
@@ -223,7 +288,7 @@ pub trait Sentence: ToDisplayAndBrief {
     /// @return Whether the object is a Judgement
     #[inline(always)]
     fn is_judgement(&self) -> bool {
-        matches!(self.punctuation(), SentenceType::Judgement(..))
+        matches!(self.punctuation(), SentenceType::Judgement { .. })
     }
 
     /// 模拟`Sentence.isQuestion`
@@ -416,31 +481,32 @@ pub trait SentenceConcrete: Sentence + Clone + Hash + PartialEq {
         // truth: Self::Truth,
         sentence_type: SentenceType<Self::Truth>,
         stamp: Self::Stamp,
-        revisable: bool,
+        // revisable: bool,
     ) -> Self;
 
-    /// 模拟`new Sentence(Term content, char punctuation, TruthValue truth, Stamp stamp)`
-    /// * 📝OpenNARS中默认`revisable`为`true`
-    /// * 🚩【2024-05-05 18:39:19】现在使用「语句类型」简并「标点」「真值」两个字段
-    ///   * 🎯应对「判断有真值，问题无真值」的情形
-    ///
-    /// # 📄OpenNARS
-    ///
-    /// Create a Sentence with the given fields
-    ///
-    /// @param content     The Term that forms the content of the sentence
-    /// @param punctuation The punctuation indicating the type of the sentence
-    /// @param truth       The truth value of the sentence, null for question
-    /// @param stamp       The stamp of the sentence indicating its derivation time
-    fn new_revisable(
-        content: Term,
-        // punctuation: Punctuation,
-        // truth: Self::Truth,
-        sentence_type: SentenceType<Self::Truth>,
-        stamp: Self::Stamp,
-    ) -> Self {
-        Self::new(content, sentence_type, stamp, true)
-    }
+    // * ✅【2024-05-24 12:07:56】↓现在因「可修正」内含于「语句类型」中，故无需使用此构造函数
+    // /// 模拟`new Sentence(Term content, char punctuation, TruthValue truth, Stamp stamp)`
+    // /// * 📝OpenNARS中默认`revisable`为`true`
+    // /// * 🚩【2024-05-05 18:39:19】现在使用「语句类型」简并「标点」「真值」两个字段
+    // ///   * 🎯应对「判断有真值，问题无真值」的情形
+    // ///
+    // /// # 📄OpenNARS
+    // ///
+    // /// Create a Sentence with the given fields
+    // ///
+    // /// @param content     The Term that forms the content of the sentence
+    // /// @param punctuation The punctuation indicating the type of the sentence
+    // /// @param truth       The truth value of the sentence, null for question
+    // /// @param stamp       The stamp of the sentence indicating its derivation time
+    // fn new_revisable(
+    //     content: Term,
+    //     // punctuation: Punctuation,
+    //     // truth: Self::Truth,
+    //     sentence_type: SentenceType<Self::Truth>,
+    //     // stamp: Self::Stamp,
+    // ) -> Self {
+    //     Self::new(content, sentence_type, stamp, true)
+    // }
 
     /// 模拟`Sentence.equals`
     /// * 🎯用于方便实现者用其统一实现[`PartialEq`]
@@ -538,12 +604,13 @@ pub trait SentenceConcrete: Sentence + Clone + Hash + PartialEq {
             truth,
             truth_default_values,
             truth_is_analytic,
+            revisable,
         )?;
         // 解析时间戳
         let stamp =
             <Self::Stamp as StampConcrete>::from_lexical(stamp, stamp_current_serial, stamp_time)?;
         // 构造
-        Ok(Self::new(content, sentence_type, stamp, revisable))
+        Ok(Self::new(content, sentence_type, stamp))
     }
 
     /// 🆕自身到「词法」的转换
@@ -577,12 +644,13 @@ mod impl_v1 {
         /// 内部词项
         content: Term,
         /// 内部「标点」（语句类型）
-        /// * 🚩标点+真值
+        /// * 🚩标点+真值+是否可修订
         punctuation: SentenceType<T>,
         /// 内部「时间戳」字段
         stamp: S,
-        /// 内部「可修订」字段
-        revisable: bool,
+        // * ✅【2024-05-24 12:10:41】↓现在因「纳入『语句类型』」不再需要
+        // /// 内部「可修订」字段
+        // revisable: bool,
     }
 
     // * 【2024-05-05 19:38:47】📌后边都是非常简单的「字段对字段」实现 //
@@ -650,10 +718,6 @@ mod impl_v1 {
         fn stamp_mut(&mut self) -> &mut Self::Stamp {
             &mut self.stamp
         }
-
-        fn revisable(&self) -> bool {
-            self.revisable
-        }
     }
 
     impl<T, S> SentenceConcrete for SentenceV1<T, S>
@@ -667,13 +731,13 @@ mod impl_v1 {
             // truth: Self::Truth,
             sentence_type: SentenceType<Self::Truth>,
             stamp: Self::Stamp,
-            revisable: bool,
+            // revisable: bool,
         ) -> Self {
             Self {
                 content,
                 punctuation: sentence_type,
                 stamp,
-                revisable,
+                // revisable,
             }
         }
     }
@@ -687,8 +751,9 @@ mod tests {
     use crate::{
         entity::{StampV1, TruthV1},
         global::tests::AResult,
-        ok, stamp, term,
+        ok, punctuation, stamp, term, truth,
     };
+    use nar_dev_utils::macro_once;
 
     /// 用于测试的「语句」类型
     type S = SentenceV1<TruthV1, StampV1>;
@@ -696,11 +761,40 @@ mod tests {
     /// 测试/content
     #[test]
     fn content() -> AResult {
-        let term = term!(<A --> B>)?;
-        let stamp = stamp!({1: 1; 2; 3});
-        let punctuation = SentenceType::Question;
-        let sentence = S::new(term, punctuation, stamp, false);
-        dbg!(sentence);
+        use SentenceType::*;
+        macro_once! {
+            /// * 🚩模式：(词项) 时间戳 语句类型 => 预期
+            macro test {
+                ($( ( $($term:tt)* ) { $($stamp:tt)* } $punctuation:expr => ( $($expected:tt)* ) )*) => {
+                    $(
+                        let term = term!( $($term)* )?;
+                        let stamp = stamp!({ $($stamp)* });
+                        let punctuation = $punctuation;
+                        let sentence = S::new(term, punctuation, stamp);
+                        let expected = term!( $($expected)* )?;
+                        assert_eq!(sentence.content(), &expected);
+                    )*
+                }
+            }
+            (<A --> B>) {1: 1; 2; 3} Question => (<A --> B>)
+            (<A --> B>) {0: 1; 2; 3} Question => (<A --> B>)
+            (<A --> B>) {0: 2; 2; 3} Question => (<A --> B>)
+            (<A --> B>) {0: 2; 3; 3} Question => (<A --> B>)
+            (<A --> B>) {0: 2; 3; 4} Question => (<A --> B>)
+            (<A --> B>) {1: 1; 2; 3} punctuation!(?) => (<A --> B>)
+            (<A --> B>) {1: 1; 2; 3} Judgement {truth: truth!(0.5;0.5), revisable: true} => (<A --> B>)
+            (<A --> B>) {1: 1; 2; 3} punctuation!(. % 1.0;0.9) => (<A --> B>)
+            (<A --> B>) {1: 1; 2; 3} punctuation!(. false % 1.0;0.9) => (<A --> B>)
+            (this_is_a_sentence) {1: 1; 2; 3} Question => (this_is_a_sentence)
+            (this_is_a_sentence) {0: 1; 2; 3} Question => (this_is_a_sentence)
+            (this_is_a_sentence) {0: 2; 2; 3} Question => (this_is_a_sentence)
+            (this_is_a_sentence) {0: 2; 3; 3} Question => (this_is_a_sentence)
+            (this_is_a_sentence) {0: 2; 3; 4} Question => (this_is_a_sentence)
+            (this_is_a_sentence) {1: 1; 2; 3} punctuation!(?) => (this_is_a_sentence)
+            (this_is_a_sentence) {1: 1; 2; 3} Judgement {truth: truth!(0.5;0.5), revisable: true} => (this_is_a_sentence)
+            (this_is_a_sentence) {1: 1; 2; 3} punctuation!(. % 1.0;0.9) => (this_is_a_sentence)
+            (this_is_a_sentence) {1: 1; 2; 3} punctuation!(. false % 1.0;0.9) => (this_is_a_sentence)
+        }
         ok!()
     }
 

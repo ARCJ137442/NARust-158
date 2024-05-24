@@ -89,24 +89,25 @@ pub trait ReasonerParseTask<C: TypeContext>: Reasoner<C> {
         let stamp =
             <C::Stamp as StampConcrete>::from_lexical(stamp, stamp_current_serial, stamp_time)?;
 
-        // 标点 & 真值
+        // 标点 & 真值 & 可被修正
         let truth_is_analytic = DEFAULT_PARAMETERS.default_truth_analytic;
         let sentence_type = SentenceType::from_lexical(
             punctuation,
             truth,
             truth_default_values,
             truth_is_analytic,
+            revisable,
         )?;
 
         // 构造语句
-        let sentence: C::Sentence = SentenceConcrete::new(content, sentence_type, stamp, revisable);
+        let sentence: C::Sentence = SentenceConcrete::new(content, sentence_type, stamp);
 
         // * 🚩解析任务
 
         // 解析预算值：先计算出「默认预算值」再参与「词法解析」（覆盖）
         use SentenceType::*;
         let (priority, durability, quality) = match sentence.punctuation() {
-            Judgement(truth) => (
+            Judgement { truth, .. } => (
                 ShortFloat::from_float(DEFAULT_PARAMETERS.default_judgement_priority),
                 ShortFloat::from_float(DEFAULT_PARAMETERS.default_judgement_durability),
                 <C::Budget as BudgetFunctions>::truth_to_quality(truth),

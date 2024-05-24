@@ -12,8 +12,7 @@
 //! * ♻️【2024-05-17 21:53:40】目前完全基于「推理上下文」工作
 
 use crate::{
-    control::*, entity::*, inference::*, language::Term, nars::DEFAULT_PARAMETERS,
-    types::TypeContext, *,
+    control::*, entity::*, language::Term, nars::DEFAULT_PARAMETERS, types::TypeContext, *,
 };
 use narsese::api::NarseseValue;
 use navm::output::Output;
@@ -153,10 +152,10 @@ pub trait MemoryDerivationProcess<C: TypeContext>: DerivationContext<C> {
         } */
         let mut new_punctuation = current_task.sentence().punctuation().clone();
         // * 🆕🚩【2024-05-08 11:52:03】需要以此将「真值」插入「语句类型/标点」中（「问题」可能没有真值）
-        if let SentenceType::Judgement(truth) = &mut new_punctuation {
+        if let SentenceType::Judgement { truth, .. } = &mut new_punctuation {
             *truth = new_truth;
         }
-        let new_sentence = SentenceConcrete::new_revisable(
+        let new_sentence = SentenceConcrete::new(
             new_content,
             new_punctuation,
             self.new_stamp().as_ref().unwrap().clone(),
@@ -191,7 +190,7 @@ pub trait MemoryDerivationProcess<C: TypeContext>: DerivationContext<C> {
         new_content: Term,
         new_truth: C::Truth,
         new_budget: C::Budget,
-        revisable: bool,
+        new_revisable: bool,
     ) {
         /* 📄OpenNARS源码：
         if (newContent != null) {
@@ -203,14 +202,14 @@ pub trait MemoryDerivationProcess<C: TypeContext>: DerivationContext<C> {
         } */
         let mut new_punctuation = current_task.sentence().punctuation().clone();
         // * 🆕🚩【2024-05-08 11:52:03】需要以此将「真值」插入「语句类型/标点」中（「问题」可能没有真值）
-        if let SentenceType::Judgement(truth) = &mut new_punctuation {
+        if let SentenceType::Judgement { truth, revisable } = &mut new_punctuation {
             *truth = new_truth;
+            *revisable = new_revisable
         }
         let new_sentence = SentenceConcrete::new(
             new_content,
             new_punctuation,
             self.new_stamp().as_ref().unwrap().clone(),
-            revisable, // * 📌【2024-05-08 11:57:19】就这里是新增的
         );
         let new_task = TaskConcrete::from_derive(
             new_sentence,
@@ -293,13 +292,14 @@ pub trait MemoryDerivationProcess<C: TypeContext>: DerivationContext<C> {
             }
         }
         // 产生「新标点」与「新真值」
+        let task_sentence = current_task.sentence();
         let mut new_punctuation = current_task.sentence().punctuation().clone();
         // * 🆕🚩【2024-05-08 11:52:03】需要以此将「真值」插入「语句类型/标点」中（「问题」可能没有真值）
-        if let SentenceType::Judgement(truth) = &mut new_punctuation {
+        if let SentenceType::Judgement { truth, revisable } = &mut new_punctuation {
             *truth = new_truth;
+            *revisable = task_sentence.revisable(); // * 📌【2024-05-08 11:57:19】就这里是新增的
         }
         // 产生「新时间戳」
-        let task_sentence = current_task.sentence();
         // * 🆕🚩【2024-05-08 14:40:12】此处通过「先决定『旧时间戳』再构造」避免了重复代码与非必要`unwrap`
         let old_stamp = match (task_sentence.is_judgement(), self.current_belief()) {
             (true, _) | (_, None) => task_sentence.stamp(), // * 📄对应`taskSentence.isJudgment() || currentBelief == null`
@@ -311,7 +311,6 @@ pub trait MemoryDerivationProcess<C: TypeContext>: DerivationContext<C> {
             new_content,
             punctuation,
             self.new_stamp().as_ref().unwrap().clone(),
-            task_sentence.revisable(), // * 📌【2024-05-08 11:57:19】就这里是新增的
         );
         *self.new_stamp_mut() = Some(new_stamp); // ! 🚩【2024-05-08 15:36:57】必须放在后边：借用检查不通过
         let new_task = TaskConcrete::from_derive(

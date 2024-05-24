@@ -630,7 +630,8 @@ mod tests {
         let is_analytic = false;
         let truth = TruthV1::from_floats(1.0, 0.9, is_analytic);
         let revisable = false;
-        let sentence = SentenceV1::new(content, SentenceType::Judgement(truth), stamp, revisable);
+        let punctuation = SentenceType::Judgement { truth, revisable };
+        let sentence = SentenceV1::new(content, punctuation, stamp);
         let budget = BudgetV1::from_floats(0.5, 0.5, 0.5);
         let task = T::from_input(sentence, budget);
         // 展示
