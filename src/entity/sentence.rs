@@ -97,7 +97,6 @@ mod punctuation {
     /// 快捷构造宏
     #[macro_export]
     macro_rules! punctuation {
-        // TODO: 【2024-05-24 12:19:45】🚧简化单元测试
         // 问题
         (?) => {
             SentenceType::Question
