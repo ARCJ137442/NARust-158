@@ -16,7 +16,7 @@ use pest::{iterators::Pair, Parser};
 use pest_derive::Parser;
 
 #[derive(Parser)] // ! ↓ 必须从项目根目录开始
-#[grammar = "src/language/term_v2/_dialect.pest"]
+#[grammar = "src/language/term_impl/_dialect.pest"]
 pub struct DialectParser;
 
 /// 使用[`pest`]将输入的「NARust方言」转换为「词法Narsese」
