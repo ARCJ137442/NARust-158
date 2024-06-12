@@ -278,7 +278,7 @@ impl Term {
     ///
     /// Clone the component list
     pub fn clone_components(&self) -> TermComponents {
-        *self.components.clone()
+        self.components.clone()
     }
 
     /// 📄OpenNARS `CompoundTerm.containComponent` 方法
@@ -328,30 +328,34 @@ impl Term {
         }
     }
 
-    /// 尝试追加一个新词项
-    /// * 🎯尝试朝「组分列表」增加新词项，并根据「可交换性」重排去重
-    pub fn add(&mut self, term: Term) {
-        // 增加词项
-        self.components.add(term);
-        // 可交换⇒重排去重
-        if self.is_commutative() {
-            self.components.sort_dedup();
-        }
-    }
+    // ! 🚩【2024-06-13 01:10:07】后续要跟MakeTerm结合起来：Cow「写时复制」
+    // TODO: 【2024-06-13 01:11:49】后续将要实现Cow「写时复制」功能
+    // /// 尝试追加一个新词项
+    // /// * 🎯尝试朝「组分列表」增加新词项，并根据「可交换性」重排去重
+    // pub fn add(&mut self, term: Term) {
+    //     // 增加词项
+    //     self.components.add(term);
+    //     // 可交换⇒重排去重
+    //     if self.is_commutative() {
+    //         self.components.sort_dedup();
+    //     }
+    // }
 
-    /// 尝试删除一个新词项
-    /// * 🎯尝试在「组分列表」移除词项，并根据「可交换性」重排去重
-    /// * ⚠️只会删除**最多一个**词项
-    /// * 🚩返回「是否删除成功」
-    pub fn remove(&mut self, term: &Term) -> bool {
-        // 增加词项
-        let result = self.components.remove(term);
-        // 可交换⇒重排去重
-        if self.is_commutative() {
-            self.components.sort_dedup();
-        }
-        result
-    }
+    // ! 🚩【2024-06-13 01:10:07】后续要跟MakeTerm结合起来：Cow「写时复制」
+    // TODO: 【2024-06-13 01:11:49】后续将要实现Cow「写时复制」功能
+    // /// 尝试删除一个新词项
+    // /// * 🎯尝试在「组分列表」移除词项，并根据「可交换性」重排去重
+    // /// * ⚠️只会删除**最多一个**词项
+    // /// * 🚩返回「是否删除成功」
+    // pub fn remove(&mut self, term: &Term) -> bool {
+    //     // 增加词项
+    //     let result = self.components.remove(term);
+    //     // 可交换⇒重排去重
+    //     if self.is_commutative() {
+    //         self.components.sort_dedup();
+    //     }
+    //     result
+    // }
 
     /// 尝试删除一个新词项
     /// * 🎯尝试在「组分列表」替换词项，并根据「可交换性」重排去重
@@ -599,7 +603,7 @@ mod tests {
             // * 🚩模式：词项字符串 | 复制之后与新词项的「组分」相等
             macro clone_components($($s:literal)*) {
                 asserts! {$(
-                    term!($s).clone_components() => *term!($s).components,
+                    term!($s).clone_components() => term!($s).components,
                 )*}
             }
             // 占位符
@@ -753,6 +757,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(临时关闭)] // TODO: 有待恢复
     fn add() -> AResult {
         macro_once! {
             // * 🚩模式：词项字符串 (+ 附加词项字符串)... ⇒ 预期结果

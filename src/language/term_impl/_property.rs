@@ -61,7 +61,7 @@ impl Term {
     /// 快捷获取「标识符-组分」二元组
     /// * 🎯用于很多地方的「类型匹配」
     pub fn id_comp(&self) -> (&str, &TermComponents) {
-        (&self.identifier, &*self.components)
+        (&self.identifier, &self.components)
     }
 
     /// 快捷获取「标识符-组分」二元组，并提供可变机会
@@ -70,7 +70,7 @@ impl Term {
     ///   * 📌使用`&mut &str`会遇到生命周期问题
     ///   * 📌实际上「修改类型」本身亦不常用
     pub fn id_comp_mut(&mut self) -> (&mut str, &mut TermComponents) {
-        (&mut self.identifier, &mut *self.components)
+        (&mut self.identifier, &mut self.components)
     }
 
     /// 判断「是否包含指定类型的词项」
@@ -99,16 +99,10 @@ impl Term {
         use TermComponents::*;
         match self.components() {
             // 无组分⇒遍历自身
-            Empty | Named(..) => f(self),
+            Empty | Word(..) | Variable(..) => f(self),
             // 内含词项⇒递归深入
-            Unary(term) => term.for_each_atom(f),
-            Binary(term1, term2) => {
-                // 不能直接用递归：无法重复使用`f`
-                term1.for_each_atom(f);
-                term2.for_each_atom(f);
-            }
-            Multi(terms) | MultiIndexed(_, terms) => {
-                for term in terms {
+            Compound(terms) => {
+                for term in terms.iter() {
                     term.for_each_atom(f);
                 }
             }
@@ -144,12 +138,9 @@ impl TermComponents {
         use TermComponents::*;
         match self {
             // 无组分
-            Empty | Named(..) => 0,
-            // 固定数目
-            Unary(..) => 1,
-            Binary(..) => 2,
+            Empty | Word(..) | Variable(..) => 0,
             // 不定数目
-            Multi(terms) | MultiIndexed(_, terms) => terms.len(),
+            Compound(terms) => terms.len(),
         }
     }
 
@@ -159,11 +150,9 @@ impl TermComponents {
         use TermComponents::*;
         match self {
             // 一定空
-            Empty | Named(..) => true,
-            // 一定非空
-            Unary(..) | Binary(..) => false,
+            Empty | Word(..) | Variable(..) => true,
             // 可能空
-            Multi(terms) | MultiIndexed(_, terms) => terms.is_empty(),
+            Compound(terms) => terms.is_empty(),
         }
     }
 
@@ -172,15 +161,11 @@ impl TermComponents {
     ///   * 📄对「像」不受「像占位符」影响
     pub fn get(&self, index: usize) -> Option<&Term> {
         use TermComponents::*;
-        match (self, index) {
+        match self {
             // 无组分
-            (Empty | Named(..), _) => None,
-            // 固定数目 @ 固定索引
-            (Unary(term), 0) | (Binary(term, _), 0) | (Binary(_, term), 1) => Some(term),
-            // 不定数目
-            (Multi(terms) | MultiIndexed(_, terms), _) => terms.get(index),
-            // 其它情况⇒无
-            _ => None,
+            Empty | Word(..) | Variable(..) => None,
+            // 有组分
+            Compound(terms) => terms.get(index),
         }
     }
 
@@ -193,11 +178,9 @@ impl TermComponents {
     /// ⚠️只有在「确保索引不会越界」才不会引发panic和未定义行为（UB）
     pub unsafe fn get_unchecked(&self, index: usize) -> &Term {
         use TermComponents::*;
-        match (self, index) {
-            // 固定数目
-            (Unary(term), 0) | (Binary(term, _), 0) | (Binary(_, term), 1) => term,
-            // 不定数目
-            (Multi(terms) | MultiIndexed(_, terms), _) => terms.get_unchecked(index),
+        match self {
+            // 有组分
+            Compound(terms) => terms.get_unchecked(index),
             // 其它情况⇒panic
             _ => panic!("尝试在非法位置 {index} 获取词项：{self:?}"),
         }
@@ -211,12 +194,9 @@ impl TermComponents {
         // * 📝必须添加类型注释，以便统一不同类型的`Box`，进而统一「迭代器」类型
         let b: Box<dyn Iterator<Item = &Term>> = match self {
             // 一定空
-            Empty | Named(..) => Box::new(None.into_iter()),
-            // 一定非空
-            Unary(term) => Box::new([term].into_iter()),
-            Binary(term1, term2) => Box::new([term1, term2].into_iter()),
+            Empty | Word(..) | Variable(..) => Box::new(None.into_iter()),
             // 可能空
-            Multi(terms) | MultiIndexed(_, terms) => Box::new(terms.iter()),
+            Compound(terms) => Box::new(terms.iter()),
         };
         b
     }
@@ -232,12 +212,9 @@ impl TermComponents {
         // * 📝必须添加类型注释，以便统一不同类型的`Box`，进而统一「迭代器」类型
         let b: Box<dyn Iterator<Item = &mut Term>> = match self {
             // 一定空
-            Empty | Named(..) => Box::new(None.into_iter()),
-            // 一定非空
-            Unary(term) => Box::new([term].into_iter()),
-            Binary(term1, term2) => Box::new([term1, term2].into_iter()),
+            Empty | Word(..) | Variable(..) => Box::new(None.into_iter()),
             // 可能空
-            Multi(terms) | MultiIndexed(_, terms) => Box::new(terms.iter_mut()),
+            Compound(terms) => Box::new(terms.iter_mut()),
         };
         b
     }
@@ -250,80 +227,72 @@ impl TermComponents {
     ///   * 📄NAL-6「变量替换」
     /// * ⚠️暂且封闭：不让外界随意调用 破坏其内部结构
     /// * ⚠️「像占位符」不参与排序：不会影响到「像占位符」的位置
+    ///
+    /// TODO: 【2024-06-12 22:33:17】后续可能要考虑此处「去重」导致元素减少的问题
+    /// * 💭可能需要后续删除：只在「MakeTerm」中使用
     pub(crate) fn sort_dedup(&mut self) {
         use TermComponents::*;
         match self {
-            // 零元 | 一元 ⇒ 不排序
-            Empty | Named(..) | Unary(..) => (),
-            // 二元 ⇒ 排序内部词项，但不去重
-            Binary(term1, term2) => {
-                if term1 > term2 {
-                    std::mem::swap(term1, term2);
-                }
-                // ❌【2024-04-25 15:00:34】使用临时数组进行重排，会导致引用失效
-                // // 使用临时数组进行重排
-                // let [new_term1, new_term2] = manipulate!(
-                //     [term1, term2]
-                //   => .sort()
-                // );
-                // // 重排后重新赋值
-                // *term1 = *new_term1;
-                // *term2 = *new_term2;
-            }
+            // 无组分 ⇒ 不排序
+            Empty | Word(..) | Variable(..) => (),
             // 不定数目⇒直接对数组重排并去重
-            Multi(terms) | MultiIndexed(_, terms) => {
+            Compound(terms) => {
                 // 重排
                 terms.sort();
-                // 去重
-                terms.dedup()
+                // 去重 | ⚠️危险：会改变词项长度
+                let mut new_terms = terms.to_vec();
+                new_terms.dedup();
+                *terms = new_terms.into_boxed_slice();
             }
         }
     }
 
-    /// 尝试向其中添加元素
-    /// * ⚠️【2024-04-25 14:48:37】默认作为**有序**容器处理
-    ///   * 📌其「可交换性」交由「词项」处理
-    ///   * 📌对所谓「可交换词项」不会在此重新排序
-    /// * 🚩始终作为其内的「组分」添加，没有「同类⇒组分合并」的逻辑
-    /// * 🚩返回「是否添加成功」
-    /// * ⚠️不涉及「记忆区」有关`make`的「词项缓存机制」
-    pub(super) fn add(&mut self, term: Term) -> bool {
-        use TermComponents::*;
-        match self {
-            // 固定数目的词项⇒必然添加失败
-            Empty | Named(..) | Unary(..) | Binary(..) => false,
-            // 不定数目⇒添加
-            Multi(terms) | MultiIndexed(_, terms) => {
-                terms.push(term);
-                true
-            }
-        }
-    }
+    // ! 🚩【2024-06-12 22:35:49】弃用：不再作为「可变长容器」使用
+    // TODO: 【2024-06-13 01:11:49】后续将要实现Cow「写时复制」功能
+    // /// 尝试向其中添加元素
+    // /// * ⚠️【2024-04-25 14:48:37】默认作为**有序**容器处理
+    // ///   * 📌其「可交换性」交由「词项」处理
+    // ///   * 📌对所谓「可交换词项」不会在此重新排序
+    // /// * 🚩始终作为其内的「组分」添加，没有「同类⇒组分合并」的逻辑
+    // /// * 🚩返回「是否添加成功」
+    // /// * ⚠️不涉及「记忆区」有关`make`的「词项缓存机制」
+    // pub(super) fn add(&mut self, term: Term) -> bool {
+    //     use TermComponents::*;
+    //     match self {
+    //         // 固定数目的词项⇒必然添加失败
+    //         Empty | Word(..) | Variable(..) => false,
+    //         // 不定数目⇒添加
+    //         Multi(terms) => {
+    //             terms.push(term);
+    //             true
+    //         }
+    //     }
+    // }
 
-    /// 尝试向其中删除元素
-    /// * 🚩始终作为其内的「组分」删除，没有「同类⇒删除其中所有组分」的逻辑
-    /// * 🚩返回「是否删除成功」
-    /// * ⚠️只会移除一个
-    /// * ⚠️不涉及「记忆区」有关`make`的「词项缓存机制」
-    pub(super) fn remove(&mut self, term: &Term) -> bool {
-        use TermComponents::*;
-        match self {
-            // 固定数目的词项⇒必然删除失败
-            Empty | Named(..) | Unary(..) | Binary(..) => false,
-            // 不定数目⇒尝试删除
-            Multi(terms) | MultiIndexed(_, terms) => match terms.iter().position(|t| t == term) {
-                // 找到⇒删除
-                Some(index) => {
-                    terms.remove(index);
-                    true
-                }
-                // 未找到⇒返回false
-                None => false,
-            },
-        }
-    }
+    // /// 尝试向其中删除元素
+    // /// * 🚩始终作为其内的「组分」删除，没有「同类⇒删除其中所有组分」的逻辑
+    // /// * 🚩返回「是否删除成功」
+    // /// * ⚠️只会移除一个
+    // /// * ⚠️不涉及「记忆区」有关`make`的「词项缓存机制」
+    // pub(super) fn remove(&mut self, term: &Term) -> bool {
+    //     use TermComponents::*;
+    //     match self {
+    //         // 固定数目的词项⇒必然删除失败
+    //         Empty | Word(..) | Compound(..) | Compound(..) => false,
+    //         // 不定数目⇒尝试删除
+    //         Multi(terms) | MultiIndexed(_, terms) => match terms.iter().position(|t| t == term) {
+    //             // 找到⇒删除
+    //             Some(index) => {
+    //                 terms.remove(index);
+    //                 true
+    //             }
+    //             // 未找到⇒返回false
+    //             None => false,
+    //         },
+    //     }
+    // }
 
-    /// 尝试向其中替换元素
+    /// 尝试替换其中的元素
     /// * 🚩始终作为其内的「组分」替换
     /// * 🚩返回「是否替换成功」
     /// * ⚠️不涉及「记忆区」有关`make`的「词项缓存机制」
@@ -331,14 +300,9 @@ impl TermComponents {
         use TermComponents::*;
         match (self, index) {
             // 无组分
-            (Empty | Named(..), _) => false,
-            // 固定数目 @ 固定索引
-            (Unary(term), 0) | (Binary(term, _), 0) | (Binary(_, term), 1) => {
-                *term = new;
-                true
-            }
-            // 不定数目 & 长度保证
-            (Multi(terms) | MultiIndexed(_, terms), _) if index < terms.len() => {
+            (Empty | Word(..) | Variable(..), _) => false,
+            // 有组分
+            (Compound(terms), _) if index < terms.len() => {
                 terms[index] = new;
                 true
             }
@@ -363,15 +327,10 @@ impl TermComponents {
     pub fn structural_match(&self, other: &Self) -> bool {
         use TermComponents::*;
         match (self, other) {
-            // 同类型 / 空 | 同类型 / 一元 | 同类型 / 二元
-            (Empty | Named(..), Empty | Named(..))
-            | (Unary(..), Unary(..))
-            | (Binary(..), Binary(..)) => true,
+            // 同类型 / 空 | 同类型 / 具名 | 同类型 / 变量
+            (Empty, Empty) | (Word(..), Word(..)) | (Variable(..), Variable(..)) => true,
             // 同类型 / 多元
-            (Multi(terms1), Multi(terms2)) => terms1.len() == terms2.len(),
-            (MultiIndexed(i1, terms1), MultiIndexed(i2, terms2)) => {
-                i1 == i2 && terms1.len() == terms2.len()
-            }
+            (Compound(terms1), Compound(terms2)) => terms1.len() == terms2.len(),
             // 其它情形（类型相异）
             _ => false,
         }
@@ -508,30 +467,30 @@ mod tests {
                 // 空（一般不会在外部出现）
                 "_" => Empty
                 // 具名
-                "A" => Named(..)
-                "$A" => Named(..)
-                "#A" => Named(..)
-                "?A" => Named(..)
+                "A" => Word(..)
+                "$A" => Word(..)
+                "#A" => Word(..)
+                "?A" => Word(..)
                 // 一元
-                "(--, A)" => Unary(..)
+                "(--, A)" => Compound(..)
                 // 二元
-                "(-, A, B)" => Binary(..)
-                "(~, A, B)" => Binary(..)
-                "<A --> B>" => Binary(..)
-                "<A <-> B>" => Binary(..)
-                "<A ==> B>" => Binary(..)
-                "<A <=> B>" => Binary(..)
+                "(-, A, B)" => Compound(..)
+                "(~, A, B)" => Compound(..)
+                "<A --> B>" => Compound(..)
+                "<A <-> B>" => Compound(..)
+                "<A ==> B>" => Compound(..)
+                "<A <=> B>" => Compound(..)
                 // 多元
-                "{A}" => Multi(..)
-                "[A]" => Multi(..)
-                "(&, A)" => Multi(..)
-                "(|, A)" => Multi(..)
-                "(*, A)" => Multi(..)
-                r"(&&, A)" => Multi(..)
-                r"(||, A)" => Multi(..)
+                "{A}" => Compound(..)
+                "[A]" => Compound(..)
+                "(&, A)" => Compound(..)
+                "(|, A)" => Compound(..)
+                "(*, A)" => Compound(..)
+                r"(&&, A)" => Compound(..)
+                r"(||, A)" => Compound(..)
                 // 多元索引
-                r"(/, R, _)" => MultiIndexed(..)
-                r"(\, R, _)" => MultiIndexed(..)
+                r"(/, R, _)" => Compound(..)
+                r"(\, R, _)" => Compound(..)
             }
             ok!()
         }
@@ -1061,6 +1020,7 @@ mod tests {
         /// ! 不考虑「可交换性」这个「复合词项」`compound`才引入的概念
         /// * ⚠️因此只对「不可交换的词项」进行测试
         #[test]
+        #[cfg(临时关闭)] // TODO: 有待恢复
         fn add() -> AResult {
             macro_once! {
                 // * 🚩模式：词项字符串 (+ 附加词项字符串)... ⇒ 预期结果
@@ -1097,6 +1057,7 @@ mod tests {
         }
 
         #[test]
+        #[cfg(临时关闭)] // TODO: 有待恢复
         fn remove() -> AResult {
             macro_once! {
                 // * 🚩模式：词项字符串 (- 附加词项字符串)... ⇒ 预期结果

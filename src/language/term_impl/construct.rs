@@ -2,7 +2,7 @@
 
 use super::*;
 use anyhow::Result;
-use nar_dev_utils::if_return;
+use nar_dev_utils::{if_return, pipe};
 
 impl Term {
     /// 构造函数
@@ -11,7 +11,7 @@ impl Term {
         // 使用默认值构造
         let mut term = Self {
             identifier: identifier.into(),
-            components: Box::new(components),
+            components,
             is_constant: true, // 取默认值
         };
         // 初始化「是否常量」为「是否不含变量」 | ⚠️后续可能会被修改
@@ -31,7 +31,7 @@ impl Term {
 
     /// NAL-1 / 词语
     pub fn new_word(name: impl Into<String>) -> Self {
-        Self::new(WORD, TermComponents::Named(name.into()))
+        Self::new(WORD, TermComponents::Word(name.into()))
     }
 
     /// NAL-4 / 占位符
@@ -45,17 +45,17 @@ impl Term {
 
     /// NAL-6 / 独立变量
     pub fn new_var_i(name: impl Into<String>) -> Self {
-        Self::new(VAR_INDEPENDENT, TermComponents::Named(name.into()))
+        Self::new(VAR_INDEPENDENT, TermComponents::Word(name.into()))
     }
 
     /// NAL-6 / 非独变量
     pub fn new_var_d(name: impl Into<String>) -> Self {
-        Self::new(VAR_DEPENDENT, TermComponents::Named(name.into()))
+        Self::new(VAR_DEPENDENT, TermComponents::Word(name.into()))
     }
 
     /// NAL-6 / 查询变量
     pub fn new_var_q(name: impl Into<String>) -> Self {
-        Self::new(VAR_QUERY, TermComponents::Named(name.into()))
+        Self::new(VAR_QUERY, TermComponents::Word(name.into()))
     }
 
     /// 从旧的原子词项构造，但使用新的名称
@@ -65,7 +65,7 @@ impl Term {
     pub(super) fn from_var_clone(from: &Term, new_name: impl Into<String>) -> Self {
         Self::new(
             from.identifier.clone(),
-            TermComponents::Named(new_name.into()),
+            TermComponents::Word(new_name.into()),
         )
     }
 
@@ -76,9 +76,9 @@ impl Term {
     pub fn from_rename(from: &Term, new_name: impl Into<String>) -> Option<Self> {
         match from.components() {
             // ! 只会在「组分类型相同」时复制
-            TermComponents::Named(..) => Some(Self::new(
+            TermComponents::Word(..) => Some(Self::new(
                 from.identifier.clone(),
-                TermComponents::Named(new_name.into()),
+                TermComponents::Word(new_name.into()),
             )),
             _ => None,
         }
@@ -126,7 +126,7 @@ impl Term {
     pub fn new_diff_ext(term1: Term, term2: Term) -> Self {
         Self::new(
             DIFFERENCE_EXT_OPERATOR,
-            TermComponents::Binary(term1, term2),
+            TermComponents::new_binary(term1, term2),
         )
     }
 
@@ -134,13 +134,13 @@ impl Term {
     pub fn new_diff_int(term1: Term, term2: Term) -> Self {
         Self::new(
             DIFFERENCE_INT_OPERATOR,
-            TermComponents::Binary(term1, term2),
+            TermComponents::new_binary(term1, term2),
         )
     }
 
     /// NAL-4 / 乘积
     pub fn new_product(terms: impl Into<Vec<Term>>) -> Self {
-        Self::new(PRODUCT_OPERATOR, TermComponents::Multi(terms.into()))
+        Self::new(PRODUCT_OPERATOR, TermComponents::new_multi(terms.into()))
     }
 
     /// NAL-4 / 外延像
@@ -183,7 +183,8 @@ impl Term {
                 => Err(anyhow::anyhow!("占位符索引超出范围"))
         }
         // 构造 & 返回
-        Ok(TermComponents::MultiIndexed(i_placeholder, terms))
+        // * 🚩【2024-06-12 22:48:33】现在不再附带额外字段，统一使用一个枚举变种
+        Ok(TermComponents::new_multi(terms))
     }
 
     /// NAL-5 / 合取
@@ -206,7 +207,7 @@ impl Term {
 
     /// NAL-5 / 否定
     pub fn new_negation(term: Term) -> Self {
-        Self::new(NEGATION_OPERATOR, TermComponents::Unary(term))
+        Self::new(NEGATION_OPERATOR, TermComponents::new_unary(term))
     }
 
     // 陈述 //
@@ -215,7 +216,7 @@ impl Term {
     pub fn new_inheritance(subject: Term, predicate: Term) -> Self {
         Self::new(
             INHERITANCE_RELATION,
-            TermComponents::Binary(subject, predicate),
+            TermComponents::new_binary(subject, predicate),
         )
     }
 
@@ -231,7 +232,7 @@ impl Term {
     pub fn new_implication(subject: Term, predicate: Term) -> Self {
         Self::new(
             IMPLICATION_RELATION,
-            TermComponents::Binary(subject, predicate),
+            TermComponents::new_binary(subject, predicate),
         )
     }
 
@@ -245,15 +246,16 @@ impl Term {
 }
 
 impl TermComponents {
-    /// 多元无序不重复组分
-    /// * 🎯用于【无序不重复】的集合类组分
-    /// * 📄外延集、内涵集
-    /// * 📄外延交、内涵交
-    pub fn new_multi_set(terms: Vec<Term>) -> Self {
-        manipulate!(
-            Self::Multi(terms)
-            => .sort_dedup() // 重排 & 去重
-        )
+    /// 一元组分
+    /// * 🚩【2024-06-12 22:43:34】现在封装「内部枚举变种」接口
+    pub fn new_unary(term: Term) -> Self {
+        Self::Compound(Box::new([term]))
+    }
+
+    /// 二元有序组分
+    /// * 🚩【2024-06-12 22:43:34】现在封装「内部枚举变种」接口
+    pub fn new_binary(term1: Term, term2: Term) -> Self {
+        Self::Compound(Box::new([term1, term2]))
     }
 
     /// 二元无序组分
@@ -262,12 +264,44 @@ impl TermComponents {
     /// * 📄相似、等价
     /// * 🚩使用「临时数组切片」实现（较为简洁）
     pub fn new_binary_unordered(term1: Term, term2: Term) -> Self {
-        manipulate!(
-            // 构造
-            Self::Binary(term1, term2)
+        pipe! {
             // 排序
-            => .sort_dedup()
-        )
+            manipulate!(
+                [term1, term2]
+                => .sort()
+            )
+            // 构造
+            => Box::new
+            => Self::Compound
+        }
+    }
+
+    /// 多元有序组分
+    pub fn new_multi(terms: Vec<Term>) -> Self {
+        pipe! {
+            terms
+            // 转换
+            => .into_boxed_slice()
+            // 构造
+            => Self::Compound
+        }
+    }
+
+    /// 多元无序不重复组分
+    /// * 🎯用于【无序不重复】的集合类组分
+    /// * 📄外延集、内涵集
+    /// * 📄外延交、内涵交
+    pub fn new_multi_set(terms: Vec<Term>) -> Self {
+        pipe! {
+            manipulate!(
+                terms
+                // 重排 & 去重
+                => .sort()
+                => .dedup()
+            )
+            => .into_boxed_slice()
+            => Self::Compound
+        }
     }
 }
 
@@ -303,13 +337,14 @@ mod tests {
         fn detect(term: &Term) {
             use TermComponents::*;
             match term.id_comp() {
-                (WORD, Named(name)) => {
+                (WORD, Word(name)) => {
                     println!("word with {name:?}");
                 }
-                (IMAGE_EXT_OPERATOR, MultiIndexed(i, v)) => {
+                (IMAGE_EXT_OPERATOR, Compound(v)) => {
+                    let i = v.iter().position(Term::is_placeholder).unwrap();
                     println!("ext_image '/' with {i}");
                     println!("<components>");
-                    for term in v {
+                    for term in v.iter() {
                         detect(term);
                     }
                     println!("</components>");
@@ -320,7 +355,7 @@ mod tests {
         // 直接从内部构造函数中构造一个词项
         let im_ext = Term::new(
             IMAGE_EXT_OPERATOR,
-            TermComponents::MultiIndexed(1, vec![Term::new_word("word")]),
+            TermComponents::new_multi(vec![Term::new_word("word"), Term::new_placeholder()]),
         );
         detect(&im_ext);
         // 从「词法Narsese」中解析词项

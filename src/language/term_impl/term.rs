@@ -51,19 +51,14 @@ impl Term {
         }
         // 剩余类型
         use TermComponents::*;
-        match &*self.components {
+        match &self.components {
             // 占位符 ⇒ 0
             Empty => 0,
-            // 原子 ⇒ 1 | 不包括「变量」
-            Named(..) => 1,
-            // 一元 ⇒ 1 + 内部词项复杂度
-            Unary(term) => 1 + term.complexity(),
-            // 二元 ⇒ 1 + 内部所有词项复杂度之和
-            Binary(term1, term2) => 1 + term1.complexity() + term2.complexity(),
+            // 原子/变量 ⇒ 1 | 不包括「变量」
+            // * 🚩目前遵照更新的PyNARS设置，将「变量词项」的复杂度定为1
+            Word(..) | Variable(..) => 1,
             // 多元 ⇒ 1 + 内部所有词项复杂度之和
-            Multi(terms) | MultiIndexed(_, terms) => {
-                1 + terms.iter().map(Term::complexity).sum::<usize>()
-            }
+            Compound(terms) => 1 + terms.iter().map(Term::complexity).sum::<usize>(),
         }
     }
 }

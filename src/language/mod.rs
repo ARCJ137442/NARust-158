@@ -61,6 +61,8 @@
 //! - create and access corresponding concept
 //! - structural operation in compound
 
-// 词项2
+// 当前版本
 mod term_impl;
+
+// 对外公开的实现
 pub use term_impl::*;

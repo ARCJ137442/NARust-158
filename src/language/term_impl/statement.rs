@@ -214,8 +214,8 @@ impl Term {
     /// # 📄OpenNARS
     ///
     pub fn get_subject(&self) -> &Term {
-        match &*self.components {
-            TermComponents::Binary(subject, _) => subject,
+        match &self.components {
+            TermComponents::Compound(terms) => &terms[0],
             _ => panic!("尝试向「非陈述词项」获取主词"),
         }
     }
@@ -225,8 +225,8 @@ impl Term {
     /// # 📄OpenNARS
     ///
     pub fn get_predicate(&self) -> &Term {
-        match &*self.components {
-            TermComponents::Binary(_, predicate) => predicate,
+        match &self.components {
+            TermComponents::Compound(terms) => &terms[1],
             _ => panic!("尝试向「非陈述词项」获取谓词"),
         }
     }

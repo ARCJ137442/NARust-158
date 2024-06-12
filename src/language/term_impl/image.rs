@@ -68,8 +68,7 @@ impl Term {
     ///
     /// ! ⚠️仅限于「像」的`TermComponents::MultiIndexed`词项
     /// * 若尝试获取「非『像』词项」的关系索引，则会panic
-    ///
-    /// TODO: 【2024-05-11 14:29:23】🏗️后续考虑改为[`Option`]
+    /// * 🚩【2024-06-12 22:53:09】本来就不应该对「非像词项」调用该函数——严格跟「像」类型绑定
     ///
     /// # 📄OpenNARS
     ///
@@ -78,8 +77,11 @@ impl Term {
     /// @return the index of relation
     #[doc(alias = "get_relation_index")]
     pub fn get_placeholder_index(&self) -> usize {
-        match &&*self.components {
-            TermComponents::MultiIndexed(index, _) => *index,
+        match &self.components {
+            TermComponents::Compound(terms) => terms
+                .iter()
+                .position(Term::is_placeholder)
+                .expect("尝试获取「非『像』词项」的关系索引"),
             _ => panic!("尝试获取「非『像』词项」的关系索引"),
         }
     }
@@ -95,8 +97,8 @@ impl Term {
     ///
     /// @return The term representing a relation
     pub fn get_relation(&self) -> &Term {
-        match &&*self.components {
-            TermComponents::MultiIndexed(_, terms) => &terms[0],
+        match &self.components {
+            TermComponents::Compound(terms) => &terms[0],
             _ => panic!("尝试获取「非『像』词项」的关系词项"),
         }
     }
@@ -117,8 +119,8 @@ impl Term {
             return null;
         }
         return (relationIndex == 0) ? components.get(1) : components.get(0); */
-        match &&*self.components {
-            TermComponents::MultiIndexed(_, terms) => match terms.len() {
+        match &self.components {
+            TermComponents::Compound(terms) => match terms.len() {
                 2 => Some(&terms[1]),
                 _ => None,
             },

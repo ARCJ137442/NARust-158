@@ -21,39 +21,15 @@ const COMPONENT_SEPARATOR: &str = " ";
 impl Term {
     pub fn format_name(&self) -> String {
         let id = &self.identifier;
-        match &*self.components {
+        match &self.components {
             // 空组分
             TermComponents::Empty => id.clone(),
             // 名称 | 原子词项
-            TermComponents::Named(name) => id.clone() + name,
-            // 一元
-            TermComponents::Unary(term) => {
-                // 📄 "(-- A)"
-                manipulate!(
-                    String::new()
-                    => {+= COMPONENT_OPENER}#
-                    => {+= id}#
-                    => {+= COMPONENT_SEPARATOR}#
-                    => {+= &term.format_name()}#
-                    => {+= COMPONENT_CLOSER}#
-                )
-            }
-            // 二元
-            TermComponents::Binary(term1, term2) => {
-                // 📄 "(A --> B)"
-                manipulate!(
-                    String::new()
-                    => {+= COMPONENT_OPENER}#
-                    => {+= &term1.format_name()}#
-                    => {+= COMPONENT_SEPARATOR}#
-                    => {+= id}#
-                    => {+= COMPONENT_SEPARATOR}#
-                    => {+= &term2.format_name()}#
-                    => {+= COMPONENT_CLOSER}#
-                )
-            }
+            TermComponents::Word(name) => id.clone() + name,
+            // 名称 | 变量词项
+            TermComponents::Variable(n) => id.clone() + &n.to_string(),
             // 多元
-            TermComponents::Multi(terms) => {
+            TermComponents::Compound(terms) => {
                 let mut s = id.to_string() + COMPONENT_OPENER;
                 let mut terms = terms.iter();
                 if let Some(t) = terms.next() {
@@ -62,36 +38,6 @@ impl Term {
                 for t in terms {
                     s += COMPONENT_SEPARATOR;
                     s += &t.format_name();
-                }
-                s + COMPONENT_CLOSER
-            }
-            // 多元+索引
-            TermComponents::MultiIndexed(index, terms) => {
-                let mut s = id.to_string() + COMPONENT_OPENER;
-                let mut terms = terms.iter();
-                // 分「占位符在开头」与「占位符在后头」
-                if *index == 0 {
-                    s += PLACEHOLDER;
-                    for term in terms {
-                        s += COMPONENT_SEPARATOR;
-                        s += &term.format_name();
-                    }
-                } else {
-                    // * ⚠️【2024-04-22 13:02:41】SAFETY: 经由「像」的构造函数保证，占位符必定在界内
-                    // 占位符前的词项
-                    s += &terms.next().unwrap().format_name();
-                    for _ in 1..*index {
-                        s += COMPONENT_SEPARATOR;
-                        s += &terms.next().unwrap().format_name();
-                    }
-                    // 占位符
-                    s += COMPONENT_SEPARATOR;
-                    s += PLACEHOLDER;
-                    // 占位符后的词项
-                    for term in terms {
-                        s += COMPONENT_SEPARATOR;
-                        s += &term.format_name();
-                    }
                 }
                 s + COMPONENT_CLOSER
             }
@@ -116,6 +62,8 @@ impl Term {
     }
 }
 
+// TODO: 后续有待明了：变量「预先重命名」问题
+// * 🚩此处的「变量词项」一开始就应该是个数值，从「具名变量」变为「数字变量」
 /// 词项⇒词法Narsese
 impl From<&Term> for TermLexical {
     fn from(value: &Term) -> Self {
@@ -123,38 +71,27 @@ impl From<&Term> for TermLexical {
         let (id, comp) = value.id_comp();
         match (id, comp) {
             // 专用 / 集合词项 | 默认已排序
-            (SET_EXT_OPERATOR | SET_INT_OPERATOR, Multi(v)) => {
+            (SET_EXT_OPERATOR | SET_INT_OPERATOR, Compound(v)) => {
                 let v = v.iter().map(TermLexical::from).collect::<Vec<_>>();
                 Self::new_compound(id, v)
             }
-            // 专用 / 陈述
+            //  陈述
             (
                 INHERITANCE_RELATION | SIMILARITY_RELATION | IMPLICATION_RELATION
                 | EQUIVALENCE_RELATION,
-                Binary(subj, pred),
-            ) => Self::new_statement(id, subj.into(), pred.into()),
+                Compound(terms),
+            ) if terms.len() == 2 => {
+                Self::new_statement(id, (&terms[0]).into(), (&terms[1]).into())
+            }
             // 通用 / 空：仅前缀
             (_, Empty) => Self::new_atom(id, ""),
             // 通用 / 具名：前缀+词项名
-            (_, Named(name)) => Self::new_atom(id, name),
-            // 通用 / 一元
-            (_, Unary(term)) => Self::new_compound(id, vec![term.into()]),
-            // 通用 / 二元
-            (_, Binary(subj, pred)) => Self::new_compound(id, vec![subj.into(), pred.into()]),
-            // 多元
-            (_, Multi(terms)) => {
+            (_, Word(name)) => Self::new_atom(id, name),
+            // 通用 / 变量：前缀+变量编号
+            (_, Variable(num)) => Self::new_atom(id, &num.to_string()),
+            // 通用 / 多元
+            (_, Compound(terms)) => {
                 Self::new_compound(id, terms.iter().map(TermLexical::from).collect())
-            }
-            // 通用 / 带索引
-            (_, MultiIndexed(i, v)) => {
-                // 逐个转换组分
-                let mut v = v.iter().map(TermLexical::from).collect::<Vec<_>>();
-                // 创建并插入「占位符」
-                let placeholder = Term::new_placeholder();
-                let placeholder = (&placeholder).into();
-                v.insert(*i, placeholder);
-                // 构造 & 返回
-                Self::new_compound(id, v)
             }
         }
     }

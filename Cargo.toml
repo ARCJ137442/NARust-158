@@ -26,7 +26,7 @@ features = ["bundled"]
 
 # Narsese支持：API、枚举Narsese & 词法Narsese
 [dependencies.narsese]
-version = "0.18"
+version = "0.19"
 features = [
     "enum_narsese",
     "lexical_narsese",
