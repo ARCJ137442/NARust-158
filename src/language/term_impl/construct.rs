@@ -44,28 +44,29 @@ impl Term {
     }
 
     /// NAL-6 / 独立变量
-    pub fn new_var_i(name: impl Into<String>) -> Self {
-        Self::new(VAR_INDEPENDENT, TermComponents::Word(name.into()))
+    pub fn new_var_i(name: impl Into<usize>) -> Self {
+        Self::new(VAR_INDEPENDENT, TermComponents::Variable(name.into()))
     }
 
     /// NAL-6 / 非独变量
-    pub fn new_var_d(name: impl Into<String>) -> Self {
-        Self::new(VAR_DEPENDENT, TermComponents::Word(name.into()))
+    pub fn new_var_d(name: impl Into<usize>) -> Self {
+        Self::new(VAR_DEPENDENT, TermComponents::Variable(name.into()))
     }
 
     /// NAL-6 / 查询变量
-    pub fn new_var_q(name: impl Into<String>) -> Self {
-        Self::new(VAR_QUERY, TermComponents::Word(name.into()))
+    pub fn new_var_q(name: impl Into<usize>) -> Self {
+        Self::new(VAR_QUERY, TermComponents::Variable(name.into()))
     }
 
     /// 从旧的原子词项构造，但使用新的名称
     /// * 🎯重命名变量时，将变量「换名复制」
     /// * 🚩使用旧词项的标识符，但产生新的变量
     /// * ⚠️【2024-04-25 23:08:20】内部使用：会导致产生无效类型（改变了组分类型）
-    pub(super) fn from_var_clone(from: &Term, new_name: impl Into<String>) -> Self {
+    #[deprecated]
+    pub(super) fn from_var_clone(from: &Term, new_id: impl Into<usize>) -> Self {
         Self::new(
             from.identifier.clone(),
-            TermComponents::Word(new_name.into()),
+            TermComponents::Variable(new_id.into()),
         )
     }
 
@@ -73,6 +74,8 @@ impl Term {
     /// * 🎯重命名变量时，将变量「换名复制」
     /// * 🚩使用旧词项的标识符，但产生新的变量
     /// * ✅开放：会检查
+    #[cfg(弃用_20240614000254_对后续变量命名等机制无用)]
+    #[deprecated]
     pub fn from_rename(from: &Term, new_name: impl Into<String>) -> Option<Self> {
         match from.components() {
             // ! 只会在「组分类型相同」时复制
@@ -327,7 +330,7 @@ macro_rules! term {
 mod tests {
     use super::*;
     use crate::{global::tests::AResult, ok, test_term as t};
-    use nar_dev_utils::{asserts, fail_tests, macro_once};
+    use nar_dev_utils::fail_tests;
     // ! ❌使用`test_term as t`避免`term`重名：即便不导入，也会ambiguous
 
     /// 测试/词项
@@ -386,6 +389,8 @@ mod tests {
     }
 
     #[test]
+    #[cfg(弃用_20240614000254_对后续变量命名等机制无用)]
+    #[deprecated]
     fn from_var_clone() -> AResult {
         macro_once! {
             // * 🚩模式：词项字符串 ⇒ 预期词项字符串
@@ -407,6 +412,8 @@ mod tests {
     }
 
     #[test]
+    #[cfg(弃用_20240614000254_对后续变量命名等机制无用)]
+    #[deprecated]
     fn from_rename() -> AResult {
         macro_once! {
             // * 🚩模式：词项字符串 ⇒ 预期词项字符串

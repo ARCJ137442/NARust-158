@@ -8,7 +8,7 @@
 //!     * 📌本质上是「缓存」的需求与作用
 
 use super::*;
-use nar_dev_utils::if_return;
+use narsese::api::{GetCategory, TermCategory};
 
 /// 📄OpenNARS `nars.language.Term`
 impl Term {
@@ -32,23 +32,19 @@ impl Term {
 
     /// 模拟`Term.getComplexity`
     /// * 🚩逻辑 from OpenNARS
-    ///   * 词语 ⇒ 1
-    ///   * 变量 ⇒ 0
+    ///   * 原子 ⇒ 1
+    /// //  * 变量 ⇒ 0
     ///   * 复合 ⇒ 1 + 所有组分复杂度之和
     ///
     /// # 📄OpenNARS
     ///
     /// - The syntactic complexity, for constant atomic Term, is 1.
     /// - The complexity of the term is the sum of those of the components plus 1
-    /// - The syntactic complexity of a variable is 0, because it does not refer to * any concept.
+    /// // - The syntactic complexity of a variable is 0, because it does not refer to * any concept.
     ///
     /// @return The complexity of the term, an integer
     #[doc(alias = "get_complexity")]
     pub fn complexity(&self) -> usize {
-        // 对「变量」特殊处理：不引用到任何「概念」
-        if_return! {
-            self.instanceof_variable() => 0
-        }
         // 剩余类型
         use TermComponents::*;
         match &self.components {
@@ -59,6 +55,34 @@ impl Term {
             Word(..) | Variable(..) => 1,
             // 多元 ⇒ 1 + 内部所有词项复杂度之和
             Compound(terms) => 1 + terms.iter().map(Term::complexity).sum::<usize>(),
+        }
+    }
+}
+
+impl GetCategory for Term {
+    fn get_category(&self) -> TermCategory {
+        use TermCategory::*;
+        match self.identifier.as_str() {
+            // * 🚩原子：词语、占位符、变量
+            WORD | PLACEHOLDER | VAR_INDEPENDENT | VAR_DEPENDENT | VAR_QUERY => Atom,
+            // * 🚩陈述：继承、相似、蕴含、等价 | ❌不包括「实例」「属性」「实例属性」
+            INHERITANCE_RELATION | IMPLICATION_RELATION | SIMILARITY_RELATION
+            | EQUIVALENCE_RELATION => Statement,
+            // * 🚩一元：否定
+            NEGATION_OPERATOR |
+            // * 🚩二元序列：差集
+            DIFFERENCE_EXT_OPERATOR | DIFFERENCE_INT_OPERATOR |
+            // * 🚩多元序列：乘积、像
+            PRODUCT_OPERATOR | IMAGE_EXT_OPERATOR | IMAGE_INT_OPERATOR |
+            // * 🚩多元集合：词项集、交集、合取、析取
+            SET_EXT_OPERATOR
+            | SET_INT_OPERATOR
+            | INTERSECTION_EXT_OPERATOR
+            | INTERSECTION_INT_OPERATOR
+            | CONJUNCTION_OPERATOR
+            | DISJUNCTION_OPERATOR => Compound,
+            // * 🚩其它⇒panic（不应出现）
+            _ => panic!("Unexpected compound term identifier: {}", self.identifier),
         }
     }
 }
@@ -77,16 +101,16 @@ mod tests {
             // * 🚩模式：词项字符串 ⇒ 预期
             macro fmt($($term:literal => $expected:expr)*) {
                 asserts! {$(
-                    format!("{}", term!($term)) => $expected
+                    term!($term).to_string() => $expected
                 )*}
             }
             // 占位符
             "_" => "_"
             // 原子词项
             "A" => "A"
-            "$A" => "$A"
-            "#A" => "#A"
-            "?A" => "?A"
+            "$A" => "$1" // ! 🚩【2024-06-13 19:02:58】现在对「变量词项」会自动重命名
+            "#A" => "#1" // ! 🚩【2024-06-13 19:02:58】现在对「变量词项」会自动重命名
+            "?A" => "?1" // ! 🚩【2024-06-13 19:02:58】现在对「变量词项」会自动重命名
             // 复合词项
             "{A, B}" => "{}(A B)"
             "[A, B]" => "[](A B)"
@@ -107,12 +131,18 @@ mod tests {
             "<A <-> B>" => "(A <-> B)"
             "<A ==> B>" => "(A ==> B)"
             "<A <=> B>" => "(A <=> B)"
+            // ! 自动排序
+            "<B <-> A>" => "(A <-> B)"
+            "<B <=> A>" => "(A <=> B)"
+            // ! 变量重命名
+            "(*, $e, #d, ?c, $b, #a)" => "*($1 #2 ?3 $4 #5)"
+            "(/, $e, #d, ?c, $b, #a, _)" => "/($1 #2 ?3 $4 #5 _)"
         }
         ok!()
     }
 
     #[test]
-    fn get_complexity() -> AResult {
+    fn complexity() -> AResult {
         macro_once! {
             // * 🚩模式：词项字符串 ⇒ 预期
             macro fmt($($term:literal => $expected:expr)*) {
@@ -125,9 +155,9 @@ mod tests {
             // 词语
             "A" => 1
             // 变量
-            "$A" => 0
-            "#A" => 0
-            "?A" => 0
+            "$A" => 1 // ! 🚩【2024-06-14 00:28:01】现在遵照PyNARS等更新版本的做法
+            "#A" => 1
+            "?A" => 1
             // 复合词项
             "{A}" => 2
             "[A]" => 2

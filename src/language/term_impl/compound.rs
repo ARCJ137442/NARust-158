@@ -26,6 +26,8 @@
 //! This abstract class contains default methods for all CompoundTerms.
 
 use super::*;
+use narsese::api::{GetCapacity, TermCapacity};
+
 impl Term {
     /// 🆕用于判断是否为「纯复合词项」
     /// * ⚠️**不**包括陈述
@@ -330,39 +332,28 @@ impl Term {
 
     // ! 🚩【2024-06-13 01:10:07】后续要跟MakeTerm结合起来：Cow「写时复制」
     // TODO: 【2024-06-13 01:11:49】后续将要实现Cow「写时复制」功能
-    // /// 尝试追加一个新词项
-    // /// * 🎯尝试朝「组分列表」增加新词项，并根据「可交换性」重排去重
-    // pub fn add(&mut self, term: Term) {
-    //     // 增加词项
-    //     self.components.add(term);
-    //     // 可交换⇒重排去重
-    //     if self.is_commutative() {
-    //         self.components.sort_dedup();
-    //     }
-    // }
+    /// 尝试追加一个新词项
+    /// * 🎯尝试朝「组分列表」增加新词项，并根据「可交换性」重排去重
+    #[cfg(弃用直到MakeTerm)]
+    pub fn add(&mut self, term: Term) {
+        // 增加词项
+        self.components.add(term);
+        // 可交换⇒重排去重
+        if self.is_commutative() {
+            self.components.sort_dedup();
+        }
+    }
 
     // ! 🚩【2024-06-13 01:10:07】后续要跟MakeTerm结合起来：Cow「写时复制」
     // TODO: 【2024-06-13 01:11:49】后续将要实现Cow「写时复制」功能
-    // /// 尝试删除一个新词项
-    // /// * 🎯尝试在「组分列表」移除词项，并根据「可交换性」重排去重
-    // /// * ⚠️只会删除**最多一个**词项
-    // /// * 🚩返回「是否删除成功」
-    // pub fn remove(&mut self, term: &Term) -> bool {
-    //     // 增加词项
-    //     let result = self.components.remove(term);
-    //     // 可交换⇒重排去重
-    //     if self.is_commutative() {
-    //         self.components.sort_dedup();
-    //     }
-    //     result
-    // }
-
     /// 尝试删除一个新词项
-    /// * 🎯尝试在「组分列表」替换词项，并根据「可交换性」重排去重
-    /// * ⚠️
-    pub fn replace(&mut self, index: usize, new: Term) -> bool {
+    /// * 🎯尝试在「组分列表」移除词项，并根据「可交换性」重排去重
+    /// * ⚠️只会删除**最多一个**词项
+    /// * 🚩返回「是否删除成功」
+    #[cfg(弃用直到MakeTerm)]
+    pub fn remove(&mut self, term: &Term) -> bool {
         // 增加词项
-        let result = self.components.replace(index, new);
+        let result = self.components.remove(term);
         // 可交换⇒重排去重
         if self.is_commutative() {
             self.components.sort_dedup();
@@ -370,7 +361,53 @@ impl Term {
         result
     }
 
+    // ! 🚩【2024-06-13 01:10:07】后续要跟MakeTerm结合起来：Cow「写时复制」
+    // TODO: 【2024-06-13 01:11:49】后续将要实现Cow「写时复制」功能
+    /// 尝试替换一个新词项
+    /// * 🎯尝试在「组分列表」替换词项，并根据「可交换性」重排去重
+    #[cfg(弃用直到MakeTerm)]
+    pub fn replace(&mut self, index: usize, new: Term) -> bool {
+        // 增加词项
+        let result = self.components.replace(index, new);
+        // 可交换⇒重排去重
+        if self.is_commutative() {
+            self.sort_dedup();
+        }
+        result
+    }
+
     // ! ℹ️有关`CompoundTerm.prepareComponentLinks`已迁移至`Concept`中
+}
+
+/// 从NAL语义上判断词项的「容量」
+impl GetCapacity for Term {
+    fn get_capacity(&self) -> TermCapacity {
+        use TermCapacity::*;
+        match self.identifier.as_str() {
+            // * 🚩原子：词语、占位符、变量
+            WORD | PLACEHOLDER | VAR_INDEPENDENT | VAR_DEPENDENT | VAR_QUERY => Atom,
+            // * 🚩一元：否定
+            NEGATION_OPERATOR => Unary,
+            // * 🚩二元序列：差集、继承、蕴含 | ❌不包括「实例」「属性」「实例属性」
+            DIFFERENCE_EXT_OPERATOR
+            | DIFFERENCE_INT_OPERATOR
+            | INHERITANCE_RELATION
+            | IMPLICATION_RELATION => BinaryVec,
+            // * 🚩二元集合：相似、等价
+            SIMILARITY_RELATION | EQUIVALENCE_RELATION => BinarySet,
+            // * 🚩多元序列：乘积、像
+            PRODUCT_OPERATOR | IMAGE_EXT_OPERATOR | IMAGE_INT_OPERATOR => Vec,
+            // * 🚩多元集合：词项集、交集、合取、析取
+            SET_EXT_OPERATOR
+            | SET_INT_OPERATOR
+            | INTERSECTION_EXT_OPERATOR
+            | INTERSECTION_INT_OPERATOR
+            | CONJUNCTION_OPERATOR
+            | DISJUNCTION_OPERATOR => Set,
+            // * 🚩其它⇒panic（不应出现）
+            _ => panic!("Unexpected compound term identifier: {}", self.identifier),
+        }
+    }
 }
 
 /// 单元测试
@@ -481,8 +518,8 @@ mod tests {
             "(-, A, B)" => 2
             "(~, A, B)" => 2
             "(*, A, B, C)" => 3
-            r"(/, R, _)" => 1 // ! 不算占位符
-            r"(\, R, _)" => 1
+            r"(/, R, _)" => 2 // * ⚠️算入占位符
+            r"(\, R, _)" => 2
             r"(&&, A)" => 1
             r"(||, A)" => 1
             r"(--, A)" => 1
@@ -513,8 +550,10 @@ mod tests {
             "(-, A, B)"[1] => "B"
             "(~, A, B)"[1] => "B"
             "(*, A, B, C)"[2] => "C"
-            r"(/, R, _)"[0] => "R" // ! 不算占位符
+            r"(/, R, _)"[0] => "R" // * ⚠️算入占位符
             r"(\, R, _)"[0] => "R"
+            r"(/, R, _)"[1] => "_" // * ⚠️算入占位符
+            r"(\, R, _)"[1] => "_"
             r"(&&, A)"[0] => "A"
             r"(||, A)"[0] => "A"
             r"(--, A)"[0] => "A"
@@ -547,8 +586,8 @@ mod tests {
             "(-, A, B)"[2]
             "(~, A, B)"[2]
             "(*, A, B, C)"[3]
-            r"(/, R, _)"[1] // ! 不算占位符
-            r"(\, R, _)"[1]
+            r"(/, R, _)"[2] // * ⚠️算入占位符
+            r"(\, R, _)"[2]
             r"(&&, A)"[1]
             r"(||, A)"[1]
             r"(--, A)"[1]

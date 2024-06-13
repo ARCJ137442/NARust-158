@@ -1,6 +1,6 @@
 [package]
 name = "narust-158"
-version = "0.0.4"
+version = "0.0.5"
 edition = "2021"
 description = """
 OpenNARS 1.5.8的Rust复刻
@@ -21,12 +21,12 @@ thiserror = "1.0.60"
 
 # 用于开发NARS的实用工具
 [dependencies.nar_dev_utils]
-version = "0.31"
+version = "0.32"
 features = ["bundled"]
 
 # Narsese支持：API、枚举Narsese & 词法Narsese
 [dependencies.narsese]
-version = "0.19"
+version = "0.21"
 features = [
     "enum_narsese",
     "lexical_narsese",

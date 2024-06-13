@@ -53,6 +53,7 @@
 //! Internally, it is actually `(\,A,P)_1`, with an index.
 
 use super::*;
+use nar_dev_utils::matches_or;
 
 impl Term {
     // * ✅现在「判别函数」统一迁移至[`super::compound`]
@@ -106,7 +107,6 @@ impl Term {
     /// 📄OpenNARS `getTheOtherComponent` 属性
     /// * 🎯用于获取「像」的「另一词项」
     /// * ⚠️若尝试获取「非『像』词项」的词项，则会panic
-    /// * 🆕按NARust「索引=占位符索引」的来：总是在索引`1`处
     ///
     /// # 📄OpenNARS
     ///
@@ -120,9 +120,14 @@ impl Term {
         }
         return (relationIndex == 0) ? components.get(1) : components.get(0); */
         match &self.components {
-            TermComponents::Compound(terms) => match terms.len() {
-                2 => Some(&terms[1]),
-                _ => None,
+            TermComponents::Compound(terms) => matches_or! {
+                ?terms.len(),
+                // ! 🚩【2024-06-13 23:52:06】现在「占位符」算作一个词项了
+                // * 📄[R, _, A]
+                3 => &terms[match terms[1].is_placeholder() {
+                    true => 2,
+                    false => 1,
+                }]
             },
             _ => panic!("尝试获取「非『像』词项」的关系词项"),
         }

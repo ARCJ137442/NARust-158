@@ -7,13 +7,14 @@ use crate::io::symbols::*;
 use anyhow::{Ok, Result};
 use nar_dev_utils::list;
 use narsese::{
-    conversion::{
-        inter_type::lexical_fold::TryFoldInto, string::impl_lexical::structs::MidParseResult,
-    },
-    lexical::{Budget, Narsese, Term, Truth},
+    api::NarseseOptions,
+    conversion::inter_type::lexical_fold::TryFoldInto,
+    lexical::{Budget, Narsese, Punctuation, Stamp, Term, Truth},
 };
 use pest::{iterators::Pair, Parser};
 use pest_derive::Parser;
+
+type MidParseResult = NarseseOptions<Budget, Term, Punctuation, Stamp, Truth>;
 
 #[derive(Parser)] // ! ↓ 必须从项目根目录开始
 #[grammar = "src/language/term_impl/_dialect.pest"]
