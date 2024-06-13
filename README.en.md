@@ -4,4 +4,4 @@
 
 ## Introduction
 
-An experimental Rust implementation of [NARS](http://www.opennars.org/)(Non-Axiomatic Reasoning System), aiming to reproduce OpenNARS 1.5.8.
+An experimental Rust reproduction of [NARS](http://www.opennars.org/)(Non-Axiomatic Reasoning System), aiming to reproduce OpenNARS 1.5.8.
