@@ -82,9 +82,9 @@ checksum = "97b3888a4aecf77e811145cadf6eef5901f4782c53886191b2f693f24761847c"
 
 [[package]]
 name = "memchr"
-version = "2.7.2"
+version = "2.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6c8640c5d730cb13ebd907d8d04b52f55ac9a2eec55b440c8892f40d56c76c1d"
+checksum = "78ca9ab1a0babb1e7d5695e3530886289c18cf2f87ec19a575a0abdce112e3a3"
 
 [[package]]
 name = "nar_dev_utils"
@@ -94,9 +94,9 @@ checksum = "1bc436754166820e0cdf0dfd147ec5f8faefc6459e65e8b91c4bf5da684e8f85"
 
 [[package]]
 name = "narsese"
-version = "0.21.0"
+version = "0.21.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0896f2994e2eedc0f53113a235ce4a498cdc2b8e3a79e4c7ce5f594c243b9858"
+checksum = "04659be51d5f432c595f1337c8d03c9e0b272eaee3773a074c836adf3910c282"
 dependencies = [
  "lazy_static",
  "nar_dev_utils",
@@ -117,9 +117,9 @@ dependencies = [
 
 [[package]]
 name = "navm"
-version = "0.15.4"
+version = "0.15.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3b47eddfbb9de49498e6e50bac6240ec406034b8f121de1fc31a15aa09cc68d5"
+checksum = "1169c102c55f2714b6247e511ef223458b59902ad64a193f26d249c96580bb67"
 dependencies = [
  "anyhow",
  "nar_dev_utils",
