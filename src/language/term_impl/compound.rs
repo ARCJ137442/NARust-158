@@ -5,11 +5,10 @@
 //!   * 📄`addComponents`、`reduceComponents`
 //!
 //! # 方法列表
-//! 🕒最后更新：【2024-04-21 17:10:46】
+//! 🕒最后更新：【2024-06-14 10:29:57】
 //!
 //! * `isCommutative`
 //! * `size`
-//! * `componentAt`
 //! * `componentAt`
 //! * `getComponents`
 //! * `cloneComponents`
@@ -263,24 +262,27 @@ impl Term {
     /// * 🚩直接连接到[`TermComponents`]的方法
     /// * 🚩【2024-04-21 16:11:59】目前只需不可变引用
     ///   * 🔎OpenNARS中大部分用法是「只读」情形
+    /// * 🚩自改版：仅在复合词项「移除元素」时使用
+    ///   * TODO: 需要「复合词项组分」实现`removeAll`浅层移除方法
     ///
     /// # 📄OpenNARS
     ///
     /// Get the component list
     #[inline]
-    pub fn get_components(&self) -> impl Iterator<Item = &Term> {
+    pub(super) fn get_components(&self) -> impl Iterator<Item = &Term> {
         self.components.iter()
     }
 
     /// 📄OpenNARS `CompoundTerm.cloneComponents` 方法
     /// * 🚩直接连接到[`TermComponents`]的方法
-    /// * ✅直接使用自动派生的[`TermComponents::clone`]方法，且不需要OpenNARS中的`cloneList`
+    /// * 🚩【2024-06-14 10:43:03】遵照改版原意，使用变长数组
+    ///   * ℹ️后续需要增删操作
     ///
     /// # 📄OpenNARS
     ///
     /// Clone the component list
-    pub fn clone_components(&self) -> TermComponents {
-        self.components.clone()
+    pub fn clone_components(&self) -> Vec<Term> {
+        self.components.clone_to_vec()
     }
 
     /// 📄OpenNARS `CompoundTerm.containComponent` 方法
@@ -642,7 +644,8 @@ mod tests {
             // * 🚩模式：词项字符串 | 复制之后与新词项的「组分」相等
             macro clone_components($($s:literal)*) {
                 asserts! {$(
-                    term!($s).clone_components() => term!($s).components,
+                    // * 🚩假设其拷贝的词项与迭代器收集的相等
+                    term!($s).clone_components() => term!($s).components.iter().cloned().collect::<Vec<_>>(),
                 )*}
             }
             // 占位符

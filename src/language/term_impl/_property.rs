@@ -262,25 +262,34 @@ impl TermComponents {
         }
     }
 
+    /// 在不可变长数组中对数组进行排序并去重
     pub fn sort_dedup_terms(terms: Box<[Term]>) -> Box<[Term]> {
         // 转换成变长数组
         let mut new_terms = Vec::from(terms);
-        // 重排 | ✅保证去重不改变顺序
-        new_terms.sort();
-        // 去重 | ⚠️危险：会改变词项长度
-        new_terms.dedup();
+        // * 重排+去重
+        Self::sort_dedup_term_vec(&mut new_terms);
         // 转换回定长数组
         new_terms.into_boxed_slice()
     }
 
     /// 对「词项数组」重排并去重
-    pub fn sort_terms(terms: &mut Box<[Term]>) {
+    pub fn sort_dedup_term_vec(terms: &mut Vec<Term>) {
+        // 重排 | ✅保证去重不改变顺序
+        terms.sort();
         // 去重 | ⚠️危险：会改变词项长度
-        let mut new_terms = terms.to_vec();
-        new_terms.dedup();
-        // 重排 | ⚠️不保证去重不改变顺序
-        new_terms.sort();
-        *terms = new_terms.into_boxed_slice();
+        terms.dedup();
+    }
+
+    /// 获取内部所有词项，拷贝成变长数组
+    /// * 🎯用于复合词项增删相关
+    pub fn clone_to_vec(&self) -> Vec<Term> {
+        use TermComponents::*;
+        match self {
+            // * 🚩原子词项⇒空数组
+            Empty | Word(..) | Variable(..) => vec![],
+            // * 🚩复合词项⇒使用`to_vec`拷贝数组
+            Compound(terms) => terms.to_vec(),
+        }
     }
 
     // ! 🚩【2024-06-12 22:35:49】弃用：不再作为「可变长容器」使用
