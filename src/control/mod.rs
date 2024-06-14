@@ -14,9 +14,6 @@ nar_dev_utils::mods! {
     // 概念处理
     pub use concept;
 
-    // 记忆区处理
-    pub use memory;
-
     // 全局（工作周期）
     pub use global;
 }

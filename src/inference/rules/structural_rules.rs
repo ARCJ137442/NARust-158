@@ -6,7 +6,12 @@
 //! TODO: 🚧完成具体实现
 
 use crate::{
-    control::*, entity::*, global::Float, inference::*, language::Term, nars::DEFAULT_PARAMETERS,
+    control::*,
+    entity::*,
+    global::Float,
+    inference::*,
+    language::{CompoundTermRef, Term},
+    nars::DEFAULT_PARAMETERS,
     types::TypeContext,
 };
 
@@ -163,13 +168,13 @@ pub trait StructuralRules<C: TypeContext> {
     /// @param compound The compound term
     /// @param index    The location of focus in the compound
     /// @return Whether the direction of inheritance should be revised
-    fn __switch_order(compound: &Term, index: usize) -> bool {
+    fn __switch_order(compound: CompoundTermRef, index: usize) -> bool {
         /* 📄OpenNARS源码：
         return ((((compound instanceof DifferenceExt) || (compound instanceof DifferenceInt)) && (index == 1))
                 || ((compound instanceof ImageExt) && (index != ((ImageExt) compound).getRelationIndex()))
                 || ((compound instanceof ImageInt) && (index != ((ImageInt) compound).getRelationIndex()))); */
-        compound.instanceof_difference() && (index == 1)
-            || compound.instanceof_image() && index != compound.get_placeholder_index()
+        compound.term.instanceof_difference() && (index == 1)
+            || compound.term.instanceof_image() && index != compound.get_placeholder_index()
     }
 
     /// 模拟`StructuralRules.structuralCompose1`

@@ -4,10 +4,8 @@
 //!
 //! TODO: 🚧完成具体实现
 
-use crate::{
-    control::*, entity::*, inference::*, io::symbols::VAR_QUERY, language::variable::unify_two,
-    types::TypeContext,
-};
+use super::super::variable_inference::unify_two;
+use crate::{control::*, entity::*, inference::*, io::symbols::VAR_QUERY, types::TypeContext};
 
 /// 模拟`LocalRules`
 /// * 📝有关「内部思考」「内省」的规则

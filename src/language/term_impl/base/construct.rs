@@ -32,6 +32,8 @@ impl Term {
     }
 
     // 原子词项 //
+    // * ℹ️此处一系列构造方法对标OpenNARS中各「词项」的构造函数
+    // * ⚠️在MakeTerm中另有一套方法（参见term_making.rs）
 
     /// NAL-1 / 词语
     pub(in crate::language) fn new_word(name: impl Into<String>) -> Self {
@@ -48,46 +50,29 @@ impl Term {
     }
 
     /// NAL-6 / 独立变量
-    pub(in crate::language) fn new_var_i(name: impl Into<usize>) -> Self {
-        Self::new(VAR_INDEPENDENT, TermComponents::Variable(name.into()))
+    pub(in crate::language) fn new_var_i(id: impl Into<usize>) -> Self {
+        Self::new(VAR_INDEPENDENT, TermComponents::Variable(id.into()))
     }
 
     /// NAL-6 / 非独变量
-    pub(in crate::language) fn new_var_d(name: impl Into<usize>) -> Self {
-        Self::new(VAR_DEPENDENT, TermComponents::Variable(name.into()))
+    pub(in crate::language) fn new_var_d(id: impl Into<usize>) -> Self {
+        Self::new(VAR_DEPENDENT, TermComponents::Variable(id.into()))
     }
 
     /// NAL-6 / 查询变量
-    pub(in crate::language) fn new_var_q(name: impl Into<usize>) -> Self {
-        Self::new(VAR_QUERY, TermComponents::Variable(name.into()))
+    pub(in crate::language) fn new_var_q(id: impl Into<usize>) -> Self {
+        Self::new(VAR_QUERY, TermComponents::Variable(id.into()))
     }
 
     /// 从旧的原子词项构造，但使用新的名称
     /// * 🎯重命名变量时，将变量「换名复制」
     /// * 🚩使用旧词项的标识符，但产生新的变量
     /// * ⚠️【2024-04-25 23:08:20】内部使用：会导致产生无效类型（改变了组分类型）
-    pub(in crate::language) fn from_var_clone(from: &Term, new_id: impl Into<usize>) -> Self {
-        Self::new(
-            from.identifier.clone(),
-            TermComponents::Variable(new_id.into()),
-        )
-    }
-
-    /// 从旧的原子词项构造，但使用新的名称
-    /// * 🎯重命名变量时，将变量「换名复制」
-    /// * 🚩使用旧词项的标识符，但产生新的变量
-    /// * ✅开放：会检查
-    #[cfg(弃用_20240614000254_对后续变量命名等机制无用)]
-    #[deprecated]
-    pub fn from_rename(from: &Term, new_name: impl Into<String>) -> Option<Self> {
-        match from.components() {
-            // ! 只会在「组分类型相同」时复制
-            TermComponents::Word(..) => Some(Self::new(
-                from.identifier.clone(),
-                TermComponents::Word(new_name.into()),
-            )),
-            _ => None,
-        }
+    pub(in crate::language) fn from_var_similar(
+        var_type: impl Into<String>,
+        new_id: impl Into<usize>,
+    ) -> Self {
+        Self::new(var_type.into(), TermComponents::Variable(new_id.into()))
     }
 
     // 复合词项 //
@@ -410,35 +395,6 @@ mod tests {
             "$A" x "B" => "$B"
             "#A" x "B" => "#B"
             "?A" x "B" => "?B"
-        }
-        ok!()
-    }
-
-    #[test]
-    #[cfg(弃用_20240614000254_对后续变量命名等机制无用)]
-    #[deprecated]
-    fn from_rename() -> AResult {
-        macro_once! {
-            // * 🚩模式：词项字符串 ⇒ 预期词项字符串
-            macro from_rename($($origin:literal x $new_name:expr => $expected:expr )*) {
-                asserts! {$(
-                    Term::from_rename(&t!($origin), $new_name) => $expected
-                    // 比对
-                    // dbg!(&term);
-                    // assert_eq!(term, t!($expected));
-                )*}
-            }
-            // 原子词项
-            "A" x "B" => Some(t!("B"))
-            "$A" x "B" => Some(t!("$B"))
-            "#A" x "B" => Some(t!("#B"))
-            "?A" x "B" => Some(t!("?B"))
-            // 其它
-            "_" x "B" => None // ! 占位符没有「名称」
-            "(*, $A)" x "B" => None
-            "{$A}" x "B" => None
-            "(--, #A)" x "B" => None
-            "<?A --> ?B>" x "B" => None
         }
         ok!()
     }

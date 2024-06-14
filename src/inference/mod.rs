@@ -35,4 +35,7 @@ nar_dev_utils::mods! {
 
     // ♻️具体规则
     pub use rules;
+
+    // 🚩变量推理
+    pub use variable_inference;
 }

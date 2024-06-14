@@ -55,7 +55,7 @@
 use crate::language::*;
 use nar_dev_utils::matches_or;
 
-impl Term {
+impl CompoundTermRef<'_> {
     // * ✅现在「判别函数」统一迁移至[`super::compound`]
 
     /// 📄OpenNARS `getRelationIndex` 属性
@@ -78,13 +78,10 @@ impl Term {
     /// @return the index of relation
     #[doc(alias = "get_relation_index")]
     pub fn get_placeholder_index(&self) -> usize {
-        match &self.components {
-            TermComponents::Compound(terms) => terms
-                .iter()
-                .position(Term::is_placeholder)
-                .expect("尝试获取「非『像』词项」的关系索引"),
-            _ => panic!("尝试获取「非『像』词项」的关系索引"),
-        }
+        self.components
+            .iter()
+            .position(Term::is_placeholder)
+            .expect("尝试获取「非『像』词项」的关系索引")
     }
 
     /// 📄OpenNARS `getRelation` 属性
@@ -98,10 +95,7 @@ impl Term {
     ///
     /// @return The term representing a relation
     pub fn get_relation(&self) -> &Term {
-        match &self.components {
-            TermComponents::Compound(terms) => &terms[0],
-            _ => panic!("尝试获取「非『像』词项」的关系词项"),
-        }
+        &self.components[0]
     }
 
     /// 📄OpenNARS `getTheOtherComponent` 属性
@@ -119,17 +113,14 @@ impl Term {
             return null;
         }
         return (relationIndex == 0) ? components.get(1) : components.get(0); */
-        match &self.components {
-            TermComponents::Compound(terms) => matches_or! {
-                ?terms.len(),
-                // ! 🚩【2024-06-13 23:52:06】现在「占位符」算作一个词项了
-                // * 📄[R, _, A]
-                3 => &terms[match terms[1].is_placeholder() {
-                    true => 2,
-                    false => 1,
-                }]
-            },
-            _ => panic!("尝试获取「非『像』词项」的关系词项"),
+        matches_or! {
+            ?self.components,
+            // ! 🚩【2024-06-13 23:52:06】现在「占位符」算作一个词项了
+            // * 📄[R, _, A]
+            [_, term1, term2] => match term1.is_placeholder() {
+                true => term2,
+                false => term1,
+            }
         }
     }
 }
@@ -138,6 +129,7 @@ impl Term {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::compound;
     use crate::io::symbols::*;
     use crate::test_term as term;
     use crate::{global::tests::AResult, ok};
@@ -162,12 +154,12 @@ mod tests {
     #[test]
     fn get_relation_index() -> AResult {
         asserts! {
-            // term!(r"(/, _, A, B)").get_relation_index() => 0 // 会被解析为「乘积」
-            // term!(r"(\, _, A, B)").get_relation_index() => 0 // 会被解析为「乘积」
-            term!(r"(/, A, _, B)").get_placeholder_index() => 1
-            term!(r"(\, A, _, B)").get_placeholder_index() => 1
-            term!(r"(/, A, B, _)").get_placeholder_index() => 2
-            term!(r"(\, A, B, _)").get_placeholder_index() => 2
+            // compound!(r"(/, _, A, B)").get_relation_index() => 0 // 会被解析为「乘积」
+            // compound!(r"(\, _, A, B)").get_relation_index() => 0 // 会被解析为「乘积」
+            compound!(r"(/, A, _, B)").get_placeholder_index() => 1
+            compound!(r"(\, A, _, B)").get_placeholder_index() => 1
+            compound!(r"(/, A, B, _)").get_placeholder_index() => 2
+            compound!(r"(\, A, B, _)").get_placeholder_index() => 2
         }
         ok!()
     }
@@ -175,10 +167,10 @@ mod tests {
     #[test]
     fn get_relation() -> AResult {
         asserts! {
-            term!(r"(/, R, _, B)").get_relation() => &term!("R")
-            term!(r"(\, R, _, B)").get_relation() => &term!("R")
-            term!(r"(/, R, A, _)").get_relation() => &term!("R")
-            term!(r"(\, R, A, _)").get_relation() => &term!("R")
+            compound!(r"(/, R, _, B)").get_relation() => &term!("R")
+            compound!(r"(\, R, _, B)").get_relation() => &term!("R")
+            compound!(r"(/, R, A, _)").get_relation() => &term!("R")
+            compound!(r"(\, R, A, _)").get_relation() => &term!("R")
         }
         ok!()
     }
@@ -186,10 +178,10 @@ mod tests {
     #[test]
     fn get_the_other_component() -> AResult {
         asserts! {
-            term!(r"(/, R, _, B)").get_the_other_component() => Some(&term!("B"))
-            term!(r"(\, R, _, B)").get_the_other_component() => Some(&term!("B"))
-            term!(r"(/, R, A, _)").get_the_other_component() => Some(&term!("A"))
-            term!(r"(\, R, A, _)").get_the_other_component() => Some(&term!("A"))
+            compound!(r"(/, R, _, B)").get_the_other_component() => Some(&term!("B"))
+            compound!(r"(\, R, _, B)").get_the_other_component() => Some(&term!("B"))
+            compound!(r"(/, R, A, _)").get_the_other_component() => Some(&term!("A"))
+            compound!(r"(\, R, A, _)").get_the_other_component() => Some(&term!("A"))
         }
         ok!()
     }
