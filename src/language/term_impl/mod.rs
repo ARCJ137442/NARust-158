@@ -26,4 +26,3 @@ pub use features::*;
 
 // 「制作词项」
 mod term_making;
-pub use term_making::*;

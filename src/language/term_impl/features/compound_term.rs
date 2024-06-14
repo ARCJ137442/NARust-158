@@ -320,7 +320,9 @@ impl GetCapacity for Term {
 /// * 🎯在程序类型层面表示一个「复合词项」（不可变引用）
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct CompoundTermRef<'a> {
+    /// 复合词项整体
     pub term: &'a Term,
+    /// 复合词项的元素列表
     pub components: &'a [Term],
 }
 
@@ -330,6 +332,7 @@ pub struct CompoundTermRef<'a> {
 ///   * 📌构造时保证「内部组分」为「复合词项」变种
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct CompoundTermRefMut<'a> {
+    /// 复合词项内部的词项整体（自身）
     pub inner: &'a mut Term,
 }
 

@@ -2,16 +2,17 @@
 //! * 📌NAL底层的「陈述」逻辑，对应`Statement`及其所有子类
 //! * ⚠️不包括与记忆区有关的`make`系列方法
 //! * ⚠️不包括只和语法解析有关的`isRelation`、`makeName`、`makeStatementName`等方法
+//! * ✅【2024-06-14 14:53:10】基本完成方法复刻
 //!
 //! # 方法列表
-//! 🕒最后更新：【2024-04-24 14:32:52】
+//! 🕒最后更新：【2024-06-14 14:53:18】
 //!
 //! * `Statement`
 //!   * `makeSym` => `new_sym_statement`
 //!   * `invalidStatement` => `is_invalid_statement`
 //!   * `invalidReflexive`
 //!   * `invalidPair`
-//!   * `invalid` => `invalid_statement`
+//!   * `invalid`
 //!   * `getSubject`
 //!   * `getPredicate`
 //!
@@ -24,14 +25,6 @@ use super::compound_term::CompoundTermRef;
 use crate::io::symbols::*;
 use crate::language::*;
 use nar_dev_utils::{if_return, matches_or};
-
-/// 🆕作为「复合词项引用」的词项类型
-/// * 🎯在程序类型层面表示一个「复合词项」（不可变引用）
-pub struct StatementRef<'a> {
-    pub statement: &'a Term,
-    pub subject: &'a Term,
-    pub predicate: &'a Term,
-}
 
 impl Term {
     /// 🆕用于判断是否为「陈述词项」
@@ -92,24 +85,6 @@ impl Term {
         self.identifier == EQUIVALENCE_RELATION
     }
 
-    /// 📄OpenNARS `Statement.makeSym` 方法
-    /// * 🚩通过使用「标识符映射」将「非对称版本」映射到「对称版本」
-    /// * ⚠️目前只支持「继承」和「蕴含」，其它均会`panic`
-    ///
-    /// # 📄OpenNARS
-    /// Make a symmetric Statement from given components and temporal information,
-    /// called by the rules
-    pub fn new_sym_statement(identifier: &str, subject: Term, predicate: Term) -> Self {
-        match identifier {
-            // 继承⇒相似
-            INHERITANCE_RELATION => Term::new_similarity(subject, predicate),
-            // 蕴含⇒等价
-            IMPLICATION_RELATION => Term::new_equivalence(subject, predicate),
-            // 其它⇒panic
-            _ => unimplemented!("不支持的标识符：{identifier:?}"),
-        }
-    }
-
     /// 🆕判断一个词项是否为「陈述词项」
     /// * 🚩判断其「内部元素」的个数是否为2
     pub fn is_statement(&self) -> bool {
@@ -131,6 +106,8 @@ impl Term {
     }
 }
 
+/// 为「复合词项」添加「转换到陈述」的方法
+/// * 📌依据：陈述 ⊂ 复合词项
 impl CompoundTermRef<'_> {
     /// 🆕判断一个复合词项是否为「陈述词项」
     /// * 🚩判断其「内部元素」的个数是否为2
@@ -153,10 +130,26 @@ impl CompoundTermRef<'_> {
             }
         )
     }
+
+    // ! ❌【2024-06-14 14:47:26】没必要添加一个额外的`unchecked`方法：可以使用`unwrap`现场解包
+
+    // ! 🚩【2024-06-14 14:45:48】暂不添加「陈述可变引用」
+}
+
+/// 🆕作为「陈述引用」的词项类型
+/// * 🎯在程序类型层面表示一个「陈述」（不可变引用）
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct StatementRef<'a> {
+    /// 陈述词项本身
+    pub statement: &'a Term,
+    /// 陈述词项的主项
+    pub subject: &'a Term,
+    /// 陈述词项的谓项
+    pub predicate: &'a Term,
 }
 
 impl StatementRef<'_> {
-    /// 📄OpenNARS `getSubject` 方法
+    /// 📄OpenNARS `getSubject`
     /// * 🚩通过「组分」得到
     /// * 📌【2024-04-24 14:56:33】因为实现方式的区别，无法确保「能够得到 主词/谓词」
     ///   * ⚠️必须在调用时明确是「陈述」，否则`panic`
@@ -167,7 +160,7 @@ impl StatementRef<'_> {
         self.subject
     }
 
-    /// 📄OpenNARS `getPredicate` 方法
+    /// 📄OpenNARS `getPredicate`
     ///
     /// # 📄OpenNARS
     ///
@@ -175,7 +168,7 @@ impl StatementRef<'_> {
         self.predicate
     }
 
-    /// 📄OpenNARS `invalidStatement` 方法
+    /// 📄OpenNARS `invalidStatement`
     /// * ⚠️必须是「陈述」才能调用
     /// * 🎯检查「无效陈述」
     /// * 🎯基于AIKR，避免定义无用、冗余的陈述
@@ -189,7 +182,7 @@ impl StatementRef<'_> {
     /// # 📄OpenNARS
     ///
     /// Check the validity of a potential Statement. [To be refined]
-    pub fn is_invalid_statement(subject: &Term, predicate: &Term) -> bool {
+    pub fn invalid_statement(subject: &Term, predicate: &Term) -> bool {
         if_return! {
             // 重言式⇒无效
             subject == predicate => true
@@ -226,7 +219,7 @@ impl StatementRef<'_> {
         false
     }
 
-    /// 📄OpenNARS `invalidReflexive` 方法
+    /// 📄OpenNARS `invalidReflexive`
     /// * 🚩主词项是「非像复合词项」并且包括另一词项
     ///
     /// # 📄OpenNARS
@@ -259,7 +252,7 @@ impl StatementRef<'_> {
         }
     }
 
-    /// 📄OpenNARS `invalidPair` 方法
+    /// 📄OpenNARS `invalidPair`
     /// * 📝总体逻辑：是否「一边包含独立变量，而另一边不包含」
     ///   * 💭可能是要「避免自由变量」
     /// * 🚩两边「包含独立变量」的情况不一致
@@ -278,12 +271,12 @@ impl StatementRef<'_> {
         subject.contain_var_i() != predicate.contain_var_i()
     }
 
-    /// 📄OpenNARS `invalid` 方法
+    /// 📄OpenNARS `invalid`
     ///
     /// # 📄OpenNARS
     ///
-    pub fn invalid_statement(&self) -> bool {
-        Self::is_invalid_statement(self.get_subject(), self.get_predicate())
+    pub fn invalid(&self) -> bool {
+        Self::invalid_statement(self.get_subject(), self.get_predicate())
     }
 }
 
@@ -301,40 +294,27 @@ mod tests {
         };
     }
 
-    #[test]
-    fn new_sym_statement() -> AResult {
-        asserts! {
-            // 继承⇒相似
-            Term::new_sym_statement(INHERITANCE_RELATION, term!("A"), term!("B"))
-                => term!("<A <-> B>")
-            // 蕴含⇒等价
-            Term::new_sym_statement(IMPLICATION_RELATION, term!("A"), term!("B"))
-                => term!("<A <=> B>")
-        }
-        ok!()
-    }
-
     /// 陈述有效性
     /// * 🎯一并测试
-    ///   * `is_invalid_statement`
+    ///   * `invalid`
     ///   * `invalid_statement`
     ///   * `invalid_reflexive`
     ///   * `invalid_pair`
     #[test]
-    fn invalid_statement() -> AResult {
+    fn invalid() -> AResult {
         asserts! {
             // 非法
-            statement!("<A --> A>").invalid_statement()
-            statement!("<A --> [A]>").invalid_statement()
-            statement!("<[A] --> A>").invalid_statement()
-            statement!("<<A --> B> ==> <B --> A>>").invalid_statement()
+            statement!("<A --> A>").invalid()
+            statement!("<A --> [A]>").invalid()
+            statement!("<[A] --> A>").invalid()
+            statement!("<<A --> B> ==> <B --> A>>").invalid()
             // 合法
-            !statement!("<A --> B>").invalid_statement()
-            !statement!("<A --> [B]>").invalid_statement()
-            !statement!("<[A] --> B>").invalid_statement()
-            !statement!("<<A --> B> ==> <B --> C>>").invalid_statement()
-            !statement!("<<A --> B> ==> <C --> A>>").invalid_statement()
-            !statement!("<<A --> B> ==> <C --> D>>").invalid_statement()
+            !statement!("<A --> B>").invalid()
+            !statement!("<A --> [B]>").invalid()
+            !statement!("<[A] --> B>").invalid()
+            !statement!("<<A --> B> ==> <B --> C>>").invalid()
+            !statement!("<<A --> B> ==> <C --> A>>").invalid()
+            !statement!("<<A --> B> ==> <C --> D>>").invalid()
         }
         ok!()
     }
