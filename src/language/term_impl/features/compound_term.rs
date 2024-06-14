@@ -3,6 +3,7 @@
 //!   * 📄`isConstant`、`renameVariables`
 //! * ⚠️不包含与「记忆区」有关的方法
 //!   * 📄`addComponents`、`reduceComponents`
+//! * ✅【2024-06-14 13:41:30】初步完成对其内方法的更新
 //!
 //! # 方法列表
 //! 🕒最后更新：【2024-06-14 10:29:57】
@@ -15,6 +16,10 @@
 //! * `containComponent`
 //! * `containTerm`
 //! * `containAllComponents`
+//! * `setTermWhenDealingVariables`
+//! * `updateAfterRenameVariables`
+//! * `updateNameAfterRenameVariables`
+//! * `reorderComponents`
 //!
 //! # 📄OpenNARS
 //!
@@ -42,21 +47,6 @@ pub struct CompoundTermRef<'a> {
 ///   * 📌构造时保证「内部组分」为「复合词项」变种
 pub struct CompoundTermRefMut<'a> {
     pub inner: &'a mut Term,
-}
-
-impl CompoundTermRefMut<'_> {
-    /// 获取内部组分（一定有）
-    ///
-    /// # Panics
-    ///
-    /// ! ⚠️若使用了非法的构造方式将「非复合词项」构造入此，则将抛出panic
-    pub fn components(&mut self) -> &mut [Term] {
-        matches_or!(
-            self.inner.components,
-            TermComponents::Compound(ref mut components) => components,
-            unreachable!("CompoundTermRefMut::components 断言失败：不是复合词项: {}", self.inner)
-        )
-    }
 }
 
 impl Term {
@@ -485,6 +475,58 @@ impl CompoundTermRef<'_> {
     }
 
     // ! ℹ️有关`CompoundTerm.prepareComponentLinks`已迁移至`Concept`中
+}
+
+impl CompoundTermRefMut<'_> {
+    /// 获取内部组分（一定有）
+    ///
+    /// # Panics
+    ///
+    /// ! ⚠️若使用了非法的构造方式将「非复合词项」构造入此，则将抛出panic
+    pub fn components(&mut self) -> &mut [Term] {
+        matches_or!(
+            self.inner.components,
+            TermComponents::Compound(ref mut components) => components,
+            unreachable!("CompoundTermRefMut::components 断言失败：不是复合词项: {}", self.inner)
+        )
+    }
+
+    /// * 📌可变引用一定能转换成不可变引用
+    pub fn as_ref(&self) -> CompoundTermRef {
+        self.inner.as_compound_unchecked()
+    }
+
+    /* ----- variable-related utilities ----- */
+
+    /// 🆕在变量处理中设置词项
+    /// * 🎯变量推理需要使用其方法
+    ///
+    /// @param &m-this
+    /// @param index   []
+    /// @param term    []
+    pub fn set_term_when_dealing_variables(&mut self, index: usize, term: Term) {
+        self.components()[index] = term;
+    }
+
+    /// 重命名变量后，更新「是常量」
+    pub fn update_after_rename_variables(&mut self) {
+        // * 🚩【2024-06-14 13:32:50】↓此句源自OpenNARS
+        self.inner.is_constant = true;
+        // * ✅无需「重命名」
+    }
+
+    /// 🆕对于「可交换词项」重排其中的元素
+    /// * 🚩【2024-06-13 18:05:40】只在「应用替换」时用到
+    /// * 🚩【2024-06-14 13:37:46】使用「内存交换」魔法代码
+    pub fn reorder_components(&mut self) {
+        // * 🚩构造一个「占位符」并将其与已有组分互换
+        let mut placeholder = TermComponents::Empty;
+        std::mem::swap(&mut placeholder, &mut self.inner.components);
+        // * 🚩将替换后名为「占位符」的实际组分进行「重排去重」得到「新组分」
+        let new_components = placeholder.sort_dedup();
+        // * 🚩将「新组分」赋值回原先的组分，原先位置上的「占位符」被覆盖
+        self.inner.components = new_components;
+    }
 }
 
 /// 从NAL语义上判断词项的「容量」
