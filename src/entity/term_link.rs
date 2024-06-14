@@ -576,7 +576,7 @@ mod tests {
     fn new() -> AResult {
         let tl = TL::__new(
             Budget::from_floats(0.5, 0.5, 0.5),
-            Term::new_word("term"),
+            Term::make_word("term"),
             TermLinkType::SELF,
         );
         let tl2 = TL::__new(
@@ -600,7 +600,7 @@ mod tests {
         // 新建词项链
         let mut tl = TL::__new(
             Budget::from_floats(0.5, 0.5, 0.5),
-            Term::new_word("term"),
+            Term::make_word("term"),
             TermLinkType::SELF,
         );
         // 默认不应该为空

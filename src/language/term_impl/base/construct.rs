@@ -34,7 +34,7 @@ impl Term {
     // 原子词项 //
 
     /// NAL-1 / 词语
-    pub fn new_word(name: impl Into<String>) -> Self {
+    pub(in crate::language) fn new_word(name: impl Into<String>) -> Self {
         Self::new(WORD, TermComponents::Word(name.into()))
     }
 
@@ -48,17 +48,17 @@ impl Term {
     }
 
     /// NAL-6 / 独立变量
-    pub fn new_var_i(name: impl Into<usize>) -> Self {
+    pub(in crate::language) fn new_var_i(name: impl Into<usize>) -> Self {
         Self::new(VAR_INDEPENDENT, TermComponents::Variable(name.into()))
     }
 
     /// NAL-6 / 非独变量
-    pub fn new_var_d(name: impl Into<usize>) -> Self {
+    pub(in crate::language) fn new_var_d(name: impl Into<usize>) -> Self {
         Self::new(VAR_DEPENDENT, TermComponents::Variable(name.into()))
     }
 
     /// NAL-6 / 查询变量
-    pub fn new_var_q(name: impl Into<usize>) -> Self {
+    pub(in crate::language) fn new_var_q(name: impl Into<usize>) -> Self {
         Self::new(VAR_QUERY, TermComponents::Variable(name.into()))
     }
 

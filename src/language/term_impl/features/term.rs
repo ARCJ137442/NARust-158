@@ -58,6 +58,12 @@ impl Term {
             Compound(terms) => 1 + terms.iter().map(Term::complexity).sum::<usize>(),
         }
     }
+
+    /// 🆕用于替代Java的`getClass`
+    #[inline(always)]
+    pub fn get_class(&self) -> &str {
+        &self.identifier
+    }
 }
 
 impl GetCategory for Term {
@@ -189,6 +195,45 @@ mod tests {
             "<<A <-> B> <-> <A <-> B>>" => 7
             "<<A ==> B> ==> <A ==> B>>" => 7
             "<<A <=> B> <=> <A <=> B>>" => 7
+        }
+        ok!()
+    }
+
+    /// * 【2024-04-25 16:17:17】📌直接参照的`identifier`
+    #[test]
+    fn get_class() -> AResult {
+        macro_once! {
+            // * 🚩模式：词项字符串 ⇒ 预期
+            macro get_class($( $s:literal => $expected:expr )*) {
+                asserts! {$(
+                    term!($s).get_class() => $expected,
+                )*}
+            }
+            // 占位符
+            "_" => PLACEHOLDER
+            // 原子词项
+            "A" => WORD
+            "$A" => VAR_INDEPENDENT
+            "#A" => VAR_DEPENDENT
+            "?A" => VAR_QUERY
+            // 复合词项
+            "{A}" => SET_EXT_OPERATOR
+            "[A]" => SET_INT_OPERATOR
+            "(&, A)" => INTERSECTION_EXT_OPERATOR
+            "(|, A)" => INTERSECTION_INT_OPERATOR
+            "(-, A, B)" => DIFFERENCE_EXT_OPERATOR
+            "(~, A, B)" => DIFFERENCE_INT_OPERATOR
+            "(*, A)" => PRODUCT_OPERATOR
+            r"(/, R, _)" => IMAGE_EXT_OPERATOR
+            r"(\, R, _)" => IMAGE_INT_OPERATOR
+            r"(&&, A)" => CONJUNCTION_OPERATOR
+            r"(||, A)" => DISJUNCTION_OPERATOR
+            r"(--, A)" => NEGATION_OPERATOR
+            // 陈述
+            "<A --> B>" => INHERITANCE_RELATION
+            "<A <-> B>" => SIMILARITY_RELATION
+            "<A ==> B>" => IMPLICATION_RELATION
+            "<A <=> B>" => EQUIVALENCE_RELATION
         }
         ok!()
     }

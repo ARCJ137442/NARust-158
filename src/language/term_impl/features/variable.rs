@@ -23,6 +23,8 @@
 //!
 //! A variable term, which does not correspond to a concept
 
+use term_impl::features::compound_term::CompoundTermRef;
+
 use crate::io::symbols::*;
 use crate::language::*;
 use std::collections::HashMap;
@@ -444,10 +446,23 @@ pub fn find_substitute(
             //     }
             // }
             // * 🚩【2024-04-22 09:45:55】采用接近等价的纯迭代器方案，可以直接返回
-            to_be_unified_1
-                .get_components()
-                .zip(to_be_unified_2.get_components())
-                .all(|(t1, t2)| find_substitute(var_type, t1, t2, substitution_1, substitution_2))
+            if let (
+                Some(CompoundTermRef {
+                    components: components1,
+                    ..
+                }),
+                Some(CompoundTermRef {
+                    components: components2,
+                    ..
+                }),
+            ) = (to_be_unified_1.as_compound(), to_be_unified_2.as_compound())
+            {
+                components1.iter().zip(components2.iter()).all(|(t1, t2)| {
+                    find_substitute(var_type, t1, t2, substitution_1, substitution_2)
+                })
+            } else {
+                false
+            }
         } else {
             // 复合词项结构不匹配，一定不能替代
             false

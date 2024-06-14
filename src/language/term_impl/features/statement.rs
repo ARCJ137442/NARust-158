@@ -20,9 +20,18 @@
 //! A statement is a compound term, consisting of a subject, a predicate, and a relation symbol in between.
 //! It can be of either first-order or higher-order.
 
+use super::compound_term::CompoundTermRef;
 use crate::io::symbols::*;
 use crate::language::*;
-use nar_dev_utils::if_return;
+use nar_dev_utils::{if_return, matches_or};
+
+/// 🆕作为「复合词项引用」的词项类型
+/// * 🎯在程序类型层面表示一个「复合词项」（不可变引用）
+pub struct StatementRef<'a> {
+    pub statement: &'a Term,
+    pub subject: &'a Term,
+    pub predicate: &'a Term,
+}
 
 impl Term {
     /// 🆕用于判断是否为「陈述词项」
@@ -101,6 +110,71 @@ impl Term {
         }
     }
 
+    /// 🆕判断一个词项是否为「陈述词项」
+    /// * 🚩判断其「内部元素」的个数是否为2
+    pub fn is_statement(&self) -> bool {
+        matches!(&self.components, TermComponents::Compound(terms) if terms.len() == 2)
+    }
+
+    /// 🆕将一个复合词项转换为「陈述词项」（不可变引用）
+    /// * 🚩转换为Option
+    pub fn as_statement(&self) -> Option<StatementRef<'_>> {
+        matches_or!(
+            ?self.components,
+            TermComponents::Compound(ref terms) if terms.len() == 2
+            => StatementRef {
+                statement: self,
+                subject: &terms[0],
+                predicate: &terms[1],
+            }
+        )
+    }
+}
+
+impl CompoundTermRef<'_> {
+    /// 🆕判断一个复合词项是否为「陈述词项」
+    /// * 🚩判断其「内部元素」的个数是否为2
+    /// * 📌与[`Term::is_statement`]一致
+    pub fn is_statement(&self) -> bool {
+        self.components.len() == 2
+    }
+
+    /// 🆕将一个复合词项转换为「陈述词项」（不可变引用）
+    /// * 🚩转换为Option
+    /// * 📌与[`Term::as_statement`]一致
+    pub fn as_statement(&self) -> Option<StatementRef<'_>> {
+        matches_or!(
+            ?self.components,
+            [ref subject, ref predicate]
+            => StatementRef {
+                statement: self.term,
+                subject,
+                predicate,
+            }
+        )
+    }
+}
+
+impl StatementRef<'_> {
+    /// 📄OpenNARS `getSubject` 方法
+    /// * 🚩通过「组分」得到
+    /// * 📌【2024-04-24 14:56:33】因为实现方式的区别，无法确保「能够得到 主词/谓词」
+    ///   * ⚠️必须在调用时明确是「陈述」，否则`panic`
+    ///
+    /// # 📄OpenNARS
+    ///
+    pub fn get_subject(&self) -> &Term {
+        self.subject
+    }
+
+    /// 📄OpenNARS `getPredicate` 方法
+    ///
+    /// # 📄OpenNARS
+    ///
+    pub fn get_predicate(&self) -> &Term {
+        self.predicate
+    }
+
     /// 📄OpenNARS `invalidStatement` 方法
     /// * ⚠️必须是「陈述」才能调用
     /// * 🎯检查「无效陈述」
@@ -120,11 +194,12 @@ impl Term {
             // 重言式⇒无效
             subject == predicate => true
             //自反性检查（双向）
-            Term::invalid_reflexive(subject, predicate) => true
-            Term::invalid_reflexive(predicate, subject) => true
+            Self::invalid_reflexive(subject, predicate) => true
+            Self::invalid_reflexive(predicate, subject) => true
         }
         // 都是陈述⇒进一步检查
-        if subject.instanceof_statement() && predicate.instanceof_statement() {
+        matches_or! {
+            (subject.as_statement(), predicate.as_statement()),
             // 获取各自的主词、谓词，并检查是否相等
             // ! 禁止如下格式： <<A --> B> ==> <B --> A>>
             // * 📄ERR: !!! INVALID INPUT: parseTerm: <<A --> B> ==> <B --> A>> --- invalid statement
@@ -141,11 +216,11 @@ impl Term {
                     return true;
                 }
             } */
-            if (subject.get_subject() == predicate.get_predicate())
-                && (subject.get_predicate() == predicate.get_subject())
-            {
-                return true;
-            }
+            (
+                Some(StatementRef { subject:ss, predicate:sp,.. }),
+                Some(StatementRef { subject:ps, predicate:pp,.. })
+            ) if ss == pp && sp == ps => return  true,
+            () // 无效案例⇒继续检查
         }
         // 检查完毕⇒否
         false
@@ -157,7 +232,7 @@ impl Term {
     /// # 📄OpenNARS
     ///
     /// Check if one term is identical to or included in another one, except in a reflexive relation
-    pub fn invalid_reflexive(container: &Term, maybe_component: &Term) -> bool {
+    pub fn invalid_reflexive(may_container: &Term, may_component: &Term) -> bool {
         /* 📄OpenNARS源码：
         if (!(t1 instanceof CompoundTerm)) {
             return false;
@@ -175,9 +250,13 @@ impl Term {
         }
         container.contain_component(maybe_component)
         */
-        container.instanceof_compound()
-            && !container.instanceof_image()
-            && container.contain_component(maybe_component)
+        match may_container.as_compound() {
+            // 仅在复合词项时继续检查
+            Some(compound) => {
+                !compound.term.instanceof_image() && compound.contain_component(may_component)
+            }
+            None => false,
+        }
     }
 
     /// 📄OpenNARS `invalidPair` 方法
@@ -206,31 +285,6 @@ impl Term {
     pub fn invalid_statement(&self) -> bool {
         Self::is_invalid_statement(self.get_subject(), self.get_predicate())
     }
-
-    /// 📄OpenNARS `getSubject` 方法
-    /// * 🚩通过「组分」得到
-    /// * 📌【2024-04-24 14:56:33】因为实现方式的区别，无法确保「能够得到 主词/谓词」
-    ///   * ⚠️必须在调用时明确是「陈述」，否则`panic`
-    ///
-    /// # 📄OpenNARS
-    ///
-    pub fn get_subject(&self) -> &Term {
-        match &self.components {
-            TermComponents::Compound(terms) => &terms[0],
-            _ => panic!("尝试向「非陈述词项」获取主词"),
-        }
-    }
-
-    /// 📄OpenNARS `getPredicate` 方法
-    ///
-    /// # 📄OpenNARS
-    ///
-    pub fn get_predicate(&self) -> &Term {
-        match &self.components {
-            TermComponents::Compound(terms) => &terms[1],
-            _ => panic!("尝试向「非陈述词项」获取谓词"),
-        }
-    }
 }
 
 /// 单元测试
@@ -240,6 +294,12 @@ mod tests {
     use crate::test_term as term;
     use crate::{global::tests::AResult, ok};
     use nar_dev_utils::asserts;
+
+    macro_rules! statement {
+        ($($t:tt)*) => {
+            term!($($t)*).as_statement().unwrap()
+        };
+    }
 
     #[test]
     fn new_sym_statement() -> AResult {
@@ -264,17 +324,17 @@ mod tests {
     fn invalid_statement() -> AResult {
         asserts! {
             // 非法
-            term!("<A --> A>").invalid_statement()
-            term!("<A --> [A]>").invalid_statement()
-            term!("<[A] --> A>").invalid_statement()
-            term!("<<A --> B> ==> <B --> A>>").invalid_statement()
+            statement!("<A --> A>").invalid_statement()
+            statement!("<A --> [A]>").invalid_statement()
+            statement!("<[A] --> A>").invalid_statement()
+            statement!("<<A --> B> ==> <B --> A>>").invalid_statement()
             // 合法
-            !term!("<A --> B>").invalid_statement()
-            !term!("<A --> [B]>").invalid_statement()
-            !term!("<[A] --> B>").invalid_statement()
-            !term!("<<A --> B> ==> <B --> C>>").invalid_statement()
-            !term!("<<A --> B> ==> <C --> A>>").invalid_statement()
-            !term!("<<A --> B> ==> <C --> D>>").invalid_statement()
+            !statement!("<A --> B>").invalid_statement()
+            !statement!("<A --> [B]>").invalid_statement()
+            !statement!("<[A] --> B>").invalid_statement()
+            !statement!("<<A --> B> ==> <B --> C>>").invalid_statement()
+            !statement!("<<A --> B> ==> <C --> A>>").invalid_statement()
+            !statement!("<<A --> B> ==> <C --> D>>").invalid_statement()
         }
         ok!()
     }
@@ -282,12 +342,12 @@ mod tests {
     #[test]
     fn get_subject() -> AResult {
         asserts! {
-            term!("<A --> B>").get_subject() => &term!("A")
-            term!("<あ --> B>").get_subject() => &term!("あ")
-            term!("<{SELF} --> B>").get_subject() => &term!("{SELF}")
-            term!("<<a --> b> --> B>").get_subject() => &term!("<a --> b>")
-            term!("<$1 --> B>").get_subject() => &term!("$1")
-            term!("<(*, 1, 2, 3) --> B>").get_subject() => &term!("(*, 1, 2, 3)")
+            statement!("<A --> B>").get_subject() => &term!("A")
+            statement!("<あ --> B>").get_subject() => &term!("あ")
+            statement!("<{SELF} --> B>").get_subject() => &term!("{SELF}")
+            statement!("<<a --> b> --> B>").get_subject() => &term!("<a --> b>")
+            statement!("<$1 --> B>").get_subject() => &term!("$1")
+            statement!("<(*, 1, 2, 3) --> B>").get_subject() => &term!("(*, 1, 2, 3)")
         }
         ok!()
     }
@@ -295,12 +355,12 @@ mod tests {
     #[test]
     fn get_predicate() -> AResult {
         asserts! {
-            term!("<S --> A>").get_predicate() => &term!("A")
-            term!("<S --> あ>").get_predicate() => &term!("あ")
-            term!("<S --> {SELF}>").get_predicate() => &term!("{SELF}")
-            term!("<S --> <a --> b>>").get_predicate() => &term!("<a --> b>")
-            term!("<S --> $1>").get_predicate() => &term!("$1")
-            term!("<S --> (*, 1, 2, 3)>").get_predicate() => &term!("(*, 1, 2, 3)")
+            statement!("<S --> A>").get_predicate() => &term!("A")
+            statement!("<S --> あ>").get_predicate() => &term!("あ")
+            statement!("<S --> {SELF}>").get_predicate() => &term!("{SELF}")
+            statement!("<S --> <a --> b>>").get_predicate() => &term!("<a --> b>")
+            statement!("<S --> $1>").get_predicate() => &term!("$1")
+            statement!("<S --> (*, 1, 2, 3)>").get_predicate() => &term!("(*, 1, 2, 3)")
         }
         ok!()
     }

@@ -23,3 +23,7 @@ pub mod dialect;
 // 各词项基于改版源码的「特性」
 mod features;
 pub use features::*;
+
+// 「制作词项」
+mod term_making;
+pub use term_making::*;

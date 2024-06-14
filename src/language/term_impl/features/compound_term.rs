@@ -26,7 +26,38 @@
 
 use crate::io::symbols::*;
 use crate::language::*;
+use nar_dev_utils::matches_or;
 use narsese::api::{GetCapacity, TermCapacity};
+
+/// 🆕作为「复合词项引用」的词项类型
+/// * 🎯在程序类型层面表示一个「复合词项」（不可变引用）
+pub struct CompoundTermRef<'a> {
+    pub term: &'a Term,
+    pub components: &'a [Term],
+}
+
+/// 🆕作为「复合词项引用」的词项类型
+/// * 🎯在程序类型层面表示一个「复合词项」（可变引用）
+/// * ⚠️取舍：因可变引用无法共享，此时需要在构造层面限制
+///   * 📌构造时保证「内部组分」为「复合词项」变种
+pub struct CompoundTermRefMut<'a> {
+    pub inner: &'a mut Term,
+}
+
+impl CompoundTermRefMut<'_> {
+    /// 获取内部组分（一定有）
+    ///
+    /// # Panics
+    ///
+    /// ! ⚠️若使用了非法的构造方式将「非复合词项」构造入此，则将抛出panic
+    pub fn components(&mut self) -> &mut [Term] {
+        matches_or!(
+            self.inner.components,
+            TermComponents::Compound(ref mut components) => components,
+            unreachable!("CompoundTermRefMut::components 断言失败：不是复合词项: {}", self.inner)
+        )
+    }
+}
 
 impl Term {
     /// 🆕用于判断是否为「纯复合词项」
@@ -188,7 +219,7 @@ impl Term {
         self.identifier == NEGATION_OPERATOR
     }
 
-    /// 📄OpenNARS `CompoundTerm.isCommutative` 属性
+    /// 📄OpenNARS `CompoundTerm.isCommutative`
     /// * 📌对「零元/一元 词项」默认为「不可交换」
     ///   * 📜返回`false`
     ///   * 📄OpenNARS中`Negation`的定义（即默认「不可交换」）
@@ -217,7 +248,68 @@ impl Term {
         )
     }
 
-    /// 📄OpenNARS `CompoundTerm.size` 属性
+    /// 判断和另一词项是否「结构匹配」
+    /// * 🎯变量替换中的模式匹配
+    /// * 🚩类型匹配 & 组分匹配
+    /// * ⚠️非递归：不会递归比较「组分是否对应匹配」
+    #[inline(always)]
+    pub fn structural_match(&self, other: &Self) -> bool {
+        self.get_class() == other.get_class()
+        // * 🚩内部组分的「结构匹配」而非自身匹配
+            && self
+                .components
+                .structural_match(&other.components)
+    }
+
+    /// 🆕判断是否真的是「复合词项」
+    /// * 🚩通过判断「内部元素枚举」的类型实现
+    /// * 🎯用于后续「作为复合词项」使用
+    ///   * ✨以此在程序层面表示「复合词项」类型
+    pub fn is_compound(&self) -> bool {
+        matches!(self.components, TermComponents::Compound(..))
+    }
+
+    /// 🆕尝试将词项作为「复合词项」
+    /// * 📌通过判断「内部元素枚举」的类型实现
+    /// * 🚩在其内部元素不是「复合词项」时，会返回`None`
+    pub fn as_compound(&self) -> Option<CompoundTermRef> {
+        matches_or!(
+            ?self.components,
+            TermComponents::Compound(ref c) => CompoundTermRef{
+                term: self,
+                components: c
+            }
+        )
+    }
+
+    /// 🆕尝试将词项作为「复合词项」
+    /// * ℹ️[`Self::as_compound`]的可变版本
+    pub fn as_compound_mut(&mut self) -> Option<CompoundTermRefMut> {
+        matches_or!(
+            ?self.components,
+            TermComponents::Compound(..) => CompoundTermRefMut {inner   :self}
+        )
+    }
+
+    /// 🆕尝试将词项作为「复合词项」（未检查）
+    /// * 🚩通过判断「内部元素枚举」的类型实现
+    ///
+    /// # Panics
+    ///
+    /// ! ⚠️存在「未检查」的风险：在其内部元素不是「复合词项」时，会返回`None`
+    pub fn as_compound_unchecked(&self) -> CompoundTermRef {
+        match self.components {
+            TermComponents::Compound(ref c) => CompoundTermRef {
+                term: self,
+                components: c,
+            },
+            _ => unreachable!("未检查：断定的词项不是复合词项"),
+        }
+    }
+}
+
+impl CompoundTermRef<'_> {
+    /// 📄OpenNARS `CompoundTerm.size`
     /// * 🚩直接链接到[`TermComponents`]的属性
     /// * ⚠️对「像」不包括「像占位符」
     ///   * 📄`(/, A, _, B)`的`size`为`2`而非`3`
@@ -230,7 +322,7 @@ impl Term {
         self.components.len()
     }
 
-    /// 📄OpenNARS `CompoundTerm.componentAt` 方法
+    /// 📄OpenNARS `CompoundTerm.componentAt`
     /// * 🚩直接连接到[`TermComponents`]的方法
     /// * ⚠️对「像」不受「像占位符」位置影响
     ///
@@ -242,7 +334,7 @@ impl Term {
         self.components.get(index)
     }
 
-    /// 📄OpenNARS `CompoundTerm.componentAt` 方法
+    /// 📄OpenNARS `CompoundTerm.componentAt`
     /// * 🆕unsafe版本：若已知词项的组分数，则可经此对症下药
     /// * 🚩直接连接到[`TermComponents`]的方法
     /// * ⚠️对「像」不受「像占位符」位置影响
@@ -259,7 +351,7 @@ impl Term {
         self.components.get_unchecked(index)
     }
 
-    /// 📄OpenNARS `CompoundTerm.getComponents` 属性
+    /// 📄OpenNARS `CompoundTerm.getComponents`
     /// * 🚩直接连接到[`TermComponents`]的方法
     /// * 🚩【2024-04-21 16:11:59】目前只需不可变引用
     ///   * 🔎OpenNARS中大部分用法是「只读」情形
@@ -274,7 +366,16 @@ impl Term {
         self.components.iter()
     }
 
-    /// 📄OpenNARS `CompoundTerm.cloneComponents` 方法
+    /// 🆕改版 `CompoundTerm.indexOfComponent`
+    ///
+    /// @param t [&]
+    /// @return [] index or -1
+    ///
+    pub fn index_of_component(&self, t: &Term) -> Option<usize> {
+        self.components.iter().position(|term| term == t)
+    }
+
+    /// 📄OpenNARS `CompoundTerm.cloneComponents`
     /// * 🚩直接连接到[`TermComponents`]的方法
     /// * 🚩【2024-06-14 10:43:03】遵照改版原意，使用变长数组
     ///   * ℹ️后续需要增删操作
@@ -283,10 +384,10 @@ impl Term {
     ///
     /// Clone the component list
     pub fn clone_components(&self) -> Vec<Term> {
-        self.components.clone_to_vec()
+        self.components.to_vec()
     }
 
-    /// 📄OpenNARS `CompoundTerm.containComponent` 方法
+    /// 📄OpenNARS `CompoundTerm.containComponent`
     /// * 🎯检查其是否包含**直接**组分
     /// * 🚩直接基于已有迭代器方法
     ///
@@ -297,7 +398,7 @@ impl Term {
         self.get_components().any(|term| term == component)
     }
 
-    /// 📄OpenNARS `CompoundTerm.containTerm` 方法
+    /// 📄OpenNARS `CompoundTerm.containTerm`
     /// * 🎯检查其是否**递归**包含组分
     /// * 🚩直接基于已有迭代器方法：词项 == 组分 || 词项 in 组分
     ///
@@ -306,25 +407,15 @@ impl Term {
     /// Recursively check if a compound contains a term
     pub fn contain_term(&self, term: &Term) -> bool {
         self.get_components()
-            .any(|component| term == component || component.contain_term(term))
+            .any(|sub_term| match sub_term.as_compound() {
+                // * 🚩非复合⇒判等
+                None => term == sub_term,
+                // * 🚩复合⇒递归
+                Some(sub_compound) => sub_compound.contain_term(term),
+            })
     }
 
-    /// 🆕用于替代Java的`getClass`
-    #[inline(always)]
-    pub fn get_class(&self) -> &str {
-        &self.identifier
-    }
-
-    /// 判断和另一词项是否「结构匹配」
-    /// * 🎯变量替换中的模式匹配
-    /// * 🚩类型匹配 & 组分匹配
-    /// * ⚠️非递归：不会递归比较「组分是否对应匹配」
-    #[inline(always)]
-    pub fn structural_match(&self, other: &Self) -> bool {
-        self.get_class() == other.get_class() && self.components.structural_match(&other.components)
-    }
-
-    /// 📄OpenNARS `CompoundTerm.containAllComponents` 方法
+    /// 📄OpenNARS `CompoundTerm.containAllComponents`
     /// * 🎯分情况检查「是否包含所有组分」
     ///   * 📌同类⇒检查其是否包含`other`的所有组分
     ///   * 📌异类⇒检查其是否包含`other`作为整体
@@ -334,10 +425,15 @@ impl Term {
     ///
     /// Check whether the compound contains all components of another term, or that term as a whole
     pub fn contain_all_components(&self, other: &Term) -> bool {
-        match self.get_class() == other.get_class() {
-            true => other
-                .get_components()
-                .all(|should_in| self.contain_component(should_in)),
+        match self.term.get_class() == other.get_class() {
+            // * 🚩再判断内层是否为复合词项
+            true => match other.as_compound() {
+                // * 🚩复合词项⇒深入一层
+                Some(other) => other
+                    .get_components()
+                    .all(|should_in| self.contain_component(should_in)),
+                _ => false,
+            },
             false => self.contain_component(other),
         }
     }
@@ -430,6 +526,15 @@ mod tests {
     use crate::{global::tests::AResult, ok};
     use nar_dev_utils::{asserts, macro_once};
 
+    macro_rules! compound {
+        (mut $($t:tt)*) => {
+            term!($($t)*).as_compound_mut().unwrap()
+        };
+        ($($t:tt)*) => {
+            term!($($t)*).as_compound().unwrap()
+        };
+    }
+
     #[test]
     fn instanceof_compound() -> AResult {
         macro_once! {
@@ -512,16 +617,16 @@ mod tests {
             // * 🚩模式：词项字符串 ⇒ 预期
             macro size($( $s:literal => $expected:expr )*) {
                 asserts! {$(
-                    term!($s).size() => $expected,
+                    compound!($s).size() => $expected,
                 )*}
             }
-            // 占位符
-            "_" => 0
-            // 原子词项
-            "A" => 0
-            "$A" => 0
-            "#A" => 0
-            "?A" => 0
+            // // 占位符
+            // "_" => 0
+            // // 原子词项
+            // "A" => 0
+            // "$A" => 0
+            // "#A" => 0
+            // "?A" => 0
             // 复合词项
             "{A}" => 1
             "[A]" => 1
@@ -551,7 +656,7 @@ mod tests {
             // * 🚩模式：词项字符串[索引] ⇒ 预期词项
             macro component_at($( $s:literal [ $index:expr ] => $expected:expr )*) {
                 asserts! {$(
-                    term!($s).component_at($index) => Some(&term!($expected)),
+                    compound!($s).component_at($index) => Some(&term!($expected)),
                 )*}
             }
             // 复合词项
@@ -580,16 +685,16 @@ mod tests {
             // * 🚩模式：词项字符串[索引]
             macro component_at($( $s:literal [ $index:expr ] )*) {
                 asserts! {$(
-                    term!($s).component_at($index) => None,
+                    compound!($s).component_at($index) => None,
                 )*}
             }
-            // 占位符
-            "_"[0]
-            // 原子词项
-            "A"[0]
-            "$A"[0]
-            "#A"[0]
-            "?A"[0]
+            // // 占位符
+            // "_"[0]
+            // // 原子词项
+            // "A"[0]
+            // "$A"[0]
+            // "#A"[0]
+            // "?A"[0]
             // 复合词项
             "{A}"[1]
             "[A]"[1]
@@ -620,7 +725,7 @@ mod tests {
             macro component_at_unchecked($( $s:literal [ $index:expr ] => $expected:expr )*) {
                 unsafe {
                     asserts! {$(
-                        term!($s).component_at_unchecked($index) => &term!($expected),
+                        compound!($s).component_at_unchecked($index) => &term!($expected),
                     )*}
                 }
             }
@@ -655,16 +760,16 @@ mod tests {
             macro clone_components($($s:literal)*) {
                 asserts! {$(
                     // * 🚩假设其拷贝的词项与迭代器收集的相等
-                    term!($s).clone_components() => term!($s).components.iter().cloned().collect::<Vec<_>>(),
+                    compound!($s).clone_components() => term!($s).components.iter().cloned().collect::<Vec<_>>(),
                 )*}
             }
-            // 占位符
-            "_"
-            // 原子词项
-            "A"
-            "$A"
-            "#A"
-            "?A"
+            // // 占位符
+            // "_"
+            // // 原子词项
+            // "A"
+            // "$A"
+            // "#A"
+            // "?A"
             // 复合词项
             "{A}"
             "[A]"
@@ -693,7 +798,7 @@ mod tests {
             // * 🚩模式：词项 in 容器词项
             macro contain_component($($term:literal in $container:expr)*) {
                 asserts! {$(
-                    term!($container).contain_component(&term!($term))
+                    compound!($container).contain_component(&term!($term))
                 )*}
             }
             // 复合词项
@@ -730,7 +835,7 @@ mod tests {
             // * 🚩模式：词项 in 容器词项
             macro contain_term($($term:literal in $container:expr)*) {
                 asserts! {$(
-                    term!($container).contain_term(&term!($term))
+                    compound!($container).contain_term(&term!($term))
                 )*}
             }
             // 复合词项
@@ -761,46 +866,7 @@ mod tests {
         ok!()
     }
 
-    /// * 【2024-04-25 16:17:17】📌直接参照的`identifier`
-    #[test]
-    fn get_class() -> AResult {
-        macro_once! {
-            // * 🚩模式：词项字符串 ⇒ 预期
-            macro get_class($( $s:literal => $expected:expr )*) {
-                asserts! {$(
-                    term!($s).get_class() => $expected,
-                )*}
-            }
-            // 占位符
-            "_" => PLACEHOLDER
-            // 原子词项
-            "A" => WORD
-            "$A" => VAR_INDEPENDENT
-            "#A" => VAR_DEPENDENT
-            "?A" => VAR_QUERY
-            // 复合词项
-            "{A}" => SET_EXT_OPERATOR
-            "[A]" => SET_INT_OPERATOR
-            "(&, A)" => INTERSECTION_EXT_OPERATOR
-            "(|, A)" => INTERSECTION_INT_OPERATOR
-            "(-, A, B)" => DIFFERENCE_EXT_OPERATOR
-            "(~, A, B)" => DIFFERENCE_INT_OPERATOR
-            "(*, A)" => PRODUCT_OPERATOR
-            r"(/, R, _)" => IMAGE_EXT_OPERATOR
-            r"(\, R, _)" => IMAGE_INT_OPERATOR
-            r"(&&, A)" => CONJUNCTION_OPERATOR
-            r"(||, A)" => DISJUNCTION_OPERATOR
-            r"(--, A)" => NEGATION_OPERATOR
-            // 陈述
-            "<A --> B>" => INHERITANCE_RELATION
-            "<A <-> B>" => SIMILARITY_RELATION
-            "<A ==> B>" => IMPLICATION_RELATION
-            "<A <=> B>" => EQUIVALENCE_RELATION
-        }
-        ok!()
-    }
-
-    #[test]
+    #[test] // TODO: 有待构建
     fn contain_all_components() -> AResult {
         asserts! {
             //
