@@ -24,7 +24,8 @@
 //!
 //! This abstract class contains default methods for all CompoundTerms.
 
-use super::*;
+use crate::io::symbols::*;
+use crate::language::*;
 use narsese::api::{GetCapacity, TermCapacity};
 
 impl Term {
@@ -312,6 +313,15 @@ impl Term {
     #[inline(always)]
     pub fn get_class(&self) -> &str {
         &self.identifier
+    }
+
+    /// 判断和另一词项是否「结构匹配」
+    /// * 🎯变量替换中的模式匹配
+    /// * 🚩类型匹配 & 组分匹配
+    /// * ⚠️非递归：不会递归比较「组分是否对应匹配」
+    #[inline(always)]
+    pub fn structural_match(&self, other: &Self) -> bool {
+        self.get_class() == other.get_class() && self.components.structural_match(&other.components)
     }
 
     /// 📄OpenNARS `CompoundTerm.containAllComponents` 方法

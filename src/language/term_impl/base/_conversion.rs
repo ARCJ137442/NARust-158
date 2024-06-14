@@ -1,8 +1,10 @@
 //! 与其它类型相互转换
 //! * 🎯转换为「词法Narsese」以便「获取名称」
 
-use super::*;
+use super::structs::*;
+use crate::io::symbols::*;
 use anyhow::{anyhow, Result};
+use nar_dev_utils::*;
 use narsese::{
     api::GetCapacity,
     conversion::{
@@ -98,7 +100,8 @@ impl Term {
     #[inline(always)]
     #[cfg(feature = "dialect_parser")]
     pub fn from_dialect(input: &str) -> Result<Self> {
-        super::_dialect::parse_term(input)
+        use super::super::dialect::parse_term;
+        parse_term(input)
     }
 }
 

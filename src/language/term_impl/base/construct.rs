@@ -1,13 +1,17 @@
 //! 实现 / 构造
 
-use super::*;
+use super::structs::*;
+use crate::io::symbols::*;
 use anyhow::Result;
-use nar_dev_utils::{if_return, pipe};
+use nar_dev_utils::*;
 
 impl Term {
     /// 构造函数
     /// * ⚠️有限性：仅限在「内部」使用，不希望外部以此构造出「不符范围」的词项
-    pub(super) fn new(identifier: impl Into<String>, components: TermComponents) -> Self {
+    pub(in crate::language) fn new(
+        identifier: impl Into<String>,
+        components: TermComponents,
+    ) -> Self {
         // 使用默认值构造
         let mut term = Self {
             identifier: identifier.into(),
@@ -39,7 +43,7 @@ impl Term {
     /// * 🚩仅使用「占位符标识符+空组分」表示
     /// * 🎯仅在解析时临时出现
     /// * ⚠️【2024-04-25 09:45:51】不允许外部直接创建
-    pub(super) fn new_placeholder() -> Self {
+    pub(in crate::language) fn new_placeholder() -> Self {
         Self::new(PLACEHOLDER, TermComponents::Empty)
     }
 
@@ -62,8 +66,7 @@ impl Term {
     /// * 🎯重命名变量时，将变量「换名复制」
     /// * 🚩使用旧词项的标识符，但产生新的变量
     /// * ⚠️【2024-04-25 23:08:20】内部使用：会导致产生无效类型（改变了组分类型）
-    #[deprecated]
-    pub(super) fn from_var_clone(from: &Term, new_id: impl Into<usize>) -> Self {
+    pub(in crate::language) fn from_var_clone(from: &Term, new_id: impl Into<usize>) -> Self {
         Self::new(
             from.identifier.clone(),
             TermComponents::Variable(new_id.into()),

@@ -12,39 +12,14 @@
 //! * 🚩【2024-04-25 08:36:07】在`term_v3`、`term_v4`相继失败后，重启该方法
 //!   * 📌通过「限制构造函数」+「只处理特定词项模式」的方法，基本解决堵点
 
-use crate::io::symbols::*; // ! 📌【2024-04-25 23:37:20】这些在各大子模块的`use super::*`中用到
-use nar_dev_utils::manipulate;
+// 基础：结构、属性、转换
+mod base;
+pub use base::*;
 
-// 结构
-mod structs;
-pub use structs::*;
-
-// 实现 / 构造
-mod construct;
-
-// 【内建】与其它类型相互转换
-mod _conversion;
-
-// 【内建】方言解析器
+// 【内建】方言（解析器）
 #[cfg(feature = "dialect_parser")]
-pub mod _dialect;
-#[cfg(feature = "dialect_parser")]
-pub use _dialect as dialect;
+pub mod dialect;
 
-// 【内建】实现 / 属性
-mod _property;
-
-// 📄OpenNARS `nars.language.Term`
-mod term;
-
-// 📄OpenNARS `nars.language.CompoundTerm`
-mod compound;
-
-// 📄OpenNARS `nars.language.Variable`
-pub mod variable;
-
-// 📄OpenNARS `nars.language.Statement`
-mod statement;
-
-// 📄OpenNARS `nars.language.ImageXXt`
-mod image;
+// 各词项基于改版源码的「特性」
+mod features;
+pub use features::*;

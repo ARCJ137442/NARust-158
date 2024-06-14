@@ -52,7 +52,7 @@
 //!
 //! Internally, it is actually `(\,A,P)_1`, with an index.
 
-use super::*;
+use crate::language::*;
 use nar_dev_utils::matches_or;
 
 impl Term {
@@ -138,6 +138,7 @@ impl Term {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::io::symbols::*;
     use crate::test_term as term;
     use crate::{global::tests::AResult, ok};
     use nar_dev_utils::asserts;
@@ -146,7 +147,7 @@ mod tests {
     fn instanceof_image() -> AResult {
         asserts! {
             // 像占位符在第一位的「像」会被解析为「乘积」
-            term!(r"(/, _, A, B)").identifier() => PRODUCT_OPERATOR
+            term!(r"(/, _, A, B)").identifier() => PRODUCT_OPERATOR,
             term!(r"(\, _, A, B)").identifier() => PRODUCT_OPERATOR,
             // 其余正常情况
             Term::new_image_ext(1, vec![term!("S"), term!("A"), term!("B")])?.instanceof_image()

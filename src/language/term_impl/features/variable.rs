@@ -23,7 +23,8 @@
 //!
 //! A variable term, which does not correspond to a concept
 
-use super::*;
+use crate::io::symbols::*;
+use crate::language::*;
 use std::collections::HashMap;
 
 impl Term {

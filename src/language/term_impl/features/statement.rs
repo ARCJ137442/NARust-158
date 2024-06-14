@@ -20,7 +20,8 @@
 //! A statement is a compound term, consisting of a subject, a predicate, and a relation symbol in between.
 //! It can be of either first-order or higher-order.
 
-use super::*;
+use crate::io::symbols::*;
+use crate::language::*;
 use nar_dev_utils::if_return;
 
 impl Term {

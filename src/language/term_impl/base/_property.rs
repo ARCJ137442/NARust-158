@@ -2,9 +2,10 @@
 //! * 🎯非OpenNARS所定义之「属性」「方法」
 //!   * 📌至少并非OpenNARS原先所定义的
 
-use super::*;
+use super::structs::*;
+use crate::io::symbols::*;
 use crate::ToDisplayAndBrief;
-use nar_dev_utils::macro_once;
+use nar_dev_utils::*;
 use narsese::{
     conversion::string::impl_lexical::format_instances::FORMAT_ASCII, lexical::Term as TermLexical,
 };
@@ -82,15 +83,6 @@ impl Term {
     /// * 🎯支持「词项」中的方法，递归判断「是否含有变量」
     pub fn contain_type(&self, identifier: &str) -> bool {
         self.identifier == identifier || self.components.contain_type(identifier)
-    }
-
-    /// 判断和另一词项是否「结构匹配」
-    /// * 🎯变量替换中的模式匹配
-    /// * 🚩类型匹配 & 组分匹配
-    /// * ⚠️非递归：不会递归比较「组分是否对应匹配」
-    #[inline(always)]
-    pub fn structural_match(&self, other: &Self) -> bool {
-        self.get_class() == other.get_class() && self.components.structural_match(&other.components)
     }
 
     /// 遍历其中所有原子词项

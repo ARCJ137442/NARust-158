@@ -17,7 +17,7 @@ use pest_derive::Parser;
 type MidParseResult = NarseseOptions<Budget, Term, Punctuation, Stamp, Truth>;
 
 #[derive(Parser)] // ! ↓ 必须从项目根目录开始
-#[grammar = "src/language/term_impl/_dialect.pest"]
+#[grammar = "src/language/term_impl/dialect/narust_dialect.pest"]
 pub struct DialectParser;
 
 /// 使用[`pest`]将输入的「NARust方言」转换为「词法Narsese」

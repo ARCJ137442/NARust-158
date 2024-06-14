@@ -7,7 +7,8 @@
 //!     * 🚩已经在概念区中⇒使用已有「概念」的词项
 //!     * 📌本质上是「缓存」的需求与作用
 
-use super::*;
+use crate::io::symbols::*;
+use crate::language::*;
 use narsese::api::{GetCategory, TermCategory};
 
 /// 📄OpenNARS `nars.language.Term`
