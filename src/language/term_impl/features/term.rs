@@ -6,6 +6,7 @@
 //!   * 📝OpenNARS中有关`make`的目的：避免在记忆区中**重复构造**词项
 //!     * 🚩已经在概念区中⇒使用已有「概念」的词项
 //!     * 📌本质上是「缓存」的需求与作用
+//! * ✅【2024-06-14 16:33:57】基本完成对「基础词项」的属性检查
 
 use crate::io::symbols::*;
 use crate::language::*;
@@ -30,6 +31,9 @@ impl Term {
     pub fn name(&self) -> String {
         self.format_name()
     }
+
+    // * ✅`is_constant`已在别处定义
+    // * ✅`is_placeholder`已在别处定义
 
     /// 模拟`Term.getComplexity`
     /// * 🚩逻辑 from OpenNARS
@@ -57,6 +61,13 @@ impl Term {
             // 多元 ⇒ 1 + 内部所有词项复杂度之和
             Compound(terms) => 1 + terms.iter().map(Term::complexity).sum::<usize>(),
         }
+    }
+
+    /// 🆕判断是否为「零复杂度」
+    /// * 🎯用于部分「除以复杂度」的函数
+    #[doc(alias = "zero_complexity")]
+    pub fn is_zero_complexity(&self) -> bool {
+        self.complexity() == 0
     }
 
     /// 🆕用于替代Java的`getClass`

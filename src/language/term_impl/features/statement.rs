@@ -8,7 +8,6 @@
 //! 🕒最后更新：【2024-06-14 14:53:18】
 //!
 //! * `Statement`
-//!   * `makeSym` => `new_sym_statement`
 //!   * `invalidStatement` => `is_invalid_statement`
 //!   * `invalidReflexive`
 //!   * `invalidPair`
