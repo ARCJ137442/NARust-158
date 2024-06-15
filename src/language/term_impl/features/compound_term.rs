@@ -254,7 +254,7 @@ impl Term {
     pub fn as_compound(&self) -> Option<CompoundTermRef> {
         matches_or!(
             ?self.components,
-            TermComponents::Compound(ref c) => CompoundTermRef{
+            TermComponents::Compound(ref c) => CompoundTermRef {
                 inner: self,
                 components: c
             }
@@ -738,6 +738,14 @@ pub(crate) mod tests {
                 let compound = unsafe { term.as_compound_unchecked() };
                 // * 🚩像一个普通的词项（不可变引用）使用
                 dbg!(compound.identifier(), compound.components());
+
+                // * 🚩安全：可被多次共用
+                let c1 = compound; // ! Copy特征无需显式clone
+                let c2 = compound.as_compound().unwrap();
+                let c3 = term.as_compound().unwrap();
+                dbg!(c1, c2, c3); // 同时出现
+
+                // * 🚩其它系列特性
                 asserts! {
                     compound.is_compound(),
                     compound.as_compound() => Some(compound),
@@ -1207,6 +1215,7 @@ pub(crate) mod tests {
                 // * 🚩无检查转换到复合词项（可变引用）
                 let term2 = term.clone();
                 let mut compound = unsafe { term.as_compound_mut_unchecked() };
+                // dbg!(term.as_compound_mut()); // * ✅安全：借用检查拦截了「重复借用」行为
 
                 // * 🚩像一个普通的词项（不可变引用）使用：一次只能传入一个
                 // dbg!(compound.identifier(), compound.components());
@@ -1220,7 +1229,15 @@ pub(crate) mod tests {
                 assert_eq!(compound.identifier, "MUTATED");
                 (*compound).identifier = original_id; // * 🚩与上述语法等价，但这次是改回原标识符
 
-                // * 其它属性的验证
+                // * 🚩检验潜在风险：使用Deref拷贝出并存的不可变引用
+                let compound_ref = compound.as_compound().unwrap();
+                // (compound_ref, compound);
+                // * ✅安全：生命期约束下，不可变引用与可变引用无法同时存在
+                // * 📝在调用`.as_compound()`之后，返回值的生命期即不可变引用的生命期
+                // * 📝因此在「得到的不可变引用」生命期结束前，不能使用可变引用
+                dbg!(compound_ref, compound_ref, compound_ref); // ! 转换成的不可变引用，可以同时存在多个
+
+                // * 🚩其它属性的验证
                 asserts! {
                     compound.is_compound(),
                     compound.as_compound().is_some(),
