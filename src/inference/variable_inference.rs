@@ -45,7 +45,7 @@ impl CompoundTermRefMut<'_> {
         let mut substitution = VarSubstitution::new();
         // 填充「变量映射对」
         // * 🚩从`1`开始
-        self.inner.for_each_atom_mut(&mut |atom| {
+        self.inner().for_each_atom_mut(&mut |atom| {
             // 条件：是变量 & 之前没出现过
             if atom.instanceof_variable() && !substitution.has(atom) {
                 // * 🚩替换：类型不变，名称换成「映射大小+1」（唯一的，从1开始）

@@ -30,6 +30,8 @@
 //!
 //! This abstract class contains default methods for all CompoundTerms.
 
+use std::ops::{Deref, DerefMut};
+
 use crate::io::symbols::*;
 use crate::language::*;
 use nar_dev_utils::matches_or;
@@ -253,34 +255,69 @@ impl Term {
         matches_or!(
             ?self.components,
             TermComponents::Compound(ref c) => CompoundTermRef{
-                term: self,
+                inner: self,
                 components: c
             }
-        )
-    }
-
-    /// 🆕尝试将词项作为「复合词项」
-    /// * ℹ️[`Self::as_compound`]的可变版本
-    pub fn as_compound_mut(&mut self) -> Option<CompoundTermRefMut> {
-        matches_or!(
-            ?self.components,
-            TermComponents::Compound(..) => CompoundTermRefMut {inner   :self}
         )
     }
 
     /// 🆕尝试将词项作为「复合词项」（未检查）
     /// * 🚩通过判断「内部元素枚举」的类型实现
     ///
-    /// # Panics
+    /// # Safety
     ///
-    /// ! ⚠️存在「未检查」的风险：在其内部元素不是「复合词项」时，会返回`None`
-    pub fn as_compound_unchecked(&self) -> CompoundTermRef {
+    /// * ⚠️代码是不安全的：必须在解包前已经假定是「复合词项」
+    /// * 📄逻辑参考自[`Option::unwrap_unchecked`]
+    pub unsafe fn as_compound_unchecked(&self) -> CompoundTermRef {
+        // * 🚩在debug模式下检查
+        debug_assert!(self.is_compound(), "转换前必须假定其为复合词项");
+        // * 🚩正式开始解引用
         match self.components {
             TermComponents::Compound(ref c) => CompoundTermRef {
-                term: self,
+                inner: self,
                 components: c,
             },
-            _ => unreachable!("未检查：断定的词项不是复合词项"),
+            // SAFETY: the safety contract must be upheld by the caller.
+            _ => unsafe { core::hint::unreachable_unchecked() },
+        }
+    }
+
+    /// 🆕尝试将词项作为「复合词项」
+    /// * ℹ️[`Self::as_compound`]的可变版本
+    pub fn as_compound_mut(&mut self) -> Option<CompoundTermRefMut> {
+        matches_or! {
+            // * 📌此处需要可变借用，才能在下头正常把Box变成可变引用（而无需Deref）
+            // * ❌使用`ref mut`不能达到目的：解引用后还是Box
+            ?&mut self.components,
+            TermComponents::Compound(components) => CompoundTermRefMut {
+                // * 🚩【2024-06-15 14:00:09】此处创建裸指针，是安全行为（解引用才是不安全行为）
+                // * 📄具体使用参见[`CompoundTermRefMut::components`]
+                components: &mut **components as *mut [Term],
+                inner   :self,
+            }
+        }
+    }
+
+    /// 🆕尝试将词项作为「可变复合词项」（未检查）
+    /// * 🚩通过判断「内部元素枚举」的类型实现
+    ///
+    /// # Safety
+    ///
+    /// * ⚠️代码是不安全的：必须在解包前已经假定是「复合词项」
+    /// * 📄逻辑参考自[`Option::unwrap_unchecked`]
+    pub unsafe fn as_compound_mut_unchecked(&mut self) -> CompoundTermRefMut {
+        // * 🚩在debug模式下检查
+        debug_assert!(self.is_compound(), "转换前必须假定其为复合词项");
+        // * 🚩正式开始解引用
+        match &mut self.components {
+            TermComponents::Compound(components) => CompoundTermRefMut {
+                // * 🚩【2024-06-15 14:00:09】此处创建裸指针，是安全行为（解引用才是不安全行为）
+                // * 📄具体使用参见[`CompoundTermRefMut::components`]
+                components: &mut **components as *mut [Term],
+                inner: self,
+            },
+            // SAFETY: the safety contract must be upheld by the caller.
+            _ => unsafe { core::hint::unreachable_unchecked() },
         }
     }
 }
@@ -321,19 +358,9 @@ impl GetCapacity for Term {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct CompoundTermRef<'a> {
     /// 复合词项整体
-    pub term: &'a Term,
+    pub inner: &'a Term,
     /// 复合词项的元素列表
     pub components: &'a [Term],
-}
-
-/// 🆕作为「复合词项引用」的词项类型
-/// * 🎯在程序类型层面表示一个「复合词项」（可变引用）
-/// * ⚠️取舍：因可变引用无法共享，此时需要在构造层面限制
-///   * 📌构造时保证「内部组分」为「复合词项」变种
-#[derive(Debug, PartialEq, Eq, Hash)]
-pub struct CompoundTermRefMut<'a> {
-    /// 复合词项内部的词项整体（自身）
-    pub inner: &'a mut Term,
 }
 
 impl CompoundTermRef<'_> {
@@ -453,7 +480,7 @@ impl CompoundTermRef<'_> {
     ///
     /// Check whether the compound contains all components of another term, or that term as a whole
     pub fn contain_all_components(&self, other: &Term) -> bool {
-        match self.term.get_class() == other.get_class() {
+        match self.inner.get_class() == other.get_class() {
             // * 🚩再判断内层是否为复合词项
             true => match other.as_compound() {
                 // * 🚩复合词项⇒深入一层
@@ -467,23 +494,73 @@ impl CompoundTermRef<'_> {
     }
 }
 
+/// 向词项本身的自动解引用
+/// * 🎯让「复合词项引用」可以被看作是一个普通的词项
+impl Deref for CompoundTermRef<'_> {
+    type Target = Term;
+
+    fn deref(&self) -> &Self::Target {
+        self.inner
+    }
+}
+
+/// 🆕作为「复合词项引用」的词项类型
+/// * 🎯在程序类型层面表示一个「复合词项」（可变引用）
+/// * ⚠️取舍：因可变引用无法共享，此时需要在构造层面限制
+///   * 📌构造时保证「内部组分」为「复合词项」变种
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub struct CompoundTermRefMut<'a> {
+    /// 复合词项内部的词项整体（自身）
+    pub(super) inner: &'a mut Term,
+    /// 复合词项内部的元素列表
+    /// * ⚠️【2024-06-15 13:45:47】尝试使用裸指针，不安全代码封装安全接口
+    pub(super) components: *mut [Term],
+}
+
 impl CompoundTermRefMut<'_> {
-    /// 获取内部组分（一定有）
+    /// 获取词项整体
+    pub fn inner(&mut self) -> &mut Term {
+        self.inner
+    }
+
+    /// 获取内部组分
+    /// * 📌【2024-06-15 14:56:33】需要用可变引用`&mut self`保证「独占性」
     ///
     /// # Panics
     ///
     /// ! ⚠️若使用了非法的构造方式将「非复合词项」构造入此，则将抛出panic
     pub fn components(&mut self) -> &mut [Term] {
-        matches_or!(
-            self.inner.components,
-            TermComponents::Compound(ref mut components) => components,
-            unreachable!("CompoundTermRefMut::components 断言失败：不是复合词项: {}", self.inner)
-        )
+        // matches_or!(
+        //     self.inner.components,
+        //     TermComponents::Compound(ref mut components) => components,
+        //     unreachable!("CompoundTermRefMut::components 断言失败：不是复合词项: {}", self.inner)
+        // )
+        // * ✅即：不可能在「调用components」与「使用components」之间插入「inner」
+        // * 🚩解引用前（在debug模式下）检查
+        debug_assert!(self.inner.is_compound());
+        // * 🚩解引用
+        // ! SAFETY: 此处保证对整体（整个复合词项）拥有引用
+        unsafe { &mut *self.components }
     }
 
+    /// 生成一个不可变引用
+    /// * 🚩将自身的所有字段转换为不可变引用，然后构造一个「不可变引用」结构
     /// * 📌可变引用一定能转换成不可变引用
-    pub fn as_ref(&self) -> CompoundTermRef {
-        self.inner.as_compound_unchecked()
+    /// * ⚠️与[`AsRef`]与[`Deref`]不同：此处需要返回所有权，而非对目标类型（[`Term`]）的引用
+    ///   * ❌返回`&CompoundTermRef`会导致「返回临时变量引用」故无法使用
+    /// * ❌【2024-06-15 16:37:07】危险：不能在此【只传引用】，否则将能在「拿出引用」的同时「使用自身」
+    pub fn into_ref<'s>(self) -> CompoundTermRef<'s>
+    where
+        Self: 's,
+    {
+        // * 🚩解引用前（在debug模式下）检查
+        debug_assert!(self.inner.is_compound());
+        // * 🚩传递引用 & 裸指针解引用
+        CompoundTermRef {
+            inner: self.inner,
+            // SAFETY: 自身相当于对词项的可变引用，同时两个字段均保证有效——那就一定能同时转换
+            components: unsafe { &*self.components },
+        }
     }
 
     /* ----- variable-related utilities ----- */
@@ -520,6 +597,34 @@ impl CompoundTermRefMut<'_> {
     }
 }
 
+/// 向词项本身的自动解引用
+/// * 🎯让「复合词项可变引用」可以被看作是一个普通的词项
+/// * 📌【2024-06-15 15:08:55】安全性保证：在该引用结构使用「元素列表」时，独占引用不允许其再度解引用
+/// * ❌【2024-06-15 15:38:58】不能实现「自动解引用到不可变引用」
+impl Deref for CompoundTermRefMut<'_> {
+    type Target = Term;
+
+    fn deref(&self) -> &Self::Target {
+        self.inner
+    }
+}
+
+/// 向词项本身的自动解引用
+/// * 🎯让「复合词项可变引用」可以被看作是一个普通的词项（可变引用）
+/// * 📌【2024-06-15 15:08:55】安全性保证：在该引用结构使用「元素列表」时，独占引用不允许其再度解引用
+impl DerefMut for CompoundTermRefMut<'_> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.inner
+    }
+}
+
+/// 可变引用 ⇒ 不可变引用
+impl<'s> From<CompoundTermRefMut<'s>> for CompoundTermRef<'s> {
+    fn from(r: CompoundTermRefMut<'s>) -> Self {
+        r.into_ref()
+    }
+}
+
 /// 单元测试
 #[cfg(test)]
 pub(crate) mod tests {
@@ -538,8 +643,8 @@ pub(crate) mod tests {
         };
     }
 
-    /// 复合词项不可变引用
-    mod compound_term_ref {
+    /// 「词项」与「复合词项」相关的代码
+    mod term {
         use super::*;
 
         #[test]
@@ -614,6 +719,64 @@ pub(crate) mod tests {
                 "<A <-> B>" => true
                 "<A ==> B>" => false
                 "<A <=> B>" => true
+            }
+            ok!()
+        }
+    }
+
+    /// 复合词项不可变引用
+    mod compound_term_ref {
+        use super::*;
+
+        #[test]
+        fn deref() -> AResult {
+            /// 通用测试函数
+            fn test(term: Term) {
+                // * 🚩首先是一个复合词项
+                assert!(term.is_compound());
+                // * 🚩无检查转换到复合词项（不可变引用）
+                let compound = unsafe { term.as_compound_unchecked() };
+                // * 🚩像一个普通的词项（不可变引用）使用
+                dbg!(compound.identifier(), compound.components());
+                asserts! {
+                    compound.is_compound(),
+                    compound.as_compound() => Some(compound),
+                    // * 📌还可以使用：因为CompoundTermRef实现了Copy特征
+                    *compound => term, // ! 这毕竟是引用，需要解引用才能
+                    compound.clone() => compound, // ! 引用的复制≠自身的复制
+                    (*compound).clone() => term, // ! 解引用后复制，结果才相等
+                }
+            }
+            macro_once! {
+                // * 🚩模式：词项字符串 ⇒ 预期
+                macro test($( $term:literal )*) {$(
+                    test(term!($term));
+                )*}
+                // // 占位符
+                // "_" => 0
+                // // 原子词项
+                // "A" => 0
+                // "$A" => 0
+                // "#A" => 0
+                // "?A" => 0
+                // 复合词项
+                "{A}"
+                "[A]"
+                "(&, A)"
+                "(|, A)"
+                "(-, A, B)"
+                "(~, A, B)"
+                "(*, A, B, C)"
+                r"(/, R, _)"
+                r"(\, R, _)"
+                r"(&&, A)"
+                r"(||, A)"
+                r"(--, A)"
+                // 陈述
+                "<A --> B>"
+                "<A <-> B>"
+                "<A ==> B>"
+                "<A <=> B>"
             }
             ok!()
         }
@@ -927,7 +1090,7 @@ pub(crate) mod tests {
             ok!()
         }
 
-        #[test] // TODO: 有待构建
+        #[test]
         fn contain_all_components() -> AResult {
             macro_once! {
                 // * 🚩模式：词项 in 容器词项
@@ -993,6 +1156,115 @@ pub(crate) mod tests {
     mod compound_term_ref_mut {
         use super::*;
 
+        /// 保证整个接口是安全的
+        #[test]
+        #[allow(unused_variables)]
+        pub fn assure_safe_interface() -> AResult {
+            fn use_inner(_: &mut Term) {}
+            fn use_components(_: &mut [Term]) {}
+            let mut term = term!("(*, A, B, C)");
+            let mut mut_compound = term.as_compound_mut().expect("无法转换为可变复合词项");
+
+            // 先用元素集合，再用词项自身
+            let components = mut_compound.components();
+            let inner = mut_compound.inner();
+            // ! 在这之后是用不了`components`的：因为`inner`已经借走了`mut_compound`的引用
+            // * 📝实际上`components`的生命周期早已在`inner`处结束，只是因为「自动作用域调整」才【显得】可以共存
+            // use_terms(components);
+            use_inner(inner);
+            // * ✅下面这个是被允许的：有方式保证inner与整体不会同时出现，那就是让inner生命期在这之前结束
+            use_components(mut_compound.components());
+            // drop(inner); // ! 在这之后同样用不了`inner`：不允许整体被同时可变借用两次
+            use_inner(mut_compound.inner()); // * ✅这个是被允许的：上头的可变引用创建后就被传入（然后回收）
+
+            // 先用词项自身，再用元素集合
+            let inner = mut_compound.inner();
+            let components = mut_compound.components();
+            // ! 在这之后是用不了`inner`的：因为`components`已经借走了`mut_compound`的引用
+            // * 📝实际上`inner`的生命周期早已在`components`处结束，只是因为「自动作用域调整」才【显得】可以共存
+            // use_term(inner);
+            use_components(components);
+            // * ✅下面这个是被允许的：有方式保证inner与整体不会同时出现，那就是让components生命期在这之前结束
+            use_inner(mut_compound.inner());
+            // drop(components); // ! 在这之后同样用不了`inner`：不允许整体被同时可变借用两次
+            use_components(mut_compound.components()); // * ✅这个是被允许的：上头的可变引用创建后就被传入（然后回收）
+
+            // components; // * 📌接下来不再允许使用`components`：中间可变借用了mut_compound，因此生命期被限定在借用之前
+            // inner; // * 📌接下来不再允许使用`inner`：中间可变借用了mut_compound，因此生命期被限定在借用之前
+
+            ok!()
+        }
+
+        /// 解引用：可变/不可变
+        /// * ✅同时测试[`Deref`]与[`DerefMut`]
+        #[test]
+        fn deref_and_mut() -> AResult {
+            /// 通用测试函数
+            #[allow(clippy::explicit_auto_deref)]
+            fn test(mut term: Term) {
+                // * 🚩首先是一个复合词项
+                assert!(term.is_compound());
+                // * 🚩无检查转换到复合词项（可变引用）
+                let term2 = term.clone();
+                let mut compound = unsafe { term.as_compound_mut_unchecked() };
+
+                // * 🚩像一个普通的词项（不可变引用）使用：一次只能传入一个
+                // dbg!(compound.identifier(), compound.components());
+                dbg!(compound.identifier());
+                dbg!(compound.components());
+
+                // * 🚩像一个普通的词项（可变引用）使用：一次只能传入一个
+                dbg!(compound.components_mut());
+                let original_id = compound.identifier().to_string();
+                compound.identifier = "MUTATED".into(); // * 🚩自动解引用并修改字段
+                assert_eq!(compound.identifier, "MUTATED");
+                (*compound).identifier = original_id; // * 🚩与上述语法等价，但这次是改回原标识符
+
+                // * 其它属性的验证
+                asserts! {
+                    compound.is_compound(),
+                    compound.as_compound().is_some(),
+                    compound.as_compound_mut().is_some(),
+                    // ! 可变引用未实现Clone和Copy特征，但因实现了Deref而可以使用clone方法
+                    *compound => term2, // ! 这毕竟是引用，需要解引用才能
+                    compound.clone() => term2, // ! 引用的复制=自身的复制
+                    (*compound).clone() => term2, // ! 解引用后复制，结果仍相等
+                }
+            }
+            macro_once! {
+                // * 🚩模式：词项字符串 ⇒ 预期
+                macro test($( $term:literal )*) {$(
+                    test(term!($term));
+                )*}
+                // // 占位符
+                // "_" => 0
+                // // 原子词项
+                // "A" => 0
+                // "$A" => 0
+                // "#A" => 0
+                // "?A" => 0
+                // 复合词项
+                "{A}"
+                "[A]"
+                "(&, A)"
+                "(|, A)"
+                "(-, A, B)"
+                "(~, A, B)"
+                "(*, A, B, C)"
+                r"(/, R, _)"
+                r"(\, R, _)"
+                r"(&&, A)"
+                r"(||, A)"
+                r"(--, A)"
+                // 陈述
+                "<A --> B>"
+                "<A <-> B>"
+                "<A ==> B>"
+                "<A <=> B>"
+            }
+            ok!()
+        }
+
         #[test]
         pub fn components() -> AResult {
             macro_once! {
@@ -1023,11 +1295,11 @@ pub(crate) mod tests {
         }
 
         #[test]
-        pub fn as_ref() -> AResult {
+        pub fn into_ref() -> AResult {
             macro_once! {
                 macro test($($term:literal)*) {
                     asserts! {$(
-                            compound!(mut $term).as_ref()
+                            compound!(mut $term).into_ref()
                             => compound!($term)
                     )*}
                 }

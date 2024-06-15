@@ -20,6 +20,8 @@
 //! A statement is a compound term, consisting of a subject, a predicate, and a relation symbol in between.
 //! It can be of either first-order or higher-order.
 
+use std::ops::{Deref, DerefMut};
+
 use super::compound_term::CompoundTermRef;
 use crate::io::symbols::*;
 use crate::language::*;
@@ -92,7 +94,7 @@ impl Term {
 
     /// 🆕将一个复合词项转换为「陈述词项」（不可变引用）
     /// * 🚩转换为Option
-    pub fn as_statement(&self) -> Option<StatementRef<'_>> {
+    pub fn as_statement(&self) -> Option<StatementRef> {
         matches_or!(
             ?self.components,
             TermComponents::Compound(ref terms) if terms.len() == 2
@@ -100,6 +102,21 @@ impl Term {
                 statement: self,
                 subject: &terms[0],
                 predicate: &terms[1],
+            }
+        )
+    }
+
+    /// 🆕将一个复合词项转换为「陈述词项」（可变引用）
+    /// * 🚩转换为Option
+    pub fn as_statement_mut(&mut self) -> Option<StatementRefMut> {
+        matches_or!(
+            ?self.components,
+            TermComponents::Compound(ref mut terms) if terms.len() == 2
+            => StatementRefMut {
+                // * 🚩均转换为裸指针
+                subject: &mut terms[0] as *mut Term,
+                predicate: &mut terms[1] as *mut Term,
+                statement: self,
             }
         )
     }
@@ -118,12 +135,12 @@ impl CompoundTermRef<'_> {
     /// 🆕将一个复合词项转换为「陈述词项」（不可变引用）
     /// * 🚩转换为Option
     /// * 📌与[`Term::as_statement`]一致
-    pub fn as_statement(&self) -> Option<StatementRef<'_>> {
+    pub fn as_statement(&self) -> Option<StatementRef> {
         matches_or!(
             ?self.components,
             [ref subject, ref predicate]
             => StatementRef {
-                statement: self.term,
+                statement: self.inner,
                 subject,
                 predicate,
             }
@@ -131,8 +148,29 @@ impl CompoundTermRef<'_> {
     }
 
     // ! ❌【2024-06-14 14:47:26】没必要添加一个额外的`unchecked`方法：可以使用`unwrap`现场解包
+}
 
-    // ! 🚩【2024-06-14 14:45:48】暂不添加「陈述可变引用」
+/// 为「复合词项」添加「转换到陈述」的方法（可变引用）
+/// * 📌依据：陈述 ⊂ 复合词项
+impl CompoundTermRefMut<'_> {
+    /// 🆕将一个复合词项转换为「陈述词项」（可变引用）
+    /// * 🚩转换为Option
+    /// * 📌与[`Term::as_statement`]一致
+    pub fn as_statement(&mut self) -> Option<StatementRef> {
+        matches_or!(
+            // * 📝此处必须内联`self.components()`，以告诉借用检查器「并非使用整个结构」
+            // ! SAFETY: 此处保证对整体（整个复合词项）拥有引用
+            ? unsafe { &mut *self.components },
+            [ref mut subject, ref mut predicate]
+            => StatementRef {
+                statement: self.inner,
+                subject,
+                predicate,
+            }
+        )
+    }
+
+    // ! ❌【2024-06-14 14:47:26】没必要添加一个额外的`unchecked`方法：可以使用`unwrap`现场解包
 }
 
 /// 🆕作为「陈述引用」的词项类型
@@ -149,13 +187,11 @@ pub struct StatementRef<'a> {
 
 impl StatementRef<'_> {
     /// 📄OpenNARS `getSubject`
-    /// * 🚩通过「组分」得到
-    /// * 📌【2024-04-24 14:56:33】因为实现方式的区别，无法确保「能够得到 主词/谓词」
-    ///   * ⚠️必须在调用时明确是「陈述」，否则`panic`
     ///
     /// # 📄OpenNARS
     ///
-    pub fn get_subject(&self) -> &Term {
+    /// 🈚
+    pub fn subject(&self) -> &Term {
         self.subject
     }
 
@@ -163,7 +199,8 @@ impl StatementRef<'_> {
     ///
     /// # 📄OpenNARS
     ///
-    pub fn get_predicate(&self) -> &Term {
+    /// 🈚
+    pub fn predicate(&self) -> &Term {
         self.predicate
     }
 
@@ -245,7 +282,7 @@ impl StatementRef<'_> {
         match may_container.as_compound() {
             // 仅在复合词项时继续检查
             Some(compound) => {
-                !compound.term.instanceof_image() && compound.contain_component(may_component)
+                !compound.inner.instanceof_image() && compound.contain_component(may_component)
             }
             None => false,
         }
@@ -274,8 +311,135 @@ impl StatementRef<'_> {
     ///
     /// # 📄OpenNARS
     ///
+    /// 🈚
     pub fn invalid(&self) -> bool {
-        Self::invalid_statement(self.get_subject(), self.get_predicate())
+        Self::invalid_statement(self.subject(), self.predicate())
+    }
+}
+
+/// 向词项本身的自动解引用
+/// * 🎯让「陈述引用」可以被看作是一个普通的词项
+impl Deref for StatementRef<'_> {
+    type Target = Term;
+
+    fn deref(&self) -> &Self::Target {
+        self.statement
+    }
+}
+
+/// 🆕作为「陈述引用」的词项类型
+/// * 🎯在程序类型层面表示一个「陈述」（可变引用）
+/// * 📝【2024-06-15 17:08:26】目前「陈述可变引用」用处不大
+///   * 📄OpenNARS中没有与之相关的独有方法（`Statement`类中没有可变的方法）
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub struct StatementRefMut<'a> {
+    /// 陈述词项本身
+    statement: &'a mut Term,
+    /// 陈述词项的主项
+    subject: *mut Term,
+    /// 陈述词项的谓项
+    predicate: *mut Term,
+}
+
+impl StatementRefMut<'_> {
+    /// 获取陈述整体
+    pub fn statement(&mut self) -> &mut Term {
+        self.statement
+    }
+
+    /// 📄OpenNARS `getSubject`
+    /// * ⚠️此处对裸指针解引用
+    ///   * 📄安全性保证同[`CompoundTermRefMut::components`]
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// 🈚
+    pub fn subject(&mut self) -> &mut Term {
+        // SAFETY: 同[`Compound::components`]
+        unsafe { &mut *self.subject }
+    }
+
+    /// 📄OpenNARS `getPredicate`
+    /// * ⚠️此处对裸指针解引用
+    ///   * 📄安全性保证同[`CompoundTermRefMut::components`]
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// 🈚
+    pub fn predicate(&mut self) -> &mut Term {
+        // SAFETY: 同[`Compound::components`]
+        unsafe { &mut *self.predicate }
+    }
+
+    /// 生成一个不可变引用
+    /// * 🚩将自身的所有字段转换为不可变引用，然后构造一个「不可变引用」结构
+    /// * 📌可变引用一定能转换成不可变引用
+    /// * ⚠️与[`AsRef`]与[`Deref`]不同：此处需要返回所有权，而非对目标类型（[`Term`]）的引用
+    ///   * ❌返回`&CompoundTermRef`会导致「返回临时变量引用」故无法使用
+    /// * ❌【2024-06-15 16:37:07】危险：不能在此【只传引用】，否则将能在「拿出引用」的同时「使用自身」
+    pub fn into_ref<'s>(self) -> StatementRef<'s>
+    where
+        Self: 's,
+    {
+        // * 🚩解引用前（在debug模式下）检查
+        debug_assert!(self.statement.is_statement());
+        // * 🚩传递引用 & 裸指针解引用
+        StatementRef {
+            statement: self.statement,
+            // SAFETY: 自身相当于对词项的可变引用，同时所有字段均保证有效——那就一定能同时转换
+            subject: unsafe { &*self.subject },
+            // SAFETY: 自身相当于对词项的可变引用，同时所有字段均保证有效——那就一定能同时转换
+            predicate: unsafe { &*self.predicate },
+        }
+    }
+
+    /// 转换为「复合词项可变引用」
+    /// * 🎯不通过额外的「类型判断」（从[`DerefMut`]中来）转换为「复合词项可变引用」
+    /// * ❌【2024-06-15 16:37:07】危险：不能在此【只传引用】，否则将能在「拿出引用」的同时「使用自身」
+    pub fn into_compound_ref<'s>(self) -> CompoundTermRefMut<'s>
+    where
+        Self: 's,
+    {
+        debug_assert!(self.is_statement());
+        // SAFETY: 保证「陈述词项」一定从「复合词项」中来
+        unsafe { self.statement.as_compound_mut_unchecked() }
+    }
+}
+
+/// 可变引用 ⇒ 不可变引用
+impl<'s> From<StatementRefMut<'s>> for StatementRef<'s> {
+    #[inline]
+    fn from(r: StatementRefMut<'s>) -> Self {
+        r.into_ref()
+    }
+}
+
+/// 陈述可变引用 ⇒ 复合词项可变引用
+impl<'s> From<StatementRefMut<'s>> for CompoundTermRefMut<'s> {
+    #[inline]
+    fn from(r: StatementRefMut<'s>) -> Self {
+        r.into_compound_ref()
+    }
+}
+
+/// 向词项本身的自动解引用
+/// * 🎯让「陈述可变引用」可以被看作是一个普通的词项
+/// * 📌【2024-06-15 15:08:55】安全性保证：在该引用结构使用「元素列表」时，独占引用不允许其再度解引用
+/// * ❌【2024-06-15 15:38:58】不能实现「自动解引用到不可变引用」
+impl Deref for StatementRefMut<'_> {
+    type Target = Term;
+
+    fn deref(&self) -> &Self::Target {
+        self.statement
+    }
+}
+
+/// 向词项本身的自动解引用
+/// * 🎯让「陈述可变引用」可以被看作是一个普通的词项（可变引用）
+/// * 📌【2024-06-15 15:08:55】安全性保证：在该引用结构使用「元素列表」时，独占引用不允许其再度解引用
+impl DerefMut for StatementRefMut<'_> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.statement
     }
 }
 
@@ -285,62 +449,133 @@ mod tests {
     use super::*;
     use crate::test_term as term;
     use crate::{global::tests::AResult, ok};
-    use nar_dev_utils::asserts;
+    use nar_dev_utils::{asserts, macro_once};
 
     macro_rules! statement {
-        ($($t:tt)*) => {
-            term!($($t)*).as_statement().unwrap()
+        // 可变引用/新常量
+        (mut $term:literal) => {
+            statement!(mut term!($term))
+        };
+        // 可变引用/原有变量
+        (mut $term:expr) => {
+            $term.as_statement_mut().unwrap()
+        };
+        // 不可变引用
+        ($term:literal) => {
+            statement!(term!($term))
+        };
+        // 不可变引用
+        ($term:expr) => {
+            $term.as_statement().unwrap()
         };
     }
 
-    /// 陈述有效性
-    /// * 🎯一并测试
-    ///   * `invalid`
-    ///   * `invalid_statement`
-    ///   * `invalid_reflexive`
-    ///   * `invalid_pair`
-    #[test]
-    fn invalid() -> AResult {
-        asserts! {
-            // 非法
-            statement!("<A --> A>").invalid()
-            statement!("<A --> [A]>").invalid()
-            statement!("<[A] --> A>").invalid()
-            statement!("<<A --> B> ==> <B --> A>>").invalid()
-            // 合法
-            !statement!("<A --> B>").invalid()
-            !statement!("<A --> [B]>").invalid()
-            !statement!("<[A] --> B>").invalid()
-            !statement!("<<A --> B> ==> <B --> C>>").invalid()
-            !statement!("<<A --> B> ==> <C --> A>>").invalid()
-            !statement!("<<A --> B> ==> <C --> D>>").invalid()
+    mod statement_ref {
+        use super::*;
+
+        /// 陈述有效性
+        /// * 🎯一并测试
+        ///   * `invalid`
+        ///   * `invalid_statement`
+        ///   * `invalid_reflexive`
+        ///   * `invalid_pair`
+        #[test]
+        fn invalid() -> AResult {
+            asserts! {
+                // 非法
+                statement!("<A --> A>").invalid()
+                statement!("<A --> [A]>").invalid()
+                statement!("<[A] --> A>").invalid()
+                statement!("<<A --> B> ==> <B --> A>>").invalid()
+                // 合法
+                !statement!("<A --> B>").invalid()
+                !statement!("<A --> [B]>").invalid()
+                !statement!("<[A] --> B>").invalid()
+                !statement!("<<A --> B> ==> <B --> C>>").invalid()
+                !statement!("<<A --> B> ==> <C --> A>>").invalid()
+                !statement!("<<A --> B> ==> <C --> D>>").invalid()
+            }
+            ok!()
         }
-        ok!()
+
+        #[test]
+        fn subject_predicate() -> AResult {
+            macro_once! {
+                // * 🚩模式：陈述 ⇒ [主词, 谓词]
+                macro test($($statement:expr => [$subject:literal, $predicate:literal])*) {
+                    asserts! {$(
+                        statement!($statement).subject() => &term!($subject)
+                        statement!($statement).predicate() => &term!($predicate)
+                    )*}
+                }
+                "<A --> B>"             => ["A", "B"]
+                "<あ ==> α>"            => ["あ", "α"]
+                "<{SELF} --> [good]>"   => ["{SELF}", "[good]"]
+                "<<a --> b> ==> {C}>"   => ["<a --> b>", "{C}"]
+                "<$1 --> [$2]>"         => ["$1", "[$2]"]
+                "<(*, 1, 2, 3) ==> 4>"  => ["(*, 1, 2, 3)", "4"]
+                // ! 实例、属性、实例属性 ⇒ 继承
+                "<A {-- B>"             => ["{A}",  "B"]
+                "<A --] B>"             => [ "A",  "[B]"]
+                "<A {-] B>"             => ["{A}", "[B]"]
+            }
+            ok!()
+        }
     }
 
-    #[test]
-    fn get_subject() -> AResult {
-        asserts! {
-            statement!("<A --> B>").get_subject() => &term!("A")
-            statement!("<あ --> B>").get_subject() => &term!("あ")
-            statement!("<{SELF} --> B>").get_subject() => &term!("{SELF}")
-            statement!("<<a --> b> --> B>").get_subject() => &term!("<a --> b>")
-            statement!("<$1 --> B>").get_subject() => &term!("$1")
-            statement!("<(*, 1, 2, 3) --> B>").get_subject() => &term!("(*, 1, 2, 3)")
-        }
-        ok!()
-    }
+    mod statement_ref_mut {
+        use super::*;
 
-    #[test]
-    fn get_predicate() -> AResult {
-        asserts! {
-            statement!("<S --> A>").get_predicate() => &term!("A")
-            statement!("<S --> あ>").get_predicate() => &term!("あ")
-            statement!("<S --> {SELF}>").get_predicate() => &term!("{SELF}")
-            statement!("<S --> <a --> b>>").get_predicate() => &term!("<a --> b>")
-            statement!("<S --> $1>").get_predicate() => &term!("$1")
-            statement!("<S --> (*, 1, 2, 3)>").get_predicate() => &term!("(*, 1, 2, 3)")
+        #[test]
+        fn subject_predicate() -> AResult {
+            macro_once! {
+                // * 🚩模式：陈述 ⇒ [主词, 谓词]
+                macro test($($statement:expr => [$subject:literal, $predicate:literal])*) {
+                    asserts! {$(
+                        statement!(mut $statement).subject() => &term!($subject)
+                        statement!(mut $statement).predicate() => &term!($predicate)
+                    )*}
+                }
+                "<A --> B>"             => ["A", "B"]
+                "<あ ==> α>"            => ["あ", "α"]
+                "<{SELF} --> [good]>"   => ["{SELF}", "[good]"]
+                "<<a --> b> ==> {C}>"   => ["<a --> b>", "{C}"]
+                "<$1 --> [$2]>"         => ["$1", "[$2]"]
+                "<(*, 1, 2, 3) ==> 4>"  => ["(*, 1, 2, 3)", "4"]
+                // ! 实例、属性、实例属性 ⇒ 继承
+                "<A {-- B>"             => ["{A}",  "B"]
+                "<A --] B>"             => [ "A",  "[B]"]
+                "<A {-] B>"             => ["{A}", "[B]"]
+            }
+            ok!()
         }
-        ok!()
+
+        #[test]
+        fn to_ref() -> AResult {
+            fn test(mut term: Term) {
+                // * 🚩非陈述⇒返回 | 🎯检验「检验函数」
+                if !term.is_statement() {
+                    return;
+                }
+                // * 🚩构建陈述的可变引用
+                let mut statement = term.as_statement_mut().expect("是陈述了还转换失败");
+                // * 🚩测试/Deref
+                assert!(!statement.as_statement().unwrap().invalid());
+                // * 🚩假定陈述有效
+                statement.subject().identifier = "".into();
+                // * 🚩转换为不可变引用
+                let statement = statement.into_ref();
+                assert!(!statement.invalid());
+            }
+            macro_once! {
+                macro test($($term:expr)*) {
+                    $(test(term!($term));)*
+                }
+                // !
+                "A"
+                "A"
+            }
+            ok!()
+        }
     }
 }

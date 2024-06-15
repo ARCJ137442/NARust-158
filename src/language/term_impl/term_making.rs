@@ -52,7 +52,7 @@ impl Term {
         else
             // * 🚩其它
             return makeCompoundTerm(compound.operator(), components); */
-        let term = template.term;
+        let term = template.inner;
         if term.instanceof_image_ext() {
             Self::make_image_ext(components, template.get_placeholder_index())
         } else if term.instanceof_image_int() {

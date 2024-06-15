@@ -173,8 +173,8 @@ pub trait StructuralRules<C: TypeContext> {
         return ((((compound instanceof DifferenceExt) || (compound instanceof DifferenceInt)) && (index == 1))
                 || ((compound instanceof ImageExt) && (index != ((ImageExt) compound).getRelationIndex()))
                 || ((compound instanceof ImageInt) && (index != ((ImageInt) compound).getRelationIndex()))); */
-        compound.term.instanceof_difference() && (index == 1)
-            || compound.term.instanceof_image() && index != compound.get_placeholder_index()
+        compound.inner.instanceof_difference() && (index == 1)
+            || compound.inner.instanceof_image() && index != compound.get_placeholder_index()
     }
 
     /// 模拟`StructuralRules.structuralCompose1`
