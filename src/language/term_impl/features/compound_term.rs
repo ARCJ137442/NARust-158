@@ -71,6 +71,7 @@ pub(in crate::language) mod vec_utils {
         }
     }
 
+    /// 在[`Vec`]中移除多个词项
     pub fn remove_all(vec: &mut Vec<Term>, terms: &[Term]) -> bool {
         // * 🚩暂且直接遍历做删除
         // vec.retain(|t| !terms.contains(t)); // ! 📌【2024-06-16 11:59:47】不使用：可能对一个term in terms会删掉多个词项
@@ -82,6 +83,12 @@ pub(in crate::language) mod vec_utils {
             }
         }
         removed
+    }
+
+    /// 词项数组取交集
+    /// * 📌根据[`==`](Eq::eq)
+    pub fn retain_all(vec: &mut Vec<Term>, terms: &[Term]) {
+        vec.retain(|t| terms.contains(t));
     }
 }
 
@@ -106,6 +113,63 @@ impl Term {
                 | NEGATION_OPERATOR
         )
     }
+
+    /// 🆕用于判断词项是否为「指定类型的复合词项」，并尝试返回「复合词项」的引用信息
+    /// * 📌包括陈述
+    /// * 🚩模式匹配后返回一个[`Option`]，只在其为「符合指定类型的词项」时为[`Some`]
+    /// * 🚩返回不可变引用
+    pub fn as_compound_type(&self, compound_class: impl AsRef<str>) -> Option<CompoundTermRef> {
+        matches_or! {
+            ?self.as_compound(),
+            Some(compound)
+                // * 🚩标识符相等
+                if compound_class.as_ref() == self.identifier()
+                // * 🚩内部（类型相等）的复合词项
+                => compound
+        }
+    }
+
+    /// 🆕用于判断词项是否为「指定类型的复合词项」
+    /// * 📌包括陈述
+    /// * 🚩模式匹配后返回一个[`Option`]，只在其为「符合指定类型的词项」时为[`Some`]
+    /// * 🚩返回内部所有元素的所有权
+    pub fn unwrap_compound_components(self) -> Option<Box<[Term]>> {
+        matches_or! {
+            ?self,
+            // * 🚩匹配到如下结构⇒返回Some，否则返回None
+            Term {
+                // * 🚩内容为「复合词项」
+                components: TermComponents::Compound(terms),
+                ..
+            }
+            // * 🚩返回内容
+            => terms
+        }
+    }
+
+    // /// 🆕用于判断词项是否为「指定类型的复合词项」
+    // /// * 📌包括陈述
+    // /// * 🚩模式匹配后返回一个[`Option`]，只在其为「符合指定类型的词项」时为[`Some`]
+    // /// * 🚩返回内部所有元素的所有权
+    // pub fn unwrap_compound_type_components(
+    //     self,
+    //     compound_class: impl AsRef<str>,
+    // ) -> Option<Box<[Term]>> {
+    //     matches_or! {
+    //         ?self,
+    //         // * 🚩匹配到如下结构⇒返回Some，否则返回None
+    //         Term {
+    //             identifier,
+    //             // * 🚩内容为「复合词项」
+    //             components: TermComponents::Compound(terms),
+    //             ..
+    //         }
+    //         // * 🚩标识符相等
+    //         if identifier.as_str() == compound_class.as_ref()
+    //         // * 🚩返回内容
+    //         => terms
+    //     }
+    // }
 
     /// 🆕用于判断是否为「复合词项」
     /// * ⚠️包括陈述
@@ -681,13 +745,24 @@ pub(crate) mod tests {
     use crate::{global::tests::AResult, ok};
     use nar_dev_utils::{asserts, macro_once};
 
+    /// 构建测试用复合词项
     #[macro_export]
-    macro_rules! compound {
+    macro_rules! test_compound {
+        // 可变
         (mut $($t:tt)*) => {
             term!($($t)*).as_compound_mut().unwrap()
         };
+        // 不可变
         ($($t:tt)*) => {
             term!($($t)*).as_compound().unwrap()
+        };
+    }
+
+    /// 转发，用于模块内部
+    /// * ❌【2024-06-16 13:44:19】无法在内部use
+    macro_rules! compound {
+        ($($t:tt)*) => {
+            test_compound!($($t)*)
         };
     }
 

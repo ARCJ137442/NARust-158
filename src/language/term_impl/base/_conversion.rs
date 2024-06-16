@@ -226,10 +226,10 @@ fn fold_term(term: TermLexical, var_id_map: &mut Vec<String>) -> Result<Term> {
             Term::new_set_int(fold_lexical_terms(terms, var_id_map)?)
         }
         (INTERSECTION_EXT_OPERATOR, Compound { terms, .. }) => {
-            Term::new_intersect_ext(fold_lexical_terms(terms, var_id_map)?)
+            Term::new_intersection_ext(fold_lexical_terms(terms, var_id_map)?)
         }
         (INTERSECTION_INT_OPERATOR, Compound { terms, .. }) => {
-            Term::new_intersect_int(fold_lexical_terms(terms, var_id_map)?)
+            Term::new_intersection_int(fold_lexical_terms(terms, var_id_map)?)
         }
         (DIFFERENCE_EXT_OPERATOR, Compound { terms, .. }) if terms.len() == 2 => {
             let mut iter = terms.into_iter();
@@ -247,19 +247,21 @@ fn fold_term(term: TermLexical, var_id_map: &mut Vec<String>) -> Result<Term> {
             Term::new_product(fold_lexical_terms(terms, var_id_map)?)
         }
         (IMAGE_EXT_OPERATOR, Compound { terms, .. }) => {
+            // ! ⚠️现在解析出作为「像之内容」的「词项序列」包含「占位符」作为内容
             let (i, terms) = fold_lexical_terms_as_image(terms, var_id_map)?;
             match i {
                 // 占位符在首位⇒视作「乘积」 | 📝NAL-4中保留「第0位」作「关系」词项
                 0 => Term::new_product(terms),
-                _ => Term::new_image_ext(i, terms)?,
+                _ => Term::new_image_ext(terms)?,
             }
         }
         (IMAGE_INT_OPERATOR, Compound { terms, .. }) => {
+            // ! ⚠️现在解析出作为「像之内容」的「词项序列」包含「占位符」作为内容
             let (i, terms) = fold_lexical_terms_as_image(terms, var_id_map)?;
             match i {
                 // 占位符在首位⇒视作「乘积」 | 📝NAL-4中保留「第0位」作「关系」词项
                 0 => Term::new_product(terms),
-                _ => Term::new_image_int(i, terms)?,
+                _ => Term::new_image_int(terms)?,
             }
         }
         (CONJUNCTION_OPERATOR, Compound { terms, .. }) => {

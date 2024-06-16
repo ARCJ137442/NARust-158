@@ -97,7 +97,7 @@ impl Term {
 
     /// NAL-3 / 外延交
     /// * 🚩【2024-04-21 13:39:28】使用统一的「无序不重复集合」构造组分
-    pub fn new_intersect_ext(terms: impl Into<Vec<Term>>) -> Self {
+    pub fn new_intersection_ext(terms: impl Into<Vec<Term>>) -> Self {
         Self::new(
             INTERSECTION_EXT_OPERATOR,
             TermComponents::new_multi_set(terms.into()),
@@ -106,7 +106,7 @@ impl Term {
 
     /// NAL-3 / 内涵交
     /// * 🚩【2024-04-21 13:39:28】使用统一的「无序不重复集合」构造组分
-    pub fn new_intersect_int(terms: impl Into<Vec<Term>>) -> Self {
+    pub fn new_intersection_int(terms: impl Into<Vec<Term>>) -> Self {
         Self::new(
             INTERSECTION_INT_OPERATOR,
             TermComponents::new_multi_set(terms.into()),
@@ -137,20 +137,24 @@ impl Term {
     /// NAL-4 / 外延像
     /// * 📝占位符索引≠关系词项索引（in OpenNARS）
     ///   * ⚠️占位符索引=0 ⇒ 不被允许
-    pub fn new_image_ext(i_placeholder: usize, terms: impl Into<Vec<Term>>) -> Result<Self> {
+    ///
+    /// ! ⚠️【2024-06-16 16:50:23】现在传入的「词项列表」将附带「像占位符」词项
+    pub fn new_image_ext(terms: impl Into<Vec<Term>>) -> Result<Self> {
         Ok(Self::new(
             IMAGE_EXT_OPERATOR,
-            Self::_process_image_terms(i_placeholder, terms)?,
+            Self::_process_image_terms(terms)?,
         ))
     }
 
     /// NAL-4 / 内涵像
     /// * 📝占位符索引≠关系词项索引（in OpenNARS）
     ///   * ⚠️占位符索引=0 ⇒ 不被允许
-    pub fn new_image_int(i_placeholder: usize, terms: impl Into<Vec<Term>>) -> Result<Self> {
+    ///
+    /// ! ⚠️【2024-06-16 16:50:23】现在传入的「词项列表」将附带「像占位符」词项
+    pub fn new_image_int(terms: impl Into<Vec<Term>>) -> Result<Self> {
         Ok(Self::new(
             IMAGE_INT_OPERATOR,
-            Self::_process_image_terms(i_placeholder, terms)?,
+            Self::_process_image_terms(terms)?,
         ))
     }
 
@@ -159,19 +163,25 @@ impl Term {
     /// * 🚩检查占位符索引范围
     /// * 🚩返回构造好的「词项组分」
     /// * ⚠️会返回错误
+    ///
+    /// ! ⚠️【2024-06-16 16:50:23】现在传入的「词项列表」将附带「像占位符」词项
     #[inline(always)]
-    fn _process_image_terms(
-        i_placeholder: usize,
-        terms: impl Into<Vec<Term>>,
-    ) -> Result<TermComponents> {
+    fn _process_image_terms(terms: impl Into<Vec<Term>>) -> Result<TermComponents> {
         // 转换词项列表
-        let terms = terms.into();
+        let mut terms = terms.into();
+        // 检索像占位符位置
+        let i_placeholder = terms.iter().position(Term::is_placeholder);
         // 检查占位符索引范围
-        if_return! {
-            i_placeholder == 0
-                => Err(anyhow::anyhow!("占位符不能压在「关系词项」的位置上"))
-            i_placeholder > terms.len()
-                => Err(anyhow::anyhow!("占位符索引超出范围"))
+        match i_placeholder {
+            Some(i_placeholder) => {
+                if_return! {
+                    i_placeholder == 0
+                        => Err(anyhow::anyhow!("占位符不能压在「关系词项」的位置上"))
+                    i_placeholder > terms.len()
+                        => Err(anyhow::anyhow!("占位符索引超出范围"))
+                }
+            }
+            None => return Err(anyhow::anyhow!("未在像的元素中找到占位符")),
         }
         // 构造 & 返回
         // * 🚩【2024-06-12 22:48:33】现在不再附带额外字段，统一使用一个枚举变种

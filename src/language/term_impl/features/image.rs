@@ -129,8 +129,8 @@ impl CompoundTermRef<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::compound;
     use crate::io::symbols::*;
+    use crate::test_compound as compound;
     use crate::test_term as term;
     use crate::{global::tests::AResult, ok};
     use nar_dev_utils::asserts;
@@ -142,7 +142,7 @@ mod tests {
             term!(r"(/, _, A, B)").identifier() => PRODUCT_OPERATOR,
             term!(r"(\, _, A, B)").identifier() => PRODUCT_OPERATOR,
             // 其余正常情况
-            Term::new_image_ext(1, vec![term!("S"), term!("A"), term!("B")])?.instanceof_image()
+            Term::new_image_ext(vec![term!("S"), term!("_"), term!("A"), term!("B")])?.instanceof_image()
             term!(r"(/, A, _, B)").instanceof_image()
             term!(r"(\, A, _, B)").instanceof_image()
             term!(r"(/, A, B, _)").instanceof_image()
