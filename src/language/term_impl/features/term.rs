@@ -70,10 +70,10 @@ impl Term {
         self.complexity() == 0
     }
 
-    /// 🆕用于替代Java的`getClass`
+    /// 🆕用于替代Java的`x.getClass() == y.getClass()`
     #[inline(always)]
-    pub fn get_class(&self) -> &str {
-        &self.identifier
+    pub fn is_same_type(&self, other: &Self) -> bool {
+        self.identifier == other.identifier
     }
 }
 
@@ -212,39 +212,43 @@ mod tests {
 
     /// * 【2024-04-25 16:17:17】📌直接参照的`identifier`
     #[test]
-    fn get_class() -> AResult {
+    fn is_same_type() -> AResult {
         macro_once! {
             // * 🚩模式：词项字符串 ⇒ 预期
-            macro get_class($( $s:literal => $expected:expr )*) {
-                asserts! {$(
-                    term!($s).get_class() => $expected,
-                )*}
+            macro is_same_type($( $s:literal ~ $s2:literal => $id:expr )*) {
+                $(
+                    let term = term!($s);
+                    let term2 = term!($s2);
+                    assert!(term.is_same_type(&term2));
+                    assert_eq!(term.identifier, $id);
+                    assert_eq!(term2.identifier, $id);
+                )*
             }
             // 占位符
-            "_" => PLACEHOLDER
+            "_" ~ "_" => PLACEHOLDER
             // 原子词项
-            "A" => WORD
-            "$A" => VAR_INDEPENDENT
-            "#A" => VAR_DEPENDENT
-            "?A" => VAR_QUERY
+            "A" ~ "B" => WORD
+            "$A" ~ "$x" => VAR_INDEPENDENT
+            "#A" ~ "#1" => VAR_DEPENDENT
+            "?A" ~ "?question" => VAR_QUERY
             // 复合词项
-            "{A}" => SET_EXT_OPERATOR
-            "[A]" => SET_INT_OPERATOR
-            "(&, A)" => INTERSECTION_EXT_OPERATOR
-            "(|, A)" => INTERSECTION_INT_OPERATOR
-            "(-, A, B)" => DIFFERENCE_EXT_OPERATOR
-            "(~, A, B)" => DIFFERENCE_INT_OPERATOR
-            "(*, A)" => PRODUCT_OPERATOR
-            r"(/, R, _)" => IMAGE_EXT_OPERATOR
-            r"(\, R, _)" => IMAGE_INT_OPERATOR
-            r"(&&, A)" => CONJUNCTION_OPERATOR
-            r"(||, A)" => DISJUNCTION_OPERATOR
-            r"(--, A)" => NEGATION_OPERATOR
+            "{A}" ~ "{x, y, z}" => SET_EXT_OPERATOR
+            "[A]" ~ "[ㄚ, ㄛ, ㄜ]" => SET_INT_OPERATOR
+            "(&, A)" ~ "(&, x, y)" => INTERSECTION_EXT_OPERATOR
+            "(|, A)" ~ "(|, a, b)" => INTERSECTION_INT_OPERATOR
+            "(-, A, B)" ~ "(-, B, A)" => DIFFERENCE_EXT_OPERATOR
+            "(~, A, B)" ~ "(~, B, C)" => DIFFERENCE_INT_OPERATOR
+            "(*, A)" ~ "(*, α, β, γ)" => PRODUCT_OPERATOR
+            r"(/, R, _)" ~ r"(/, R, A, _, B)" => IMAGE_EXT_OPERATOR
+            r"(\, R, _)" ~ r"(\, R, A, B, _)" => IMAGE_INT_OPERATOR
+            r"(&&, A)" ~ r"(&&, X, Y, Z)" => CONJUNCTION_OPERATOR
+            r"(||, A)" ~ r"(||, (||, A), B)" => DISJUNCTION_OPERATOR
+            r"(--, A)" ~ r"(--, (~, B, A))" => NEGATION_OPERATOR
             // 陈述
-            "<A --> B>" => INHERITANCE_RELATION
-            "<A <-> B>" => SIMILARITY_RELATION
-            "<A ==> B>" => IMPLICATION_RELATION
-            "<A <=> B>" => EQUIVALENCE_RELATION
+            "<A --> B>" ~ "<<B --> C> --> A>" => INHERITANCE_RELATION
+            "<A <-> B>" ~ "<<B <-> C> <-> A>" => SIMILARITY_RELATION
+            "<A ==> B>" ~ "<<B ==> C> ==> A>" => IMPLICATION_RELATION
+            "<A <=> B>" ~ "<<B <=> C> <=> A>" => EQUIVALENCE_RELATION
         }
         ok!()
     }

@@ -30,6 +30,23 @@ impl PartialEq for Term {
     }
 }
 
+/// 手动实现「比大小」逻辑
+/// * ⚠️不实现「变量之间相等」的逻辑
+impl Ord for Term {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        // * 🚩逻辑：先比对标识符，再比对组分
+        (self.identifier.cmp(&other.identifier))
+            .then_with(|| self.components.cmp(&other.components))
+    }
+}
+
+impl PartialOrd for Term {
+    #[inline(always)]
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
 /// 手动实现「散列」逻辑
 /// * 🎯在手动实现「判等」后，无法自动实现[`Hash`]（只能考虑到字段）
 /// * 📄OpenNARS `hashCode`：直接使用其（词法上）唯一的「名称」作为依据
@@ -849,6 +866,8 @@ mod tests {
             }
             ok!()
         }
+
+        // TODO: 【2024-06-16 12:40:20】增加「判等⇔排序」的测试
     }
 
     /// 测试 / [`TermComponents`]

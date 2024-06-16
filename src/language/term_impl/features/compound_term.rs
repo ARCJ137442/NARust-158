@@ -30,12 +30,60 @@
 //!
 //! This abstract class contains default methods for all CompoundTerms.
 
-use std::ops::{Deref, DerefMut};
-
 use crate::io::symbols::*;
 use crate::language::*;
 use nar_dev_utils::matches_or;
 use narsese::api::{GetCapacity, TermCapacity};
+use std::ops::{Deref, DerefMut};
+
+/// 对词项数组的外加方法
+/// * 🎯复现OpenNARS中ArrayList的remove, removeAll等方法
+pub(in crate::language) mod vec_utils {
+    use crate::language::Term;
+
+    /// 从[`Vec`]中移除一个词项
+    pub fn remove(vec: &mut Vec<Term>, term: &Term) -> bool {
+        /* 📄Java ArrayList
+        final Object[] es = elementData;
+        final int size = this.size;
+        int i = 0;
+        found: {
+            if (o == null) {
+                for (; i < size; i++)
+                    if (es[i] == null)
+                        break found;
+            } else {
+                for (; i < size; i++)
+                    if (o.equals(es[i]))
+                        break found;
+            }
+            return false;
+        }
+        fastRemove(es, i);
+        return true; */
+        let position = vec.iter().position(|t| t == term);
+        match position {
+            Some(i) => {
+                vec.remove(i);
+                true
+            }
+            None => false,
+        }
+    }
+
+    pub fn remove_all(vec: &mut Vec<Term>, terms: &[Term]) -> bool {
+        // * 🚩暂且直接遍历做删除
+        // vec.retain(|t| !terms.contains(t)); // ! 📌【2024-06-16 11:59:47】不使用：可能对一个term in terms会删掉多个词项
+        let mut removed = false;
+        for term in terms {
+            // * 🚩始终运行，不使用惰性的any
+            if remove(vec, term) {
+                removed = true;
+            }
+        }
+        removed
+    }
+}
 
 // 词项与「复合词项」（内部元素）无关的特性
 impl Term {
@@ -233,7 +281,7 @@ impl Term {
     /// * ⚠️非递归：不会递归比较「组分是否对应匹配」
     #[inline(always)]
     pub fn structural_match(&self, other: &Self) -> bool {
-        self.get_class() == other.get_class()
+        self.is_same_type(other)
         // * 🚩内部组分的「结构匹配」而非自身匹配
             && self
                 .components
@@ -480,7 +528,7 @@ impl CompoundTermRef<'_> {
     ///
     /// Check whether the compound contains all components of another term, or that term as a whole
     pub fn contain_all_components(&self, other: &Term) -> bool {
-        match self.inner.get_class() == other.get_class() {
+        match self.inner.is_same_type(other) {
             // * 🚩再判断内层是否为复合词项
             true => match other.as_compound() {
                 // * 🚩复合词项⇒深入一层
