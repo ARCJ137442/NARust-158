@@ -61,9 +61,9 @@ impl Term {
             return makeCompoundTerm(compound.operator(), components); */
         let term = template.inner;
         if term.instanceof_image_ext() {
-            Self::make_image_ext(components, template.get_placeholder_index())
+            Self::make_image_ext_arg(components)
         } else if term.instanceof_image_int() {
-            Self::make_image_int(components, template.get_placeholder_index())
+            Self::make_image_int_arg(components)
         } else {
             Self::make_compound_term_from_identifier(&term.identifier, components)
         }
@@ -500,6 +500,18 @@ impl Term {
 
     /// * 🚩从解析器构造外延像
     /// * ⚠️参数argument中含有「占位符」词项
+    ///   * ✅这点和OpenNARS相同
+    ///
+    /// ## 📄OpenNARS中的例子
+    ///
+    /// * 📄argList=[reaction, _, base] => argument=[reaction, base], index=0
+    /// * * => "(/,reaction,_,base)"
+    /// * 📄argList=[reaction, acid, _] => argument=[acid, reaction], index=1
+    /// * * => "(/,reaction,acid,_)"
+    /// * 📄argList=[neutralization, _, base] => argument=[neutralization, base], index=0
+    /// * * => "(/,neutralization,_,base)"
+    /// * 📄argList=[open, $120, _] => argument=[$120, open], index=1
+    /// * * => "(/,open,$120,_)"
     fn make_image_ext_arg(argument: Vec<Term>) -> Option<Term> {
         // * 🚩拒绝元素过少的词项 | 第一个词项需要是「关系」，除此之外必须含有至少一个元素 & 占位符
         if argument.len() < 2 {
@@ -509,8 +521,96 @@ impl Term {
         Self::new_image_ext(argument).ok()
     }
 
-    pub fn make_image_ext(argument: Vec<Term>, placeholder_index: usize) -> Option<Term> {
-        todo!("// TODO: 有待复刻")
+    /// 从一个「乘积」构造外延像
+    /// * ⚠️有关「像」的机制跟OpenNARS实现不一致，将作调整
+    ///   * 💭但在效果上是可以一致的
+    /// * 🚩整体过程：关系词项插入到最前头，然后在指定的占位符处替换
+    ///   * 📌应用「惰性复制」思路
+    ///
+    /// ## 📄OpenNARS中的例子
+    ///
+    /// * 📄product="(*,$1,sunglasses)", relation="own",  index=1 => "(/,own,$1,_)"
+    /// * 📄product="(*,bird,plant)",    relation="?1",   index=0 => "(/,?1,_,plant)"
+    /// * 📄product="(*,bird,plant)",    relation="?1",   index=1 => "(/,?1,bird,_)"
+    /// * 📄product="(*,robin,worms)",   relation="food", index=1 => "(/,food,robin,_)"
+    /// * 📄product="(*,CAT,eat,fish)",  relation="R",    index=0 => "(/,R,_,eat,fish)"
+    /// * 📄product="(*,CAT,eat,fish)",  relation="R",    index=1 => "(/,R,CAT,_,fish)"
+    /// * 📄product="(*,CAT,eat,fish)",  relation="R",    index=2 => "(/,R,CAT,eat,_)"
+    /// * 📄product="(*,b,a)", relation="(*,b,(/,like,b,_))", index=1 => "(/,like,b,_)"
+    /// * 📄product="(*,a,b)", relation="(*,(/,like,b,_),b)", index=0 => "(/,like,b,_)"
+    pub fn make_image_ext_from_product(
+        product: CompoundTermRef,
+        relation: &Term,
+        index: usize, // * 📝这个指的是「乘积里头挖空」的索引
+    ) -> Option<Term> {
+        // * 🚩关系词项是「乘积」⇒可能可以简化
+        if let Some(p2) = relation.as_compound_type(PRODUCT_OPERATOR) {
+            // * 🚩对「二元外延像」作特别的「取索引」简化
+            if product.size() == 2 && p2.size() == 2 {
+                if index == 0 && product.components[1] == p2.components[1] {
+                    // (/,(*,a,b),_,b) with [(*,a,b),b]#0
+                    // is reduced to self[0][0] = (*,a,b)[0] = a
+                    return Some(p2.components[0].clone());
+                }
+                if index == 1 && product.components[0] == p2.components[0] {
+                    // (/,(*,a,b),a,_) with [a,(*,a,b)]#1
+                    // is reduced to self[1][1] = (*,a,b)[1] = b
+                    return Some(p2.components[1].clone());
+                }
+                // TODO: 后续可以通用化？
+            }
+        }
+        // * 🚩通过「前插关系词项」与「占位符挖空」构造外延像
+        let mut argument = vec![relation.clone()];
+        for (i, term) in product.components.iter().enumerate() {
+            let term = match i == index {
+                // * 🚩要替换的位置⇒占位符
+                true => Term::new_placeholder(),
+                // * 🚩其它位置⇒惰性拷贝
+                false => term.clone(),
+            };
+            // * 🚩推送元素
+            argument.push(term);
+        }
+        // * 🚩最终从「装填好的参数」中构造词项
+        Self::make_image_ext_arg(argument)
+    }
+
+    /// 从一个已知的外延像中构造新外延像，并切换占位符的位置
+    /// * 🚩关系词项位置不变，后头词项改变位置，原占位符填充词项
+    ///
+    /// ## 📄OpenNARS中的例子
+    ///
+    /// * 📄oldImage="(/,open,{key1},_)",   component="lock",   index=0 => "(/,open,_,lock)"
+    /// * 📄oldImage="(/,uncle,_,tom)",     component="tim",    index=1 => "(/,uncle,tim,_)"
+    /// * 📄oldImage="(/,open,{key1},_)",   component="$2",     index=0 => "(/,open,_,$2)"
+    /// * 📄oldImage="(/,open,{key1},_)",   component="#1",     index=0 => "(/,open,_,#1)"
+    /// * 📄oldImage="(/,like,_,a)",        component="b",      index=1 => "(/,like,b,_)"
+    /// * 📄oldImage="(/,like,b,_)",        component="a",      index=0 => "(/,like,_,a)"
+    pub fn make_image_ext_from_image(
+        old_image: CompoundTermRef,
+        component: &Term,
+        index: usize,
+    ) -> Option<Term> {
+        // * 🚩提取信息 | `old_placeholder_index`算入了「关系词项」
+        let mut argument = vec![];
+        let old_placeholder_index = old_image.get_placeholder_index();
+        // * 🚩开始选择性添加词项（关系词项也算在内）
+        for (i, term) in old_image.components.iter().enumerate() {
+            let term = if i == index + 1 {
+                // * 🚩要替换的位置（要相对「关系词项」后移）⇒占位符
+                Term::new_placeholder()
+            } else if i == old_placeholder_index {
+                // * 🚩原先占位符的位置⇒新元素
+                component.clone()
+            } else {
+                // * 🚩其它位置⇒原词项
+                term.clone()
+            };
+            argument.push(term);
+        }
+        // * 🚩构造出新词项
+        Self::make_image_ext_arg(argument)
     }
 
     /* ImageInt */
@@ -522,6 +622,8 @@ impl Term {
     pub fn make_image_int(argument: Vec<Term>, placeholder_index: usize) -> Option<Term> {
         todo!("// TODO: 有待复刻")
     }
+
+    /* Conjunction */
 
     fn make_conjunction_arg(mut argument: Vec<Term>) -> Option<Term> {
         todo!("// TODO: 有待复刻")
@@ -663,55 +765,143 @@ mod tests {
     use crate::{global::tests::AResult, ok, test_compound as compound, test_term as term};
     use nar_dev_utils::macro_once;
 
-    #[cfg(TODO)] // TODO: 有待复用
-    #[test]
-    fn new_sym_statement() -> AResult {
-        asserts! {
-            // 继承⇒相似
-            Term::new_sym_statement(INHERITANCE_RELATION, term!("A"), term!("B"))
-                => term!("<A <-> B>")
-            // 蕴含⇒等价
-            Term::new_sym_statement(IMPLICATION_RELATION, term!("A"), term!("B"))
-                => term!("<A <=> B>")
-        }
-        ok!()
-    }
+    /// 具体的词项构造
+    /// * 📄外延集、内涵集……
+    mod concrete_type {
+        use super::*;
 
-    #[test]
-    fn reduce_components() -> AResult {
-        fn test(t: Term, to_reduce: &Term) {
-            let c = t.as_compound().unwrap();
-            let new_c = c.reduce_components(to_reduce);
-            // TODO: 需要等到「完整实现」之后才能测试
-        }
-        ok!()
-    }
-
-    #[test]
-    fn can_extract() -> AResult {
-        macro_once! {
-            // * 🚩模式：词项字符串⇒预期
-            macro test($($term:expr => $expected:expr)*) {
-                $(
-                    assert_eq!(term!($term).as_compound().unwrap().can_extract_to_inner(), $expected);
-                )*
+        #[test]
+        fn make_image_ext_arg() -> AResult {
+            macro_once! {
+                // * 🚩模式：词项列表 ⇒ 预期词项
+                macro test($($arg_list:tt => $expected:expr;)*) {
+                    $(
+                        let arg_list: Vec<_> = term!($arg_list).into();
+                        let image = Term::make_image_ext_arg(arg_list).expect("解析词项失败！");
+                        let expected = term!($expected);
+                        assert_eq!(image, expected);
+                    )*
+                }
+                ["reaction", "_", "base"] => "(/,reaction,_,base)";
+                ["reaction", "acid", "_"] => "(/,reaction,acid,_)";
+                ["neutralization", "_", "base"] => "(/,neutralization,_,base)";
+                ["open", "$120", "_"] => "(/,open,$120,_)";
             }
-            // * 🚩正例
-            "(&&, A)" => true
-            "(||, A)" => true
-            "(&, A)" => true
-            "(|, A)" => true
-            "(-, A, B)" => true
-            "(~, A, B)" => true
-            // * 🚩反例
-            "{A}" => false
-            "[A]" => false
+            ok!()
         }
-        ok!()
+
+        #[test]
+        fn make_image_ext_from_product() -> AResult {
+            macro_once! {
+                // * 🚩模式：词项列表 ⇒ 预期词项
+                macro test($($product:tt, $relation:tt, $index:tt => $expected:expr;)*) {
+                    $(
+                        let p = term!($product);
+                        let product = p.as_compound().expect("解析出的不是复合词项！");
+                        let relation = term!($relation);
+                        let index = $index;
+                        let image = Term::make_image_ext_from_product(product, &relation, index).expect("词项制作失败！");
+                        let expected = term!($expected);
+                        assert_eq!(image, expected, "{product}, {relation}, {index} => {image} != {expected}");
+                    )*
+                }
+                "(*,$1,sunglasses)", "own",  1 => "(/,own,$1,_)";
+                "(*,bird,plant)",    "?1",   0 => "(/,?1,_,plant)";
+                "(*,bird,plant)",    "?1",   1 => "(/,?1,bird,_)";
+                "(*,robin,worms)",   "food", 1 => "(/,food,robin,_)";
+                "(*,CAT,eat,fish)",  "R",    0 => "(/,R,_,eat,fish)";
+                "(*,CAT,eat,fish)",  "R",    1 => "(/,R,CAT,_,fish)";
+                "(*,CAT,eat,fish)",  "R",    2 => "(/,R,CAT,eat,_)";
+                "(*,b,a)", "(*,b,(/,like,b,_))", 1 => "(/,like,b,_)";
+                "(*,a,b)", "(*,(/,like,b,_),b)", 0 => "(/,like,b,_)";
+            }
+            ok!()
+        }
+
+        #[test]
+        fn make_image_ext_from_image() -> AResult {
+            macro_once! {
+                // * 🚩模式：词项列表 ⇒ 预期词项
+                macro test($($image:tt, $component:tt, $index:tt => $expected:expr;)*) {
+                    $(
+                        let i = term!($image);
+                        let image = i.as_compound().expect("解析出的不是复合词项！");
+                        let component = term!($component);
+                        let index = $index;
+                        let image = Term::make_image_ext_from_image(image, &component, index).expect("词项制作失败！");
+                        let expected = term!($expected);
+                        assert_eq!(image, expected, "{image}, {component}, {index} => {image} != {expected}");
+                    )*
+                }
+                "(/,open,{key1},_)",   "lock",   0 => "(/,open,_,lock)";
+                "(/,uncle,_,tom)",     "tim",    1 => "(/,uncle,tim,_)";
+                "(/,open,{key1},_)",   "$2",     0 => "(/,open,_,$2)";
+                "(/,open,{key1},_)",   "#1",     0 => "(/,open,_,#1)";
+                "(/,like,_,a)",        "b",      1 => "(/,like,b,_)";
+                "(/,like,b,_)",        "a",      0 => "(/,like,_,a)";
+            }
+            ok!()
+        }
     }
 
-    #[test]
-    fn set_component() -> AResult {
-        ok!()
+    mod compound {
+        use super::*;
+
+        #[test]
+        fn can_extract() -> AResult {
+            macro_once! {
+                // * 🚩模式：词项字符串⇒预期
+                macro test($($term:expr => $expected:expr)*) {
+                    $(
+                        assert_eq!(term!($term).as_compound().unwrap().can_extract_to_inner(), $expected);
+                    )*
+                }
+                // * 🚩正例
+                "(&&, A)" => true
+                "(||, A)" => true
+                "(&, A)" => true
+                "(|, A)" => true
+                "(-, A, B)" => true
+                "(~, A, B)" => true
+                // * 🚩反例
+                "{A}" => false
+                "[A]" => false
+            }
+            ok!()
+        }
+
+        #[test]
+        fn reduce_components() -> AResult {
+            fn test(t: Term, to_reduce: &Term) {
+                let c = t.as_compound().unwrap();
+                let new_c = c.reduce_components(to_reduce);
+                // TODO: 需要等到「完整实现」之后才能测试
+            }
+            ok!()
+        }
+
+        #[test]
+        fn set_component() -> AResult {
+            // TODO: 等待「制作词项」所有方法均完成
+            ok!()
+        }
+    }
+
+    mod statement {
+        use super::*;
+
+        #[cfg(TODO)] // TODO: 有待复用
+        #[test]
+        fn new_sym_statement() -> AResult {
+            asserts! {
+                // 继承⇒相似
+                Term::new_sym_statement(INHERITANCE_RELATION, term!("A"), term!("B"))
+                    => term!("<A <-> B>")
+                // 蕴含⇒等价
+                Term::new_sym_statement(IMPLICATION_RELATION, term!("A"), term!("B"))
+                    => term!("<A <=> B>")
+            }
+            ok!()
+        }
     }
 }

@@ -20,7 +20,10 @@
 //! A statement is a compound term, consisting of a subject, a predicate, and a relation symbol in between.
 //! It can be of either first-order or higher-order.
 
-use std::ops::{Deref, DerefMut};
+use std::{
+    fmt::{Display, Formatter},
+    ops::{Deref, DerefMut},
+};
 
 use super::compound_term::CompoundTermRef;
 use crate::io::symbols::*;
@@ -317,6 +320,13 @@ impl StatementRef<'_> {
     }
 }
 
+/// 转发「呈现」方法到「内部词项」
+impl Display for StatementRef<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        self.statement.fmt(f)
+    }
+}
+
 /// 向词项本身的自动解引用
 /// * 🎯让「陈述引用」可以被看作是一个普通的词项
 impl Deref for StatementRef<'_> {
@@ -403,6 +413,13 @@ impl StatementRefMut<'_> {
         debug_assert!(self.is_statement());
         // SAFETY: 保证「陈述词项」一定从「复合词项」中来
         unsafe { self.statement.as_compound_mut_unchecked() }
+    }
+}
+
+/// 转发「呈现」方法到「内部词项」
+impl Display for StatementRefMut<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        self.statement.fmt(f)
     }
 }
 

@@ -34,7 +34,10 @@ use crate::io::symbols::*;
 use crate::language::*;
 use nar_dev_utils::matches_or;
 use narsese::api::{GetCapacity, TermCapacity};
-use std::ops::{Deref, DerefMut};
+use std::{
+    fmt::{Display, Formatter},
+    ops::{Deref, DerefMut},
+};
 
 /// 对词项数组的外加方法
 /// * 🎯复现OpenNARS中ArrayList的remove, removeAll等方法
@@ -606,6 +609,13 @@ impl CompoundTermRef<'_> {
     }
 }
 
+/// 转发「呈现」方法到「内部词项」
+impl Display for CompoundTermRef<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        self.inner.fmt(f)
+    }
+}
+
 /// 向词项本身的自动解引用
 /// * 🎯让「复合词项引用」可以被看作是一个普通的词项
 impl Deref for CompoundTermRef<'_> {
@@ -706,6 +716,13 @@ impl CompoundTermRefMut<'_> {
         let new_components = placeholder.sort_dedup();
         // * 🚩将「新组分」赋值回原先的组分，原先位置上的「占位符」被覆盖
         self.inner.components = new_components;
+    }
+}
+
+/// 转发「呈现」方法到「内部词项」
+impl Display for CompoundTermRefMut<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        self.inner.fmt(f)
     }
 }
 
