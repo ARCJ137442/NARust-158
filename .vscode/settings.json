@@ -10,6 +10,7 @@
         "nogui",
         "powf",
         "powi",
-        "thiserror"
+        "thiserror",
+        "Tweety"
     ]
 }

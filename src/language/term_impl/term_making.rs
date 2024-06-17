@@ -174,162 +174,84 @@ impl Term {
 
     /* IntersectionExt */
 
-    pub fn make_intersection_ext(term1: Term, term2: Term) -> Option<Term> {
+    /// 统一的「外延交/内涵交」制作
+    /// * 🔧term1、term2：参与制作的两个词项
+    /// * 🚩统一的「外延/内涵」参数前缀：要么统一选左侧，要么统一选右侧
+    ///   * 左⇒构造**外延**交
+    ///   * 右⇒构造**内涵**交
+    #[allow(clippy::too_many_arguments)]
+    fn make_intersection(
+        term1: Term,
+        term2: Term,
+        // * 📌有关「同相」的参数：外延→外延，内涵→内涵
+        ex_in_set_operator: &str,
+        ex_in_intersection_operator: &str,
+        ex_in_make_set_arg: fn(Vec<Term>) -> Option<Term>,
+        ex_in_make_intersection_vec: fn(Vec<Term>) -> Option<Term>,
+        // * 📌有关「反相」的参数：外延→内涵，内涵→外延
+        in_ex_set_operator: &str,
+        in_ex_make_set_arg: fn(Vec<Term>) -> Option<Term>,
+    ) -> Option<Term> {
         // * 🚩预置「词项列表」与「词项制作」
         let mut terms = vec![];
         let make: fn(Vec<Term>) -> Option<Term>;
-        // * 🚩两个内涵集取外延交 ⇒ 外延交=内涵并 ⇒ 取并集
+        // * 🚩两个内涵集取外延交 ⇒ 外延交=内涵并 ⇒ 取并集 | 两个外延集取内涵交 ⇒ 内涵交=外延并 ⇒ 取并集
         // * 📄[A,B] & [C,D] = [A,B,C,D]
-        if let [Some(s1), Some(s2)] = [
-            term1.as_compound_type(SET_INT_OPERATOR),
-            term2.as_compound_type(SET_INT_OPERATOR),
-        ] {
-            // * 🚩s1加入最终词项集
-            terms.extend(s1.components.iter().cloned());
-            // * 🚩s2加入最终词项集
-            terms.extend(s2.components.iter().cloned());
-            // * 🚩最终生成内涵集
-            make = Self::make_set_int_arg;
-        }
-        // * 🚩两个外延集取外延交 ⇒ 取交集
-        // * 📄{A,B} & {B,C} = {B}
-        else if let [Some(s1), Some(s2)] = [
-            term1.as_compound_type(SET_EXT_OPERATOR),
-            term2.as_compound_type(SET_EXT_OPERATOR),
-        ] {
-            // * 🚩s1加入最终词项集
-            terms.extend(s1.components.iter().cloned());
-            // * 🚩加入的词项集和s2取交集
-            vec_utils::retain_all(&mut terms, s2.components);
-            // * 🚩最终生成外延集
-            make = Self::make_set_ext_arg;
-        } else {
-            // * 🚩均生成外延交 | 注意：在OpenNARS中是传入集合然后重载，此处即改为「直接传递类集合数组」
-            make = Self::make_intersection_ext_vec;
-            match [
-                term1.as_compound_type(INTERSECTION_EXT_OPERATOR),
-                term2.as_compound_type(INTERSECTION_EXT_OPERATOR),
-            ] {
-                // * 🚩左右都是外延交 ⇒ 取交集
-                // * 📄(&,P,Q) & (&,R,S) = (&,P,Q,R,S)
-                [Some(s1), Some(s2)] => {
-                    terms.extend(s1.components.iter().cloned());
-                    terms.extend(s2.components.iter().cloned());
-                }
-                // * 🚩仅左边是外延交 ⇒ 右边加进左边
-                // * 📄(&,P,Q) & R = (&,P,Q,R)
-                [Some(s1), None] => {
-                    terms.extend(s1.components.iter().cloned());
-                    terms.push(term2);
-                }
-                // * 🚩仅右边是外延交 ⇒ 左边加进右边
-                // * 📄R & (&,P,Q) = (&,P,Q,R)
-                [None, Some(s2)] => {
-                    terms.extend(s2.components.iter().cloned());
-                    terms.push(term1);
-                }
-                // * 🚩纯默认 ⇒ 直接添加
-                // * 📄P & Q = (&,P,Q)
-                _ => {
-                    terms.push(term1);
-                    terms.push(term2);
-                }
-            }
-        }
-
-        // * 🚩将「最终词项集」视作「集合」重排去重，然后加入「制作」
-        TermComponents::sort_dedup_term_vec(&mut terms);
-        make(terms)
-    }
-
-    /// * 📝同时包括「用户输入」与「从参数构造」两种来源
-    /// * 📄来源1：结构规则「structuralCompose2」
-    /// * 🆕现在构造时也会用reduce逻辑尝试合并
-    fn make_intersection_ext_arg(mut argument: Vec<Term>) -> Option<Term> {
-        // * 🆕🚩做一个reduce的操作 | 此版本中是从尾到头，总体逻辑仍然一样
-        // * ✅↓此处已含有「列表为空⇒返回空」的逻辑
-        let mut term = argument.pop()?;
-        // * 🚩取出剩下的
-        while let Some(t) = argument.pop() {
-            // * 🚩尝试做交集：失败⇒返回空
-            let new_term = Self::make_intersection_ext(term, t)?;
-            // * 🚩更新
-            term = new_term;
-        }
-        // * 🚩返回
-        Some(term)
-    }
-
-    /// * 🚩只依照集合数量进行化简
-    fn make_intersection_ext_vec(mut terms: Vec<Term>) -> Option<Term> {
-        match terms.len() {
-            // * 🚩空集⇒空
-            0 => None,
-            // * 🚩单个元素⇒直接取元素
-            1 => terms.pop(),
-            // * 🚩其它⇒新建词项
-            _ => Some(Term::new_intersection_ext(terms)),
-        }
-    }
-
-    /* IntersectionInt */
-
-    pub fn make_intersection_int(term1: Term, term2: Term) -> Option<Term> {
-        // TODO: 或可与「制作外延交」归一化？
-        // * 🚩预置「词项列表」与「词项制作」
-        let mut terms = vec![];
-        let make: fn(Vec<Term>) -> Option<Term>;
-        // * 🚩两个外延集取内涵交 ⇒ 内涵交=外延并 ⇒ 取并集
         // * 📄{A,B} | {C,D} = {A,B,C,D}
         if let [Some(s1), Some(s2)] = [
-            term1.as_compound_type(SET_EXT_OPERATOR),
-            term2.as_compound_type(SET_EXT_OPERATOR),
+            term1.as_compound_type(in_ex_set_operator),
+            term2.as_compound_type(in_ex_set_operator),
         ] {
-            // * 🚩s1加入最终词项集
+            // * 🚩s1加入最终词项集 | s1加入最终词项集
             terms.extend(s1.components.iter().cloned());
-            // * 🚩s2加入最终词项集
+            // * 🚩s2加入最终词项集 | s2加入最终词项集
             terms.extend(s2.components.iter().cloned());
-            // * 🚩最终生成外延集
-            make = Self::make_set_ext_arg;
+            // * 🚩最终生成内涵集 | 最终生成外延集
+            make = in_ex_make_set_arg;
         }
-        // * 🚩两个内涵集取内涵交 ⇒ 取交集
+        // * 🚩两个外延集取外延交 ⇒ 取交集 | 两个内涵集取内涵交 ⇒ 取交集
+        // * 📄{A,B} & {B,C} = {B}
         // * 📄[A,B] | [B,C] = [B]
         else if let [Some(s1), Some(s2)] = [
-            term1.as_compound_type(SET_INT_OPERATOR),
-            term2.as_compound_type(SET_INT_OPERATOR),
+            term1.as_compound_type(ex_in_set_operator),
+            term2.as_compound_type(ex_in_set_operator),
         ] {
-            // * 🚩s1加入最终词项集
+            // * 🚩s1加入最终词项集 | s1加入最终词项集
             terms.extend(s1.components.iter().cloned());
-            // * 🚩加入的词项集和s2取交集
+            // * 🚩加入的词项集和s2取交集 | 加入的词项集和s2取交集
             vec_utils::retain_all(&mut terms, s2.components);
-            // * 🚩最终生成内涵集
-            make = Self::make_set_int_arg;
+            // * 🚩最终生成外延集 | 最终生成内涵集
+            make = ex_in_make_set_arg;
         } else {
-            // * 🚩均生成内涵交
-            make = Self::make_intersection_int_vec;
+            // * 🚩均生成外延交 | 注意：在OpenNARS中是传入集合然后重载，此处即改为「直接传递类集合数组」 | 均生成内涵交
+            make = ex_in_make_intersection_vec;
             match [
-                term1.as_compound_type(INTERSECTION_INT_OPERATOR),
-                term2.as_compound_type(INTERSECTION_INT_OPERATOR),
+                term1.as_compound_type(ex_in_intersection_operator),
+                term2.as_compound_type(ex_in_intersection_operator),
             ] {
-                // * 🚩左右都是内涵交 ⇒ 取交集
+                // * 🚩左右都是外延交 ⇒ 取交集 | 左右都是内涵交 ⇒ 取交集
+                // * 📄(&,P,Q) & (&,R,S) = (&,P,Q,R,S)
                 // * 📄(|,P,Q) | (|,R,S) = (|,P,Q,R,S)
                 [Some(s1), Some(s2)] => {
                     terms.extend(s1.components.iter().cloned());
                     terms.extend(s2.components.iter().cloned());
                 }
-                // * 🚩仅左边是内涵交 ⇒ 右边加进左边
+                // * 🚩仅左边是外延交 ⇒ 右边加进左边 | 仅左边是内涵交 ⇒ 右边加进左边
+                // * 📄(&,P,Q) & R = (&,P,Q,R)
                 // * 📄(|,P,Q) | R = (|,P,Q,R)
                 [Some(s1), None] => {
                     terms.extend(s1.components.iter().cloned());
                     terms.push(term2);
                 }
-                // * 🚩仅右边是内涵交 ⇒ 左边加进右边
+                // * 🚩仅右边是外延交 ⇒ 左边加进右边 | 仅右边是内涵交 ⇒ 左边加进右边
+                // * 📄R & (&,P,Q) = (&,P,Q,R)
                 // * 📄R | (|,P,Q) = (|,P,Q,R)
                 [None, Some(s2)] => {
                     terms.extend(s2.components.iter().cloned());
                     terms.push(term1);
                 }
                 // * 🚩纯默认 ⇒ 直接添加
+                // * 📄P & Q = (&,P,Q)
                 // * 📄P | Q = (|,P,Q)
                 _ => {
                     terms.push(term1);
@@ -346,14 +268,17 @@ impl Term {
     /// * 📝同时包括「用户输入」与「从参数构造」两种来源
     /// * 📄来源1：结构规则「structuralCompose2」
     /// * 🆕现在构造时也会用reduce逻辑尝试合并
-    fn make_intersection_int_arg(mut argument: Vec<Term>) -> Option<Term> {
+    fn make_intersection_arg(
+        mut argument: Vec<Term>,
+        make_arg: fn(Term, Term) -> Option<Term>,
+    ) -> Option<Term> {
         // * 🆕🚩做一个reduce的操作 | 此版本中是从尾到头，总体逻辑仍然一样
         // * ✅↓此处已含有「列表为空⇒返回空」的逻辑
         let mut term = argument.pop()?;
         // * 🚩取出剩下的
         while let Some(t) = argument.pop() {
             // * 🚩尝试做交集：失败⇒返回空
-            let new_term = Self::make_intersection_int(term, t)?;
+            let new_term = make_arg(term, t)?;
             // * 🚩更新
             term = new_term;
         }
@@ -362,15 +287,70 @@ impl Term {
     }
 
     /// * 🚩只依照集合数量进行化简
-    fn make_intersection_int_vec(mut argument: Vec<Term>) -> Option<Term> {
-        match argument.len() {
+    fn make_intersection_vec(
+        mut terms: Vec<Term>,
+        new_intersection: fn(Vec<Term>) -> Term,
+    ) -> Option<Term> {
+        match terms.len() {
             // * 🚩空集⇒空
             0 => None,
             // * 🚩单个元素⇒直接取元素
-            1 => argument.pop(),
+            1 => terms.pop(),
             // * 🚩其它⇒新建词项
-            _ => Some(Term::new_intersection_int(argument)),
+            _ => Some(new_intersection(terms)),
         }
+    }
+
+    pub fn make_intersection_ext(term1: Term, term2: Term) -> Option<Term> {
+        Self::make_intersection(
+            term1,
+            term2,
+            SET_EXT_OPERATOR,
+            INTERSECTION_EXT_OPERATOR,
+            Self::make_set_ext_arg,
+            Self::make_intersection_ext_vec,
+            SET_INT_OPERATOR,
+            Self::make_set_int_arg,
+        )
+    }
+
+    /// * 📝同时包括「用户输入」与「从参数构造」两种来源
+    /// * 📄来源1：结构规则「structuralCompose2」
+    /// * 🆕现在构造时也会用reduce逻辑尝试合并
+    fn make_intersection_ext_arg(argument: Vec<Term>) -> Option<Term> {
+        Self::make_intersection_arg(argument, Self::make_intersection_ext)
+    }
+
+    /// * 🚩只依照集合数量进行化简
+    fn make_intersection_ext_vec(terms: Vec<Term>) -> Option<Term> {
+        Self::make_intersection_vec(terms, Self::new_intersection_ext)
+    }
+
+    /* IntersectionInt */
+
+    pub fn make_intersection_int(term1: Term, term2: Term) -> Option<Term> {
+        Self::make_intersection(
+            term1,
+            term2,
+            SET_INT_OPERATOR,
+            INTERSECTION_INT_OPERATOR,
+            Self::make_set_int_arg,
+            Self::make_intersection_int_vec,
+            SET_EXT_OPERATOR,
+            Self::make_set_ext_arg,
+        )
+    }
+
+    /// * 📝同时包括「用户输入」与「从参数构造」两种来源
+    /// * 📄来源1：结构规则「structuralCompose2」
+    /// * 🆕现在构造时也会用reduce逻辑尝试合并
+    fn make_intersection_int_arg(argument: Vec<Term>) -> Option<Term> {
+        Self::make_intersection_arg(argument, Self::make_intersection_int)
+    }
+
+    /// * 🚩只依照集合数量进行化简
+    fn make_intersection_int_vec(terms: Vec<Term>) -> Option<Term> {
+        Self::make_intersection_vec(terms, Self::new_intersection_int)
     }
 
     /* DifferenceExt */
@@ -820,6 +800,257 @@ mod tests {
     mod concrete_type {
         use super::*;
 
+        /// 快捷构造[`Option<Term>`](Option)
+        macro_rules! option_term {
+            () => {
+                None
+            };
+            (None) => {
+                None
+            };
+            ($t:literal) => {
+                Some(term!($t))
+            };
+        }
+
+        /// 快捷格式化[`Option<Term>`](Option)
+        fn format_option_term(ot: &Option<Term>) -> String {
+            match ot {
+                Some(t) => format!("Some({t})"),
+                None => "None".to_string(),
+            }
+        }
+
+        /* IntersectionExt */
+
+        #[test]
+        fn make_intersection_ext() -> AResult {
+            macro_once! {
+                // * 🚩模式：函数参数 ⇒ 预期词项
+                macro test($($term1:tt, $term2:tt => $expected:tt;)*) {
+                    $(
+                        let term1 = term!($term1);
+                        let term2 = term!($term2);
+                        let out = Term::make_intersection_ext(term1.clone(), term2.clone());
+                        let expected = option_term!($expected);
+                        assert_eq!(
+                            out, expected,
+                            "{term1}, {term2} => {} != {}",
+                            format_option_term(&out),format_option_term(&expected)
+                        );
+                    )*
+                }
+                // * ℹ️用例均源自OpenNARS实际运行
+                // 集合之间的交集
+                "{Pluto,Saturn}", "{Mars,Pluto,Venus}" => "{Pluto}";
+                "{Mars,Pluto,Venus}", "{Pluto,Saturn}" => "{Pluto}";
+                "[with_wings]", "[yellow]" => "[with_wings,yellow]";
+                "[with_wings]", "[with_wings,yellow]" => "[with_wings,with_wings,yellow]";
+                "[yellow]", "[with_wings]" => "[with_wings,yellow]";
+                "[with_wings]", "[with_wings]" => "[with_wings,with_wings]";
+                "[with_wings]", "[yellow]" => "[with_wings,yellow]";
+                "[yellow]", "[with_wings]" => "[with_wings,yellow]";
+                "{Mars,Venus}", "{Pluto,Saturn}" => None;
+                "{Tweety}", "{Birdie}" => None;
+                "{Pluto,Saturn}", "{Mars,Venus}" => None;
+                // 其它情形
+                "robin", "swan" => "(&,robin,swan)";
+                "flyer", "{Birdie}" => "(&,flyer,{Birdie})";
+                "{Birdie}", "bird" => "(&,bird,{Birdie})";
+                "bird", "(|,#1,flyer)" => "(&,bird,(|,#1,flyer))";
+                "#1", "bird" => "(&,#1,bird)";
+                "(&,flyer,{Birdie})", "[yellow]" => "(&,flyer,[yellow],{Birdie})";
+                "bird", "[yellow]" => "(&,bird,[yellow])";
+                "chess", "sport" => "(&,chess,sport)";
+                "bird", "{Birdie}" => "(&,bird,{Birdie})";
+                "(|,bird,flyer)", "(|,bird,{Birdie})" => "(&,(|,bird,flyer),(|,bird,{Birdie}))";
+                "swan", "robin" => "(&,robin,swan)";
+                "(&,flyer,{Birdie})", "(&,bird,[yellow])" => "(&,bird,flyer,[yellow],{Birdie})";
+                "robin", "bird" => "(&,bird,robin)";
+                "robin", "{Tweety}" => "(&,robin,{Tweety})";
+                "bird", "[with-wings]" => "(&,bird,[with-wings])";
+                "bird", "animal" => "(&,animal,bird)";
+                "bird", "swan" => "(&,bird,swan)";
+                "competition", "sport" => "(&,competition,sport)";
+                "flyer", "[yellow]" => "(&,flyer,[yellow])";
+                "flyer", "#1" => "(&,#1,flyer)";
+                "bird", "tiger" => "(&,bird,tiger)";
+                "#1", "{Tweety}" => "(&,#1,{Tweety})";
+                "<{Tweety} --> bird>", "<bird --> fly>" => "(&,<bird --> fly>,<{Tweety} --> bird>)";
+                "swimmer", "animal" => "(&,animal,swimmer)";
+                "(&,bird,{Birdie})", "[yellow]" => "(&,bird,[yellow],{Birdie})";
+                "flyer", "(&,bird,[yellow])" => "(&,bird,flyer,[yellow])";
+                "{Birdie}", "[with-wings]" => "(&,[with-wings],{Birdie})";
+                "flyer", "[with-wings]" => "(&,flyer,[with-wings])";
+                "#1", "{Birdie}" => "(&,#1,{Birdie})";
+                "chess", "competition" => "(&,chess,competition)";
+                "[strong]", "(~,youth,girl)" => "(&,[strong],(~,youth,girl))";
+                "robin", "swimmer" => "(&,robin,swimmer)";
+                "sport", "chess" => "(&,chess,sport)";
+                "bird", "flyer" => "(&,bird,flyer)";
+                "swimmer", "bird" => "(&,bird,swimmer)";
+                "animal", "bird" => "(&,animal,bird)";
+                "swan", "swimmer" => "(&,swan,swimmer)";
+                "flyer", "(&,bird,{Birdie})" => "(&,bird,flyer,{Birdie})";
+                "flyer", "bird" => "(&,bird,flyer)";
+                "bird", "swimmer" => "(&,bird,swimmer)";
+                "(|,flyer,{Birdie})", "[with-wings]" => "(&,[with-wings],(|,flyer,{Birdie}))";
+                "animal", "swimmer" => "(&,animal,swimmer)";
+                "key", "{key1}" => "(&,key,{key1})";
+                "{Birdie}", "[with_wings]" => "(&,[with_wings],{Birdie})";
+                "bird", "#1" => "(&,#1,bird)";
+                "robin", "tiger" => "(&,robin,tiger)";
+                "swimmer", "robin" => "(&,robin,swimmer)";
+                "(|,flyer,{Birdie})", "(|,#1,flyer)" => "(&,(|,#1,flyer),(|,flyer,{Birdie}))";
+                "(|,bird,flyer)", "#1" => "(&,#1,(|,bird,flyer))";
+                "bird", "{Tweety}" => "(&,bird,{Tweety})";
+                "robin", "{Birdie}" => "(&,robin,{Birdie})";
+                "swan", "bird" => "(&,bird,swan)";
+                "bird", "robin" => "(&,bird,robin)";
+                "#1", "{lock1}" => "(&,#1,{lock1})";
+                "{Tweety}", "#1" => "(&,#1,{Tweety})";
+                "(|,bird,flyer)", "(|,bird,{Tweety})" => "(&,(|,bird,flyer),(|,bird,{Tweety}))";
+                "lock1", "#1" => "(&,#1,lock1)";
+                "[yellow]", "bird" => "(&,bird,[yellow])";
+                "(&,bird,{Birdie})", "flyer" => "(&,bird,flyer,{Birdie})";
+            }
+            ok!()
+        }
+
+        #[test]
+        fn make_intersection_int() -> AResult {
+            macro_once! {
+                // * 🚩模式：函数参数 ⇒ 预期词项
+                macro test($($term1:tt, $term2:tt => $expected:tt;)*) {
+                    $(
+                        let term1 = term!($term1);
+                        let term2 = term!($term2);
+                        let out = Term::make_intersection_int(term1.clone(), term2.clone());
+                        let expected = option_term!($expected);
+                        assert_eq!(
+                            out, expected,
+                            "{term1}, {term2} => {} != {}",
+                            format_option_term(&out),format_option_term(&expected)
+                        );
+                    )*
+                }
+                // * ℹ️用例均源自OpenNARS实际运行"(|,flyer,{Tweety})", "{Birdie}" => "(|,flyer,{Birdie},{Tweety})";
+                "(|,#1,bird)", "{Birdie}" => "(|,#1,bird,{Birdie})";
+                "[with_wings]", "[yellow]" => None;
+                "animal", "bird" => "(|,animal,bird)";
+                "[with-wings]", "{Tweety}" => "(|,[with-wings],{Tweety})";
+                "{Tweety}", "#1" => "(|,#1,{Tweety})";
+                "(&,#1,{lock1})", "lock1" => "(|,lock1,(&,#1,{lock1}))";
+                "{Mars,Venus}", "{Pluto,Saturn}" => "{Mars,Pluto,Saturn,Venus}";
+                "neutralization", "reaction" => "(|,neutralization,reaction)";
+                "[strong]", "(~,youth,girl)" => "(|,[strong],(~,youth,girl))";
+                "robin", "[with-wings]" => "(|,robin,[with-wings])";
+                "robin", "{Tweety}" => "(|,robin,{Tweety})";
+                "[with_wings]", "{Birdie}" => "(|,[with_wings],{Birdie})";
+                "bird", "(&,bird,{Birdie})" => "(|,bird,(&,bird,{Birdie}))";
+                "bird", "tiger" => "(|,bird,tiger)";
+                "(|,flyer,[with_wings])", "{Birdie}" => "(|,flyer,[with_wings],{Birdie})";
+                "boy", "girl" => "(|,boy,girl)";
+                "chess", "(|,chess,sport)" => "(|,chess,sport)";
+                "(&,flyer,{Birdie})", "[yellow]" => "(|,[yellow],(&,flyer,{Birdie}))";
+                "sport", "competition" => "(|,competition,sport)";
+                "flyer", "(|,bird,flyer)" => "(|,bird,flyer)";
+                "bird", "{Birdie}" => "(|,bird,{Birdie})";
+                "(&,bird,{Birdie})", "[yellow]" => "(|,[yellow],(&,bird,{Birdie}))";
+                "flyer", "[with_wings]" => "(|,flyer,[with_wings])";
+                "flyer", "[with-wings]" => "(|,flyer,[with-wings])";
+                "robin", "(|,#1,{Birdie})" => "(|,#1,robin,{Birdie})";
+                "(|,flyer,{Birdie})", "[with-wings]" => "(|,flyer,[with-wings],{Birdie})";
+                "(|,bird,robin)", "{Birdie}" => "(|,bird,robin,{Birdie})";
+                "#1", "{lock1}" => "(|,#1,{lock1})";
+                "{Birdie}", "bird" => "(|,bird,{Birdie})";
+                "swimmer", "animal" => "(|,animal,swimmer)";
+                "(~,boy,girl)", "(~,youth,girl)" => "(|,(~,boy,girl),(~,youth,girl))";
+                "[with-wings]", "(|,bird,flyer)" => "(|,bird,flyer,[with-wings])";
+                "bird", "flyer" => "(|,bird,flyer)";
+                "(&,flyer,{Birdie})", "(&,bird,{Birdie})" => "(|,(&,bird,{Birdie}),(&,flyer,{Birdie}))";
+                "#1", "(&,bird,{Birdie})" => "(|,#1,(&,bird,{Birdie}))";
+                "robin", "[yellow]" => "(|,robin,[yellow])";
+                "{Tweety}", "{Birdie}" => "{Birdie,Tweety}";
+                "#1", "robin" => "(|,#1,robin)";
+                "(&,[with-wings],{Birdie})", "(&,bird,flyer)" => "(|,(&,bird,flyer),(&,[with-wings],{Birdie}))";
+                "[with_wings]", "(|,bird,{Birdie})" => "(|,bird,[with_wings],{Birdie})";
+                "competition", "chess" => "(|,chess,competition)";
+                "[with-wings]", "(&,bird,[yellow])" => "(|,[with-wings],(&,bird,[yellow]))";
+                "[with_wings]", "[with-wings]" => None;
+                "bird", "(|,flyer,[with-wings])" => "(|,bird,flyer,[with-wings])";
+                "flyer", "(&,bird,[yellow])" => "(|,flyer,(&,bird,[yellow]))";
+                "{Birdie}", "(|,[with_wings],(&,bird,[with-wings]))" => "(|,[with_wings],{Birdie},(&,bird,[with-wings]))";
+                "chess", "competition" => "(|,chess,competition)";
+                "[with-wings]", "{Birdie}" => "(|,[with-wings],{Birdie})";
+                "swan", "bird" => "(|,bird,swan)";
+                "(|,bird,flyer)", "(|,bird,{Birdie})" => "(|,bird,flyer,{Birdie})";
+                "[with-wings]", "[with_wings,yellow]" => None;
+                "{Pluto,Saturn}", "{Mars,Pluto,Venus}" => "{Mars,Pluto,Saturn,Venus}";
+                "flyer", "[yellow]" => "(|,flyer,[yellow])";
+                "flyer", "{Birdie}" => "(|,flyer,{Birdie})";
+                "bird", "robin" => "(|,bird,robin)";
+                "bird", "animal" => "(|,animal,bird)";
+                "(|,bird,flyer)", "{Birdie}" => "(|,bird,flyer,{Birdie})";
+                "animal", "swimmer" => "(|,animal,swimmer)";
+                "robin", "swimmer" => "(|,robin,swimmer)";
+                "bird", "(|,#1,flyer)" => "(|,#1,bird,flyer)";
+                "{Birdie}", "[with_wings]" => "(|,[with_wings],{Birdie})";
+                "swan", "animal" => "(|,animal,swan)";
+                "(&,bird,{Birdie})", "flyer" => "(|,flyer,(&,bird,{Birdie}))";
+                "boy", "(~,youth,girl)" => "(|,boy,(~,youth,girl))";
+                "#1", "{Tweety}" => "(|,#1,{Tweety})";
+                "#1", "bird" => "(|,#1,bird)";
+                "[with_wings]", "(&,bird,{Birdie})" => "(|,[with_wings],(&,bird,{Birdie}))";
+                "flyer", "(&,bird,{Birdie})" => "(|,flyer,(&,bird,{Birdie}))";
+                "bird", "{Tweety}" => "(|,bird,{Tweety})";
+                "robin", "bird" => "(|,bird,robin)";
+                "{Mars,Pluto,Venus}", "{Pluto,Saturn}" => "{Mars,Pluto,Saturn,Venus}";
+                "(&,flyer,{Birdie})", "(&,bird,[yellow])" => "(|,(&,bird,[yellow]),(&,flyer,{Birdie}))";
+                "robin", "animal" => "(|,animal,robin)";
+                "[with-wings]", "(&,bird,flyer)" => "(|,[with-wings],(&,bird,flyer))";
+                "robin", "swan" => "(|,robin,swan)";
+                "robin", "#1" => "(|,#1,robin)";
+                "chess", "sport" => "(|,chess,sport)";
+                "robin", "tiger" => "(|,robin,tiger)";
+                "youth", "girl" => "(|,girl,youth)";
+                "bird", "(&,flyer,{Birdie})" => "(|,bird,(&,flyer,{Birdie}))";
+                "swimmer", "bird" => "(|,bird,swimmer)";
+                "bird", "(|,bird,flyer)" => "(|,bird,flyer)";
+                "lock1", "#1" => "(|,#1,lock1)";
+                "robin", "(&,bird,[with-wings])" => "(|,robin,(&,bird,[with-wings]))";
+                "bird", "swimmer" => "(|,bird,swimmer)";
+                "flyer", "(&,bird,[with-wings])" => "(|,flyer,(&,bird,[with-wings]))";
+                "flyer", "bird" => "(|,bird,flyer)";
+                "swimmer", "robin" => "(|,robin,swimmer)";
+                "bird", "swan" => "(|,bird,swan)";
+                "swan", "robin" => "(|,robin,swan)";
+                "flyer", "#1" => "(|,#1,flyer)";
+                "(|,#1,flyer)", "{Tweety}" => "(|,#1,flyer,{Tweety})";
+                "robin", "{Birdie}" => "(|,robin,{Birdie})";
+                "(|,bird,flyer)", "#1" => "(|,#1,bird,flyer)";
+                "[with-wings]", "(&,bird,{Birdie})" => "(|,[with-wings],(&,bird,{Birdie}))";
+                "[yellow]", "bird" => "(|,bird,[yellow])";
+                "(|,flyer,{Birdie})", "(|,#1,flyer)" => "(|,#1,flyer,{Birdie})";
+                "{Birdie}", "[with-wings]" => "(|,[with-wings],{Birdie})";
+                "(|,[with-wings],(&,bird,[yellow]))", "flyer" => "(|,flyer,[with-wings],(&,bird,[yellow]))";
+                "bird", "#1" => "(|,#1,bird)";
+                "[with_wings]", "bird" => "(|,bird,[with_wings])";
+                "bird", "[yellow]" => "(|,bird,[yellow])";
+                "{key1}", "key" => "(|,key,{key1})";
+                "flyer", "(&,flyer,{Birdie})" => "(|,flyer,(&,flyer,{Birdie}))";
+                "[with_wings]", "(&,bird,[with-wings])" => "(|,[with_wings],(&,bird,[with-wings]))";
+                "#1", "lock1" => "(|,#1,lock1)";
+                "flyer", "{Tweety}" => "(|,flyer,{Tweety})";
+                "[with-wings]", "#1" => "(|,#1,[with-wings])";
+                "#1", "{Birdie}" => "(|,#1,{Birdie})";
+                "competition", "sport" => "(|,competition,sport)";
+                "sport", "chess" => "(|,chess,sport)";
+                "bird", "[with-wings]" => "(|,bird,[with-wings])";
+            }
+            ok!()
+        }
+
         /* ImageExt */
 
         #[test]
@@ -857,6 +1088,7 @@ mod tests {
                         assert_eq!(image, expected, "{product}, {relation}, {index} => {image} != {expected}");
                     )*
                 }
+                // * ℹ️用例均源自OpenNARS实际运行
                 "(*,$1,sunglasses)", "own",                1 => "(/,own,$1,_)";
                 "(*,bird,plant)",    "?1",                 0 => "(/,?1,_,plant)";
                 "(*,bird,plant)",    "?1",                 1 => "(/,?1,bird,_)";
@@ -867,15 +1099,9 @@ mod tests {
                 "(*,b,a)",           "(*,b,(/,like,b,_))", 1 => "(/,like,b,_)";
                 "(*,a,b)",           "(*,(/,like,b,_),b)", 0 => "(/,like,b,_)";
                 // 特别替换
-                r"(*,b,(/,like,b,_))",                   r"(*,b,a)",                            1 => r"a";
                 r"(*,(/,like,b,_),b)",                   r"(*,a,b)",                            0 => r"a";
-                r"(*,b,(/,like,b,_))",                   r"(*,b,a)",                            1 => r"a";
-                r"(*,(/,like,_,a),a)",                   r"(*,b,a)",                            0 => r"b";
-                r"(*,(&,key,(/,open,_,{lock1})),lock)",  r"(*,{key1},lock)",                    0 => r"{key1}";
-                r"(*,b,(/,like,b,_))",                   r"(*,b,a)",                            1 => r"a";
                 r"(*,(&,key,(/,open,_,{lock1})),lock1)", r"(*,{key1},lock1)",                   0 => r"{key1}";
                 r"(*,(\,reaction,_,soda),base)",         r"(*,(\,neutralization,_,soda),base)", 0 => r"(\,neutralization,_,soda)";
-                r"(*,(/,like,_,a),a)",                   r"(*,b,a)",                            0 => r"b";
                 r"(*,(&,key,(/,open,_,{lock1})),lock)",  r"(*,{key1},lock)",                    0 => r"{key1}";
                 r"(*,b,(/,like,b,_))",                   r"(*,b,a)",                            1 => r"a";
                 r"(*,(/,like,_,a),a)",                   r"(*,b,a)",                            0 => r"b";
@@ -898,6 +1124,7 @@ mod tests {
                         assert_eq!(image, expected, "{image}, {component}, {index} => {image} != {expected}");
                     )*
                 }
+                // * ℹ️用例均源自OpenNARS实际运行
                 "(/,open,{key1},_)",   "lock",   0 => "(/,open,_,lock)";
                 "(/,uncle,_,tom)",     "tim",    1 => "(/,uncle,tim,_)";
                 "(/,open,{key1},_)",   "$2",     0 => "(/,open,_,$2)";
@@ -922,6 +1149,7 @@ mod tests {
                         assert_eq!(image, expected);
                     )*
                 }
+                // * ℹ️用例均源自OpenNARS实际运行
                 ["reaction", "_", "base"]       => r"(\,reaction,_,base)";
                 ["reaction", "acid", "_"]       => r"(\,reaction,acid,_)";
                 ["neutralization", "_", "base"] => r"(\,neutralization,_,base)";
@@ -945,6 +1173,7 @@ mod tests {
                         assert_eq!(image, expected, "{product}, {relation}, {index} => {image} != {expected}");
                     )*
                 }
+                // * ℹ️用例均源自OpenNARS实际运行
                 r"(*,(/,num,_))",                       "#1",                0 => r"(\,#1,_)";
                 r"(*,(\,reaction,_,soda),base)",        "neutralization",    1 => r"(\,neutralization,(\,reaction,_,soda),_)";
                 r"(*,(\,reaction,_,soda),base)",        "neutralization",    0 => r"(\,neutralization,_,base)";
@@ -968,16 +1197,10 @@ mod tests {
                 r"(*,(/,like,b,_),b)",                  "(*,a,b)",           1 => r"(\,(*,a,b),(/,like,b,_),_)";
                 // 特别替换
                 r"(*,(\,reaction,_,soda),base)",         r"(*,(\,reaction,_,soda),soda)",       1 => r"soda";
-                r"(*,(\,reaction,_,soda),base)",         r"(*,(\,reaction,_,soda),soda)",       1 => r"soda";
-                r"(*,(|,key,(/,open,_,{lock1})),lock1)", r"(*,{key1},lock1)",                   0 => r"{key1}";
                 r"(*,(\,reaction,_,soda),base)",         r"(*,acid,base)",                      0 => r"acid";
                 r"(*,acid,(\,neutralization,acid,_))",   r"(*,acid,(\,reaction,acid,_))",       1 => r"(\,reaction,acid,_)";
                 r"(*,(&,key,(/,open,_,{lock1})),lock)",  r"(*,{key1},lock)",                    0 => r"{key1}";
-                r"(*,(|,key,(/,open,_,{lock1})),lock1)", r"(*,{key1},lock1)",                   0 => r"{key1}";
                 r"(*,(\,neutralization,_,soda),base)",   r"(*,(\,reaction,_,soda),base)",       0 => r"(\,reaction,_,soda)";
-                r"(*,(&,key,(/,open,_,{lock1})),lock1)", r"(*,{key1},lock1)",                   0 => r"{key1}";
-                r"(*,(&,key,(/,open,_,{lock1})),lock)",  r"(*,{key1},lock)",                    0 => r"{key1}";
-                r"(*,(|,key,(/,open,_,{lock1})),lock1)", r"(*,{key1},lock1)",                   0 => r"{key1}";
                 r"(*,(/,open,_,#1),{lock1})",            r"(*,{key1},{lock1})",                 0 => r"{key1}";
                 r"(*,key,lock)",                         r"(*,{key1},lock)",                    0 => r"{key1}";
                 r"(*,acid,(\,reaction,acid,_))",         r"(*,acid,soda)",                      1 => r"soda";
