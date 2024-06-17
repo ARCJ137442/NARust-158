@@ -357,97 +357,96 @@ impl Term {
         Self::make_intersection_vec(terms, Self::new_intersection_int)
     }
 
-    /* DifferenceExt */
+    /* Difference */
 
-    // TODO: 有待统一逻辑
-    pub fn make_difference_ext(left: Term, right: Term) -> Option<Term> {
+    fn make_difference(
+        left: Term,
+        right: Term,
+        set_operator: &str,
+        make_set_arg: fn(Vec<Term>) -> Option<Term>,
+        new_diff: fn(Term, Term) -> Term,
+    ) -> Option<Term> {
         // * 🚩自己减自己 ⇒ 空集 ⇒ 空
         if left == right {
             return None;
         }
         match [
-            left.as_compound_type(SET_EXT_OPERATOR),
-            right.as_compound_type(SET_EXT_OPERATOR),
+            left.as_compound_type(set_operator),
+            right.as_compound_type(set_operator),
         ] {
             // * 🚩外延集的差：求差，构造外延集 | {A, B} - {A} = {B}
+            // * 🚩内涵集的差：求差，构造内涵集 | [A, B] - [A] = [B]
             [Some(..), Some(..)] => {
                 // * 🚩先解包出内部元素（开始丢弃左右所有权）
                 let [left, right] = [
-                    left.unwrap_compound_components().unwrap(), // ! 先前已假设过复合词项
-                    right.unwrap_compound_components().unwrap(), // ! 先前已假设过复合词项
+                    left.unwrap_compound_components().unwrap(), // ! 先前已假设过复合词项 |
+                    right.unwrap_compound_components().unwrap(), // ! 先前已假设过复合词项 |
                 ];
-                // * 🚩left加入最终词项集
-                // * 📝to_vec会拷贝元素，故不用之
+                // * 🚩left加入最终词项集 |
+                // * 📝to_vec会拷贝元素，故不用之 |
                 let mut terms = left.into();
-                // * 🚩加入的词项集和right取差集 // set difference
+                // * 🚩加入的词项集和right取差集 // set difference |
                 vec_utils::remove_all(&mut terms, &right);
-                // * 🚩最终生成外延集
-                Self::make_set_int_arg(terms)
+                // * 🚩最终生成外延集 |
+                make_set_arg(terms)
             }
-            // * 🚩否则：直接构造外延差 | A - B = (-,A,B)
-            _ => Some(Self::new_diff_ext(left, right)),
+            // * 🚩否则：直接构造差集
+            // * 📄A - B = (-,A,B)
+            // * 📄A ~ B = (~,A,B)
+            _ => Some(new_diff(left, right)),
         }
     }
 
-    fn make_difference_ext_arg(mut argument: Vec<Term>) -> Option<Term> {
+    fn make_difference_arg(
+        mut argument: Vec<Term>,
+        make_difference: fn(Term, Term) -> Option<Term>,
+    ) -> Option<Term> {
         match argument.len() {
-            // * 🚩单个元素：约简为内部元素 | (-,A) = A
+            // * 🚩单个元素：约简为内部元素（仅在「约简元素」reduceComponent时使用）
+            // * 📄(-,A) = A
+            // * 📄(~,A) = A
             1 => argument.pop(), // special case from CompoundTerm.reduceComponent
             // * 🚩两个元素⇒进一步判断
             2 => {
                 let right = argument.pop().unwrap();
                 let left = argument.pop().unwrap();
-                Self::make_difference_ext(left, right)
+                make_difference(left, right)
             }
             // * 🚩其它⇒空
             _ => None,
         }
+    }
+
+    /* DifferenceExt */
+
+    pub fn make_difference_ext(left: Term, right: Term) -> Option<Term> {
+        Self::make_difference(
+            left,
+            right,
+            SET_EXT_OPERATOR,
+            Self::make_set_ext_arg,
+            Self::new_diff_ext,
+        )
+    }
+
+    fn make_difference_ext_arg(argument: Vec<Term>) -> Option<Term> {
+        Self::make_difference_arg(argument, Self::make_difference_ext)
     }
 
     /* DifferenceInt */
 
     pub fn make_difference_int(left: Term, right: Term) -> Option<Term> {
-        // * 🚩自己减自己 ⇒ 空集 ⇒ 空
-        if left == right {
-            return None;
-        }
-        match [
-            left.as_compound_type(SET_INT_OPERATOR),
-            right.as_compound_type(SET_INT_OPERATOR),
-        ] {
-            // * 🚩内涵集的差：求差，构造内涵集 | [A, B] - [A] = [B]
-            [Some(..), Some(..)] => {
-                // * 🚩先解包出内部元素（开始丢弃左右所有权）
-                let [left, right] = [
-                    left.unwrap_compound_components().unwrap(), // ! 先前已假设过复合词项
-                    right.unwrap_compound_components().unwrap(), // ! 先前已假设过复合词项
-                ];
-                // * 🚩left加入最终词项集
-                // * 📝to_vec会拷贝元素，故不用之
-                let mut terms = left.into();
-                // * 🚩加入的词项集和right取差集 // set difference
-                vec_utils::remove_all(&mut terms, &right);
-                // * 🚩最终生成内涵集
-                Self::make_set_int_arg(terms)
-            }
-            // * 🚩否则：直接构造内涵差 | A - B = (-,A,B)
-            _ => Some(Self::new_diff_int(left, right)),
-        }
+        Self::make_difference(
+            left,
+            right,
+            SET_INT_OPERATOR,
+            Self::make_set_int_arg,
+            Self::new_diff_int,
+        )
     }
 
-    fn make_difference_int_arg(mut argument: Vec<Term>) -> Option<Term> {
-        match argument.len() {
-            // * 🚩单个元素：约简为内部元素 | (-,A) = A
-            1 => argument.pop(), // special case from CompoundTerm.reduceComponent
-            // * 🚩两个元素⇒进一步判断
-            2 => {
-                let right = argument.pop().unwrap();
-                let left = argument.pop().unwrap();
-                Self::make_difference_int(left, right)
-            }
-            // * 🚩其它⇒空
-            _ => None,
-        }
+    fn make_difference_int_arg(argument: Vec<Term>) -> Option<Term> {
+        Self::make_difference_arg(argument, Self::make_difference_int)
     }
 
     /* Product */
@@ -1033,6 +1032,7 @@ mod tests {
             ok!()
         }
 
+        /* IntersectionInt */
         #[test]
         fn make_intersection_int() -> AResult {
             macro_once! {
@@ -1163,6 +1163,183 @@ mod tests {
                 "competition", "sport" => "(|,competition,sport)";
                 "sport", "chess" => "(|,chess,sport)";
                 "bird", "[with-wings]" => "(|,bird,[with-wings])";
+            }
+            ok!()
+        }
+
+        /* DifferenceExt */
+
+        #[test]
+        fn make_difference_ext_arg() -> AResult {
+            macro_once! {
+                // * 🚩模式：词项列表 ⇒ 预期词项
+                macro test($($arg_list:tt => $expected:expr;)*) {
+                    $(
+                        let arg_list: Vec<_> = term!($arg_list).into();
+                        let out = Term::make_difference_ext_arg(arg_list).expect("解析词项失败！");
+                        let expected = term!($expected);
+                        assert_eq!(out, expected);
+                    )*
+                }
+                // * ℹ️用例均源自OpenNARS实际运行
+                ["swimmer", "bird"] => "(-,swimmer,bird)";
+                ["mammal", "swimmer"] => "(-,mammal,swimmer)";
+                ["bird", "swimmer"] => "(-,bird,swimmer)";
+                ["swimmer", "animal"] => "(-,swimmer,animal)";
+            }
+            ok!()
+        }
+
+        #[test]
+        fn make_difference_ext() -> AResult {
+            macro_once! {
+                // * 🚩模式：词项列表 ⇒ 预期词项
+                macro test($($term1:tt, $term2:tt => $expected:expr;)*) {
+                    $(
+                        let term1 = term!($term1);
+                        let term2 = term!($term2);
+                        let out = Term::make_difference_ext(term1.clone(), term2.clone());
+                        let expected = option_term!($expected);
+                        assert_eq!(
+                            out, expected,
+                            "{term1}, {term2} => {} != {}",
+                            format_option_term(&out), format_option_term(&expected)
+                        );
+                    )*
+                }
+                // * ℹ️用例均源自OpenNARS实际运行
+                "[yellow]", "bird" => "(-,[yellow],bird)";
+                "(|,bird,{Birdie})", "[with_wings]" => "(-,(|,bird,{Birdie}),[with_wings])";
+                "bird", "[yellow]" => "(-,bird,[yellow])";
+                "bird", "[with_wings]" => "(-,bird,[with_wings])";
+                "[yellow]", "{Birdie}" => "(-,[yellow],{Birdie})";
+                "(|,[yellow],{Birdie})", "flyer" => "(-,(|,[yellow],{Birdie}),flyer)";
+                "(|,chess,competition)", "(|,competition,sport)" => "(-,(|,chess,competition),(|,competition,sport))";
+                "{Mars,Pluto,Venus}", "{Pluto,Saturn}" => "{Mars,Venus}";
+                "(|,[yellow],{Birdie})", "bird" => "(-,(|,[yellow],{Birdie}),bird)";
+                "swan", "swimmer" => "(-,swan,swimmer)";
+                "(|,flyer,{Birdie})", "[with_wings]" => "(-,(|,flyer,{Birdie}),[with_wings])";
+                "swan", "flyer" => "(-,swan,flyer)";
+                "(|,[yellow],{Birdie})", "[with_wings]" => "(-,(|,[yellow],{Birdie}),[with_wings])";
+                "robin", "bird" => "(-,robin,bird)";
+                "[yellow]", "[with_wings]" => "(-,[yellow],[with_wings])";
+                "swimmer", "swan" => "(-,swimmer,swan)";
+                "bird", "swimmer" => "(-,bird,swimmer)";
+                "{Birdie}", "flyer" => "(-,{Birdie},flyer)";
+                "(&,bird,flyer)", "[with_wings]" => "(-,(&,bird,flyer),[with_wings])";
+                "(/,open,_,#1)", "(/,open,_,{lock1})" => "(-,(/,open,_,#1),(/,open,_,{lock1}))";
+                "flyer", "[with_wings]" => "(-,flyer,[with_wings])";
+                "swan", "animal" => "(-,swan,animal)";
+                "(&,bird,(|,[yellow],{Birdie}))", "[with_wings]" => "(-,(&,bird,(|,[yellow],{Birdie})),[with_wings])";
+                "bird", "flyer" => "(-,bird,flyer)";
+                "mammal", "swimmer" => "(-,mammal,swimmer)";
+                "(|,flyer,[yellow])", "{Birdie}" => "(-,(|,flyer,[yellow]),{Birdie})";
+                "(&,flyer,{Birdie})", "[with_wings]" => "(-,(&,flyer,{Birdie}),[with_wings])";
+                "swimmer", "animal" => "(-,swimmer,animal)";
+                "(|,flyer,[with_wings])", "[yellow]" => "(-,(|,flyer,[with_wings]),[yellow])";
+                "animal", "swimmer" => "(-,animal,swimmer)";
+                "bird", "animal" => "(-,bird,animal)";
+                "(|,bird,flyer)", "[with_wings]" => "(-,(|,bird,flyer),[with_wings])";
+                "{Birdie}", "[with_wings]" => "(-,{Birdie},[with_wings])";
+                "(|,bird,swimmer)", "animal" => "(-,(|,bird,swimmer),animal)";
+                "(|,flyer,[yellow])", "[with_wings]" => "(-,(|,flyer,[yellow]),[with_wings])";
+                "(&,flyer,[yellow])", "[with_wings]" => "(-,(&,flyer,[yellow]),[with_wings])";
+                "(|,bird,{Birdie})", "[yellow]" => "(-,(|,bird,{Birdie}),[yellow])";
+                "swimmer", "bird" => "(-,swimmer,bird)";
+                "swan", "bird" => "(-,swan,bird)";
+                "robin", "animal" => "(-,robin,animal)";
+            }
+            ok!()
+        }
+
+        /* DifferenceInt */
+
+        #[test]
+        fn make_difference_int_arg() -> AResult {
+            macro_once! {
+                // * 🚩模式：词项列表 ⇒ 预期词项
+                macro test($($arg_list:tt => $expected:expr;)*) {
+                    $(
+                        let arg_list: Vec<_> = term!($arg_list).into();
+                        let out = Term::make_difference_int_arg(arg_list).expect("解析词项失败！");
+                        let expected = term!($expected);
+                        assert_eq!(out, expected);
+                    )*
+                }
+                // * ℹ️用例均源自OpenNARS实际运行
+                ["(~,boy,girl)", "girl"] => "(~,(~,boy,girl),girl)";
+                ["swimmer", "swan"] => "(~,swimmer,swan)";
+                ["youth", "girl"] => "(~,youth,girl)";
+                ["(|,boy,girl)", "girl"] => "(~,(|,boy,girl),girl)";
+                ["boy", "girl"] => "(~,boy,girl)";
+                ["(/,(*,tim,tom),tom,_)", "(/,uncle,tom,_)"] => "(~,(/,(*,tim,tom),tom,_),(/,uncle,tom,_))";
+                ["[strong]", "girl"] => "(~,[strong],girl)";
+            }
+            ok!()
+        }
+
+        #[test]
+        fn make_difference_int() -> AResult {
+            macro_once! {
+                // * 🚩模式：词项列表 ⇒ 预期词项
+                macro test($($term1:tt, $term2:tt => $expected:expr;)*) {
+                    $(
+                        let term1 = term!($term1);
+                        let term2 = term!($term2);
+                        let out = Term::make_difference_int(term1.clone(), term2.clone());
+                        let expected = option_term!($expected);
+                        assert_eq!(
+                            out, expected,
+                            "{term1}, {term2} => {} != {}",
+                            format_option_term(&out), format_option_term(&expected)
+                        );
+                    )*
+                }
+                // * ℹ️用例均源自OpenNARS实际运行
+                "{Birdie}", "(|,flyer,robin)" => "(~,{Birdie},(|,flyer,robin))";
+                "{Tweety}", "(|,flyer,robin)" => "(~,{Tweety},(|,flyer,robin))";
+                "swimmer", "bird" => "(~,swimmer,bird)";
+                "bird", "robin" => "(~,bird,robin)";
+                "tiger", "swan" => "(~,tiger,swan)";
+                "sport", "chess" => "(~,sport,chess)";
+                "robin", "bird" => "(~,robin,bird)";
+                "(&,flyer,{Tweety})", "robin" => "(~,(&,flyer,{Tweety}),robin)";
+                "(/,open,_,lock)", "{key1}" => "(~,(/,open,_,lock),{key1})";
+                "swan", "robin" => "(~,swan,robin)";
+                "tiger", "robin" => "(~,tiger,robin)";
+                "{Tweety}", "robin" => "(~,{Tweety},robin)";
+                "(&,flyer,{Birdie})", "(&,flyer,robin)" => "(~,(&,flyer,{Birdie}),(&,flyer,robin))";
+                "boy", "girl" => "(~,boy,girl)";
+                "animal", "robin" => "(~,animal,robin)";
+                "(/,(*,tim,tom),tom,_)", "(/,uncle,tom,_)" => "(~,(/,(*,tim,tom),tom,_),(/,uncle,tom,_))";
+                "bird", "(|,robin,tiger)" => "(~,bird,(|,robin,tiger))";
+                "(/,(*,tim,tom),tom,_)", "tim" => "(~,(/,(*,tim,tom),tom,_),tim)";
+                "(&,bird,robin)", "tiger" => "(~,(&,bird,robin),tiger)";
+                "youth", "girl" => "(~,youth,girl)";
+                "(|,flyer,[with_wings],{Birdie})", "robin" => "(~,(|,flyer,[with_wings],{Birdie}),robin)";
+                "(|,bird,robin)", "tiger" => "(~,(|,bird,robin),tiger)";
+                "(&,flyer,{Tweety})", "(&,flyer,robin)" => "(~,(&,flyer,{Tweety}),(&,flyer,robin))";
+                "swan", "bird" => "(~,swan,bird)";
+                "swan", "tiger" => "(~,swan,tiger)";
+                "swimmer", "swan" => "(~,swimmer,swan)";
+                "chess", "sport" => "(~,chess,sport)";
+                "tiger", "bird" => "(~,tiger,bird)";
+                "(&,flyer,{Birdie})", "robin" => "(~,(&,flyer,{Birdie}),robin)";
+                "(|,boy,girl)", "girl" => "(~,(|,boy,girl),girl)";
+                "tiger", "swimmer" => "(~,tiger,swimmer)";
+                "flyer", "robin" => "(~,flyer,robin)";
+                "{Tweety}", "(&,flyer,robin)" => "(~,{Tweety},(&,flyer,robin))";
+                "swimmer", "robin" => "(~,swimmer,robin)";
+                "animal", "bird" => "(~,animal,bird)";
+                "bird", "#1" => "(~,bird,#1)";
+                "{lock1}", "#1" => "(~,{lock1},#1)";
+                "{Birdie}", "robin" => "(~,{Birdie},robin)";
+                "(~,boy,girl)", "girl" => "(~,(~,boy,girl),girl)";
+                "{Tweety}", "(|,robin,[yellow],{Birdie})" => "(~,{Tweety},(|,robin,[yellow],{Birdie}))";
+                "swimmer", "tiger" => "(~,swimmer,tiger)";
+                "swimmer", "#1" => "(~,swimmer,#1)";
+                "[strong]", "girl" => "(~,[strong],girl)";
+                "(|,flyer,{Birdie})", "robin" => "(~,(|,flyer,{Birdie}),robin)";
             }
             ok!()
         }
