@@ -543,9 +543,20 @@ impl Term {
         relation: &Term,
         index: usize, // * 📝这个指的是「乘积里头挖空」的索引
     ) -> Option<Term> {
+        // * 🚩现在统一在一个「『像』构造」逻辑中
+        Self::make_image_from_product(product, relation, index, Self::make_image_ext_arg)
+    }
+
+    /// 共用的「从乘积构造像」逻辑
+    fn make_image_from_product(
+        product: CompoundTermRef,
+        relation: &Term,
+        index: usize, // * 📝这个指的是「乘积里头挖空」的索引
+        make_image_arg: fn(Vec<Term>) -> Option<Term>,
+    ) -> Option<Term> {
         // * 🚩关系词项是「乘积」⇒可能可以简化
         if let Some(p2) = relation.as_compound_type(PRODUCT_OPERATOR) {
-            // * 🚩对「二元外延像」作特别的「取索引」简化
+            // * 🚩对「二元像」作特别的「取索引」简化
             if product.size() == 2 && p2.size() == 2 {
                 if index == 0 && product.components[1] == p2.components[1] {
                     // (/,(*,a,b),_,b) with [(*,a,b),b]#0
@@ -557,10 +568,9 @@ impl Term {
                     // is reduced to self[1][1] = (*,a,b)[1] = b
                     return Some(p2.components[1].clone());
                 }
-                // TODO: 后续可以通用化？
             }
         }
-        // * 🚩通过「前插关系词项」与「占位符挖空」构造外延像
+        // * 🚩通过「前插关系词项」与「占位符挖空」构造像
         let mut argument = vec![relation.clone()];
         for (i, term) in product.components.iter().enumerate() {
             let term = match i == index {
@@ -573,7 +583,7 @@ impl Term {
             argument.push(term);
         }
         // * 🚩最终从「装填好的参数」中构造词项
-        Self::make_image_ext_arg(argument)
+        make_image_arg(argument)
     }
 
     /// 从一个已知的外延像中构造新外延像，并切换占位符的位置
@@ -591,6 +601,17 @@ impl Term {
         old_image: CompoundTermRef,
         component: &Term,
         index: usize,
+    ) -> Option<Term> {
+        // * 🚩现在统一在一个「『像』构造」逻辑中
+        Self::make_image_from_image(old_image, component, index, Self::make_image_ext_arg)
+    }
+
+    /// 共用的「从像构造像」逻辑
+    fn make_image_from_image(
+        old_image: CompoundTermRef,
+        component: &Term,
+        index: usize,
+        make_image_arg: fn(Vec<Term>) -> Option<Term>,
     ) -> Option<Term> {
         // * 🚩提取信息 | `old_placeholder_index`算入了「关系词项」
         let mut argument = vec![];
@@ -610,17 +631,46 @@ impl Term {
             argument.push(term);
         }
         // * 🚩构造出新词项
-        Self::make_image_ext_arg(argument)
+        make_image_arg(argument)
     }
 
     /* ImageInt */
 
-    fn make_image_int_arg(mut argument: Vec<Term>) -> Option<Term> {
-        todo!("// TODO: 有待复刻")
+    fn make_image_int_arg(argument: Vec<Term>) -> Option<Term> {
+        // * 🚩拒绝元素过少的词项 | 第一个词项需要是「关系」，除此之外必须含有至少一个元素 & 占位符
+        if argument.len() < 2 {
+            return None;
+        }
+        // * 🚩因为「词项中自带占位符」所以无需「特别决定索引」
+        Self::new_image_int(argument).ok()
     }
 
-    pub fn make_image_int(argument: Vec<Term>, placeholder_index: usize) -> Option<Term> {
-        todo!("// TODO: 有待复刻")
+    pub fn make_image_int_from_product(
+        product: CompoundTermRef,
+        relation: &Term,
+        index: usize, // * 📝这个指的是「乘积里头挖空」的索引
+    ) -> Option<Term> {
+        // * 🚩现在统一在一个「『像』构造」逻辑中
+        Self::make_image_from_product(product, relation, index, Self::make_image_int_arg)
+    }
+
+    /// ## 📄OpenNARS中的例子
+    ///
+    /// * 📄oldImage=`(\,(\,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish)`, component=`cat`, index=`2` => `(\,(\,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),cat,eat,_)`
+    /// * 📄oldImage=`(\,reaction,acid,_)`, component=`soda`, index=`0` => `(\,reaction,_,soda)`
+    /// * 📄oldImage=`(\,(\,REPRESENT,_,<(*,$1,FISH) --> FOOD>),_,eat,fish)`, component=`(\,REPRESENT,_,$1)`, index=`2` => `(\,(\,REPRESENT,_,<(*,$1,FISH) --> FOOD>),(\,REPRESENT,_,$1),eat,_)`
+    /// * 📄oldImage=`(\,neutralization,_,soda)`, component=`acid`, index=`1` => `(\,neutralization,acid,_)`
+    /// * 📄oldImage=`(\,neutralization,acid,_)`, component=`$1`, index=`0` => `(\,neutralization,_,$1)`
+    /// * 📄oldImage=`(\,REPRESENT,_,$1)`, component=`(\,(\,REPRESENT,_,<(*,$1,FISH) --> FOOD>),_,eat,fish)`, index=`1` => `(\,REPRESENT,(\,(\,REPRESENT,_,<(*,$1,FISH) --> FOOD>),_,eat,fish),_)`
+    ///
+    /// ℹ️更多例子详见单元测试用例
+    pub fn make_image_int_from_image(
+        old_image: CompoundTermRef,
+        component: &Term,
+        index: usize,
+    ) -> Option<Term> {
+        // * 🚩现在统一在一个「『像』构造」逻辑中
+        Self::make_image_from_image(old_image, component, index, Self::make_image_int_arg)
     }
 
     /* Conjunction */
@@ -770,6 +820,8 @@ mod tests {
     mod concrete_type {
         use super::*;
 
+        /* ImageExt */
+
         #[test]
         fn make_image_ext_arg() -> AResult {
             macro_once! {
@@ -805,15 +857,28 @@ mod tests {
                         assert_eq!(image, expected, "{product}, {relation}, {index} => {image} != {expected}");
                     )*
                 }
-                "(*,$1,sunglasses)", "own",  1 => "(/,own,$1,_)";
-                "(*,bird,plant)",    "?1",   0 => "(/,?1,_,plant)";
-                "(*,bird,plant)",    "?1",   1 => "(/,?1,bird,_)";
-                "(*,robin,worms)",   "food", 1 => "(/,food,robin,_)";
-                "(*,CAT,eat,fish)",  "R",    0 => "(/,R,_,eat,fish)";
-                "(*,CAT,eat,fish)",  "R",    1 => "(/,R,CAT,_,fish)";
-                "(*,CAT,eat,fish)",  "R",    2 => "(/,R,CAT,eat,_)";
-                "(*,b,a)", "(*,b,(/,like,b,_))", 1 => "(/,like,b,_)";
-                "(*,a,b)", "(*,(/,like,b,_),b)", 0 => "(/,like,b,_)";
+                "(*,$1,sunglasses)", "own",                1 => "(/,own,$1,_)";
+                "(*,bird,plant)",    "?1",                 0 => "(/,?1,_,plant)";
+                "(*,bird,plant)",    "?1",                 1 => "(/,?1,bird,_)";
+                "(*,robin,worms)",   "food",               1 => "(/,food,robin,_)";
+                "(*,CAT,eat,fish)",  "R",                  0 => "(/,R,_,eat,fish)";
+                "(*,CAT,eat,fish)",  "R",                  1 => "(/,R,CAT,_,fish)";
+                "(*,CAT,eat,fish)",  "R",                  2 => "(/,R,CAT,eat,_)";
+                "(*,b,a)",           "(*,b,(/,like,b,_))", 1 => "(/,like,b,_)";
+                "(*,a,b)",           "(*,(/,like,b,_),b)", 0 => "(/,like,b,_)";
+                // 特别替换
+                r"(*,b,(/,like,b,_))",                   r"(*,b,a)",                            1 => r"a";
+                r"(*,(/,like,b,_),b)",                   r"(*,a,b)",                            0 => r"a";
+                r"(*,b,(/,like,b,_))",                   r"(*,b,a)",                            1 => r"a";
+                r"(*,(/,like,_,a),a)",                   r"(*,b,a)",                            0 => r"b";
+                r"(*,(&,key,(/,open,_,{lock1})),lock)",  r"(*,{key1},lock)",                    0 => r"{key1}";
+                r"(*,b,(/,like,b,_))",                   r"(*,b,a)",                            1 => r"a";
+                r"(*,(&,key,(/,open,_,{lock1})),lock1)", r"(*,{key1},lock1)",                   0 => r"{key1}";
+                r"(*,(\,reaction,_,soda),base)",         r"(*,(\,neutralization,_,soda),base)", 0 => r"(\,neutralization,_,soda)";
+                r"(*,(/,like,_,a),a)",                   r"(*,b,a)",                            0 => r"b";
+                r"(*,(&,key,(/,open,_,{lock1})),lock)",  r"(*,{key1},lock)",                    0 => r"{key1}";
+                r"(*,b,(/,like,b,_))",                   r"(*,b,a)",                            1 => r"a";
+                r"(*,(/,like,_,a),a)",                   r"(*,b,a)",                            0 => r"b";
             }
             ok!()
         }
@@ -839,6 +904,123 @@ mod tests {
                 "(/,open,{key1},_)",   "#1",     0 => "(/,open,_,#1)";
                 "(/,like,_,a)",        "b",      1 => "(/,like,b,_)";
                 "(/,like,b,_)",        "a",      0 => "(/,like,_,a)";
+            }
+            ok!()
+        }
+
+        /* ImageInt */
+
+        #[test]
+        fn make_image_int_arg() -> AResult {
+            macro_once! {
+                // * 🚩模式：词项列表 ⇒ 预期词项
+                macro test($($arg_list:tt => $expected:expr;)*) {
+                    $(
+                        let arg_list: Vec<_> = term!($arg_list).into();
+                        let image = Term::make_image_int_arg(arg_list).expect("解析词项失败！");
+                        let expected = term!($expected);
+                        assert_eq!(image, expected);
+                    )*
+                }
+                ["reaction", "_", "base"]       => r"(\,reaction,_,base)";
+                ["reaction", "acid", "_"]       => r"(\,reaction,acid,_)";
+                ["neutralization", "_", "base"] => r"(\,neutralization,_,base)";
+                ["open", "$120", "_"]           => r"(\,open,$120,_)";
+            }
+            ok!()
+        }
+
+        #[test]
+        fn make_image_int_from_product() -> AResult {
+            macro_once! {
+                // * 🚩模式：词项列表 ⇒ 预期词项
+                macro test($($product:tt, $relation:tt, $index:tt => $expected:expr;)*) {
+                    $(
+                        let p = term!($product);
+                        let product = p.as_compound().expect("解析出的不是复合词项！");
+                        let relation = term!($relation);
+                        let index = $index;
+                        let image = Term::make_image_int_from_product(product, &relation, index).expect("词项制作失败！");
+                        let expected = term!($expected);
+                        assert_eq!(image, expected, "{product}, {relation}, {index} => {image} != {expected}");
+                    )*
+                }
+                r"(*,(/,num,_))",                       "#1",                0 => r"(\,#1,_)";
+                r"(*,(\,reaction,_,soda),base)",        "neutralization",    1 => r"(\,neutralization,(\,reaction,_,soda),_)";
+                r"(*,(\,reaction,_,soda),base)",        "neutralization",    0 => r"(\,neutralization,_,base)";
+                r"(*,(/,num,_))",                       "(*,num)",           0 => r"(\,(*,num),_)";
+                r"(*,acid,soda)",                       "reaction",          0 => r"(\,reaction,_,soda)";
+                r"(*,(*,num))",                         "(*,(*,(/,num,_)))", 0 => r"(\,(*,(*,(/,num,_))),_)";
+                r"(*,(*,(*,num)))",                     "(*,(*,(*,0)))",     0 => r"(\,(*,(*,(*,0))),_)";
+                r"(*,(\,reaction,_,soda),base)",        "#1",                1 => r"(\,#1,(\,reaction,_,soda),_)";
+                r"(*,(*,num))",                         "(*,(*,0))",         0 => r"(\,(*,(*,0)),_)";
+                r"(*,acid,base)",                       "reaction",          0 => r"(\,reaction,_,base)";
+                r"(*,b,(/,like,b,_))",                  "(*,b,a)",           0 => r"(\,(*,b,a),_,(/,like,b,_))";
+                r"(*,(\,reaction,_,soda),base)",        "#1",                0 => r"(\,#1,_,base)";
+                r"(*,(*,(/,num,_)))",                   "(*,(*,0))",         0 => r"(\,(*,(*,0)),_)";
+                r"(*,(/,num,_))",                       "(*,0)",             0 => r"(\,(*,0),_)";
+                r"(*,(/,num,_))",                       "$1",                0 => r"(\,$1,_)";
+                r"(*,num)",                             "(*,0)",             0 => r"(\,(*,0),_)";
+                r"(*,acid,soda)",                       "reaction",          1 => r"(\,reaction,acid,_)";
+                r"(*,(/,like,_,a),a)",                  "(*,b,a)",           1 => r"(\,(*,b,a),(/,like,_,a),_)";
+                r"(*,acid,base)",                       "reaction",          1 => r"(\,reaction,acid,_)";
+                r"(*,(&,key,(/,open,_,{lock1})),lock)", "(*,{key1},lock)",   1 => r"(\,(*,{key1},lock),(&,key,(/,open,_,{lock1})),_)";
+                r"(*,(/,like,b,_),b)",                  "(*,a,b)",           1 => r"(\,(*,a,b),(/,like,b,_),_)";
+                // 特别替换
+                r"(*,(\,reaction,_,soda),base)",         r"(*,(\,reaction,_,soda),soda)",       1 => r"soda";
+                r"(*,(\,reaction,_,soda),base)",         r"(*,(\,reaction,_,soda),soda)",       1 => r"soda";
+                r"(*,(|,key,(/,open,_,{lock1})),lock1)", r"(*,{key1},lock1)",                   0 => r"{key1}";
+                r"(*,(\,reaction,_,soda),base)",         r"(*,acid,base)",                      0 => r"acid";
+                r"(*,acid,(\,neutralization,acid,_))",   r"(*,acid,(\,reaction,acid,_))",       1 => r"(\,reaction,acid,_)";
+                r"(*,(&,key,(/,open,_,{lock1})),lock)",  r"(*,{key1},lock)",                    0 => r"{key1}";
+                r"(*,(|,key,(/,open,_,{lock1})),lock1)", r"(*,{key1},lock1)",                   0 => r"{key1}";
+                r"(*,(\,neutralization,_,soda),base)",   r"(*,(\,reaction,_,soda),base)",       0 => r"(\,reaction,_,soda)";
+                r"(*,(&,key,(/,open,_,{lock1})),lock1)", r"(*,{key1},lock1)",                   0 => r"{key1}";
+                r"(*,(&,key,(/,open,_,{lock1})),lock)",  r"(*,{key1},lock)",                    0 => r"{key1}";
+                r"(*,(|,key,(/,open,_,{lock1})),lock1)", r"(*,{key1},lock1)",                   0 => r"{key1}";
+                r"(*,(/,open,_,#1),{lock1})",            r"(*,{key1},{lock1})",                 0 => r"{key1}";
+                r"(*,key,lock)",                         r"(*,{key1},lock)",                    0 => r"{key1}";
+                r"(*,acid,(\,reaction,acid,_))",         r"(*,acid,soda)",                      1 => r"soda";
+                r"(*,(|,key,(/,open,_,{lock1})),lock1)", r"(*,{key1},lock1)",                   0 => r"{key1}";
+                r"(*,(&,key,(/,open,_,{lock1})),lock1)", r"(*,{key1},lock1)",                   0 => r"{key1}";
+            }
+            ok!()
+        }
+
+        #[test]
+        fn make_image_int_from_image() -> AResult {
+            macro_once! {
+                // * 🚩模式：词项列表 ⇒ 预期词项
+                macro test($($image:tt, $component:tt, $index:tt => $expected:expr;)*) {
+                    $(
+                        let i = term!($image);
+                        let image = i.as_compound().expect("解析出的不是复合词项！");
+                        let component = term!($component);
+                        let index = $index;
+                        let image = Term::make_image_int_from_image(image, &component, index).expect("词项制作失败！");
+                        let expected = term!($expected);
+                        assert_eq!(image, expected, "{image}, {component}, {index} => {image} != {expected}");
+                    )*
+                }
+                // * ℹ️用例均源自OpenNARS实际运行
+                r"(\,R,_,eat,fish)",           "cat",                       2 => r"(\,R,cat,eat,_)";
+                r"(\,reaction,acid,_)",        "soda",                      0 => r"(\,reaction,_,soda)";
+                r"(\,R,_,eat,fish)",          r"(\,REPRESENT,_,$1)",        2 => r"(\,R,(\,REPRESENT,_,$1),eat,_)";
+                r"(\,neutralization,_,soda)",  "acid",                      1 => r"(\,neutralization,acid,_)";
+                r"(\,neutralization,acid,_)",  "$1",                        0 => r"(\,neutralization,_,$1)";
+                r"(\,REPRESENT,_,$1)",        r"(\,R,_,eat,fish)",          1 => r"(\,REPRESENT,(\,R,_,eat,fish),_)";
+                r"(\,neutralization,acid,_)",  "soda",                      0 => r"(\,neutralization,_,soda)";
+                r"(\,neutralization,acid,_)",  "?1",                        0 => r"(\,neutralization,_,?1)";
+                r"(\,reaction,acid,_)",       r"(\,neutralization,acid,_)", 0 => r"(\,reaction,_,(\,neutralization,acid,_))";
+                r"(\,REPRESENT,_,CAT)",        "(/,R,_,eat,fish)",          1 => r"(\,REPRESENT,(/,R,_,eat,fish),_)";
+                r"(\,R,_,eat,fish)",          r"(\,REPRESENT,_,$1)",        1 => r"(\,R,(\,REPRESENT,_,$1),_,fish)";
+                r"(\,R,_,eat,fish)",           "cat",                       1 => r"(\,R,cat,_,fish)";
+                r"(\,reaction,_,soda)",        "acid",                      1 => r"(\,reaction,acid,_)";
+                r"(\,reaction,_,base)",       r"(\,reaction,_,soda)",       1 => r"(\,reaction,(\,reaction,_,soda),_)";
+                r"(\,neutralization,acid,_)",  "#1",                        0 => r"(\,neutralization,_,#1)";
+                r"(\,neutralization,acid,_)",  "base",                      0 => r"(\,neutralization,_,base)";
+                r"(\,reaction,_,base)",        "acid",                      1 => r"(\,reaction,acid,_)";
+                r"(\,neutralization,acid,_)",  "(/,reaction,acid,_)",       0 => r"(\,neutralization,_,(/,reaction,acid,_))";
             }
             ok!()
         }
