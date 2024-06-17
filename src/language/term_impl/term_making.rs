@@ -128,18 +128,13 @@ impl Term {
         vec![t1, t2]
     }
 
-    /* SetExt */
+    /* Set */
 
-    /// 制作一个外延集
-    /// * 🚩单个词项⇒视作一元数组构造
-    pub fn make_set_ext(t: Term) -> Option<Term> {
-        Self::make_set_ext_arg(vec![t])
+    fn make_set(t: Term, make_set_arg: fn(Vec<Term>) -> Option<Term>) -> Option<Term> {
+        make_set_arg(vec![t])
     }
 
-    /// 制作一个外延集
-    /// * 🚩数组⇒统一重排去重⇒构造
-    /// * ℹ️相对改版而言，综合「用集合构造」与「用数组构造」
-    pub fn make_set_ext_arg(mut argument: Vec<Term>) -> Option<Term> {
+    fn make_set_arg(mut argument: Vec<Term>, new_set: fn(Vec<Term>) -> Term) -> Option<Term> {
         // * 🚩不允许空集
         if argument.is_empty() {
             return None;
@@ -147,7 +142,22 @@ impl Term {
         // * 🚩重排去重 | 📌只重排一层：OpenNARS原意如此，并且在外部构建的词项也经过了重排去重
         TermComponents::sort_dedup_term_vec(&mut argument);
         // * 🚩构造
-        Some(Term::new_set_ext(argument))
+        Some(new_set(argument))
+    }
+
+    /* SetExt */
+
+    /// 制作一个外延集
+    /// * 🚩单个词项⇒视作一元数组构造
+    pub fn make_set_ext(t: Term) -> Option<Term> {
+        Self::make_set(t, Self::make_set_ext_arg)
+    }
+
+    /// 制作一个外延集
+    /// * 🚩数组⇒统一重排去重⇒构造
+    /// * ℹ️相对改版而言，综合「用集合构造」与「用数组构造」
+    pub fn make_set_ext_arg(argument: Vec<Term>) -> Option<Term> {
+        Self::make_set_arg(argument, Term::new_set_ext)
     }
 
     /* SetInt */
@@ -155,24 +165,17 @@ impl Term {
     /// 制作一个内涵集
     /// * 🚩单个词项⇒视作一元数组构造
     pub fn make_set_int(t: Term) -> Option<Term> {
-        Self::make_set_int_arg(vec![t])
+        Self::make_set(t, Self::make_set_int_arg)
     }
 
     /// 制作一个内涵集
     /// * 🚩数组⇒统一重排去重⇒构造
     /// * ℹ️相对改版而言，综合「用集合构造」与「用数组构造」
-    pub fn make_set_int_arg(mut argument: Vec<Term>) -> Option<Term> {
-        // * 🚩不允许空集
-        if argument.is_empty() {
-            return None;
-        }
-        // * 🚩重排去重 | 📌只重排一层：OpenNARS原意如此，并且在外部构建的词项也经过了重排去重
-        TermComponents::sort_dedup_term_vec(&mut argument);
-        // * 🚩构造
-        Some(Term::new_set_int(argument))
+    pub fn make_set_int_arg(argument: Vec<Term>) -> Option<Term> {
+        Self::make_set_arg(argument, Term::new_set_int)
     }
 
-    /* IntersectionExt */
+    /* Intersection */
 
     /// 统一的「外延交/内涵交」制作
     /// * 🔧term1、term2：参与制作的两个词项
@@ -300,6 +303,8 @@ impl Term {
             _ => Some(new_intersection(terms)),
         }
     }
+
+    /* IntersectionExt */
 
     pub fn make_intersection_ext(term1: Term, term2: Term) -> Option<Term> {
         Self::make_intersection(
@@ -476,58 +481,25 @@ impl Term {
         Self::make_product_arg(terms)
     }
 
-    /* ImageExt */
+    /* Image */
 
-    /// * 🚩从解析器构造外延像
-    /// * ⚠️参数argument中含有「占位符」词项
-    ///   * ✅这点和OpenNARS相同
-    ///
-    /// ## 📄OpenNARS中的例子
-    ///
-    /// * 📄argList=[reaction, _, base] => argument=[reaction, base], index=0
-    /// * * => "(/,reaction,_,base)"
-    /// * 📄argList=[reaction, acid, _] => argument=[acid, reaction], index=1
-    /// * * => "(/,reaction,acid,_)"
-    /// * 📄argList=[neutralization, _, base] => argument=[neutralization, base], index=0
-    /// * * => "(/,neutralization,_,base)"
-    /// * 📄argList=[open, $120, _] => argument=[$120, open], index=1
-    /// * * => "(/,open,$120,_)"
-    fn make_image_ext_arg(argument: Vec<Term>) -> Option<Term> {
+    fn make_image_arg(
+        argument: Vec<Term>,
+        new_image: fn(Vec<Term>) -> anyhow::Result<Term>,
+    ) -> Option<Term> {
         // * 🚩拒绝元素过少的词项 | 第一个词项需要是「关系」，除此之外必须含有至少一个元素 & 占位符
         if argument.len() < 2 {
             return None;
         }
         // * 🚩因为「词项中自带占位符」所以无需「特别决定索引」
-        Self::new_image_ext(argument).ok()
+        new_image(argument).ok()
     }
 
-    /// 从一个「乘积」构造外延像
+    /// 共用的「从乘积构造像」逻辑
     /// * ⚠️有关「像」的机制跟OpenNARS实现不一致，将作调整
     ///   * 💭但在效果上是可以一致的
     /// * 🚩整体过程：关系词项插入到最前头，然后在指定的占位符处替换
     ///   * 📌应用「惰性复制」思路
-    ///
-    /// ## 📄OpenNARS中的例子
-    ///
-    /// * 📄product="(*,$1,sunglasses)", relation="own",  index=1 => "(/,own,$1,_)"
-    /// * 📄product="(*,bird,plant)",    relation="?1",   index=0 => "(/,?1,_,plant)"
-    /// * 📄product="(*,bird,plant)",    relation="?1",   index=1 => "(/,?1,bird,_)"
-    /// * 📄product="(*,robin,worms)",   relation="food", index=1 => "(/,food,robin,_)"
-    /// * 📄product="(*,CAT,eat,fish)",  relation="R",    index=0 => "(/,R,_,eat,fish)"
-    /// * 📄product="(*,CAT,eat,fish)",  relation="R",    index=1 => "(/,R,CAT,_,fish)"
-    /// * 📄product="(*,CAT,eat,fish)",  relation="R",    index=2 => "(/,R,CAT,eat,_)"
-    /// * 📄product="(*,b,a)", relation="(*,b,(/,like,b,_))", index=1 => "(/,like,b,_)"
-    /// * 📄product="(*,a,b)", relation="(*,(/,like,b,_),b)", index=0 => "(/,like,b,_)"
-    pub fn make_image_ext_from_product(
-        product: CompoundTermRef,
-        relation: &Term,
-        index: usize, // * 📝这个指的是「乘积里头挖空」的索引
-    ) -> Option<Term> {
-        // * 🚩现在统一在一个「『像』构造」逻辑中
-        Self::make_image_from_product(product, relation, index, Self::make_image_ext_arg)
-    }
-
-    /// 共用的「从乘积构造像」逻辑
     fn make_image_from_product(
         product: CompoundTermRef,
         relation: &Term,
@@ -566,27 +538,9 @@ impl Term {
         make_image_arg(argument)
     }
 
-    /// 从一个已知的外延像中构造新外延像，并切换占位符的位置
-    /// * 🚩关系词项位置不变，后头词项改变位置，原占位符填充词项
-    ///
-    /// ## 📄OpenNARS中的例子
-    ///
-    /// * 📄oldImage="(/,open,{key1},_)",   component="lock",   index=0 => "(/,open,_,lock)"
-    /// * 📄oldImage="(/,uncle,_,tom)",     component="tim",    index=1 => "(/,uncle,tim,_)"
-    /// * 📄oldImage="(/,open,{key1},_)",   component="$2",     index=0 => "(/,open,_,$2)"
-    /// * 📄oldImage="(/,open,{key1},_)",   component="#1",     index=0 => "(/,open,_,#1)"
-    /// * 📄oldImage="(/,like,_,a)",        component="b",      index=1 => "(/,like,b,_)"
-    /// * 📄oldImage="(/,like,b,_)",        component="a",      index=0 => "(/,like,_,a)"
-    pub fn make_image_ext_from_image(
-        old_image: CompoundTermRef,
-        component: &Term,
-        index: usize,
-    ) -> Option<Term> {
-        // * 🚩现在统一在一个「『像』构造」逻辑中
-        Self::make_image_from_image(old_image, component, index, Self::make_image_ext_arg)
-    }
-
     /// 共用的「从像构造像」逻辑
+    /// * 📌从一个已知的外延像中构造新外延像，并切换占位符的位置
+    /// * 🚩关系词项位置不变，后头词项改变位置，原占位符填充词项
     fn make_image_from_image(
         old_image: CompoundTermRef,
         component: &Term,
@@ -614,15 +568,69 @@ impl Term {
         make_image_arg(argument)
     }
 
+    /* ImageExt */
+
+    /// * 🚩从解析器构造外延像
+    /// * ⚠️参数argument中含有「占位符」词项
+    ///   * ✅这点和OpenNARS相同
+    ///
+    /// ## 📄OpenNARS中的例子
+    ///
+    /// * 📄argList=[reaction, _, base] => argument=[reaction, base], index=0
+    /// * * => "(/,reaction,_,base)"
+    /// * 📄argList=[reaction, acid, _] => argument=[acid, reaction], index=1
+    /// * * => "(/,reaction,acid,_)"
+    /// * 📄argList=[neutralization, _, base] => argument=[neutralization, base], index=0
+    /// * * => "(/,neutralization,_,base)"
+    /// * 📄argList=[open, $120, _] => argument=[$120, open], index=1
+    /// * * => "(/,open,$120,_)"
+    fn make_image_ext_arg(argument: Vec<Term>) -> Option<Term> {
+        Self::make_image_arg(argument, Self::new_image_ext)
+    }
+
+    /// 从一个「乘积」构造外延像
+    ///
+    /// ## 📄OpenNARS中的例子
+    ///
+    /// * 📄product="(*,$1,sunglasses)", relation="own",  index=1 => "(/,own,$1,_)"
+    /// * 📄product="(*,bird,plant)",    relation="?1",   index=0 => "(/,?1,_,plant)"
+    /// * 📄product="(*,bird,plant)",    relation="?1",   index=1 => "(/,?1,bird,_)"
+    /// * 📄product="(*,robin,worms)",   relation="food", index=1 => "(/,food,robin,_)"
+    /// * 📄product="(*,CAT,eat,fish)",  relation="R",    index=0 => "(/,R,_,eat,fish)"
+    /// * 📄product="(*,CAT,eat,fish)",  relation="R",    index=1 => "(/,R,CAT,_,fish)"
+    /// * 📄product="(*,CAT,eat,fish)",  relation="R",    index=2 => "(/,R,CAT,eat,_)"
+    /// * 📄product="(*,b,a)", relation="(*,b,(/,like,b,_))", index=1 => "(/,like,b,_)"
+    /// * 📄product="(*,a,b)", relation="(*,(/,like,b,_),b)", index=0 => "(/,like,b,_)"
+    pub fn make_image_ext_from_product(
+        product: CompoundTermRef,
+        relation: &Term,
+        index: usize, // * 📝这个指的是「乘积里头挖空」的索引
+    ) -> Option<Term> {
+        // * 🚩现在统一在一个「『像』构造」逻辑中
+        Self::make_image_from_product(product, relation, index, Self::make_image_ext_arg)
+    }
+
+    /// ## 📄OpenNARS中的例子
+    ///
+    /// * 📄oldImage="(/,open,{key1},_)",   component="lock",   index=0 => "(/,open,_,lock)"
+    /// * 📄oldImage="(/,uncle,_,tom)",     component="tim",    index=1 => "(/,uncle,tim,_)"
+    /// * 📄oldImage="(/,open,{key1},_)",   component="$2",     index=0 => "(/,open,_,$2)"
+    /// * 📄oldImage="(/,open,{key1},_)",   component="#1",     index=0 => "(/,open,_,#1)"
+    /// * 📄oldImage="(/,like,_,a)",        component="b",      index=1 => "(/,like,b,_)"
+    /// * 📄oldImage="(/,like,b,_)",        component="a",      index=0 => "(/,like,_,a)"
+    pub fn make_image_ext_from_image(
+        old_image: CompoundTermRef,
+        component: &Term,
+        index: usize,
+    ) -> Option<Term> {
+        // * 🚩现在统一在一个「『像』构造」逻辑中
+        Self::make_image_from_image(old_image, component, index, Self::make_image_ext_arg)
+    }
+
     /* ImageInt */
 
     fn make_image_int_arg(argument: Vec<Term>) -> Option<Term> {
-        // * 🚩拒绝元素过少的词项 | 第一个词项需要是「关系」，除此之外必须含有至少一个元素 & 占位符
-        if argument.len() < 2 {
-            return None;
-        }
-        // * 🚩因为「词项中自带占位符」所以无需「特别决定索引」
-        Self::new_image_int(argument).ok()
+        Self::make_image_arg(argument, Self::new_image_int)
     }
 
     pub fn make_image_int_from_product(
