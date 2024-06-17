@@ -130,10 +130,15 @@ impl Term {
 
     /* Set */
 
+    /// 制作一个 外延集/内涵集
+    /// * 🚩单个词项⇒视作一元数组构造
     fn make_set(t: Term, make_set_arg: fn(Vec<Term>) -> Option<Term>) -> Option<Term> {
         make_set_arg(vec![t])
     }
 
+    /// 制作一个 外延集/内涵集
+    /// * 🚩数组⇒统一重排去重⇒构造
+    /// * ℹ️相对改版而言，综合「用集合构造」与「用数组构造」
     fn make_set_arg(mut argument: Vec<Term>, new_set: fn(Vec<Term>) -> Term) -> Option<Term> {
         // * 🚩不允许空集
         if argument.is_empty() {
@@ -148,14 +153,11 @@ impl Term {
     /* SetExt */
 
     /// 制作一个外延集
-    /// * 🚩单个词项⇒视作一元数组构造
     pub fn make_set_ext(t: Term) -> Option<Term> {
         Self::make_set(t, Self::make_set_ext_arg)
     }
 
     /// 制作一个外延集
-    /// * 🚩数组⇒统一重排去重⇒构造
-    /// * ℹ️相对改版而言，综合「用集合构造」与「用数组构造」
     pub fn make_set_ext_arg(argument: Vec<Term>) -> Option<Term> {
         Self::make_set_arg(argument, Term::new_set_ext)
     }
@@ -163,14 +165,11 @@ impl Term {
     /* SetInt */
 
     /// 制作一个内涵集
-    /// * 🚩单个词项⇒视作一元数组构造
     pub fn make_set_int(t: Term) -> Option<Term> {
         Self::make_set(t, Self::make_set_int_arg)
     }
 
     /// 制作一个内涵集
-    /// * 🚩数组⇒统一重排去重⇒构造
-    /// * ℹ️相对改版而言，综合「用集合构造」与「用数组构造」
     pub fn make_set_int_arg(argument: Vec<Term>) -> Option<Term> {
         Self::make_set_arg(argument, Term::new_set_int)
     }
@@ -360,6 +359,7 @@ impl Term {
 
     /* DifferenceExt */
 
+    // TODO: 有待统一逻辑
     pub fn make_difference_ext(left: Term, right: Term) -> Option<Term> {
         // * 🚩自己减自己 ⇒ 空集 ⇒ 空
         if left == right {
@@ -827,6 +827,114 @@ mod tests {
                 Some(t) => format!("Some({t})"),
                 None => "None".to_string(),
             }
+        }
+
+        /* SetExt */
+
+        #[test]
+        fn make_set_ext() -> AResult {
+            macro_once! {
+                // * 🚩模式：词项列表 ⇒ 预期词项
+                macro test($($t:tt => $expected:tt;)*) {
+                    $(
+                        let out = Term::make_set_ext(term!($t));
+                        let expected = option_term!($expected);
+                        assert_eq!(out, expected);
+                    )*
+                }
+                "tom" => "{tom}";
+                "Tweety" => "{Tweety}";
+                "Saturn" => "{Saturn}";
+                "Venus" => "{Venus}";
+                "tim" => "{tim}";
+                "Birdie" => "{Birdie}";
+                "Pluto" => "{Pluto}";
+            }
+            ok!()
+        }
+
+        #[test]
+        fn make_set_ext_arg() -> AResult {
+            macro_once! {
+                // * 🚩模式：词项列表 ⇒ 预期词项
+                macro test($($argument:tt => $expected:tt;)*) {
+                    $(
+                        let argument: Vec<_> = term!($argument).into();
+                        let set = Term::make_set_ext_arg(argument);
+                        let expected = option_term!($expected);
+                        assert_eq!(set, expected);
+                    )*
+                }
+                [] => None;
+                ["?49"] => "{?49}";
+                ["Mars", "Pluto", "Venus"] => "{Mars,Pluto,Venus}";
+                ["Birdie"] => "{Birdie}";
+                ["lock"] => "{lock}";
+                ["#1"] => "{#1}";
+                ["key1"] => "{key1}";
+                ["Pluto", "Saturn"] => "{Pluto,Saturn}";
+                ["Mars", "Venus"] => "{Mars,Venus}";
+                ["lock1"] => "{lock1}";
+                ["Tweety"] => "{Tweety}";
+            }
+            ok!()
+        }
+
+        /* SetInt */
+
+        #[test]
+        fn make_set_int() -> AResult {
+            macro_once! {
+                // * 🚩模式：词项列表 ⇒ 预期词项
+                macro test($($t:tt => $expected:expr;)*) {
+                    $(
+                        let out = Term::make_set_int(term!($t)).expect("解析词项失败！");
+                        let expected = term!($expected);
+                        assert_eq!(out, expected);
+                    )*
+                }
+                "[1]" => "[[1]]";
+                "[{1}]" => "[[{1}]]";
+                "{[<[1] --> {1}>]}" => "[{[<[1] --> {1}>]}]";
+                // * ℹ️以下用例源自OpenNARS实际运行
+                "black" => "[black]";
+                "yellow" => "[yellow]";
+            }
+            ok!()
+        }
+
+        #[test]
+        fn make_set_int_arg() -> AResult {
+            macro_once! {
+                // * 🚩模式：词项列表 ⇒ 预期词项
+                macro test($($argument:tt => $expected:tt;)*) {
+                    $(
+                        let argument: Vec<_> = term!($argument).into();
+                        let set = Term::make_set_int_arg(argument);
+                        let expected = option_term!($expected);
+                        assert_eq!(set, expected);
+                    )*
+                }
+                [] => None;
+                ["1", "2"] => "[1, 2]";
+                ["1", "2", "[1]", "[2]"] => "[1, 2, [1], [2]]";
+                ["1", "2", "<1 --> 2>", "<1 --> 2>"] => "[1, 2, <1 --> 2>]"; // 去重
+                // * ℹ️以下用例源自OpenNARS实际运行
+                ["flying"]     => "[flying]";
+                ["unscrewing"] => "[unscrewing]";
+                ["with_wings"] => "[with_wings]";
+                ["smart"]      => "[smart]";
+                ["bright"]     => "[bright]";
+                ["strong"]     => "[strong]";
+                ["living"]     => "[living]";
+                ["chirping"]   => "[chirping]";
+                ["aggressive"] => "[aggressive]";
+                ["black"]      => "[black]";
+                ["bendable"]   => "[bendable]";
+                ["hurt"]       => "[hurt]";
+                ["with_beak"]  => "[with_beak]";
+            }
+            ok!()
         }
 
         /* IntersectionExt */
