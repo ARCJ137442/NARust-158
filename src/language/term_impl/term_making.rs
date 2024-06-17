@@ -327,7 +327,7 @@ impl Term {
 
     /// * 🚩只依照集合数量进行化简
     fn make_intersection_ext_vec(terms: Vec<Term>) -> Option<Term> {
-        Self::make_intersection_vec(terms, Self::new_intersection_ext)
+        Self::make_intersection_vec(terms, Term::new_intersection_ext)
     }
 
     /* IntersectionInt */
@@ -354,7 +354,7 @@ impl Term {
 
     /// * 🚩只依照集合数量进行化简
     fn make_intersection_int_vec(terms: Vec<Term>) -> Option<Term> {
-        Self::make_intersection_vec(terms, Self::new_intersection_int)
+        Self::make_intersection_vec(terms, Term::new_intersection_int)
     }
 
     /* Difference */
@@ -425,7 +425,7 @@ impl Term {
             right,
             SET_EXT_OPERATOR,
             Self::make_set_ext_arg,
-            Self::new_diff_ext,
+            Term::new_diff_ext,
         )
     }
 
@@ -441,7 +441,7 @@ impl Term {
             right,
             SET_INT_OPERATOR,
             Self::make_set_int_arg,
-            Self::new_diff_int,
+            Term::new_diff_int,
         )
     }
 
@@ -452,7 +452,7 @@ impl Term {
     /* Product */
 
     fn make_product_arg(argument: Vec<Term>) -> Option<Term> {
-        Some(Self::new_product(argument))
+        Some(Term::new_product(argument))
     }
 
     /// * 🚩从「外延像/内涵像」构造，用某个词项替换掉指定索引处的元素
@@ -584,7 +584,7 @@ impl Term {
     /// * 📄argList=[open, $120, _] => argument=[$120, open], index=1
     /// * * => "(/,open,$120,_)"
     fn make_image_ext_arg(argument: Vec<Term>) -> Option<Term> {
-        Self::make_image_arg(argument, Self::new_image_ext)
+        Self::make_image_arg(argument, Term::new_image_ext)
     }
 
     /// 从一个「乘积」构造外延像
@@ -629,7 +629,7 @@ impl Term {
     /* ImageInt */
 
     fn make_image_int_arg(argument: Vec<Term>) -> Option<Term> {
-        Self::make_image_arg(argument, Self::new_image_int)
+        Self::make_image_arg(argument, Term::new_image_int)
     }
 
     pub fn make_image_int_from_product(
@@ -660,18 +660,112 @@ impl Term {
         Self::make_image_from_image(old_image, component, index, Self::make_image_int_arg)
     }
 
-    /* Conjunction */
+    /* Junction */
 
-    fn make_conjunction_arg(mut argument: Vec<Term>) -> Option<Term> {
-        todo!("// TODO: 有待复刻")
+    /// 同时代表「从数组」与「从集合」
+    fn make_junction_arg(
+        mut argument: Vec<Term>,
+        new_junction: fn(Vec<Term>) -> Term,
+    ) -> Option<Term> {
+        match argument.len() {
+            // * 🚩不允许空集
+            0 => None,
+            // * 🚩单元素⇒直接用元素
+            // special case: single component
+            1 => argument.pop(),
+            _ => Some(new_junction(argument)),
+        }
     }
 
-    fn make_disjunction_arg(mut argument: Vec<Term>) -> Option<Term> {
-        todo!("// TODO: 有待复刻")
+    /// 从推理规则中构建
+    fn make_junction(
+        term1: Term,
+        term2: Term,
+        junction_operator: &str,
+        make_junction_arg: fn(Vec<Term>) -> Option<Term>,
+    ) -> Option<Term> {
+        let mut terms: Vec<Term> = vec![];
+        match term1.as_compound_type(junction_operator) {
+            // * 🚩同类⇒合并
+            Some(..) => terms.extend(
+                term1
+                    .unwrap_compound_components()
+                    .expect("已判断是复合词项")
+                    .into_vec(),
+            ),
+            // * 🚩异类⇒加入
+            _ => terms.push(term1),
+        }
+        match term2.as_compound_type(junction_operator) {
+            // * 🚩同类⇒合并
+            Some(..) => terms.extend(
+                term2
+                    .unwrap_compound_components()
+                    .expect("已判断是复合词项")
+                    .into_vec(),
+            ),
+            // * 🚩异类⇒加入
+            _ => terms.push(term2),
+        }
+        make_junction_arg(terms)
+    }
+
+    /* Conjunction */
+    // TODO: 单元测试
+
+    fn make_conjunction_arg(argument: Vec<Term>) -> Option<Term> {
+        Self::make_junction_arg(argument, Term::new_conjunction)
+    }
+
+    pub fn make_conjunction(term1: Term, term2: Term) -> Option<Term> {
+        Self::make_junction(
+            term1,
+            term2,
+            CONJUNCTION_OPERATOR,
+            Self::make_conjunction_arg,
+        )
+    }
+
+    /* Disjunction */
+    // TODO: 单元测试
+
+    fn make_disjunction_arg(argument: Vec<Term>) -> Option<Term> {
+        Self::make_junction_arg(argument, Term::new_disjunction)
+    }
+
+    pub fn make_disjunction(term1: Term, term2: Term) -> Option<Term> {
+        Self::make_junction(
+            term1,
+            term2,
+            DISJUNCTION_OPERATOR,
+            Self::make_disjunction_arg,
+        )
+    }
+
+    /* Negation */
+    // TODO: 单元测试
+
+    pub fn make_negation(t: Term) -> Option<Term> {
+        match t.as_compound_type(NEGATION_OPERATOR) {
+            // * 🚩双重否定⇒肯定
+            // * 📄-- (--,P) = P
+            Some(..) => t
+                .unwrap_compound_components()
+                .expect("已经假定是复合词项")
+                .into_vec()
+                .pop(), // * 📌只能使用pop来安全取出元素。。
+            // * 🚩其它⇒只有一个参数的「否定」词项
+            None => Self::make_negation_arg(vec![t]),
+        }
     }
 
     fn make_negation_arg(mut argument: Vec<Term>) -> Option<Term> {
-        todo!("// TODO: 有待复刻")
+        match argument.len() {
+            // * 🚩仅有一个⇒构造
+            1 => Some(Term::new_negation(argument.pop().unwrap())),
+            // * 🚩其它⇒空（失败）
+            _ => None,
+        }
     }
 
     /* Statement */
