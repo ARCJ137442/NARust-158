@@ -179,57 +179,57 @@ mod impl_v1 {
     /// 符合[`Result`]的「短浮点结果」
     pub type ShortFloatResult = Result<ShortFloatV1, ShortFloatError>;
 
-    #[cfg(mul_table)]
-    mod mul {
-        #![allow(long_running_const_eval)]
-        use super::*;
-        /// 合法的短浮点数个数（0~最大值，用于决定数组长度）
-        const VALID_COUNT: usize = (SHORT_MAX as usize) + 1;
-        /// 计算用数表：原始值×原始值→原始值
-        pub type CalcTable = [[UShort; VALID_COUNT]; VALID_COUNT];
+    // #[cfg(mul_table)]
+    // mod mul {
+    //     #![allow(long_running_const_eval)]
+    //     use super::*;
+    //     /// 合法的短浮点数个数（0~最大值，用于决定数组长度）
+    //     const VALID_COUNT: usize = (SHORT_MAX as usize) + 1;
+    //     /// 计算用数表：原始值×原始值→原始值
+    //     pub type CalcTable = [[UShort; VALID_COUNT]; VALID_COUNT];
 
-        /// 乘法表：(VALID_COUNT)^2 空间复杂度
-        /// * 📝【2024-06-03 09:56:25】经验：只有小规模计算适合查表，
-        ///   * ❌其它情况下会产生巨大空间占用（与编译时间占用），并不划算
-        pub const MUL_TABLE: &[[UShort; VALID_COUNT]; VALID_COUNT] = &mul_table();
+    //     /// 乘法表：(VALID_COUNT)^2 空间复杂度
+    //     /// * 📝【2024-06-03 09:56:25】经验：只有小规模计算适合查表，
+    //     ///   * ❌其它情况下会产生巨大空间占用（与编译时间占用），并不划算
+    //     pub const MUL_TABLE: &[[UShort; VALID_COUNT]; VALID_COUNT] = &mul_table();
 
-        /// 带有取整逻辑的除法
-        /// * 🚩目前统一【向下取整】而非四舍五入
-        const fn limited_div_max(v: usize) -> UShort {
-            (v / SHORT_MAX as usize) as UShort
-        }
+    //     /// 带有取整逻辑的除法
+    //     /// * 🚩目前统一【向下取整】而非四舍五入
+    //     const fn limited_div_max(v: usize) -> UShort {
+    //         (v / SHORT_MAX as usize) as UShort
+    //     }
 
-        /// p(N) = [round(x*y * N) for x in 0:(1/N):1, y in 0:(1/N):1] .|> Int
-        const fn mul_table() -> CalcTable {
-            let mut table = [[0; VALID_COUNT]; VALID_COUNT];
-            const N: usize = SHORT_MAX as usize;
-            let mut x = 0;
-            while x <= N {
-                let mut y = 0;
-                while y <= N {
-                    // constant evaluation is taking a long time
-                    table[x][y] = limited_div_max(x * y);
-                    y += 1;
-                }
-                x += 1;
-            }
-            table
-        }
+    //     /// p(N) = [round(x*y * N) for x in 0:(1/N):1, y in 0:(1/N):1] .|> Int
+    //     const fn mul_table() -> CalcTable {
+    //         let mut table = [[0; VALID_COUNT]; VALID_COUNT];
+    //         const N: usize = SHORT_MAX as usize;
+    //         let mut x = 0;
+    //         while x <= N {
+    //             let mut y = 0;
+    //             while y <= N {
+    //                 // constant evaluation is taking a long time
+    //                 table[x][y] = limited_div_max(x * y);
+    //                 y += 1;
+    //             }
+    //             x += 1;
+    //         }
+    //         table
+    //     }
 
-        #[test]
-        fn test_table() {
-            dbg!(MUL_TABLE[0][0], MUL_TABLE[SHORT_MAX as usize][0]);
-            dbg!(
-                MUL_TABLE[SHORT_MAX as usize][SHORT_MAX as usize],
-                MUL_TABLE[0][SHORT_MAX as usize]
-            );
-            for (x, arr) in MUL_TABLE.iter().enumerate() {
-                for (y, val) in arr.iter().enumerate() {
-                    assert_eq!(*val, limited_div_max(x * y));
-                }
-            }
-        }
-    }
+    //     #[test]
+    //     fn test_table() {
+    //         dbg!(MUL_TABLE[0][0], MUL_TABLE[SHORT_MAX as usize][0]);
+    //         dbg!(
+    //             MUL_TABLE[SHORT_MAX as usize][SHORT_MAX as usize],
+    //             MUL_TABLE[0][SHORT_MAX as usize]
+    //         );
+    //         for (x, arr) in MUL_TABLE.iter().enumerate() {
+    //             for (y, val) in arr.iter().enumerate() {
+    //                 assert_eq!(*val, limited_div_max(x * y));
+    //             }
+    //         }
+    //     }
+    // }
 
     impl ShortFloatV1 {
         /// 常量「0」
@@ -439,18 +439,17 @@ mod impl_v1 {
             // * 📄逻辑是 (self.value / 10000) * (rhs.value / 10000) => (new.value / 10000)
             // * 📄实际上 (self.value / 10000) * (rhs.value / 10000) =  (new.value / 10000) / 10000
             // * 📌因此 new.value = (self.value * rhs.value) / 10000
-            // #[cfg(mul_table)]
             Self::new_unchecked(mul_div(self.value, rhs.value))
         }
     }
 
-    /// 相乘再归约到 0~SHORT_MAX 范围内
-    /// * 🚩【2024-06-03 09:53:27】目前随查表法禁用
-    #[cfg(mul_table)]
-    fn mul_div(x: UShort, y: UShort) -> UShort {
-        use mul::MUL_TABLE;
-        MUL_TABLE[self.value as usize][rhs.value as usize]
-    }
+    // /// 相乘再归约到 0~SHORT_MAX 范围内
+    // /// * 🚩【2024-06-03 09:53:27】目前随查表法禁用
+    // #[cfg(mul_table)]
+    // fn mul_div(x: UShort, y: UShort) -> UShort {
+    //     use mul::MUL_TABLE;
+    //     MUL_TABLE[self.value as usize][rhs.value as usize]
+    // }
 
     /// 相乘再归约到 0~SHORT_MAX 范围内
     /// * 🚩目前是【向下取整】归约

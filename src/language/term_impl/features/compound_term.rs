@@ -150,29 +150,29 @@ impl Term {
         }
     }
 
-    // /// 🆕用于判断词项是否为「指定类型的复合词项」
-    // /// * 📌包括陈述
-    // /// * 🚩模式匹配后返回一个[`Option`]，只在其为「符合指定类型的词项」时为[`Some`]
-    // /// * 🚩返回内部所有元素的所有权
-    // pub fn unwrap_compound_type_components(
-    //     self,
-    //     compound_class: impl AsRef<str>,
-    // ) -> Option<Box<[Term]>> {
-    //     matches_or! {
-    //         ?self,
-    //         // * 🚩匹配到如下结构⇒返回Some，否则返回None
-    //         Term {
-    //             identifier,
-    //             // * 🚩内容为「复合词项」
-    //             components: TermComponents::Compound(terms),
-    //             ..
-    //         }
-    //         // * 🚩标识符相等
-    //         if identifier.as_str() == compound_class.as_ref()
-    //         // * 🚩返回内容
-    //         => terms
-    //     }
-    // }
+    /// 🆕用于判断词项是否为「指定类型的复合词项」
+    /// * 📌包括陈述
+    /// * 🚩模式匹配后返回一个[`Option`]，只在其为「符合指定类型的词项」时为[`Some`]
+    /// * 🚩返回内部所有元素的所有权
+    pub fn unwrap_compound_type_components(
+        self,
+        compound_class: impl AsRef<str>,
+    ) -> Option<Box<[Term]>> {
+        matches_or! {
+            ?self,
+            // * 🚩匹配到如下结构⇒返回Some，否则返回None
+            Term {
+                identifier,
+                // * 🚩内容为「复合词项」
+                components: TermComponents::Compound(terms),
+                ..
+            }
+            // * 🚩标识符相等
+            if identifier.as_str() == compound_class.as_ref()
+            // * 🚩返回内容
+            => terms
+        }
+    }
 
     /// 🆕用于判断是否为「复合词项」
     /// * ⚠️包括陈述

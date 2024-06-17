@@ -770,11 +770,46 @@ impl Term {
 
     /* Statement */
 
-    pub fn make_statement(template: StatementRef, subject: Term, predicate: Term) -> Option<Term> {
-        todo!("// TODO: 有待复刻")
+    /// 从一个「陈述系词」中构造
+    pub fn make_statement_relation(copula: &str, subject: Term, predicate: Term) -> Option<Term> {
+        // TODO: 单元测试
+        // * 🚩无效⇒制作失败
+        if StatementRef::invalid_statement(&subject, &predicate) {
+            return None;
+        }
+        // * 🚩按照「陈述系词」分派
+        match copula {
+            INHERITANCE_RELATION => Self::make_inheritance(subject, predicate),
+            SIMILARITY_RELATION => Self::make_similarity(subject, predicate),
+            INSTANCE_RELATION => Self::make_instance(subject, predicate),
+            PROPERTY_RELATION => Self::make_property(subject, predicate),
+            INSTANCE_PROPERTY_RELATION => Self::make_instance_property(subject, predicate),
+            IMPLICATION_RELATION => Self::make_implication(subject, predicate),
+            EQUIVALENCE_RELATION => Self::make_equivalence(subject, predicate),
+            _ => None,
+        }
     }
 
-    #[cfg(TODO)] // TODO: 有待复用
+    pub fn make_statement(template: StatementRef, subject: Term, predicate: Term) -> Option<Term> {
+        // TODO: 单元测试
+        // * 🚩无效⇒制作失败
+        if StatementRef::invalid_statement(&subject, &predicate) {
+            return None;
+        }
+        // * 🚩按照「陈述系词」分派
+        match template.identifier() {
+            INHERITANCE_RELATION => Self::make_inheritance(subject, predicate),
+            SIMILARITY_RELATION => Self::make_similarity(subject, predicate),
+            IMPLICATION_RELATION => Self::make_implication(subject, predicate),
+            EQUIVALENCE_RELATION => Self::make_equivalence(subject, predicate),
+            // ! ↓这三者不会在实际中出现
+            // INSTANCE_RELATION => Self::make_instance(subject, predicate),
+            // PROPERTY_RELATION => Self::make_property(subject, predicate),
+            // INSTANCE_PROPERTY_RELATION => Self::make_instance_property(subject, predicate),
+            _ => None,
+        }
+    }
+
     /// 📄OpenNARS `Statement.makeSym`
     /// * 🚩通过使用「标识符映射」将「非对称版本」映射到「对称版本」
     /// * ⚠️目前只支持「继承」和「蕴含」，其它均会`panic`
@@ -782,7 +817,8 @@ impl Term {
     /// # 📄OpenNARS
     /// Make a symmetric Statement from given components and temporal information,
     /// called by the rules
-    pub fn new_sym_statement(identifier: &str, subject: Term, predicate: Term) -> Self {
+    pub fn new_sym_statement(template: CompoundTermRef, subject: Term, predicate: Term) -> Self {
+        let identifier = template.identifier();
         match identifier {
             // 继承⇒相似
             INHERITANCE_RELATION => Term::new_similarity(subject, predicate),
@@ -790,6 +826,104 @@ impl Term {
             IMPLICATION_RELATION => Term::new_equivalence(subject, predicate),
             // 其它⇒panic
             _ => unimplemented!("不支持的标识符：{identifier:?}"),
+        }
+    }
+
+    /* Inheritance */
+
+    pub fn make_inheritance(subject: Term, predicate: Term) -> Option<Term> {
+        // * 🚩检查有效性
+        match StatementRef::invalid_statement(&subject, &predicate) {
+            true => None,
+            false => Some(Term::new_inheritance(subject, predicate)),
+        }
+    }
+
+    /* Instance */
+
+    /// * 🚩转发 ⇒ 继承 + 外延集
+    pub fn make_instance(subject: Term, predicate: Term) -> Option<Term> {
+        Self::make_inheritance(Self::make_set_ext(subject)?, predicate)
+    }
+
+    /* Property */
+
+    /// * 🚩转发 ⇒ 继承 + 内涵集
+    pub fn make_property(subject: Term, predicate: Term) -> Option<Term> {
+        Self::make_inheritance(subject, Self::make_set_int(predicate)?)
+    }
+
+    /* InstanceProperty */
+
+    /// * 🚩转发 ⇒ 继承 + 外延集 + 内涵集
+    pub fn make_instance_property(subject: Term, predicate: Term) -> Option<Term> {
+        Self::make_inheritance(Self::make_set_ext(subject)?, Self::make_set_int(predicate)?)
+    }
+
+    /* Similarity */
+
+    pub fn make_similarity(subject: Term, predicate: Term) -> Option<Term> {
+        // * 🚩检查有效性
+        match StatementRef::invalid_statement(&subject, &predicate) {
+            true => None,
+            // * ✅在创建时自动排序
+            false => Some(Term::new_similarity(subject, predicate)),
+        }
+    }
+
+    /* Implication */
+
+    pub fn make_implication(subject: Term, predicate: Term) -> Option<Term> {
+        // * 🚩检查有效性
+        if StatementRef::invalid_statement(&subject, &predicate) {
+            return None;
+        }
+        // * 🚩检查主词类型
+        if subject.instanceof_implication() || subject.instanceof_equivalence() {
+            return None;
+        }
+        if predicate.instanceof_equivalence() {
+            return None;
+        }
+        // B in <A ==> <B ==> C>>
+        if predicate.as_compound_type(IMPLICATION_RELATION).is_some() {
+            let [old_condition, predicate_predicate] = predicate
+                .unwrap_statement_components()
+                .expect("已经假定是复合词项");
+            // ! ❌ <A ==> <(&&, A, B) ==> C>>
+            // ? ❓为何不能合并：实际上A && (&&, A, B) = (&&, A, B)
+            if let Some(conjunction) = old_condition.as_compound_type(CONJUNCTION_OPERATOR) {
+                if conjunction.contain_component(&subject) {
+                    return None;
+                }
+            }
+            // * ♻️ <A ==> <B ==> C>> ⇒ <(&&, A, B) ==> C>
+            let new_condition = Self::make_conjunction(subject, old_condition)?;
+            Self::make_implication(new_condition, predicate_predicate)
+        } else {
+            Some(Term::new_implication(subject, predicate))
+        }
+    }
+
+    /* Equivalence */
+
+    pub fn make_equivalence(subject: Term, predicate: Term) -> Option<Term> {
+        // to be extended to check if subject is Conjunction
+        // * 🚩检查非法主谓组合
+        // ! <<A ==> B> <=> C> or <<A <=> B> <=> C>
+        if subject.instanceof_implication() || subject.instanceof_equivalence() {
+            return None;
+        }
+        // ! <C <=> <C ==> D>> or <C <=> <C <=> D>>
+        if subject.instanceof_implication() || subject.instanceof_equivalence() {
+            return None;
+        }
+        // ! <A <=> A>, <<A --> B> <=> <B --> A>>
+        // * 🚩检查有效性
+        match StatementRef::invalid_statement(&subject, &predicate) {
+            true => None,
+            // * ✅在创建时自动排序
+            false => Some(Term::new_equivalence(subject, predicate)),
         }
     }
 }

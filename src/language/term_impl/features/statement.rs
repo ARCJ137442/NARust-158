@@ -20,15 +20,14 @@
 //! A statement is a compound term, consisting of a subject, a predicate, and a relation symbol in between.
 //! It can be of either first-order or higher-order.
 
-use std::{
-    fmt::{Display, Formatter},
-    ops::{Deref, DerefMut},
-};
-
 use super::compound_term::CompoundTermRef;
 use crate::io::symbols::*;
 use crate::language::*;
 use nar_dev_utils::{if_return, matches_or};
+use std::{
+    fmt::{Display, Formatter},
+    ops::{Deref, DerefMut},
+};
 
 impl Term {
     /// 🆕用于判断是否为「陈述词项」
@@ -109,6 +108,21 @@ impl Term {
         )
     }
 
+    /// 🆕用于判断词项是否为「指定类型的复合词项」，并尝试返回「复合词项」的引用信息
+    /// * 📌包括陈述
+    /// * 🚩模式匹配后返回一个[`Option`]，只在其为「符合指定类型的词项」时为[`Some`]
+    /// * 🚩返回不可变引用
+    pub fn as_statement_type(&self, statement_class: impl AsRef<str>) -> Option<StatementRef> {
+        matches_or! {
+            ?self.as_statement(),
+            Some(statement)
+                // * 🚩标识符相等
+                if statement_class.as_ref() == self.identifier()
+                // * 🚩内部（类型相等）的复合词项
+                => statement
+        }
+    }
+
     /// 🆕将一个复合词项转换为「陈述词项」（可变引用）
     /// * 🚩转换为Option
     pub fn as_statement_mut(&mut self) -> Option<StatementRefMut> {
@@ -122,6 +136,47 @@ impl Term {
                 statement: self,
             }
         )
+    }
+
+    /// 🆕用于判断词项是否为「陈述」并解包其中的主项和谓项
+    /// * 🚩模式匹配后返回一个[`Option`]，只在其为「符合指定类型的词项」时为[`Some`]
+    /// * 🚩返回内部所有元素的所有权
+    pub fn unwrap_statement_components(self) -> Option<[Term; 2]> {
+        matches_or! {
+            ?self.unwrap_compound_components(),
+            // * 🚩匹配到（语句所作为的）复合词项，同时长度合规
+            Some(terms) if terms.len() == 2
+            // * 🚩返回内容
+            => {
+                // ? 💭后续或许能提取出一个统一的逻辑
+                let mut terms = terms.into_vec();
+                let predicate = terms.pop().expect("已经假定了长度为2");
+                let subject = terms.pop().expect("已经假定了长度为2");
+                [subject, predicate]
+            }
+        }
+    }
+
+    /// 🆕用于判断词项是否为「指定类型的陈述」，并解包其中的主项和谓项
+    /// * 🚩模式匹配后返回一个[`Option`]，只在其为「符合指定类型的词项」时为[`Some`]
+    /// * 🚩返回内部所有元素的所有权
+    pub fn unwrap_statement_type_components(
+        self,
+        statement_class: impl AsRef<str>,
+    ) -> Option<[Term; 2]> {
+        matches_or! {
+            ?self.unwrap_compound_type_components(statement_class),
+            // * 🚩匹配到（语句所作为的）复合词项，同时长度合规
+            Some(terms) if terms.len() == 2
+            // * 🚩返回内容
+            => {
+                // ? 💭后续或许能提取出一个统一的逻辑
+                let mut terms = terms.into_vec();
+                let predicate = terms.pop().expect("已经假定了长度为2");
+                let subject = terms.pop().expect("已经假定了长度为2");
+                [subject, predicate]
+            }
+        }
     }
 }
 
