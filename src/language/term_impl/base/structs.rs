@@ -53,7 +53,7 @@
 /// The same as getName by default, used in display only.
 ///
 /// @return The name of the term as a String
-#[derive(Debug, Clone, Eq)] // * 🚩PartialEq, PartialOrd, Ord 手动实现
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Term {
     /// 标识符
     /// * 🎯决定词项的「类型」
@@ -71,7 +71,6 @@ pub struct Term {
     /// * 🎯表示「词项名称」「词项包含词项」的功能
     /// * 🚩通过单一的「复合组分」实现「组合」功能
     pub(in crate::language) components: TermComponents,
-
     // 自由属性「是否为常量」
     // * 🎯用于决定其在记忆区、NAL-6推理中的行为
     // * ❓为何要设置成「结构属性」：会在系统构造「语句」时改变

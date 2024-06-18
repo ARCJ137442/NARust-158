@@ -5,58 +5,9 @@
 use super::structs::*;
 use crate::io::symbols::*;
 use crate::ToDisplayAndBrief;
-use nar_dev_utils::*;
 use narsese::{
     conversion::string::impl_lexical::format_instances::FORMAT_ASCII, lexical::Term as TermLexical,
 };
-
-/// 手动实现「判等」逻辑
-/// * 📄OpenNARS `Term.equals` 方法
-/// * 🎯不让判等受各类「临时变量/词法无关的状态变量」的影响
-///   * 📄`is_constant`字段
-impl PartialEq for Term {
-    fn eq(&self, other: &Self) -> bool {
-        macro_once! {
-            // 宏：逐个字段比较相等
-            // * 🎯方便表示、修改「要判等的字段」
-            macro eq_fields($this:ident => $other:ident; $($field:ident)*) {
-                $( $this.$field == $other.$field )&&*
-            }
-            // 判等逻辑
-            self => other;
-            identifier
-            components
-        }
-    }
-}
-
-/// 手动实现「比大小」逻辑
-/// * ⚠️不实现「变量之间相等」的逻辑
-impl Ord for Term {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        // * 🚩逻辑：先比对标识符，再比对组分
-        (self.identifier.cmp(&other.identifier))
-            .then_with(|| self.components.cmp(&other.components))
-    }
-}
-
-impl PartialOrd for Term {
-    #[inline(always)]
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-/// 手动实现「散列」逻辑
-/// * 🎯在手动实现「判等」后，无法自动实现[`Hash`]（只能考虑到字段）
-/// * 📄OpenNARS `hashCode`：直接使用其（词法上）唯一的「名称」作为依据
-///   * ⚠️此处采取更本地化的做法：只散列化与之相关的字段，而无需调用字符串格式化函数
-impl std::hash::Hash for Term {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.identifier.hash(state);
-        self.components.hash(state);
-    }
-}
 
 /// 内建属性
 impl Term {
