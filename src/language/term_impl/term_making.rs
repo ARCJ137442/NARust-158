@@ -810,7 +810,6 @@ impl Term {
 
     /// 从一个「陈述系词」中构造
     pub fn make_statement_relation(copula: &str, subject: Term, predicate: Term) -> Option<Term> {
-        // TODO: 单元测试
         // * 🚩无效⇒制作失败
         if StatementRef::invalid_statement(&subject, &predicate) {
             return None;
@@ -829,7 +828,6 @@ impl Term {
     }
 
     pub fn make_statement(template: StatementRef, subject: Term, predicate: Term) -> Option<Term> {
-        // TODO: 单元测试
         // * 🚩无效⇒制作失败
         if StatementRef::invalid_statement(&subject, &predicate) {
             return None;
@@ -1068,634 +1066,31 @@ mod tests {
     use crate::{global::tests::AResult, ok, test_term as term};
     use nar_dev_utils::macro_once;
 
+    /// 快捷构造[`Option<Term>`](Option)
+    macro_rules! option_term {
+        () => {
+            None
+        };
+        (None) => {
+            None
+        };
+        ($t:literal) => {
+            Some(term!($t))
+        };
+    }
+
+    /// 快捷格式化[`Option<Term>`](Option)
+    fn format_option_term(ot: &Option<Term>) -> String {
+        match ot {
+            Some(t) => format!("Some(\"{t}\")"),
+            None => "None".to_string(),
+        }
+    }
+
     /// 具体的词项构造
     /// * 📄外延集、内涵集……
     mod concrete_type {
         use super::*;
-
-        /// 快捷构造[`Option<Term>`](Option)
-        macro_rules! option_term {
-            () => {
-                None
-            };
-            (None) => {
-                None
-            };
-            ($t:literal) => {
-                Some(term!($t))
-            };
-        }
-
-        /// 快捷格式化[`Option<Term>`](Option)
-        fn format_option_term(ot: &Option<Term>) -> String {
-            match ot {
-                Some(t) => format!("Some(\"{t}\")"),
-                None => "None".to_string(),
-            }
-        }
-
-        /* CompoundTerm */
-
-        #[test]
-        fn make_compound_term_from_identifier() -> AResult {
-            macro_once! {
-                // * 🚩模式：参数列表 ⇒ 预期词项
-                macro test($($identifier:tt, $terms:tt => $expected:tt;)*) {
-                    $(
-                        let identifier = $identifier;
-                        let terms: Vec<Term> = term!($terms).into();
-                        let terms_str = terms.iter().map(|t| format!("\"{t}\"")).collect::<Vec<_>>().join(", ");
-                        let out = Term::make_compound_term_from_identifier(
-                            identifier,
-                            terms
-                        );
-                        let expected = option_term!($expected);
-                        assert_eq!(
-                            out, expected,
-                            "{identifier:?}, {terms_str} => {} != {}",
-                            format_option_term(&out),
-                            format_option_term(&expected),
-                        );
-                    )*
-                }
-                // * ℹ️用例均源自OpenNARS实际运行
-                "&", ["(&,robin,{Tweety})", "{Birdie}"] => "(&,robin,{Birdie},{Tweety})";
-                "&", ["(/,neutralization,_,(\\,neutralization,acid,_))", "acid"] => "(&,acid,(/,neutralization,_,(\\,neutralization,acid,_)))";
-                "&", ["(/,neutralization,_,base)", "(/,reaction,_,base)"] => "(&,(/,neutralization,_,base),(/,reaction,_,base))";
-                "&", ["(/,neutralization,_,base)", "acid"] => "(&,acid,(/,neutralization,_,base))";
-                "&", ["(/,open,_,lock)", "key"] => "(&,key,(/,open,_,lock))";
-                "&", ["(/,open,_,{lock1})", "(/,open,_,lock)"] => "(&,(/,open,_,lock),(/,open,_,{lock1}))";
-                "&", ["(/,reaction,_,soda)", "(/,reaction,_,base)"] => "(&,(/,reaction,_,base),(/,reaction,_,soda))";
-                "&", ["(\\,REPRESENT,_,CAT)", "(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish)"] => "(&,(\\,REPRESENT,_,CAT),(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish))";
-                "&", ["(\\,reaction,_,soda)", "(\\,neutralization,_,base)"] => "(&,(\\,neutralization,_,base),(\\,reaction,_,soda))";
-                "&", ["(|,(/,open,_,lock1),(/,open,_,{lock1}))", "(/,open,_,lock)"] => "(&,(/,open,_,lock),(|,(/,open,_,lock1),(/,open,_,{lock1})))";
-                "&", ["(|,bird,{Tweety})", "(|,bird,{Birdie})"] => "(&,(|,bird,{Birdie}),(|,bird,{Tweety}))";
-                "&", ["(|,key,(/,open,_,{lock1}))", "(/,open,_,lock)"] => "(&,(/,open,_,lock),(|,key,(/,open,_,{lock1})))";
-                "&", ["acid", "(/,reaction,_,base)"] => "(&,acid,(/,reaction,_,base))";
-                "&", ["acid", "(\\,neutralization,_,base)"] => "(&,acid,(\\,neutralization,_,base))";
-                "&", ["acid", "(\\,neutralization,_,soda)"] => "(&,acid,(\\,neutralization,_,soda))";
-                "&", ["animal", "(&,robin,swan)"] => "(&,animal,robin,swan)";
-                "&", ["animal", "(|,animal,swimmer)"] => "(&,animal,(|,animal,swimmer))";
-                "&", ["animal", "gull"] => "(&,animal,gull)";
-                "&", ["animal", "swan"] => "(&,animal,swan)";
-                "&", ["animal", "swimmer"] => "(&,animal,swimmer)";
-                "&", ["base", "(/,reaction,acid,_)"] => "(&,base,(/,reaction,acid,_))";
-                "&", ["base", "(\\,neutralization,acid,_)"] => "(&,base,(\\,neutralization,acid,_))";
-                "&", ["base", "soda"] => "(&,base,soda)";
-                "&", ["bird", "animal"] => "(&,animal,bird)";
-                "&", ["bird", "robin", "{Birdie}", "(|,[yellow],{Birdie})"] => "(&,bird,robin,{Birdie},(|,[yellow],{Birdie}))";
-                "&", ["bird", "swimmer"] => "(&,bird,swimmer)";
-                "&", ["chess", "competition"] => "(&,chess,competition)";
-                "&", ["competition", "sport"] => "(&,competition,sport)";
-                "&", ["flyer", "[with_wings]"] => "(&,flyer,[with_wings])";
-                "&", ["flyer", "[yellow]"] => "(&,flyer,[yellow])";
-                "&", ["flyer", "bird"] => "(&,bird,flyer)";
-                "&", ["flyer", "robin"] => "(&,flyer,robin)";
-                "&", ["flyer", "{Birdie}", "(|,[with_wings],{Birdie})"] => "(&,flyer,{Birdie},(|,[with_wings],{Birdie}))";
-                "&", ["flyer", "{Birdie}"] => "(&,flyer,{Birdie})";
-                "&", ["flyer", "{Tweety}", "(|,[with_wings],{Birdie})"] => "(&,flyer,{Tweety},(|,[with_wings],{Birdie}))";
-                "&", ["flyer", "{Tweety}"] => "(&,flyer,{Tweety})";
-                "&", ["key", "(/,open,_,lock)"] => "(&,key,(/,open,_,lock))";
-                "&", ["key", "(/,open,_,{lock1})"] => "(&,key,(/,open,_,{lock1}))";
-                "&", ["key", "{key1}"] => "(&,key,{key1})";
-                "&", ["neutralization", "(*,(\\,neutralization,_,base),base)"] => "(&,neutralization,(*,(\\,neutralization,_,base),base))";
-                "&", ["neutralization", "(*,acid,(/,reaction,acid,_))"] => "(&,neutralization,(*,acid,(/,reaction,acid,_)))";
-                "&", ["neutralization", "(*,acid,base)"] => "(&,neutralization,(*,acid,base))";
-                "&", ["neutralization", "(*,acid,soda)"] => "(&,neutralization,(*,acid,soda))";
-                "&", ["neutralization", "reaction"] => "(&,neutralization,reaction)";
-                "&", ["num", "(/,num,_)"] => "(&,num,(/,num,_))";
-                "&", ["reaction", "neutralization"] => "(&,neutralization,reaction)";
-                "&", ["robin", "animal"] => "(&,animal,robin)";
-                "&", ["robin", "bird"] => "(&,bird,robin)";
-                "&", ["robin", "swimmer"] => "(&,robin,swimmer)";
-                "&", ["robin", "{Birdie}"] => "(&,robin,{Birdie})";
-                "&", ["tiger", "animal"] => "(&,animal,tiger)";
-                "&", ["tiger", "swimmer"] => "(&,swimmer,tiger)";
-                "&", ["{Birdie}", "(|,flyer,{Tweety})"] => "(&,{Birdie},(|,flyer,{Tweety}))";
-                "&", ["{Birdie}", "{Tweety}"] => None;
-                "&", ["{Tweety}", "(|,bird,{Birdie})"] => "(&,{Tweety},(|,bird,{Birdie}))";
-                "&", ["{Tweety}", "{Birdie}"] => None;
-                "&&", ["<robin --> [chirping]>", "<robin --> [flying]>"] => "(&&,<robin --> [chirping]>,<robin --> [flying]>)";
-                "&&", ["<robin --> [chirping]>", "<robin --> [with_wings]>"] => "(&&,<robin --> [chirping]>,<robin --> [with_wings]>)";
-                "&&", ["<robin --> [chirping]>"] => "<robin --> [chirping]>";
-                "&&", ["<robin --> [flying]>", "<robin --> [with_wings]>"] => "(&&,<robin --> [flying]>,<robin --> [with_wings]>)";
-                "&&", ["<robin --> [flying]>"] => "<robin --> [flying]>";
-                "&&", ["<robin --> [living]>"] => "<robin --> [living]>";
-                "&&", ["<robin --> [with_wings]>"] => "<robin --> [with_wings]>";
-                "&&", ["<robin --> bird>", "(||,(&&,<robin --> [flying]>,<robin --> [with_wings]>),<robin --> bird>)"] => "(&&,<robin --> bird>,(||,(&&,<robin --> [flying]>,<robin --> [with_wings]>),<robin --> bird>))";
-                "&&", ["<robin --> bird>", "<robin --> [flying]>", "<robin --> [with_wings]>"] => "(&&,<robin --> bird>,<robin --> [flying]>,<robin --> [with_wings]>)";
-                "&&", ["<robin --> bird>", "<robin --> [flying]>"] => "(&&,<robin --> bird>,<robin --> [flying]>)";
-                "&&", ["<robin --> bird>", "<robin --> [with_wings]>"] => "(&&,<robin --> bird>,<robin --> [with_wings]>)";
-                "&&", ["<robin --> bird>"] => "<robin --> bird>";
-                "&&", ["<robin --> flyer>", "<(*,robin,worms) --> food>"] => "(&&,<robin --> flyer>,<(*,robin,worms) --> food>)";
-                "&&", ["<robin --> flyer>", "<robin --> bird>", "<(*,robin,worms) --> food>"] => "(&&,<robin --> bird>,<robin --> flyer>,<(*,robin,worms) --> food>)";
-                "&&", ["<robin --> flyer>", "<robin --> bird>", "<worms --> (/,food,robin,_)>"] => "(&&,<robin --> bird>,<robin --> flyer>,<worms --> (/,food,robin,_)>)";
-                "&&", ["<robin --> flyer>", "<robin --> bird>"] => "(&&,<robin --> bird>,<robin --> flyer>)";
-                "&&", ["<robin --> flyer>", "<worms --> (/,food,robin,_)>"] => "(&&,<robin --> flyer>,<worms --> (/,food,robin,_)>)";
-                "&&", ["<robin --> flyer>"] => "<robin --> flyer>";
-                "&&", ["<robin --> swimmer>"] => "<robin --> swimmer>";
-                "*", ["(&,key,(/,open,_,{lock1}))", "lock"] => "(*,(&,key,(/,open,_,{lock1})),lock)";
-                "*", ["(&,num,(/,(*,(/,num,_)),_))"] => "(*,(&,num,(/,(*,(/,num,_)),_)))";
-                "*", ["(*,num)"] => "(*,(*,num))";
-                "*", ["(/,(*,(/,num,_)),_)"] => "(*,(/,(*,(/,num,_)),_))";
-                "*", ["(/,(/,num,_),_)"] => "(*,(/,(/,num,_),_))";
-                "*", ["(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>)", "<(*,CAT,FISH) --> FOOD>"] => "(*,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),<(*,CAT,FISH) --> FOOD>)";
-                "*", ["(/,num,_)"] => "(*,(/,num,_))";
-                "*", ["(/,open,_,lock)", "lock"] => "(*,(/,open,_,lock),lock)";
-                "*", ["(/,open,_,lock)", "lock1"] => "(*,(/,open,_,lock),lock1)";
-                "*", ["(/,open,_,lock)", "{lock1}"] => "(*,(/,open,_,lock),{lock1})";
-                "*", ["(/,open,_,lock1)", "lock1"] => "(*,(/,open,_,lock1),lock1)";
-                "*", ["(/,open,_,{lock1})", "lock"] => "(*,(/,open,_,{lock1}),lock)";
-                "*", ["(/,open,_,{lock1})", "lock1"] => "(*,(/,open,_,{lock1}),lock1)";
-                "*", ["(/,open,_,{lock1})", "{lock1}"] => "(*,(/,open,_,{lock1}),{lock1})";
-                "*", ["(/,uncle,tom,_)", "tom"] => "(*,(/,uncle,tom,_),tom)";
-                "*", ["(\\,neutralization,_,base)", "base"] => "(*,(\\,neutralization,_,base),base)";
-                "*", ["(|,(/,open,_,lock1),(/,open,_,{lock1}))", "lock1"] => "(*,(|,(/,open,_,lock1),(/,open,_,{lock1})),lock1)";
-                "*", ["(|,key,(/,open,_,{lock1}))", "lock"] => "(*,(|,key,(/,open,_,{lock1})),lock)";
-                "*", ["(|,key,(/,open,_,{lock1}))", "lock1"] => "(*,(|,key,(/,open,_,{lock1})),lock1)";
-                "*", ["0"] => "(*,0)";
-                "*", ["a", "b"] => "(*,a,b)";
-                "*", ["acid", "(&,soda,(/,neutralization,acid,_))"] => "(*,acid,(&,soda,(/,neutralization,acid,_)))";
-                "*", ["acid", "(/,neutralization,acid,_)"] => "(*,acid,(/,neutralization,acid,_))";
-                "*", ["acid", "(/,reaction,acid,_)"] => "(*,acid,(/,reaction,acid,_))";
-                "*", ["acid", "(\\,neutralization,acid,_)"] => "(*,acid,(\\,neutralization,acid,_))";
-                "*", ["acid", "(\\,reaction,acid,_)"] => "(*,acid,(\\,reaction,acid,_))";
-                "*", ["acid", "(|,base,(\\,reaction,acid,_))"] => "(*,acid,(|,base,(\\,reaction,acid,_)))";
-                "*", ["acid", "(|,soda,(\\,neutralization,acid,_))"] => "(*,acid,(|,soda,(\\,neutralization,acid,_)))";
-                "*", ["acid", "base"] => "(*,acid,base)";
-                "*", ["acid", "soda"] => "(*,acid,soda)";
-                "*", ["key", "lock"] => "(*,key,lock)";
-                "*", ["key", "lock1"] => "(*,key,lock1)";
-                "*", ["key", "{lock1}"] => "(*,key,{lock1})";
-                "*", ["num"] => "(*,num)";
-                "*", ["{key1}", "lock1"] => "(*,{key1},lock1)";
-                "[]", ["bright"] => "[bright]";
-                "[]", ["smart"] => "[smart]";
-                "{}", ["Birdie"] => "{Birdie}";
-                "{}", ["Mars", "Venus"] => "{Mars,Venus}";
-                "|", ["(&,animal,gull)", "swimmer"] => "(|,swimmer,(&,animal,gull))";
-                "|", ["(&,flyer,{Birdie})", "(|,[yellow],{Birdie})"] => "(|,[yellow],{Birdie},(&,flyer,{Birdie}))";
-                "|", ["(&,flyer,{Birdie})", "(|,[yellow],{Tweety})"] => "(|,[yellow],{Tweety},(&,flyer,{Birdie}))";
-                "|", ["(&,flyer,{Birdie})", "{Birdie}"] => "(|,{Birdie},(&,flyer,{Birdie}))";
-                "|", ["(/,neutralization,_,base)", "(/,reaction,_,(\\,neutralization,acid,_))"] => "(|,(/,neutralization,_,base),(/,reaction,_,(\\,neutralization,acid,_)))";
-                "|", ["(/,neutralization,_,base)", "(/,reaction,_,base)"] => "(|,(/,neutralization,_,base),(/,reaction,_,base))";
-                "|", ["(/,neutralization,_,base)", "acid"] => "(|,acid,(/,neutralization,_,base))";
-                "|", ["(/,neutralization,acid,_)", "(\\,neutralization,acid,_)"] => "(|,(/,neutralization,acid,_),(\\,neutralization,acid,_))";
-                "|", ["(/,num,_)", "0"] => "(|,0,(/,num,_))";
-                "|", ["(/,open,_,{lock1})", "(/,open,_,lock)"] => "(|,(/,open,_,lock),(/,open,_,{lock1}))";
-                "|", ["(/,reaction,_,soda)", "(/,reaction,_,base)"] => "(|,(/,reaction,_,base),(/,reaction,_,soda))";
-                "|", ["(/,reaction,acid,_)", "(\\,neutralization,acid,_)"] => "(|,(/,reaction,acid,_),(\\,neutralization,acid,_))";
-                "|", ["(\\,REPRESENT,_,CAT)", "(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish)"] => "(|,(\\,REPRESENT,_,CAT),(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish))";
-                "|", ["(|,key,(/,open,_,{lock1}))", "(/,open,_,lock)"] => "(|,key,(/,open,_,lock),(/,open,_,{lock1}))";
-                "|", ["(~,boy,girl)", "(~,youth,girl)"] => "(|,(~,boy,girl),(~,youth,girl))";
-                "|", ["[with_wings]", "(|,flyer,{Tweety})", "{Birdie}"] => "(|,flyer,[with_wings],{Birdie},{Tweety})";
-                "|", ["[with_wings]", "flyer", "{Birdie}"] => "(|,flyer,[with_wings],{Birdie})";
-                "|", ["[with_wings]", "{Birdie}", "(|,[with_wings],{Birdie})"] => "(|,[with_wings],{Birdie})";
-                "|", ["[with_wings]", "{Tweety}", "{Birdie}"] => "(|,[with_wings],{Birdie},{Tweety})";
-                "|", ["[yellow]", "[with_wings]"] => None;
-                "|", ["[yellow]", "bird"] => "(|,bird,[yellow])";
-                "|", ["[yellow]", "flyer"] => "(|,flyer,[yellow])";
-                "|", ["[yellow]", "{Tweety}"] => "(|,[yellow],{Tweety})";
-                "|", ["acid", "(/,reaction,_,base)"] => "(|,acid,(/,reaction,_,base))";
-                "|", ["acid", "(\\,neutralization,_,base)"] => "(|,acid,(\\,neutralization,_,base))";
-                "|", ["acid", "(\\,neutralization,_,soda)"] => "(|,acid,(\\,neutralization,_,soda))";
-                "|", ["animal", "robin"] => "(|,animal,robin)";
-                "|", ["animal", "swan"] => "(|,animal,swan)";
-                "|", ["animal", "swimmer"] => "(|,animal,swimmer)";
-                "|", ["base", "(/,neutralization,acid,_)"] => "(|,base,(/,neutralization,acid,_))";
-                "|", ["base", "(/,reaction,acid,_)"] => "(|,base,(/,reaction,acid,_))";
-                "|", ["base", "(\\,neutralization,acid,_)"] => "(|,base,(\\,neutralization,acid,_))";
-                "|", ["base", "soda"] => "(|,base,soda)";
-                "|", ["bird", "[with_wings]"] => "(|,bird,[with_wings])";
-                "|", ["bird", "[yellow]"] => "(|,bird,[yellow])";
-                "|", ["bird", "animal"] => "(|,animal,bird)";
-                "|", ["bird", "flyer", "{Birdie}"] => "(|,bird,flyer,{Birdie})";
-                "|", ["bird", "flyer"] => "(|,bird,flyer)";
-                "|", ["bird", "swimmer"] => "(|,bird,swimmer)";
-                "|", ["bird", "{Birdie}"] => "(|,bird,{Birdie})";
-                "|", ["bird", "{Tweety}", "{Birdie}"] => "(|,bird,{Birdie},{Tweety})";
-                "|", ["bird", "{Tweety}"] => "(|,bird,{Tweety})";
-                "|", ["boy", "(~,youth,girl)"] => "(|,boy,(~,youth,girl))";
-                "|", ["chess", "(|,chess,sport)"] => "(|,chess,sport)";
-                "|", ["chess", "competition"] => "(|,chess,competition)";
-                "|", ["chess", "sport"] => "(|,chess,sport)";
-                "|", ["competition", "chess"] => "(|,chess,competition)";
-                "|", ["competition", "sport"] => "(|,competition,sport)";
-                "|", ["flyer", "(&,flyer,{Birdie})", "{Birdie}"] => "(|,flyer,{Birdie},(&,flyer,{Birdie}))";
-                "|", ["flyer", "(&,flyer,{Birdie})"] => "(|,flyer,(&,flyer,{Birdie}))";
-                "|", ["flyer", "(|,flyer,{Tweety})", "{Birdie}"] => "(|,flyer,{Birdie},{Tweety})";
-                "|", ["flyer", "[yellow]", "{Birdie}"] => "(|,flyer,[yellow],{Birdie})";
-                "|", ["flyer", "robin"] => "(|,flyer,robin)";
-                "|", ["flyer", "{Birdie}", "(&,bird,(|,[yellow],{Birdie}))"] => "(|,flyer,{Birdie},(&,bird,(|,[yellow],{Birdie})))";
-                "|", ["flyer", "{Birdie}", "(&,flyer,{Birdie})"] => "(|,flyer,{Birdie},(&,flyer,{Birdie}))";
-                "|", ["flyer", "{Birdie}"] => "(|,flyer,{Birdie})";
-                "|", ["flyer", "{Tweety}", "{Birdie}"] => "(|,flyer,{Birdie},{Tweety})";
-                "|", ["flyer", "{Tweety}"] => "(|,flyer,{Tweety})";
-                "|", ["key", "(/,open,_,lock)"] => "(|,key,(/,open,_,lock))";
-                "|", ["key", "(/,open,_,{lock1})"] => "(|,key,(/,open,_,{lock1}))";
-                "|", ["key", "{key1}"] => "(|,key,{key1})";
-                "|", ["neutralization", "(*,acid,(\\,neutralization,acid,_))"] => "(|,neutralization,(*,acid,(\\,neutralization,acid,_)))";
-                "|", ["neutralization", "(*,acid,base)"] => "(|,neutralization,(*,acid,base))";
-                "|", ["neutralization", "reaction"] => "(|,neutralization,reaction)";
-                "|", ["reaction", "(*,acid,base)"] => "(|,reaction,(*,acid,base))";
-                "|", ["reaction", "neutralization"] => "(|,neutralization,reaction)";
-                "|", ["robin", "(|,flyer,{Tweety})", "{Birdie}"] => "(|,flyer,robin,{Birdie},{Tweety})";
-                "|", ["robin", "[yellow]", "{Birdie}"] => "(|,robin,[yellow],{Birdie})";
-                "|", ["robin", "animal"] => "(|,animal,robin)";
-                "|", ["robin", "bird"] => "(|,bird,robin)";
-                "|", ["robin", "flyer", "{Birdie}"] => "(|,flyer,robin,{Birdie})";
-                "|", ["robin", "swimmer"] => "(|,robin,swimmer)";
-                "|", ["robin", "{Birdie}", "(&,bird,(|,[yellow],{Birdie}))"] => "(|,robin,{Birdie},(&,bird,(|,[yellow],{Birdie})))";
-                "|", ["robin", "{Birdie}"] => "(|,robin,{Birdie})";
-                "|", ["robin", "{Tweety}", "{Birdie}"] => "(|,robin,{Birdie},{Tweety})";
-                "|", ["sport", "competition"] => "(|,competition,sport)";
-                "|", ["tiger", "(|,animal,swimmer)"] => "(|,animal,swimmer,tiger)";
-                "|", ["tiger", "animal"] => "(|,animal,tiger)";
-                "|", ["tiger", "swimmer"] => "(|,swimmer,tiger)";
-                "|", ["{Birdie}", "{Tweety}"] => "{Birdie,Tweety}";
-                "|", ["{Tweety}", "{Birdie}", "(&,flyer,{Birdie})"] => "(|,(&,flyer,{Birdie}),{Birdie,Tweety})";
-                "|", ["{Tweety}", "{Birdie}"] => "{Birdie,Tweety}";
-                "~", ["(/,(*,tim,tom),tom,_)", "(/,uncle,tom,_)"] => "(~,(/,(*,tim,tom),tom,_),(/,uncle,tom,_))";
-                "~", ["(|,boy,girl)", "girl"] => "(~,(|,boy,girl),girl)";
-                "~", ["(~,boy,girl)", "girl"] => "(~,(~,boy,girl),girl)";
-                "~", ["[strong]", "girl"] => "(~,[strong],girl)";
-                "~", ["boy", "girl"] => "(~,boy,girl)";
-            }
-            ok!()
-        }
-
-        #[test]
-        fn make_compound_term() -> AResult {
-            macro_once! {
-                // * 🚩模式：参数列表 ⇒ 预期词项
-                macro test($($template:tt, $terms:tt => $expected:tt;)*) {
-                    $(
-                        let template = term!($template);
-                        let terms: Vec<Term> = term!($terms).into();
-                        let terms_str = terms.iter().map(|t| format!("\"{t}\"")).collect::<Vec<_>>().join(", ");
-                        let out = Term::make_compound_term(
-                            template.as_compound().expect("模板不是复合词项！"),
-                            terms
-                        );
-                        let expected = option_term!($expected);
-                        assert_eq!(
-                            out, expected,
-                            "\"{template}\", {terms_str} => {} != {}",
-                            format_option_term(&out),
-                            format_option_term(&expected),
-                        );
-                    )*
-                }
-                // * ℹ️用例均源自OpenNARS实际运行
-                "(&&,<robin --> [chirping]>,<robin --> [flying]>)", ["<robin --> [chirping]>"] => "<robin --> [chirping]>";
-                "(&&,<robin --> [chirping]>,<robin --> [flying]>)", ["<robin --> [flying]>"] => "<robin --> [flying]>";
-                "(&&,<robin --> [chirping]>,<robin --> [flying]>)", ["<robin --> bird>", "<robin --> [flying]>"] => "(&&,<robin --> bird>,<robin --> [flying]>)";
-                "(&&,<robin --> [chirping]>,<robin --> [flying]>,<robin --> [with_wings]>)", ["<robin --> [chirping]>", "<robin --> [flying]>"] => "(&&,<robin --> [chirping]>,<robin --> [flying]>)";
-                "(&&,<robin --> [chirping]>,<robin --> [flying]>,<robin --> [with_wings]>)", ["<robin --> [chirping]>", "<robin --> [with_wings]>"] => "(&&,<robin --> [chirping]>,<robin --> [with_wings]>)";
-                "(&&,<robin --> [chirping]>,<robin --> [flying]>,<robin --> [with_wings]>)", ["<robin --> [flying]>", "<robin --> [with_wings]>"] => "(&&,<robin --> [flying]>,<robin --> [with_wings]>)";
-                "(&&,<robin --> [chirping]>,<robin --> [flying]>,<robin --> [with_wings]>)", ["<robin --> bird>", "<robin --> [flying]>", "<robin --> [with_wings]>"] => "(&&,<robin --> bird>,<robin --> [flying]>,<robin --> [with_wings]>)";
-                "(&&,<robin --> [chirping]>,<robin --> [with_wings]>)", ["<robin --> [chirping]>", "<robin --> bird>"] => "(&&,<robin --> bird>,<robin --> [chirping]>)";
-                "(&&,<robin --> [chirping]>,<robin --> [with_wings]>)", ["<robin --> [chirping]>"] => "<robin --> [chirping]>";
-                "(&&,<robin --> [chirping]>,<robin --> [with_wings]>)", ["<robin --> [with_wings]>"] => "<robin --> [with_wings]>";
-                "(&&,<robin --> [chirping]>,<robin --> [with_wings]>)", ["<robin --> bird>", "<robin --> [with_wings]>"] => "(&&,<robin --> bird>,<robin --> [with_wings]>)";
-                "(&&,<robin --> [flying]>,<robin --> [with_wings]>)", ["<robin --> [flying]>"] => "<robin --> [flying]>";
-                "(&&,<robin --> [flying]>,<robin --> [with_wings]>)", ["<robin --> [with_wings]>"] => "<robin --> [with_wings]>";
-                "(&&,<robin --> bird>,<robin --> [flying]>)", ["<robin --> [flying]>"] => "<robin --> [flying]>";
-                "(&&,<robin --> bird>,<robin --> [flying]>)", ["<robin --> bird>"] => "<robin --> bird>";
-                "(&&,<robin --> bird>,<robin --> [flying]>,<robin --> [with_wings]>)", ["<robin --> [flying]>", "<robin --> [with_wings]>"] => "(&&,<robin --> [flying]>,<robin --> [with_wings]>)";
-                "(&&,<robin --> bird>,<robin --> [flying]>,<robin --> [with_wings]>)", ["<robin --> bird>", "<robin --> [flying]>", "<robin --> bird>"] => "(&&,<robin --> bird>,<robin --> [flying]>)";
-                "(&&,<robin --> bird>,<robin --> [flying]>,<robin --> [with_wings]>)", ["<robin --> bird>", "<robin --> [flying]>"] => "(&&,<robin --> bird>,<robin --> [flying]>)";
-                "(&&,<robin --> bird>,<robin --> [flying]>,<robin --> [with_wings]>)", ["<robin --> bird>", "<robin --> [with_wings]>"] => "(&&,<robin --> bird>,<robin --> [with_wings]>)";
-                "(&&,<robin --> bird>,<robin --> [living]>)", ["<robin --> [living]>"] => "<robin --> [living]>";
-                "(&&,<robin --> bird>,<robin --> [living]>)", ["<robin --> bird>", "(||,(&&,<robin --> [flying]>,<robin --> [with_wings]>),<robin --> bird>)"] => "(&&,<robin --> bird>,(||,(&&,<robin --> [flying]>,<robin --> [with_wings]>),<robin --> bird>))";
-                "(&&,<robin --> bird>,<robin --> [living]>)", ["<robin --> bird>", "<robin --> [flying]>", "<robin --> [with_wings]>"] => "(&&,<robin --> bird>,<robin --> [flying]>,<robin --> [with_wings]>)";
-                "(&&,<robin --> bird>,<robin --> [living]>)", ["<robin --> bird>", "<robin --> [flying]>"] => "(&&,<robin --> bird>,<robin --> [flying]>)";
-                "(&&,<robin --> bird>,<robin --> [living]>)", ["<robin --> bird>", "<robin --> bird>", "<robin --> [flying]>"] => "(&&,<robin --> bird>,<robin --> [flying]>)";
-                "(&&,<robin --> bird>,<robin --> [living]>)", ["<robin --> bird>"] => "<robin --> bird>";
-                "(&&,<robin --> flyer>,<(*,robin,worms) --> food>)", ["<robin --> flyer>", "<worms --> (/,food,robin,_)>"] => "(&&,<robin --> flyer>,<worms --> (/,food,robin,_)>)";
-                "(&&,<robin --> flyer>,<robin --> [chirping]>)", ["<robin --> flyer>", "<robin --> bird>"] => "(&&,<robin --> bird>,<robin --> flyer>)";
-                "(&&,<robin --> flyer>,<robin --> [chirping]>)", ["<robin --> flyer>"] => "<robin --> flyer>";
-                "(&&,<robin --> flyer>,<robin --> [chirping]>,<(*,robin,worms) --> food>)", ["<robin --> flyer>", "<(*,robin,worms) --> food>"] => "(&&,<robin --> flyer>,<(*,robin,worms) --> food>)";
-                "(&&,<robin --> flyer>,<robin --> [chirping]>,<(*,robin,worms) --> food>)", ["<robin --> flyer>", "<robin --> bird>", "<(*,robin,worms) --> food>"] => "(&&,<robin --> bird>,<robin --> flyer>,<(*,robin,worms) --> food>)";
-                "(&&,<robin --> flyer>,<robin --> [chirping]>,<worms --> (/,food,robin,_)>)", ["<robin --> flyer>", "<robin --> bird>", "<worms --> (/,food,robin,_)>"] => "(&&,<robin --> bird>,<robin --> flyer>,<worms --> (/,food,robin,_)>)";
-                "(&&,<robin --> flyer>,<robin --> [chirping]>,<worms --> (/,food,robin,_)>)", ["<robin --> flyer>", "<worms --> (/,food,robin,_)>"] => "(&&,<robin --> flyer>,<worms --> (/,food,robin,_)>)";
-                "(&&,<robin --> flyer>,<worms --> (/,food,robin,_)>)", ["<robin --> flyer>", "<(*,robin,worms) --> food>"] => "(&&,<robin --> flyer>,<(*,robin,worms) --> food>)";
-                "(&&,<robin --> swimmer>,<robin --> [flying]>)", ["<robin --> [flying]>"] => "<robin --> [flying]>";
-                "(&&,<robin --> swimmer>,<robin --> [flying]>)", ["<robin --> swimmer>"] => "<robin --> swimmer>";
-                "(&,(/,neutralization,_,(\\,neutralization,acid,_)),(/,reaction,_,base))", ["(/,neutralization,_,(\\,neutralization,acid,_))", "acid"] => "(&,acid,(/,neutralization,_,(\\,neutralization,acid,_)))";
-                "(&,(/,neutralization,_,(\\,neutralization,acid,_)),(/,reaction,_,base))", ["acid", "(/,reaction,_,base)"] => "(&,acid,(/,reaction,_,base))";
-                "(&,(/,neutralization,_,base),(/,reaction,_,soda))", ["(/,neutralization,_,base)", "(/,reaction,_,base)"] => "(&,(/,neutralization,_,base),(/,reaction,_,base))";
-                "(&,(/,neutralization,_,base),(/,reaction,_,soda))", ["(/,neutralization,_,base)", "acid"] => "(&,acid,(/,neutralization,_,base))";
-                "(&,(/,neutralization,_,soda),(/,reaction,_,base))", ["(/,neutralization,_,base)", "(/,reaction,_,base)"] => "(&,(/,neutralization,_,base),(/,reaction,_,base))";
-                "(&,(/,neutralization,_,soda),(/,reaction,_,base))", ["(/,reaction,_,soda)", "(/,reaction,_,base)"] => "(&,(/,reaction,_,base),(/,reaction,_,soda))";
-                "(&,(/,neutralization,_,soda),(/,reaction,_,base))", ["acid", "(/,reaction,_,base)"] => "(&,acid,(/,reaction,_,base))";
-                "(&,(/,open,_,lock),(/,open,_,{lock1}))", ["(/,open,_,lock)", "key"] => "(&,key,(/,open,_,lock))";
-                "(&,(\\,REPRESENT,_,CAT),(\\,(\\,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish))", ["(\\,REPRESENT,_,CAT)", "(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish)"] => "(&,(\\,REPRESENT,_,CAT),(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish))";
-                "(&,(\\,REPRESENT,_,CAT),(\\,(\\,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish))", ["cat", "(\\,(\\,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish)"] => "(&,cat,(\\,(\\,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish))";
-                "(&,(\\,reaction,_,soda),(|,acid,(\\,reaction,_,base)))", ["(\\,reaction,_,soda)", "(\\,neutralization,_,base)"] => "(&,(\\,neutralization,_,base),(\\,reaction,_,soda))";
-                "(&,(|,bird,flyer),(|,bird,{Birdie}))", ["(|,bird,{Tweety})", "(|,bird,{Birdie})"] => "(&,(|,bird,{Birdie}),(|,bird,{Tweety}))";
-                "(&,(|,bird,flyer),(|,bird,{Birdie}))", ["{Tweety}", "(|,bird,{Birdie})"] => "(&,{Tweety},(|,bird,{Birdie}))";
-                "(&,[with_wings],{Birdie})", ["(&,robin,{Tweety})", "{Birdie}"] => "(&,robin,{Birdie},{Tweety})";
-                "(&,[with_wings],{Birdie})", ["flyer", "{Birdie}"] => "(&,flyer,{Birdie})";
-                "(&,[with_wings],{Birdie})", ["robin", "{Birdie}"] => "(&,robin,{Birdie})";
-                "(&,[with_wings],{Birdie})", ["{Tweety}", "{Birdie}"] => None;
-                "(&,[yellow],{Birdie})", ["{Tweety}", "{Birdie}"] => None;
-                "(&,acid,(/,neutralization,_,soda))", ["acid", "(/,reaction,_,base)"] => "(&,acid,(/,reaction,_,base))";
-                "(&,acid,(\\,reaction,_,base))", ["acid", "(\\,neutralization,_,base)"] => "(&,acid,(\\,neutralization,_,base))";
-                "(&,acid,(\\,reaction,_,soda))", ["acid", "(\\,neutralization,_,soda)"] => "(&,acid,(\\,neutralization,_,soda))";
-                "(&,animal,(|,animal,swimmer))", ["animal", "gull"] => "(&,animal,gull)";
-                "(&,animal,(|,bird,swimmer))", ["animal", "(&,robin,swan)"] => "(&,animal,robin,swan)";
-                "(&,animal,(|,bird,swimmer))", ["animal", "swan"] => "(&,animal,swan)";
-                "(&,animal,gull)", ["animal", "(|,animal,swimmer)"] => "(&,animal,(|,animal,swimmer))";
-                "(&,animal,gull)", ["animal", "swan"] => "(&,animal,swan)";
-                "(&,animal,gull)", ["animal", "swimmer"] => "(&,animal,swimmer)";
-                "(&,base,(\\,reaction,acid,_))", ["base", "(/,reaction,acid,_)"] => "(&,base,(/,reaction,acid,_))";
-                "(&,base,(\\,reaction,acid,_))", ["base", "(\\,neutralization,acid,_)"] => "(&,base,(\\,neutralization,acid,_))";
-                "(&,base,(\\,reaction,acid,_))", ["base", "soda"] => "(&,base,soda)";
-                "(&,bird,(|,robin,tiger))", ["bird", "animal"] => "(&,animal,bird)";
-                "(&,bird,(|,robin,tiger))", ["bird", "swimmer"] => "(&,bird,swimmer)";
-                "(&,bird,[with_wings],{Birdie},(|,[yellow],{Birdie}))", ["bird", "robin", "{Birdie}", "(|,[yellow],{Birdie})"] => "(&,bird,robin,{Birdie},(|,[yellow],{Birdie}))";
-                "(&,chess,sport)", ["chess", "competition"] => "(&,chess,competition)";
-                "(&,chess,sport)", ["competition", "sport"] => "(&,competition,sport)";
-                "(&,flyer,[with_wings])", ["flyer", "(&,robin,{Tweety})"] => "(&,flyer,robin,{Tweety})";
-                "(&,flyer,[with_wings])", ["flyer", "robin"] => "(&,flyer,robin)";
-                "(&,flyer,[with_wings])", ["flyer", "{Birdie}"] => "(&,flyer,{Birdie})";
-                "(&,flyer,[with_wings])", ["flyer", "{Tweety}"] => "(&,flyer,{Tweety})";
-                "(&,flyer,[yellow])", ["flyer", "{Birdie}"] => "(&,flyer,{Birdie})";
-                "(&,flyer,[yellow])", ["flyer", "{Tweety}"] => "(&,flyer,{Tweety})";
-                "(&,flyer,[yellow],(|,[with_wings],{Birdie}))", ["flyer", "{Birdie}", "(|,[with_wings],{Birdie})"] => "(&,flyer,{Birdie},(|,[with_wings],{Birdie}))";
-                "(&,flyer,[yellow],(|,[with_wings],{Birdie}))", ["flyer", "{Tweety}", "(|,[with_wings],{Birdie})"] => "(&,flyer,{Tweety},(|,[with_wings],{Birdie}))";
-                "(&,flyer,{Birdie})", ["flyer", "[with_wings]"] => "(&,flyer,[with_wings])";
-                "(&,flyer,{Birdie})", ["flyer", "[yellow]"] => "(&,flyer,[yellow])";
-                "(&,flyer,{Birdie})", ["flyer", "bird"] => "(&,bird,flyer)";
-                "(&,flyer,{Birdie})", ["flyer", "{Tweety}"] => "(&,flyer,{Tweety})";
-                "(&,key,(/,open,_,lock))", ["key", "(/,open,_,{lock1})"] => "(&,key,(/,open,_,{lock1}))";
-                "(&,key,(/,open,_,lock))", ["key", "{key1}"] => "(&,key,{key1})";
-                "(&,neutralization,(*,(\\,reaction,_,soda),base))", ["neutralization", "(*,(\\,neutralization,_,base),base)"] => "(&,neutralization,(*,(\\,neutralization,_,base),base))";
-                "(&,neutralization,(*,(\\,reaction,_,soda),base))", ["neutralization", "reaction"] => "(&,neutralization,reaction)";
-                "(&,neutralization,(*,acid,(\\,neutralization,acid,_)))", ["neutralization", "(*,acid,(/,reaction,acid,_))"] => "(&,neutralization,(*,acid,(/,reaction,acid,_)))";
-                "(&,neutralization,(*,acid,(\\,neutralization,acid,_)))", ["neutralization", "(*,acid,soda)"] => "(&,neutralization,(*,acid,soda))";
-                "(&,neutralization,(*,acid,soda))", ["neutralization", "(*,acid,base)"] => "(&,neutralization,(*,acid,base))";
-                "(&,neutralization,(*,acid,soda))", ["neutralization", "reaction"] => "(&,neutralization,reaction)";
-                "(&,num,(/,(*,0),_))", ["num", "(/,num,_)"] => "(&,num,(/,num,_))";
-                "(&,reaction,(*,acid,soda))", ["reaction", "neutralization"] => "(&,neutralization,reaction)";
-                "(&,robin,tiger)", ["robin", "animal"] => "(&,animal,robin)";
-                "(&,robin,tiger)", ["robin", "bird"] => "(&,bird,robin)";
-                "(&,robin,tiger)", ["robin", "swimmer"] => "(&,robin,swimmer)";
-                "(&,tiger,(|,bird,robin))", ["bird", "(|,bird,robin)"] => "(&,bird,(|,bird,robin))";
-                "(&,tiger,(|,bird,robin))", ["tiger", "animal"] => "(&,animal,tiger)";
-                "(&,tiger,(|,bird,robin))", ["tiger", "swimmer"] => "(&,swimmer,tiger)";
-                "(&,{Birdie},(|,flyer,[yellow]))", ["{Birdie}", "(|,flyer,{Tweety})"] => "(&,{Birdie},(|,flyer,{Tweety}))";
-                "(&,{Birdie},(|,flyer,[yellow]))", ["{Birdie}", "{Tweety}"] => None;
-                "(&,{key1},(/,open,_,lock))", ["(/,open,_,{lock1})", "(/,open,_,lock)"] => "(&,(/,open,_,lock),(/,open,_,{lock1}))";
-                "(&,{key1},(/,open,_,lock))", ["(|,(/,open,_,lock1),(/,open,_,{lock1}))", "(/,open,_,lock)"] => "(&,(/,open,_,lock),(|,(/,open,_,lock1),(/,open,_,{lock1})))";
-                "(&,{key1},(/,open,_,lock))", ["(|,key,(/,open,_,{lock1}))", "(/,open,_,lock)"] => "(&,(/,open,_,lock),(|,key,(/,open,_,{lock1})))";
-                "(&,{key1},(/,open,_,lock))", ["key", "(/,open,_,lock)"] => "(&,key,(/,open,_,lock))";
-                "(*,(*,(*,0)))", ["(*,(*,(/,num,_)))"] => "(*,(*,(*,(/,num,_))))";
-                "(*,(*,0))", ["(*,(/,num,_))"] => "(*,(*,(/,num,_)))";
-                "(*,(*,0))", ["(*,num)"] => "(*,(*,num))";
-                "(*,(*,CAT,eat,fish),<(*,CAT,FISH) --> FOOD>)", ["(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>)", "<(*,CAT,FISH) --> FOOD>"] => "(*,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),<(*,CAT,FISH) --> FOOD>)";
-                "(*,(/,(*,0),_))", ["(/,num,_)"] => "(*,(/,num,_))";
-                "(*,(/,(/,num,_),_))", ["(/,num,_)"] => "(*,(/,num,_))";
-                "(*,(/,num,_))", ["(/,(/,num,_),_)"] => "(*,(/,(/,num,_),_))";
-                "(*,(/,num,_))", ["0"] => "(*,0)";
-                "(*,(/,num,_))", ["num"] => "(*,num)";
-                "(*,(/,open,_,lock1),lock1)", ["{key1}", "lock1"] => "(*,{key1},lock1)";
-                "(*,(\\,reaction,_,base),base)", ["(\\,neutralization,_,base)", "base"] => "(*,(\\,neutralization,_,base),base)";
-                "(*,(\\,reaction,_,soda),base)", ["(\\,neutralization,_,base)", "base"] => "(*,(\\,neutralization,_,base),base)";
-                "(*,(\\,reaction,_,soda),base)", ["acid", "base"] => "(*,acid,base)";
-                "(*,(|,key,(/,open,_,{lock1})),lock)", ["(/,open,_,lock)", "lock"] => "(*,(/,open,_,lock),lock)";
-                "(*,0)", ["(&,num,(/,(*,(/,num,_)),_))"] => "(*,(&,num,(/,(*,(/,num,_)),_)))";
-                "(*,0)", ["(/,(*,(/,num,_)),_)"] => "(*,(/,(*,(/,num,_)),_))";
-                "(*,0)", ["(/,num,_)"] => "(*,(/,num,_))";
-                "(*,0)", ["num"] => "(*,num)";
-                "(*,a,(/,like,_,a))", ["a", "b"] => "(*,a,b)";
-                "(*,a,b)", ["(/,like,b,_)", "b"] => "(*,(/,like,b,_),b)";
-                "(*,a,b)", ["a", "(/,like,_,a)"] => "(*,a,(/,like,_,a))";
-                "(*,acid,(&,soda,(/,neutralization,acid,_)))", ["acid", "(/,reaction,acid,_)"] => "(*,acid,(/,reaction,acid,_))";
-                "(*,acid,(/,neutralization,acid,_))", ["acid", "base"] => "(*,acid,base)";
-                "(*,acid,(/,reaction,acid,_))", ["acid", "(&,soda,(/,neutralization,acid,_))"] => "(*,acid,(&,soda,(/,neutralization,acid,_)))";
-                "(*,acid,(/,reaction,acid,_))", ["acid", "(/,neutralization,acid,_)"] => "(*,acid,(/,neutralization,acid,_))";
-                "(*,acid,(/,reaction,acid,_))", ["acid", "(\\,neutralization,acid,_)"] => "(*,acid,(\\,neutralization,acid,_))";
-                "(*,acid,(/,reaction,acid,_))", ["acid", "(\\,reaction,acid,_)"] => "(*,acid,(\\,reaction,acid,_))";
-                "(*,acid,(/,reaction,acid,_))", ["acid", "(|,base,(\\,reaction,acid,_))"] => "(*,acid,(|,base,(\\,reaction,acid,_)))";
-                "(*,acid,(/,reaction,acid,_))", ["acid", "(|,soda,(\\,neutralization,acid,_))"] => "(*,acid,(|,soda,(\\,neutralization,acid,_)))";
-                "(*,acid,(/,reaction,acid,_))", ["acid", "base"] => "(*,acid,base)";
-                "(*,acid,(/,reaction,acid,_))", ["acid", "soda"] => "(*,acid,soda)";
-                "(*,acid,base)", ["acid", "(/,neutralization,acid,_)"] => "(*,acid,(/,neutralization,acid,_))";
-                "(*,acid,base)", ["acid", "(\\,neutralization,acid,_)"] => "(*,acid,(\\,neutralization,acid,_))";
-                "(*,acid,base)", ["acid", "soda"] => "(*,acid,soda)";
-                "(*,acid,soda)", ["(/,neutralization,_,soda)", "soda"] => "(*,(/,neutralization,_,soda),soda)";
-                "(*,acid,soda)", ["acid", "(/,neutralization,acid,_)"] => "(*,acid,(/,neutralization,acid,_))";
-                "(*,acid,soda)", ["acid", "(/,reaction,acid,_)"] => "(*,acid,(/,reaction,acid,_))";
-                "(*,acid,soda)", ["acid", "(\\,neutralization,acid,_)"] => "(*,acid,(\\,neutralization,acid,_))";
-                "(*,acid,soda)", ["acid", "base"] => "(*,acid,base)";
-                "(*,b,a)", ["b", "(/,like,b,_)"] => "(*,b,(/,like,b,_))";
-                "(*,num)", ["(/,num,_)"] => "(*,(/,num,_))";
-                "(*,num)", ["0"] => "(*,0)";
-                "(*,tim,tom)", ["(/,uncle,tom,_)", "tom"] => "(*,(/,uncle,tom,_),tom)";
-                "(*,{key1},lock)", ["(&,key,(/,open,_,{lock1}))", "lock"] => "(*,(&,key,(/,open,_,{lock1})),lock)";
-                "(*,{key1},lock)", ["(/,open,_,{lock1})", "lock"] => "(*,(/,open,_,{lock1}),lock)";
-                "(*,{key1},lock)", ["(|,key,(/,open,_,{lock1}))", "lock"] => "(*,(|,key,(/,open,_,{lock1})),lock)";
-                "(*,{key1},lock)", ["key", "lock"] => "(*,key,lock)";
-                "(*,{key1},lock1)", ["(/,open,_,lock)", "lock1"] => "(*,(/,open,_,lock),lock1)";
-                "(*,{key1},lock1)", ["(/,open,_,lock1)", "lock1"] => "(*,(/,open,_,lock1),lock1)";
-                "(*,{key1},lock1)", ["(/,open,_,{lock1})", "lock1"] => "(*,(/,open,_,{lock1}),lock1)";
-                "(*,{key1},lock1)", ["(|,(/,open,_,lock1),(/,open,_,{lock1}))", "lock1"] => "(*,(|,(/,open,_,lock1),(/,open,_,{lock1})),lock1)";
-                "(*,{key1},lock1)", ["(|,key,(/,open,_,{lock1}))", "lock1"] => "(*,(|,key,(/,open,_,{lock1})),lock1)";
-                "(*,{key1},lock1)", ["key", "lock1"] => "(*,key,lock1)";
-                "(*,{key1},{lock1})", ["(/,open,_,lock)", "{lock1}"] => "(*,(/,open,_,lock),{lock1})";
-                "(*,{key1},{lock1})", ["(/,open,_,{lock1})", "{lock1}"] => "(*,(/,open,_,{lock1}),{lock1})";
-                "(*,{key1},{lock1})", ["key", "{lock1}"] => "(*,key,{lock1})";
-                "(/,(*,(/,num,_)),_)", ["(*,num)"] => "(/,(*,num),_)";
-                "(/,(*,b,(/,like,b,_)),_,a)", ["(*,b,a)", "a"] => "(/,(*,b,a),_,a)";
-                "(/,(*,num),_)", ["(*,0)"] => "(/,(*,0),_)";
-                "(/,(*,tim,tom),tom,_)", ["tom", "uncle"] => "(/,uncle,tom,_)";
-                "(/,(/,num,_),_)", ["0"] => "(/,0,_)";
-                "(/,0,_)", ["(&,num,(/,(*,(/,num,_)),_))"] => "(/,(&,num,(/,(*,(/,num,_)),_)),_)";
-                "(/,0,_)", ["(/,num,_)"] => "(/,(/,num,_),_)";
-                "(/,0,_)", ["num"] => "(/,num,_)";
-                "(/,like,_,a)", ["like", "(/,like,b,_)"] => "(/,like,_,(/,like,b,_))";
-                "(/,like,b,_)", ["(/,like,_,a)", "like"] => "(/,like,(/,like,_,a),_)";
-                "(/,neutralization,_,base)", ["neutralization", "(/,neutralization,acid,_)"] => "(/,neutralization,_,(/,neutralization,acid,_))";
-                "(/,neutralization,_,base)", ["neutralization", "(\\,neutralization,acid,_)"] => "(/,neutralization,_,(\\,neutralization,acid,_))";
-                "(/,neutralization,_,base)", ["neutralization", "soda"] => "(/,neutralization,_,soda)";
-                "(/,neutralization,_,base)", ["reaction", "base"] => "(/,reaction,_,base)";
-                "(/,neutralization,_,soda)", ["neutralization", "(/,neutralization,acid,_)"] => "(/,neutralization,_,(/,neutralization,acid,_))";
-                "(/,neutralization,_,soda)", ["neutralization", "(/,reaction,acid,_)"] => "(/,neutralization,_,(/,reaction,acid,_))";
-                "(/,neutralization,_,soda)", ["neutralization", "base"] => "(/,neutralization,_,base)";
-                "(/,neutralization,acid,_)", ["acid", "reaction"] => "(/,reaction,acid,_)";
-                "(/,num,_)", ["(*,0)"] => "(/,(*,0),_)";
-                "(/,num,_)", ["(/,num,_)"] => "(/,(/,num,_),_)";
-                "(/,num,_)", ["0"] => "(/,0,_)";
-                "(/,open,_,(|,lock,(/,open,{key1},_)))", ["open", "{lock1}"] => "(/,open,_,{lock1})";
-                "(/,open,_,{lock1})", ["open", "(|,lock,(/,open,{key1},_))"] => "(/,open,_,(|,lock,(/,open,{key1},_)))";
-                "(/,open,_,{lock1})", ["open", "lock"] => "(/,open,_,lock)";
-                "(/,reaction,_,base)", ["(*,acid,soda)", "base"] => "(/,(*,acid,soda),_,base)";
-                "(/,reaction,_,base)", ["neutralization", "base"] => "(/,neutralization,_,base)";
-                "(/,reaction,_,base)", ["reaction", "(/,neutralization,acid,_)"] => "(/,reaction,_,(/,neutralization,acid,_))";
-                "(/,reaction,_,base)", ["reaction", "soda"] => "(/,reaction,_,soda)";
-                "(/,reaction,_,soda)", ["neutralization", "soda"] => "(/,neutralization,_,soda)";
-                "(/,reaction,_,soda)", ["reaction", "(/,neutralization,acid,_)"] => "(/,reaction,_,(/,neutralization,acid,_))";
-                "(/,reaction,_,soda)", ["reaction", "(/,reaction,acid,_)"] => "(/,reaction,_,(/,reaction,acid,_))";
-                "(/,reaction,_,soda)", ["reaction", "(\\,neutralization,acid,_)"] => "(/,reaction,_,(\\,neutralization,acid,_))";
-                "(/,reaction,_,soda)", ["reaction", "(\\,reaction,acid,_)"] => "(/,reaction,_,(\\,reaction,acid,_))";
-                "(/,reaction,_,soda)", ["reaction", "base"] => "(/,reaction,_,base)";
-                "(/,reaction,acid,_)", ["acid", "(*,acid,soda)"] => "(/,(*,acid,soda),acid,_)";
-                "(/,reaction,acid,_)", ["acid", "neutralization"] => "(/,neutralization,acid,_)";
-                "(/,uncle,_,tom)", ["(*,tim,tom)", "tom"] => "(/,(*,tim,tom),_,tom)";
-                "(/,uncle,tim,_)", ["(/,uncle,_,tom)", "uncle"] => "(/,uncle,(/,uncle,_,tom),_)";
-                "(/,uncle,tim,_)", ["tim", "(*,tim,tom)"] => "(/,(*,tim,tom),tim,_)";
-                "(/,uncle,tom,_)", ["tom", "(*,tim,tom)"] => "(/,(*,tim,tom),tom,_)";
-                "(\\,(*,b,a),_,(/,like,b,_))", ["like", "(/,like,b,_)"] => "(\\,like,_,(/,like,b,_))";
-                "(\\,REPRESENT,_,CAT)", ["REPRESENT", "(\\,REPRESENT,_,CAT)"] => "(\\,REPRESENT,_,(\\,REPRESENT,_,CAT))";
-                "(\\,neutralization,_,(/,neutralization,acid,_))", ["neutralization", "soda"] => "(\\,neutralization,_,soda)";
-                "(\\,neutralization,_,(/,reaction,acid,_))", ["neutralization", "(/,neutralization,acid,_)"] => "(\\,neutralization,_,(/,neutralization,acid,_))";
-                "(\\,neutralization,_,(/,reaction,acid,_))", ["neutralization", "(\\,neutralization,acid,_)"] => "(\\,neutralization,_,(\\,neutralization,acid,_))";
-                "(\\,neutralization,_,(/,reaction,acid,_))", ["neutralization", "(|,base,(\\,reaction,acid,_))"] => "(\\,neutralization,_,(|,base,(\\,reaction,acid,_)))";
-                "(\\,neutralization,_,(/,reaction,acid,_))", ["neutralization", "base"] => "(\\,neutralization,_,base)";
-                "(\\,neutralization,_,(/,reaction,acid,_))", ["neutralization", "soda"] => "(\\,neutralization,_,soda)";
-                "(\\,neutralization,_,base)", ["neutralization", "(/,neutralization,acid,_)"] => "(\\,neutralization,_,(/,neutralization,acid,_))";
-                "(\\,neutralization,_,base)", ["neutralization", "soda"] => "(\\,neutralization,_,soda)";
-                "(\\,neutralization,_,base)", ["reaction", "base"] => "(\\,reaction,_,base)";
-                "(\\,neutralization,_,soda)", ["neutralization", "(/,neutralization,acid,_)"] => "(\\,neutralization,_,(/,neutralization,acid,_))";
-                "(\\,neutralization,_,soda)", ["neutralization", "(/,reaction,acid,_)"] => "(\\,neutralization,_,(/,reaction,acid,_))";
-                "(\\,neutralization,_,soda)", ["neutralization", "(\\,neutralization,acid,_)"] => "(\\,neutralization,_,(\\,neutralization,acid,_))";
-                "(\\,neutralization,_,soda)", ["neutralization", "(\\,reaction,acid,_)"] => "(\\,neutralization,_,(\\,reaction,acid,_))";
-                "(\\,neutralization,_,soda)", ["neutralization", "base"] => "(\\,neutralization,_,base)";
-                "(\\,neutralization,acid,_)", ["(\\,reaction,_,base)", "neutralization"] => "(\\,neutralization,(\\,reaction,_,base),_)";
-                "(\\,neutralization,acid,_)", ["acid", "reaction"] => "(\\,reaction,acid,_)";
-                "(\\,reaction,(\\,reaction,_,soda),_)", ["(\\,reaction,_,base)", "reaction"] => "(\\,reaction,(\\,reaction,_,base),_)";
-                "(\\,reaction,_,base)", ["(*,acid,soda)", "base"] => "(\\,(*,acid,soda),_,base)";
-                "(\\,reaction,_,base)", ["neutralization", "base"] => "(\\,neutralization,_,base)";
-                "(\\,reaction,_,base)", ["reaction", "soda"] => "(\\,reaction,_,soda)";
-                "(\\,reaction,_,soda)", ["neutralization", "soda"] => "(\\,neutralization,_,soda)";
-                "(\\,reaction,_,soda)", ["reaction", "(/,neutralization,acid,_)"] => "(\\,reaction,_,(/,neutralization,acid,_))";
-                "(\\,reaction,_,soda)", ["reaction", "(/,reaction,acid,_)"] => "(\\,reaction,_,(/,reaction,acid,_))";
-                "(\\,reaction,_,soda)", ["reaction", "(\\,neutralization,acid,_)"] => "(\\,reaction,_,(\\,neutralization,acid,_))";
-                "(\\,reaction,_,soda)", ["reaction", "(\\,reaction,acid,_)"] => "(\\,reaction,_,(\\,reaction,acid,_))";
-                "(\\,reaction,_,soda)", ["reaction", "base"] => "(\\,reaction,_,base)";
-                "(\\,reaction,acid,_)", ["acid", "(*,acid,soda)"] => "(\\,(*,acid,soda),acid,_)";
-                "(\\,reaction,acid,_)", ["acid", "neutralization"] => "(\\,neutralization,acid,_)";
-                "(|,(&,animal,gull),(&,bird,robin))", ["(&,animal,gull)", "swimmer"] => "(|,swimmer,(&,animal,gull))";
-                "(|,(&,flyer,{Birdie}),{Birdie,Tweety})", ["(&,flyer,{Birdie})", "(|,[yellow],{Birdie})"] => "(|,[yellow],{Birdie},(&,flyer,{Birdie}))";
-                "(|,(&,flyer,{Birdie}),{Birdie,Tweety})", ["(&,flyer,{Birdie})", "(|,[yellow],{Tweety})"] => "(|,[yellow],{Tweety},(&,flyer,{Birdie}))";
-                "(|,(/,neutralization,_,(\\,neutralization,acid,_)),(/,reaction,_,base))", ["(/,neutralization,_,base)", "(/,reaction,_,base)"] => "(|,(/,neutralization,_,base),(/,reaction,_,base))";
-                "(|,(/,neutralization,_,(\\,neutralization,acid,_)),(/,reaction,_,base))", ["acid", "(/,reaction,_,base)"] => "(|,acid,(/,reaction,_,base))";
-                "(|,(/,neutralization,_,base),(/,reaction,_,base))", ["(/,neutralization,_,base)", "acid"] => "(|,acid,(/,neutralization,_,base))";
-                "(|,(/,neutralization,_,base),(/,reaction,_,soda))", ["(/,neutralization,_,base)", "(/,neutralization,_,(\\,neutralization,acid,_))"] => "(|,(/,neutralization,_,base),(/,neutralization,_,(\\,neutralization,acid,_)))";
-                "(|,(/,neutralization,_,base),(/,reaction,_,soda))", ["(/,neutralization,_,base)", "(/,reaction,_,(\\,neutralization,acid,_))"] => "(|,(/,neutralization,_,base),(/,reaction,_,(\\,neutralization,acid,_)))";
-                "(|,(/,neutralization,_,base),(/,reaction,_,soda))", ["(/,neutralization,_,base)", "(/,reaction,_,base)"] => "(|,(/,neutralization,_,base),(/,reaction,_,base))";
-                "(|,(/,neutralization,_,base),(/,reaction,_,soda))", ["(/,neutralization,_,base)", "acid"] => "(|,acid,(/,neutralization,_,base))";
-                "(|,(/,neutralization,_,soda),(/,reaction,_,base))", ["(/,neutralization,_,base)", "(/,reaction,_,base)"] => "(|,(/,neutralization,_,base),(/,reaction,_,base))";
-                "(|,(/,neutralization,_,soda),(/,reaction,_,base))", ["(/,reaction,_,soda)", "(/,reaction,_,base)"] => "(|,(/,reaction,_,base),(/,reaction,_,soda))";
-                "(|,(/,neutralization,_,soda),(/,reaction,_,base))", ["acid", "(/,reaction,_,base)"] => "(|,acid,(/,reaction,_,base))";
-                "(|,(/,num,_),(/,(*,num),_))", ["(/,num,_)", "0"] => "(|,0,(/,num,_))";
-                "(|,(\\,REPRESENT,_,CAT),(\\,(\\,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish))", ["(\\,REPRESENT,_,CAT)", "(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish)"] => "(|,(\\,REPRESENT,_,CAT),(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish))";
-                "(|,(\\,REPRESENT,_,CAT),(\\,(\\,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish))", ["cat", "(\\,(\\,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish)"] => "(|,cat,(\\,(\\,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish))";
-                "(|,CAT,(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish))", ["(\\,(\\,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish)", "(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish)"] => "(|,(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish),(\\,(\\,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish))";
-                "(|,[strong],(~,youth,girl))", ["(~,boy,girl)", "(~,youth,girl)"] => "(|,(~,boy,girl),(~,youth,girl))";
-                "(|,[strong],(~,youth,girl))", ["boy", "(~,youth,girl)"] => "(|,boy,(~,youth,girl))";
-                "(|,[with_wings],[yellow],{Birdie})", ["[with_wings]", "(|,flyer,{Tweety})", "{Birdie}"] => "(|,flyer,[with_wings],{Birdie},{Tweety})";
-                "(|,[with_wings],[yellow],{Birdie})", ["[with_wings]", "flyer", "{Birdie}"] => "(|,flyer,[with_wings],{Birdie})";
-                "(|,[with_wings],[yellow],{Birdie})", ["[with_wings]", "{Tweety}", "{Birdie}"] => "(|,[with_wings],{Birdie},{Tweety})";
-                "(|,[with_wings],[yellow],{Birdie})", ["flyer", "[yellow]", "{Birdie}"] => "(|,flyer,[yellow],{Birdie})";
-                "(|,[with_wings],[yellow],{Birdie})", ["robin", "[yellow]", "{Birdie}"] => "(|,robin,[yellow],{Birdie})";
-                "(|,[with_wings],{Birdie})", ["flyer", "{Birdie}"] => "(|,flyer,{Birdie})";
-                "(|,[with_wings],{Birdie})", ["robin", "{Birdie}"] => "(|,robin,{Birdie})";
-                "(|,[with_wings],{Birdie})", ["{Tweety}", "{Birdie}"] => "{Birdie,Tweety}";
-                "(|,[with_wings],{Birdie},(&,bird,(|,[yellow],{Birdie})))", ["flyer", "{Birdie}", "(&,bird,(|,[yellow],{Birdie}))"] => "(|,flyer,{Birdie},(&,bird,(|,[yellow],{Birdie})))";
-                "(|,[with_wings],{Birdie},(&,bird,(|,[yellow],{Birdie})))", ["robin", "{Birdie}", "(&,bird,(|,[yellow],{Birdie}))"] => "(|,robin,{Birdie},(&,bird,(|,[yellow],{Birdie})))";
-                "(|,[with_wings],{Birdie},(&,flyer,[yellow]))", ["[with_wings]", "{Birdie}", "(|,[with_wings],{Birdie})"] => "(|,[with_wings],{Birdie})";
-                "(|,[yellow],{Birdie})", ["(&,flyer,{Birdie})", "{Birdie}"] => "(|,{Birdie},(&,flyer,{Birdie}))";
-                "(|,[yellow],{Birdie})", ["[yellow]", "[with_wings]"] => None;
-                "(|,[yellow],{Birdie})", ["[yellow]", "bird"] => "(|,bird,[yellow])";
-                "(|,[yellow],{Birdie})", ["[yellow]", "flyer"] => "(|,flyer,[yellow])";
-                "(|,[yellow],{Birdie})", ["[yellow]", "{Tweety}"] => "(|,[yellow],{Tweety})";
-                "(|,[yellow],{Birdie})", ["flyer", "{Birdie}"] => "(|,flyer,{Birdie})";
-                "(|,[yellow],{Birdie})", ["{Tweety}", "{Birdie}"] => "{Birdie,Tweety}";
-                "(|,[yellow],{Birdie},(&,flyer,{Birdie}))", ["flyer", "{Birdie}", "(&,flyer,{Birdie})"] => "(|,flyer,{Birdie},(&,flyer,{Birdie}))";
-                "(|,[yellow],{Birdie},(&,flyer,{Birdie}))", ["{Tweety}", "{Birdie}", "(&,flyer,{Birdie})"] => "(|,(&,flyer,{Birdie}),{Birdie,Tweety})";
-                "(|,[yellow],{Tweety})", ["flyer", "{Tweety}"] => "(|,flyer,{Tweety})";
-                "(|,[yellow],{Tweety})", ["{Birdie}", "{Tweety}"] => "{Birdie,Tweety}";
-                "(|,acid,(/,neutralization,_,soda))", ["acid", "(/,reaction,_,base)"] => "(|,acid,(/,reaction,_,base))";
-                "(|,acid,(\\,reaction,_,base))", ["acid", "(\\,neutralization,_,base)"] => "(|,acid,(\\,neutralization,_,base))";
-                "(|,acid,(\\,reaction,_,soda))", ["acid", "(\\,neutralization,_,base)"] => "(|,acid,(\\,neutralization,_,base))";
-                "(|,acid,(\\,reaction,_,soda))", ["acid", "(\\,neutralization,_,soda)"] => "(|,acid,(\\,neutralization,_,soda))";
-                "(|,animal,gull)", ["animal", "robin"] => "(|,animal,robin)";
-                "(|,animal,gull)", ["animal", "swan"] => "(|,animal,swan)";
-                "(|,animal,gull)", ["animal", "swimmer"] => "(|,animal,swimmer)";
-                "(|,base,(/,reaction,acid,_))", ["base", "(/,neutralization,acid,_)"] => "(|,base,(/,neutralization,acid,_))";
-                "(|,base,(\\,reaction,acid,_))", ["base", "(/,reaction,acid,_)"] => "(|,base,(/,reaction,acid,_))";
-                "(|,base,(\\,reaction,acid,_))", ["base", "(\\,neutralization,acid,_)"] => "(|,base,(\\,neutralization,acid,_))";
-                "(|,base,(\\,reaction,acid,_))", ["base", "soda"] => "(|,base,soda)";
-                "(|,bird,(&,robin,tiger))", ["bird", "animal"] => "(|,animal,bird)";
-                "(|,bird,(&,robin,tiger))", ["bird", "swimmer"] => "(|,bird,swimmer)";
-                "(|,bird,[yellow])", ["bird", "flyer"] => "(|,bird,flyer)";
-                "(|,bird,[yellow])", ["bird", "{Birdie}"] => "(|,bird,{Birdie})";
-                "(|,bird,[yellow])", ["bird", "{Tweety}"] => "(|,bird,{Tweety})";
-                "(|,bird,[yellow],{Birdie})", ["bird", "flyer", "{Birdie}"] => "(|,bird,flyer,{Birdie})";
-                "(|,bird,[yellow],{Birdie})", ["bird", "{Tweety}", "{Birdie}"] => "(|,bird,{Birdie},{Tweety})";
-                "(|,bird,{Birdie})", ["bird", "[with_wings]"] => "(|,bird,[with_wings])";
-                "(|,bird,{Birdie})", ["bird", "[yellow]"] => "(|,bird,[yellow])";
-                "(|,bird,{Birdie})", ["bird", "flyer"] => "(|,bird,flyer)";
-                "(|,bird,{Birdie})", ["bird", "{Tweety}"] => "(|,bird,{Tweety})";
-                "(|,bird,{Tweety})", ["bird", "(|,bird,flyer)"] => "(|,bird,flyer)";
-                "(|,boy,girl)", ["youth", "girl"] => "(|,girl,youth)";
-                "(|,chess,competition)", ["chess", "(|,chess,sport)"] => "(|,chess,sport)";
-                "(|,chess,competition)", ["chess", "sport"] => "(|,chess,sport)";
-                "(|,chess,competition)", ["sport", "competition"] => "(|,competition,sport)";
-                "(|,chess,sport)", ["chess", "competition"] => "(|,chess,competition)";
-                "(|,chess,sport)", ["competition", "sport"] => "(|,competition,sport)";
-                "(|,competition,sport)", ["chess", "sport"] => "(|,chess,sport)";
-                "(|,competition,sport)", ["competition", "chess"] => "(|,chess,competition)";
-                "(|,flyer,[with_wings])", ["flyer", "robin"] => "(|,flyer,robin)";
-                "(|,flyer,[with_wings])", ["flyer", "{Birdie}"] => "(|,flyer,{Birdie})";
-                "(|,flyer,[with_wings])", ["flyer", "{Tweety}"] => "(|,flyer,{Tweety})";
-                "(|,flyer,[yellow])", ["flyer", "(&,flyer,{Birdie})"] => "(|,flyer,(&,flyer,{Birdie}))";
-                "(|,flyer,[yellow])", ["flyer", "{Birdie}"] => "(|,flyer,{Birdie})";
-                "(|,flyer,[yellow])", ["flyer", "{Tweety}"] => "(|,flyer,{Tweety})";
-                "(|,flyer,[yellow],(&,flyer,{Birdie}))", ["flyer", "{Birdie}", "(&,flyer,{Birdie})"] => "(|,flyer,{Birdie},(&,flyer,{Birdie}))";
-                "(|,flyer,[yellow],{Birdie})", ["flyer", "(&,flyer,{Birdie})", "{Birdie}"] => "(|,flyer,{Birdie},(&,flyer,{Birdie}))";
-                "(|,flyer,[yellow],{Birdie})", ["flyer", "(|,flyer,{Tweety})", "{Birdie}"] => "(|,flyer,{Birdie},{Tweety})";
-                "(|,flyer,[yellow],{Birdie})", ["flyer", "{Tweety}", "{Birdie}"] => "(|,flyer,{Birdie},{Tweety})";
-                "(|,key,(/,open,_,lock))", ["key", "(/,open,_,{lock1})"] => "(|,key,(/,open,_,{lock1}))";
-                "(|,key,(/,open,_,lock))", ["key", "{key1}"] => "(|,key,{key1})";
-                "(|,neutralization,(*,(\\,reaction,_,soda),base))", ["neutralization", "reaction"] => "(|,neutralization,reaction)";
-                "(|,neutralization,(*,acid,soda))", ["neutralization", "(*,acid,(\\,neutralization,acid,_))"] => "(|,neutralization,(*,acid,(\\,neutralization,acid,_)))";
-                "(|,neutralization,(*,acid,soda))", ["neutralization", "(*,acid,base)"] => "(|,neutralization,(*,acid,base))";
-                "(|,neutralization,(*,acid,soda))", ["neutralization", "reaction"] => "(|,neutralization,reaction)";
-                "(|,reaction,(*,acid,soda))", ["reaction", "(*,acid,base)"] => "(|,reaction,(*,acid,base))";
-                "(|,reaction,(*,acid,soda))", ["reaction", "neutralization"] => "(|,neutralization,reaction)";
-                "(|,robin,[yellow],{Birdie})", ["robin", "(|,flyer,{Tweety})", "{Birdie}"] => "(|,flyer,robin,{Birdie},{Tweety})";
-                "(|,robin,[yellow],{Birdie})", ["robin", "flyer", "{Birdie}"] => "(|,flyer,robin,{Birdie})";
-                "(|,robin,[yellow],{Birdie})", ["robin", "{Tweety}", "{Birdie}"] => "(|,robin,{Birdie},{Tweety})";
-                "(|,robin,tiger)", ["robin", "animal"] => "(|,animal,robin)";
-                "(|,robin,tiger)", ["robin", "bird"] => "(|,bird,robin)";
-                "(|,robin,tiger)", ["robin", "swimmer"] => "(|,robin,swimmer)";
-                "(|,soda,(\\,neutralization,acid,_))", ["(/,neutralization,acid,_)", "(\\,neutralization,acid,_)"] => "(|,(/,neutralization,acid,_),(\\,neutralization,acid,_))";
-                "(|,soda,(\\,neutralization,acid,_))", ["(/,reaction,acid,_)", "(\\,neutralization,acid,_)"] => "(|,(/,reaction,acid,_),(\\,neutralization,acid,_))";
-                "(|,soda,(\\,neutralization,acid,_))", ["base", "(\\,neutralization,acid,_)"] => "(|,base,(\\,neutralization,acid,_))";
-                "(|,tiger,(&,bird,robin))", ["tiger", "(|,animal,swimmer)"] => "(|,animal,swimmer,tiger)";
-                "(|,tiger,(&,bird,robin))", ["tiger", "animal"] => "(|,animal,tiger)";
-                "(|,tiger,(&,bird,robin))", ["tiger", "swimmer"] => "(|,swimmer,tiger)";
-                "(|,{key1},(/,open,_,lock))", ["(/,open,_,{lock1})", "(/,open,_,lock)"] => "(|,(/,open,_,lock),(/,open,_,{lock1}))";
-                "(|,{key1},(/,open,_,lock))", ["(|,key,(/,open,_,{lock1}))", "(/,open,_,lock)"] => "(|,key,(/,open,_,lock),(/,open,_,{lock1}))";
-                "(|,{key1},(/,open,_,lock))", ["key", "(/,open,_,lock)"] => "(|,key,(/,open,_,lock))";
-                "(~,(/,(*,tim,tom),tom,_),tim)", ["(/,(*,tim,tom),tom,_)", "(/,uncle,tom,_)"] => "(~,(/,(*,tim,tom),tom,_),(/,uncle,tom,_))";
-                "(~,[strong],girl)", ["(~,boy,girl)", "girl"] => "(~,(~,boy,girl),girl)";
-                "(~,[strong],girl)", ["boy", "girl"] => "(~,boy,girl)";
-                "(~,boy,girl)", ["[strong]", "girl"] => "(~,[strong],girl)";
-                "(~,boy,girl)", ["youth", "girl"] => "(~,youth,girl)";
-                "(~,youth,girl)", ["(|,boy,girl)", "girl"] => "(~,(|,boy,girl),girl)";
-                "[bright]", ["smart"] => "[smart]";
-                "[smart]", ["bright"] => "[bright]";
-                "{Birdie}", ["Tweety"] => "{Tweety}";
-                "{Mars,Pluto,Saturn,Venus}", ["Mars", "Venus"] => "{Mars,Venus}";
-                "{Tweety}", ["Birdie"] => "{Birdie}";
-            }
-            ok!()
-        }
 
         /* SetExt */
 
@@ -2409,6 +1804,654 @@ mod tests {
             }
             ok!()
         }
+    }
+
+    mod compound {
+        use super::*;
+
+        #[test]
+        fn make_compound_term_from_identifier() -> AResult {
+            macro_once! {
+                // * 🚩模式：参数列表 ⇒ 预期词项
+                macro test($($identifier:tt, $terms:tt => $expected:tt;)*) {
+                    $(
+                        let identifier = $identifier;
+                        let terms: Vec<Term> = term!($terms).into();
+                        let terms_str = terms.iter().map(|t| format!("\"{t}\"")).collect::<Vec<_>>().join(", ");
+                        let out = Term::make_compound_term_from_identifier(
+                            identifier,
+                            terms
+                        );
+                        let expected = option_term!($expected);
+                        assert_eq!(
+                            out, expected,
+                            "{identifier:?}, {terms_str} => {} != {}",
+                            format_option_term(&out),
+                            format_option_term(&expected),
+                        );
+                    )*
+                }
+                // * ℹ️用例均源自OpenNARS实际运行
+                "&", ["(&,robin,{Tweety})", "{Birdie}"] => "(&,robin,{Birdie},{Tweety})";
+                "&", ["(/,neutralization,_,(\\,neutralization,acid,_))", "acid"] => "(&,acid,(/,neutralization,_,(\\,neutralization,acid,_)))";
+                "&", ["(/,neutralization,_,base)", "(/,reaction,_,base)"] => "(&,(/,neutralization,_,base),(/,reaction,_,base))";
+                "&", ["(/,neutralization,_,base)", "acid"] => "(&,acid,(/,neutralization,_,base))";
+                "&", ["(/,open,_,lock)", "key"] => "(&,key,(/,open,_,lock))";
+                "&", ["(/,open,_,{lock1})", "(/,open,_,lock)"] => "(&,(/,open,_,lock),(/,open,_,{lock1}))";
+                "&", ["(/,reaction,_,soda)", "(/,reaction,_,base)"] => "(&,(/,reaction,_,base),(/,reaction,_,soda))";
+                "&", ["(\\,REPRESENT,_,CAT)", "(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish)"] => "(&,(\\,REPRESENT,_,CAT),(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish))";
+                "&", ["(\\,reaction,_,soda)", "(\\,neutralization,_,base)"] => "(&,(\\,neutralization,_,base),(\\,reaction,_,soda))";
+                "&", ["(|,(/,open,_,lock1),(/,open,_,{lock1}))", "(/,open,_,lock)"] => "(&,(/,open,_,lock),(|,(/,open,_,lock1),(/,open,_,{lock1})))";
+                "&", ["(|,bird,{Tweety})", "(|,bird,{Birdie})"] => "(&,(|,bird,{Birdie}),(|,bird,{Tweety}))";
+                "&", ["(|,key,(/,open,_,{lock1}))", "(/,open,_,lock)"] => "(&,(/,open,_,lock),(|,key,(/,open,_,{lock1})))";
+                "&", ["acid", "(/,reaction,_,base)"] => "(&,acid,(/,reaction,_,base))";
+                "&", ["acid", "(\\,neutralization,_,base)"] => "(&,acid,(\\,neutralization,_,base))";
+                "&", ["acid", "(\\,neutralization,_,soda)"] => "(&,acid,(\\,neutralization,_,soda))";
+                "&", ["animal", "(&,robin,swan)"] => "(&,animal,robin,swan)";
+                "&", ["animal", "(|,animal,swimmer)"] => "(&,animal,(|,animal,swimmer))";
+                "&", ["animal", "gull"] => "(&,animal,gull)";
+                "&", ["animal", "swan"] => "(&,animal,swan)";
+                "&", ["animal", "swimmer"] => "(&,animal,swimmer)";
+                "&", ["base", "(/,reaction,acid,_)"] => "(&,base,(/,reaction,acid,_))";
+                "&", ["base", "(\\,neutralization,acid,_)"] => "(&,base,(\\,neutralization,acid,_))";
+                "&", ["base", "soda"] => "(&,base,soda)";
+                "&", ["bird", "animal"] => "(&,animal,bird)";
+                "&", ["bird", "robin", "{Birdie}", "(|,[yellow],{Birdie})"] => "(&,bird,robin,{Birdie},(|,[yellow],{Birdie}))";
+                "&", ["bird", "swimmer"] => "(&,bird,swimmer)";
+                "&", ["chess", "competition"] => "(&,chess,competition)";
+                "&", ["competition", "sport"] => "(&,competition,sport)";
+                "&", ["flyer", "[with_wings]"] => "(&,flyer,[with_wings])";
+                "&", ["flyer", "[yellow]"] => "(&,flyer,[yellow])";
+                "&", ["flyer", "bird"] => "(&,bird,flyer)";
+                "&", ["flyer", "robin"] => "(&,flyer,robin)";
+                "&", ["flyer", "{Birdie}", "(|,[with_wings],{Birdie})"] => "(&,flyer,{Birdie},(|,[with_wings],{Birdie}))";
+                "&", ["flyer", "{Birdie}"] => "(&,flyer,{Birdie})";
+                "&", ["flyer", "{Tweety}", "(|,[with_wings],{Birdie})"] => "(&,flyer,{Tweety},(|,[with_wings],{Birdie}))";
+                "&", ["flyer", "{Tweety}"] => "(&,flyer,{Tweety})";
+                "&", ["key", "(/,open,_,lock)"] => "(&,key,(/,open,_,lock))";
+                "&", ["key", "(/,open,_,{lock1})"] => "(&,key,(/,open,_,{lock1}))";
+                "&", ["key", "{key1}"] => "(&,key,{key1})";
+                "&", ["neutralization", "(*,(\\,neutralization,_,base),base)"] => "(&,neutralization,(*,(\\,neutralization,_,base),base))";
+                "&", ["neutralization", "(*,acid,(/,reaction,acid,_))"] => "(&,neutralization,(*,acid,(/,reaction,acid,_)))";
+                "&", ["neutralization", "(*,acid,base)"] => "(&,neutralization,(*,acid,base))";
+                "&", ["neutralization", "(*,acid,soda)"] => "(&,neutralization,(*,acid,soda))";
+                "&", ["neutralization", "reaction"] => "(&,neutralization,reaction)";
+                "&", ["num", "(/,num,_)"] => "(&,num,(/,num,_))";
+                "&", ["reaction", "neutralization"] => "(&,neutralization,reaction)";
+                "&", ["robin", "animal"] => "(&,animal,robin)";
+                "&", ["robin", "bird"] => "(&,bird,robin)";
+                "&", ["robin", "swimmer"] => "(&,robin,swimmer)";
+                "&", ["robin", "{Birdie}"] => "(&,robin,{Birdie})";
+                "&", ["tiger", "animal"] => "(&,animal,tiger)";
+                "&", ["tiger", "swimmer"] => "(&,swimmer,tiger)";
+                "&", ["{Birdie}", "(|,flyer,{Tweety})"] => "(&,{Birdie},(|,flyer,{Tweety}))";
+                "&", ["{Birdie}", "{Tweety}"] => None;
+                "&", ["{Tweety}", "(|,bird,{Birdie})"] => "(&,{Tweety},(|,bird,{Birdie}))";
+                "&", ["{Tweety}", "{Birdie}"] => None;
+                "&&", ["<robin --> [chirping]>", "<robin --> [flying]>"] => "(&&,<robin --> [chirping]>,<robin --> [flying]>)";
+                "&&", ["<robin --> [chirping]>", "<robin --> [with_wings]>"] => "(&&,<robin --> [chirping]>,<robin --> [with_wings]>)";
+                "&&", ["<robin --> [chirping]>"] => "<robin --> [chirping]>";
+                "&&", ["<robin --> [flying]>", "<robin --> [with_wings]>"] => "(&&,<robin --> [flying]>,<robin --> [with_wings]>)";
+                "&&", ["<robin --> [flying]>"] => "<robin --> [flying]>";
+                "&&", ["<robin --> [living]>"] => "<robin --> [living]>";
+                "&&", ["<robin --> [with_wings]>"] => "<robin --> [with_wings]>";
+                "&&", ["<robin --> bird>", "(||,(&&,<robin --> [flying]>,<robin --> [with_wings]>),<robin --> bird>)"] => "(&&,<robin --> bird>,(||,(&&,<robin --> [flying]>,<robin --> [with_wings]>),<robin --> bird>))";
+                "&&", ["<robin --> bird>", "<robin --> [flying]>", "<robin --> [with_wings]>"] => "(&&,<robin --> bird>,<robin --> [flying]>,<robin --> [with_wings]>)";
+                "&&", ["<robin --> bird>", "<robin --> [flying]>"] => "(&&,<robin --> bird>,<robin --> [flying]>)";
+                "&&", ["<robin --> bird>", "<robin --> [with_wings]>"] => "(&&,<robin --> bird>,<robin --> [with_wings]>)";
+                "&&", ["<robin --> bird>"] => "<robin --> bird>";
+                "&&", ["<robin --> flyer>", "<(*,robin,worms) --> food>"] => "(&&,<robin --> flyer>,<(*,robin,worms) --> food>)";
+                "&&", ["<robin --> flyer>", "<robin --> bird>", "<(*,robin,worms) --> food>"] => "(&&,<robin --> bird>,<robin --> flyer>,<(*,robin,worms) --> food>)";
+                "&&", ["<robin --> flyer>", "<robin --> bird>", "<worms --> (/,food,robin,_)>"] => "(&&,<robin --> bird>,<robin --> flyer>,<worms --> (/,food,robin,_)>)";
+                "&&", ["<robin --> flyer>", "<robin --> bird>"] => "(&&,<robin --> bird>,<robin --> flyer>)";
+                "&&", ["<robin --> flyer>", "<worms --> (/,food,robin,_)>"] => "(&&,<robin --> flyer>,<worms --> (/,food,robin,_)>)";
+                "&&", ["<robin --> flyer>"] => "<robin --> flyer>";
+                "&&", ["<robin --> swimmer>"] => "<robin --> swimmer>";
+                "*", ["(&,key,(/,open,_,{lock1}))", "lock"] => "(*,(&,key,(/,open,_,{lock1})),lock)";
+                "*", ["(&,num,(/,(*,(/,num,_)),_))"] => "(*,(&,num,(/,(*,(/,num,_)),_)))";
+                "*", ["(*,num)"] => "(*,(*,num))";
+                "*", ["(/,(*,(/,num,_)),_)"] => "(*,(/,(*,(/,num,_)),_))";
+                "*", ["(/,(/,num,_),_)"] => "(*,(/,(/,num,_),_))";
+                "*", ["(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>)", "<(*,CAT,FISH) --> FOOD>"] => "(*,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),<(*,CAT,FISH) --> FOOD>)";
+                "*", ["(/,num,_)"] => "(*,(/,num,_))";
+                "*", ["(/,open,_,lock)", "lock"] => "(*,(/,open,_,lock),lock)";
+                "*", ["(/,open,_,lock)", "lock1"] => "(*,(/,open,_,lock),lock1)";
+                "*", ["(/,open,_,lock)", "{lock1}"] => "(*,(/,open,_,lock),{lock1})";
+                "*", ["(/,open,_,lock1)", "lock1"] => "(*,(/,open,_,lock1),lock1)";
+                "*", ["(/,open,_,{lock1})", "lock"] => "(*,(/,open,_,{lock1}),lock)";
+                "*", ["(/,open,_,{lock1})", "lock1"] => "(*,(/,open,_,{lock1}),lock1)";
+                "*", ["(/,open,_,{lock1})", "{lock1}"] => "(*,(/,open,_,{lock1}),{lock1})";
+                "*", ["(/,uncle,tom,_)", "tom"] => "(*,(/,uncle,tom,_),tom)";
+                "*", ["(\\,neutralization,_,base)", "base"] => "(*,(\\,neutralization,_,base),base)";
+                "*", ["(|,(/,open,_,lock1),(/,open,_,{lock1}))", "lock1"] => "(*,(|,(/,open,_,lock1),(/,open,_,{lock1})),lock1)";
+                "*", ["(|,key,(/,open,_,{lock1}))", "lock"] => "(*,(|,key,(/,open,_,{lock1})),lock)";
+                "*", ["(|,key,(/,open,_,{lock1}))", "lock1"] => "(*,(|,key,(/,open,_,{lock1})),lock1)";
+                "*", ["0"] => "(*,0)";
+                "*", ["a", "b"] => "(*,a,b)";
+                "*", ["acid", "(&,soda,(/,neutralization,acid,_))"] => "(*,acid,(&,soda,(/,neutralization,acid,_)))";
+                "*", ["acid", "(/,neutralization,acid,_)"] => "(*,acid,(/,neutralization,acid,_))";
+                "*", ["acid", "(/,reaction,acid,_)"] => "(*,acid,(/,reaction,acid,_))";
+                "*", ["acid", "(\\,neutralization,acid,_)"] => "(*,acid,(\\,neutralization,acid,_))";
+                "*", ["acid", "(\\,reaction,acid,_)"] => "(*,acid,(\\,reaction,acid,_))";
+                "*", ["acid", "(|,base,(\\,reaction,acid,_))"] => "(*,acid,(|,base,(\\,reaction,acid,_)))";
+                "*", ["acid", "(|,soda,(\\,neutralization,acid,_))"] => "(*,acid,(|,soda,(\\,neutralization,acid,_)))";
+                "*", ["acid", "base"] => "(*,acid,base)";
+                "*", ["acid", "soda"] => "(*,acid,soda)";
+                "*", ["key", "lock"] => "(*,key,lock)";
+                "*", ["key", "lock1"] => "(*,key,lock1)";
+                "*", ["key", "{lock1}"] => "(*,key,{lock1})";
+                "*", ["num"] => "(*,num)";
+                "*", ["{key1}", "lock1"] => "(*,{key1},lock1)";
+                "[]", ["bright"] => "[bright]";
+                "[]", ["smart"] => "[smart]";
+                "{}", ["Birdie"] => "{Birdie}";
+                "{}", ["Mars", "Venus"] => "{Mars,Venus}";
+                "|", ["(&,animal,gull)", "swimmer"] => "(|,swimmer,(&,animal,gull))";
+                "|", ["(&,flyer,{Birdie})", "(|,[yellow],{Birdie})"] => "(|,[yellow],{Birdie},(&,flyer,{Birdie}))";
+                "|", ["(&,flyer,{Birdie})", "(|,[yellow],{Tweety})"] => "(|,[yellow],{Tweety},(&,flyer,{Birdie}))";
+                "|", ["(&,flyer,{Birdie})", "{Birdie}"] => "(|,{Birdie},(&,flyer,{Birdie}))";
+                "|", ["(/,neutralization,_,base)", "(/,reaction,_,(\\,neutralization,acid,_))"] => "(|,(/,neutralization,_,base),(/,reaction,_,(\\,neutralization,acid,_)))";
+                "|", ["(/,neutralization,_,base)", "(/,reaction,_,base)"] => "(|,(/,neutralization,_,base),(/,reaction,_,base))";
+                "|", ["(/,neutralization,_,base)", "acid"] => "(|,acid,(/,neutralization,_,base))";
+                "|", ["(/,neutralization,acid,_)", "(\\,neutralization,acid,_)"] => "(|,(/,neutralization,acid,_),(\\,neutralization,acid,_))";
+                "|", ["(/,num,_)", "0"] => "(|,0,(/,num,_))";
+                "|", ["(/,open,_,{lock1})", "(/,open,_,lock)"] => "(|,(/,open,_,lock),(/,open,_,{lock1}))";
+                "|", ["(/,reaction,_,soda)", "(/,reaction,_,base)"] => "(|,(/,reaction,_,base),(/,reaction,_,soda))";
+                "|", ["(/,reaction,acid,_)", "(\\,neutralization,acid,_)"] => "(|,(/,reaction,acid,_),(\\,neutralization,acid,_))";
+                "|", ["(\\,REPRESENT,_,CAT)", "(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish)"] => "(|,(\\,REPRESENT,_,CAT),(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish))";
+                "|", ["(|,key,(/,open,_,{lock1}))", "(/,open,_,lock)"] => "(|,key,(/,open,_,lock),(/,open,_,{lock1}))";
+                "|", ["(~,boy,girl)", "(~,youth,girl)"] => "(|,(~,boy,girl),(~,youth,girl))";
+                "|", ["[with_wings]", "(|,flyer,{Tweety})", "{Birdie}"] => "(|,flyer,[with_wings],{Birdie},{Tweety})";
+                "|", ["[with_wings]", "flyer", "{Birdie}"] => "(|,flyer,[with_wings],{Birdie})";
+                "|", ["[with_wings]", "{Birdie}", "(|,[with_wings],{Birdie})"] => "(|,[with_wings],{Birdie})";
+                "|", ["[with_wings]", "{Tweety}", "{Birdie}"] => "(|,[with_wings],{Birdie},{Tweety})";
+                "|", ["[yellow]", "[with_wings]"] => None;
+                "|", ["[yellow]", "bird"] => "(|,bird,[yellow])";
+                "|", ["[yellow]", "flyer"] => "(|,flyer,[yellow])";
+                "|", ["[yellow]", "{Tweety}"] => "(|,[yellow],{Tweety})";
+                "|", ["acid", "(/,reaction,_,base)"] => "(|,acid,(/,reaction,_,base))";
+                "|", ["acid", "(\\,neutralization,_,base)"] => "(|,acid,(\\,neutralization,_,base))";
+                "|", ["acid", "(\\,neutralization,_,soda)"] => "(|,acid,(\\,neutralization,_,soda))";
+                "|", ["animal", "robin"] => "(|,animal,robin)";
+                "|", ["animal", "swan"] => "(|,animal,swan)";
+                "|", ["animal", "swimmer"] => "(|,animal,swimmer)";
+                "|", ["base", "(/,neutralization,acid,_)"] => "(|,base,(/,neutralization,acid,_))";
+                "|", ["base", "(/,reaction,acid,_)"] => "(|,base,(/,reaction,acid,_))";
+                "|", ["base", "(\\,neutralization,acid,_)"] => "(|,base,(\\,neutralization,acid,_))";
+                "|", ["base", "soda"] => "(|,base,soda)";
+                "|", ["bird", "[with_wings]"] => "(|,bird,[with_wings])";
+                "|", ["bird", "[yellow]"] => "(|,bird,[yellow])";
+                "|", ["bird", "animal"] => "(|,animal,bird)";
+                "|", ["bird", "flyer", "{Birdie}"] => "(|,bird,flyer,{Birdie})";
+                "|", ["bird", "flyer"] => "(|,bird,flyer)";
+                "|", ["bird", "swimmer"] => "(|,bird,swimmer)";
+                "|", ["bird", "{Birdie}"] => "(|,bird,{Birdie})";
+                "|", ["bird", "{Tweety}", "{Birdie}"] => "(|,bird,{Birdie},{Tweety})";
+                "|", ["bird", "{Tweety}"] => "(|,bird,{Tweety})";
+                "|", ["boy", "(~,youth,girl)"] => "(|,boy,(~,youth,girl))";
+                "|", ["chess", "(|,chess,sport)"] => "(|,chess,sport)";
+                "|", ["chess", "competition"] => "(|,chess,competition)";
+                "|", ["chess", "sport"] => "(|,chess,sport)";
+                "|", ["competition", "chess"] => "(|,chess,competition)";
+                "|", ["competition", "sport"] => "(|,competition,sport)";
+                "|", ["flyer", "(&,flyer,{Birdie})", "{Birdie}"] => "(|,flyer,{Birdie},(&,flyer,{Birdie}))";
+                "|", ["flyer", "(&,flyer,{Birdie})"] => "(|,flyer,(&,flyer,{Birdie}))";
+                "|", ["flyer", "(|,flyer,{Tweety})", "{Birdie}"] => "(|,flyer,{Birdie},{Tweety})";
+                "|", ["flyer", "[yellow]", "{Birdie}"] => "(|,flyer,[yellow],{Birdie})";
+                "|", ["flyer", "robin"] => "(|,flyer,robin)";
+                "|", ["flyer", "{Birdie}", "(&,bird,(|,[yellow],{Birdie}))"] => "(|,flyer,{Birdie},(&,bird,(|,[yellow],{Birdie})))";
+                "|", ["flyer", "{Birdie}", "(&,flyer,{Birdie})"] => "(|,flyer,{Birdie},(&,flyer,{Birdie}))";
+                "|", ["flyer", "{Birdie}"] => "(|,flyer,{Birdie})";
+                "|", ["flyer", "{Tweety}", "{Birdie}"] => "(|,flyer,{Birdie},{Tweety})";
+                "|", ["flyer", "{Tweety}"] => "(|,flyer,{Tweety})";
+                "|", ["key", "(/,open,_,lock)"] => "(|,key,(/,open,_,lock))";
+                "|", ["key", "(/,open,_,{lock1})"] => "(|,key,(/,open,_,{lock1}))";
+                "|", ["key", "{key1}"] => "(|,key,{key1})";
+                "|", ["neutralization", "(*,acid,(\\,neutralization,acid,_))"] => "(|,neutralization,(*,acid,(\\,neutralization,acid,_)))";
+                "|", ["neutralization", "(*,acid,base)"] => "(|,neutralization,(*,acid,base))";
+                "|", ["neutralization", "reaction"] => "(|,neutralization,reaction)";
+                "|", ["reaction", "(*,acid,base)"] => "(|,reaction,(*,acid,base))";
+                "|", ["reaction", "neutralization"] => "(|,neutralization,reaction)";
+                "|", ["robin", "(|,flyer,{Tweety})", "{Birdie}"] => "(|,flyer,robin,{Birdie},{Tweety})";
+                "|", ["robin", "[yellow]", "{Birdie}"] => "(|,robin,[yellow],{Birdie})";
+                "|", ["robin", "animal"] => "(|,animal,robin)";
+                "|", ["robin", "bird"] => "(|,bird,robin)";
+                "|", ["robin", "flyer", "{Birdie}"] => "(|,flyer,robin,{Birdie})";
+                "|", ["robin", "swimmer"] => "(|,robin,swimmer)";
+                "|", ["robin", "{Birdie}", "(&,bird,(|,[yellow],{Birdie}))"] => "(|,robin,{Birdie},(&,bird,(|,[yellow],{Birdie})))";
+                "|", ["robin", "{Birdie}"] => "(|,robin,{Birdie})";
+                "|", ["robin", "{Tweety}", "{Birdie}"] => "(|,robin,{Birdie},{Tweety})";
+                "|", ["sport", "competition"] => "(|,competition,sport)";
+                "|", ["tiger", "(|,animal,swimmer)"] => "(|,animal,swimmer,tiger)";
+                "|", ["tiger", "animal"] => "(|,animal,tiger)";
+                "|", ["tiger", "swimmer"] => "(|,swimmer,tiger)";
+                "|", ["{Birdie}", "{Tweety}"] => "{Birdie,Tweety}";
+                "|", ["{Tweety}", "{Birdie}", "(&,flyer,{Birdie})"] => "(|,(&,flyer,{Birdie}),{Birdie,Tweety})";
+                "|", ["{Tweety}", "{Birdie}"] => "{Birdie,Tweety}";
+                "~", ["(/,(*,tim,tom),tom,_)", "(/,uncle,tom,_)"] => "(~,(/,(*,tim,tom),tom,_),(/,uncle,tom,_))";
+                "~", ["(|,boy,girl)", "girl"] => "(~,(|,boy,girl),girl)";
+                "~", ["(~,boy,girl)", "girl"] => "(~,(~,boy,girl),girl)";
+                "~", ["[strong]", "girl"] => "(~,[strong],girl)";
+                "~", ["boy", "girl"] => "(~,boy,girl)";
+            }
+            ok!()
+        }
+
+        #[test]
+        fn make_compound_term() -> AResult {
+            macro_once! {
+                // * 🚩模式：参数列表 ⇒ 预期词项
+                macro test($($template:tt, $terms:tt => $expected:tt;)*) {
+                    $(
+                        let template = term!($template);
+                        let terms: Vec<Term> = term!($terms).into();
+                        let terms_str = terms.iter().map(|t| format!("\"{t}\"")).collect::<Vec<_>>().join(", ");
+                        let out = Term::make_compound_term(
+                            template.as_compound().expect("模板不是复合词项！"),
+                            terms
+                        );
+                        let expected = option_term!($expected);
+                        assert_eq!(
+                            out, expected,
+                            "\"{template}\", {terms_str} => {} != {}",
+                            format_option_term(&out),
+                            format_option_term(&expected),
+                        );
+                    )*
+                }
+                // * ℹ️用例均源自OpenNARS实际运行
+                "(&&,<robin --> [chirping]>,<robin --> [flying]>)", ["<robin --> [chirping]>"] => "<robin --> [chirping]>";
+                "(&&,<robin --> [chirping]>,<robin --> [flying]>)", ["<robin --> [flying]>"] => "<robin --> [flying]>";
+                "(&&,<robin --> [chirping]>,<robin --> [flying]>)", ["<robin --> bird>", "<robin --> [flying]>"] => "(&&,<robin --> bird>,<robin --> [flying]>)";
+                "(&&,<robin --> [chirping]>,<robin --> [flying]>,<robin --> [with_wings]>)", ["<robin --> [chirping]>", "<robin --> [flying]>"] => "(&&,<robin --> [chirping]>,<robin --> [flying]>)";
+                "(&&,<robin --> [chirping]>,<robin --> [flying]>,<robin --> [with_wings]>)", ["<robin --> [chirping]>", "<robin --> [with_wings]>"] => "(&&,<robin --> [chirping]>,<robin --> [with_wings]>)";
+                "(&&,<robin --> [chirping]>,<robin --> [flying]>,<robin --> [with_wings]>)", ["<robin --> [flying]>", "<robin --> [with_wings]>"] => "(&&,<robin --> [flying]>,<robin --> [with_wings]>)";
+                "(&&,<robin --> [chirping]>,<robin --> [flying]>,<robin --> [with_wings]>)", ["<robin --> bird>", "<robin --> [flying]>", "<robin --> [with_wings]>"] => "(&&,<robin --> bird>,<robin --> [flying]>,<robin --> [with_wings]>)";
+                "(&&,<robin --> [chirping]>,<robin --> [with_wings]>)", ["<robin --> [chirping]>", "<robin --> bird>"] => "(&&,<robin --> bird>,<robin --> [chirping]>)";
+                "(&&,<robin --> [chirping]>,<robin --> [with_wings]>)", ["<robin --> [chirping]>"] => "<robin --> [chirping]>";
+                "(&&,<robin --> [chirping]>,<robin --> [with_wings]>)", ["<robin --> [with_wings]>"] => "<robin --> [with_wings]>";
+                "(&&,<robin --> [chirping]>,<robin --> [with_wings]>)", ["<robin --> bird>", "<robin --> [with_wings]>"] => "(&&,<robin --> bird>,<robin --> [with_wings]>)";
+                "(&&,<robin --> [flying]>,<robin --> [with_wings]>)", ["<robin --> [flying]>"] => "<robin --> [flying]>";
+                "(&&,<robin --> [flying]>,<robin --> [with_wings]>)", ["<robin --> [with_wings]>"] => "<robin --> [with_wings]>";
+                "(&&,<robin --> bird>,<robin --> [flying]>)", ["<robin --> [flying]>"] => "<robin --> [flying]>";
+                "(&&,<robin --> bird>,<robin --> [flying]>)", ["<robin --> bird>"] => "<robin --> bird>";
+                "(&&,<robin --> bird>,<robin --> [flying]>,<robin --> [with_wings]>)", ["<robin --> [flying]>", "<robin --> [with_wings]>"] => "(&&,<robin --> [flying]>,<robin --> [with_wings]>)";
+                "(&&,<robin --> bird>,<robin --> [flying]>,<robin --> [with_wings]>)", ["<robin --> bird>", "<robin --> [flying]>", "<robin --> bird>"] => "(&&,<robin --> bird>,<robin --> [flying]>)";
+                "(&&,<robin --> bird>,<robin --> [flying]>,<robin --> [with_wings]>)", ["<robin --> bird>", "<robin --> [flying]>"] => "(&&,<robin --> bird>,<robin --> [flying]>)";
+                "(&&,<robin --> bird>,<robin --> [flying]>,<robin --> [with_wings]>)", ["<robin --> bird>", "<robin --> [with_wings]>"] => "(&&,<robin --> bird>,<robin --> [with_wings]>)";
+                "(&&,<robin --> bird>,<robin --> [living]>)", ["<robin --> [living]>"] => "<robin --> [living]>";
+                "(&&,<robin --> bird>,<robin --> [living]>)", ["<robin --> bird>", "(||,(&&,<robin --> [flying]>,<robin --> [with_wings]>),<robin --> bird>)"] => "(&&,<robin --> bird>,(||,(&&,<robin --> [flying]>,<robin --> [with_wings]>),<robin --> bird>))";
+                "(&&,<robin --> bird>,<robin --> [living]>)", ["<robin --> bird>", "<robin --> [flying]>", "<robin --> [with_wings]>"] => "(&&,<robin --> bird>,<robin --> [flying]>,<robin --> [with_wings]>)";
+                "(&&,<robin --> bird>,<robin --> [living]>)", ["<robin --> bird>", "<robin --> [flying]>"] => "(&&,<robin --> bird>,<robin --> [flying]>)";
+                "(&&,<robin --> bird>,<robin --> [living]>)", ["<robin --> bird>", "<robin --> bird>", "<robin --> [flying]>"] => "(&&,<robin --> bird>,<robin --> [flying]>)";
+                "(&&,<robin --> bird>,<robin --> [living]>)", ["<robin --> bird>"] => "<robin --> bird>";
+                "(&&,<robin --> flyer>,<(*,robin,worms) --> food>)", ["<robin --> flyer>", "<worms --> (/,food,robin,_)>"] => "(&&,<robin --> flyer>,<worms --> (/,food,robin,_)>)";
+                "(&&,<robin --> flyer>,<robin --> [chirping]>)", ["<robin --> flyer>", "<robin --> bird>"] => "(&&,<robin --> bird>,<robin --> flyer>)";
+                "(&&,<robin --> flyer>,<robin --> [chirping]>)", ["<robin --> flyer>"] => "<robin --> flyer>";
+                "(&&,<robin --> flyer>,<robin --> [chirping]>,<(*,robin,worms) --> food>)", ["<robin --> flyer>", "<(*,robin,worms) --> food>"] => "(&&,<robin --> flyer>,<(*,robin,worms) --> food>)";
+                "(&&,<robin --> flyer>,<robin --> [chirping]>,<(*,robin,worms) --> food>)", ["<robin --> flyer>", "<robin --> bird>", "<(*,robin,worms) --> food>"] => "(&&,<robin --> bird>,<robin --> flyer>,<(*,robin,worms) --> food>)";
+                "(&&,<robin --> flyer>,<robin --> [chirping]>,<worms --> (/,food,robin,_)>)", ["<robin --> flyer>", "<robin --> bird>", "<worms --> (/,food,robin,_)>"] => "(&&,<robin --> bird>,<robin --> flyer>,<worms --> (/,food,robin,_)>)";
+                "(&&,<robin --> flyer>,<robin --> [chirping]>,<worms --> (/,food,robin,_)>)", ["<robin --> flyer>", "<worms --> (/,food,robin,_)>"] => "(&&,<robin --> flyer>,<worms --> (/,food,robin,_)>)";
+                "(&&,<robin --> flyer>,<worms --> (/,food,robin,_)>)", ["<robin --> flyer>", "<(*,robin,worms) --> food>"] => "(&&,<robin --> flyer>,<(*,robin,worms) --> food>)";
+                "(&&,<robin --> swimmer>,<robin --> [flying]>)", ["<robin --> [flying]>"] => "<robin --> [flying]>";
+                "(&&,<robin --> swimmer>,<robin --> [flying]>)", ["<robin --> swimmer>"] => "<robin --> swimmer>";
+                "(&,(/,neutralization,_,(\\,neutralization,acid,_)),(/,reaction,_,base))", ["(/,neutralization,_,(\\,neutralization,acid,_))", "acid"] => "(&,acid,(/,neutralization,_,(\\,neutralization,acid,_)))";
+                "(&,(/,neutralization,_,(\\,neutralization,acid,_)),(/,reaction,_,base))", ["acid", "(/,reaction,_,base)"] => "(&,acid,(/,reaction,_,base))";
+                "(&,(/,neutralization,_,base),(/,reaction,_,soda))", ["(/,neutralization,_,base)", "(/,reaction,_,base)"] => "(&,(/,neutralization,_,base),(/,reaction,_,base))";
+                "(&,(/,neutralization,_,base),(/,reaction,_,soda))", ["(/,neutralization,_,base)", "acid"] => "(&,acid,(/,neutralization,_,base))";
+                "(&,(/,neutralization,_,soda),(/,reaction,_,base))", ["(/,neutralization,_,base)", "(/,reaction,_,base)"] => "(&,(/,neutralization,_,base),(/,reaction,_,base))";
+                "(&,(/,neutralization,_,soda),(/,reaction,_,base))", ["(/,reaction,_,soda)", "(/,reaction,_,base)"] => "(&,(/,reaction,_,base),(/,reaction,_,soda))";
+                "(&,(/,neutralization,_,soda),(/,reaction,_,base))", ["acid", "(/,reaction,_,base)"] => "(&,acid,(/,reaction,_,base))";
+                "(&,(/,open,_,lock),(/,open,_,{lock1}))", ["(/,open,_,lock)", "key"] => "(&,key,(/,open,_,lock))";
+                "(&,(\\,REPRESENT,_,CAT),(\\,(\\,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish))", ["(\\,REPRESENT,_,CAT)", "(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish)"] => "(&,(\\,REPRESENT,_,CAT),(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish))";
+                "(&,(\\,REPRESENT,_,CAT),(\\,(\\,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish))", ["cat", "(\\,(\\,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish)"] => "(&,cat,(\\,(\\,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish))";
+                "(&,(\\,reaction,_,soda),(|,acid,(\\,reaction,_,base)))", ["(\\,reaction,_,soda)", "(\\,neutralization,_,base)"] => "(&,(\\,neutralization,_,base),(\\,reaction,_,soda))";
+                "(&,(|,bird,flyer),(|,bird,{Birdie}))", ["(|,bird,{Tweety})", "(|,bird,{Birdie})"] => "(&,(|,bird,{Birdie}),(|,bird,{Tweety}))";
+                "(&,(|,bird,flyer),(|,bird,{Birdie}))", ["{Tweety}", "(|,bird,{Birdie})"] => "(&,{Tweety},(|,bird,{Birdie}))";
+                "(&,[with_wings],{Birdie})", ["(&,robin,{Tweety})", "{Birdie}"] => "(&,robin,{Birdie},{Tweety})";
+                "(&,[with_wings],{Birdie})", ["flyer", "{Birdie}"] => "(&,flyer,{Birdie})";
+                "(&,[with_wings],{Birdie})", ["robin", "{Birdie}"] => "(&,robin,{Birdie})";
+                "(&,[with_wings],{Birdie})", ["{Tweety}", "{Birdie}"] => None;
+                "(&,[yellow],{Birdie})", ["{Tweety}", "{Birdie}"] => None;
+                "(&,acid,(/,neutralization,_,soda))", ["acid", "(/,reaction,_,base)"] => "(&,acid,(/,reaction,_,base))";
+                "(&,acid,(\\,reaction,_,base))", ["acid", "(\\,neutralization,_,base)"] => "(&,acid,(\\,neutralization,_,base))";
+                "(&,acid,(\\,reaction,_,soda))", ["acid", "(\\,neutralization,_,soda)"] => "(&,acid,(\\,neutralization,_,soda))";
+                "(&,animal,(|,animal,swimmer))", ["animal", "gull"] => "(&,animal,gull)";
+                "(&,animal,(|,bird,swimmer))", ["animal", "(&,robin,swan)"] => "(&,animal,robin,swan)";
+                "(&,animal,(|,bird,swimmer))", ["animal", "swan"] => "(&,animal,swan)";
+                "(&,animal,gull)", ["animal", "(|,animal,swimmer)"] => "(&,animal,(|,animal,swimmer))";
+                "(&,animal,gull)", ["animal", "swan"] => "(&,animal,swan)";
+                "(&,animal,gull)", ["animal", "swimmer"] => "(&,animal,swimmer)";
+                "(&,base,(\\,reaction,acid,_))", ["base", "(/,reaction,acid,_)"] => "(&,base,(/,reaction,acid,_))";
+                "(&,base,(\\,reaction,acid,_))", ["base", "(\\,neutralization,acid,_)"] => "(&,base,(\\,neutralization,acid,_))";
+                "(&,base,(\\,reaction,acid,_))", ["base", "soda"] => "(&,base,soda)";
+                "(&,bird,(|,robin,tiger))", ["bird", "animal"] => "(&,animal,bird)";
+                "(&,bird,(|,robin,tiger))", ["bird", "swimmer"] => "(&,bird,swimmer)";
+                "(&,bird,[with_wings],{Birdie},(|,[yellow],{Birdie}))", ["bird", "robin", "{Birdie}", "(|,[yellow],{Birdie})"] => "(&,bird,robin,{Birdie},(|,[yellow],{Birdie}))";
+                "(&,chess,sport)", ["chess", "competition"] => "(&,chess,competition)";
+                "(&,chess,sport)", ["competition", "sport"] => "(&,competition,sport)";
+                "(&,flyer,[with_wings])", ["flyer", "(&,robin,{Tweety})"] => "(&,flyer,robin,{Tweety})";
+                "(&,flyer,[with_wings])", ["flyer", "robin"] => "(&,flyer,robin)";
+                "(&,flyer,[with_wings])", ["flyer", "{Birdie}"] => "(&,flyer,{Birdie})";
+                "(&,flyer,[with_wings])", ["flyer", "{Tweety}"] => "(&,flyer,{Tweety})";
+                "(&,flyer,[yellow])", ["flyer", "{Birdie}"] => "(&,flyer,{Birdie})";
+                "(&,flyer,[yellow])", ["flyer", "{Tweety}"] => "(&,flyer,{Tweety})";
+                "(&,flyer,[yellow],(|,[with_wings],{Birdie}))", ["flyer", "{Birdie}", "(|,[with_wings],{Birdie})"] => "(&,flyer,{Birdie},(|,[with_wings],{Birdie}))";
+                "(&,flyer,[yellow],(|,[with_wings],{Birdie}))", ["flyer", "{Tweety}", "(|,[with_wings],{Birdie})"] => "(&,flyer,{Tweety},(|,[with_wings],{Birdie}))";
+                "(&,flyer,{Birdie})", ["flyer", "[with_wings]"] => "(&,flyer,[with_wings])";
+                "(&,flyer,{Birdie})", ["flyer", "[yellow]"] => "(&,flyer,[yellow])";
+                "(&,flyer,{Birdie})", ["flyer", "bird"] => "(&,bird,flyer)";
+                "(&,flyer,{Birdie})", ["flyer", "{Tweety}"] => "(&,flyer,{Tweety})";
+                "(&,key,(/,open,_,lock))", ["key", "(/,open,_,{lock1})"] => "(&,key,(/,open,_,{lock1}))";
+                "(&,key,(/,open,_,lock))", ["key", "{key1}"] => "(&,key,{key1})";
+                "(&,neutralization,(*,(\\,reaction,_,soda),base))", ["neutralization", "(*,(\\,neutralization,_,base),base)"] => "(&,neutralization,(*,(\\,neutralization,_,base),base))";
+                "(&,neutralization,(*,(\\,reaction,_,soda),base))", ["neutralization", "reaction"] => "(&,neutralization,reaction)";
+                "(&,neutralization,(*,acid,(\\,neutralization,acid,_)))", ["neutralization", "(*,acid,(/,reaction,acid,_))"] => "(&,neutralization,(*,acid,(/,reaction,acid,_)))";
+                "(&,neutralization,(*,acid,(\\,neutralization,acid,_)))", ["neutralization", "(*,acid,soda)"] => "(&,neutralization,(*,acid,soda))";
+                "(&,neutralization,(*,acid,soda))", ["neutralization", "(*,acid,base)"] => "(&,neutralization,(*,acid,base))";
+                "(&,neutralization,(*,acid,soda))", ["neutralization", "reaction"] => "(&,neutralization,reaction)";
+                "(&,num,(/,(*,0),_))", ["num", "(/,num,_)"] => "(&,num,(/,num,_))";
+                "(&,reaction,(*,acid,soda))", ["reaction", "neutralization"] => "(&,neutralization,reaction)";
+                "(&,robin,tiger)", ["robin", "animal"] => "(&,animal,robin)";
+                "(&,robin,tiger)", ["robin", "bird"] => "(&,bird,robin)";
+                "(&,robin,tiger)", ["robin", "swimmer"] => "(&,robin,swimmer)";
+                "(&,tiger,(|,bird,robin))", ["bird", "(|,bird,robin)"] => "(&,bird,(|,bird,robin))";
+                "(&,tiger,(|,bird,robin))", ["tiger", "animal"] => "(&,animal,tiger)";
+                "(&,tiger,(|,bird,robin))", ["tiger", "swimmer"] => "(&,swimmer,tiger)";
+                "(&,{Birdie},(|,flyer,[yellow]))", ["{Birdie}", "(|,flyer,{Tweety})"] => "(&,{Birdie},(|,flyer,{Tweety}))";
+                "(&,{Birdie},(|,flyer,[yellow]))", ["{Birdie}", "{Tweety}"] => None;
+                "(&,{key1},(/,open,_,lock))", ["(/,open,_,{lock1})", "(/,open,_,lock)"] => "(&,(/,open,_,lock),(/,open,_,{lock1}))";
+                "(&,{key1},(/,open,_,lock))", ["(|,(/,open,_,lock1),(/,open,_,{lock1}))", "(/,open,_,lock)"] => "(&,(/,open,_,lock),(|,(/,open,_,lock1),(/,open,_,{lock1})))";
+                "(&,{key1},(/,open,_,lock))", ["(|,key,(/,open,_,{lock1}))", "(/,open,_,lock)"] => "(&,(/,open,_,lock),(|,key,(/,open,_,{lock1})))";
+                "(&,{key1},(/,open,_,lock))", ["key", "(/,open,_,lock)"] => "(&,key,(/,open,_,lock))";
+                "(*,(*,(*,0)))", ["(*,(*,(/,num,_)))"] => "(*,(*,(*,(/,num,_))))";
+                "(*,(*,0))", ["(*,(/,num,_))"] => "(*,(*,(/,num,_)))";
+                "(*,(*,0))", ["(*,num)"] => "(*,(*,num))";
+                "(*,(*,CAT,eat,fish),<(*,CAT,FISH) --> FOOD>)", ["(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>)", "<(*,CAT,FISH) --> FOOD>"] => "(*,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),<(*,CAT,FISH) --> FOOD>)";
+                "(*,(/,(*,0),_))", ["(/,num,_)"] => "(*,(/,num,_))";
+                "(*,(/,(/,num,_),_))", ["(/,num,_)"] => "(*,(/,num,_))";
+                "(*,(/,num,_))", ["(/,(/,num,_),_)"] => "(*,(/,(/,num,_),_))";
+                "(*,(/,num,_))", ["0"] => "(*,0)";
+                "(*,(/,num,_))", ["num"] => "(*,num)";
+                "(*,(/,open,_,lock1),lock1)", ["{key1}", "lock1"] => "(*,{key1},lock1)";
+                "(*,(\\,reaction,_,base),base)", ["(\\,neutralization,_,base)", "base"] => "(*,(\\,neutralization,_,base),base)";
+                "(*,(\\,reaction,_,soda),base)", ["(\\,neutralization,_,base)", "base"] => "(*,(\\,neutralization,_,base),base)";
+                "(*,(\\,reaction,_,soda),base)", ["acid", "base"] => "(*,acid,base)";
+                "(*,(|,key,(/,open,_,{lock1})),lock)", ["(/,open,_,lock)", "lock"] => "(*,(/,open,_,lock),lock)";
+                "(*,0)", ["(&,num,(/,(*,(/,num,_)),_))"] => "(*,(&,num,(/,(*,(/,num,_)),_)))";
+                "(*,0)", ["(/,(*,(/,num,_)),_)"] => "(*,(/,(*,(/,num,_)),_))";
+                "(*,0)", ["(/,num,_)"] => "(*,(/,num,_))";
+                "(*,0)", ["num"] => "(*,num)";
+                "(*,a,(/,like,_,a))", ["a", "b"] => "(*,a,b)";
+                "(*,a,b)", ["(/,like,b,_)", "b"] => "(*,(/,like,b,_),b)";
+                "(*,a,b)", ["a", "(/,like,_,a)"] => "(*,a,(/,like,_,a))";
+                "(*,acid,(&,soda,(/,neutralization,acid,_)))", ["acid", "(/,reaction,acid,_)"] => "(*,acid,(/,reaction,acid,_))";
+                "(*,acid,(/,neutralization,acid,_))", ["acid", "base"] => "(*,acid,base)";
+                "(*,acid,(/,reaction,acid,_))", ["acid", "(&,soda,(/,neutralization,acid,_))"] => "(*,acid,(&,soda,(/,neutralization,acid,_)))";
+                "(*,acid,(/,reaction,acid,_))", ["acid", "(/,neutralization,acid,_)"] => "(*,acid,(/,neutralization,acid,_))";
+                "(*,acid,(/,reaction,acid,_))", ["acid", "(\\,neutralization,acid,_)"] => "(*,acid,(\\,neutralization,acid,_))";
+                "(*,acid,(/,reaction,acid,_))", ["acid", "(\\,reaction,acid,_)"] => "(*,acid,(\\,reaction,acid,_))";
+                "(*,acid,(/,reaction,acid,_))", ["acid", "(|,base,(\\,reaction,acid,_))"] => "(*,acid,(|,base,(\\,reaction,acid,_)))";
+                "(*,acid,(/,reaction,acid,_))", ["acid", "(|,soda,(\\,neutralization,acid,_))"] => "(*,acid,(|,soda,(\\,neutralization,acid,_)))";
+                "(*,acid,(/,reaction,acid,_))", ["acid", "base"] => "(*,acid,base)";
+                "(*,acid,(/,reaction,acid,_))", ["acid", "soda"] => "(*,acid,soda)";
+                "(*,acid,base)", ["acid", "(/,neutralization,acid,_)"] => "(*,acid,(/,neutralization,acid,_))";
+                "(*,acid,base)", ["acid", "(\\,neutralization,acid,_)"] => "(*,acid,(\\,neutralization,acid,_))";
+                "(*,acid,base)", ["acid", "soda"] => "(*,acid,soda)";
+                "(*,acid,soda)", ["(/,neutralization,_,soda)", "soda"] => "(*,(/,neutralization,_,soda),soda)";
+                "(*,acid,soda)", ["acid", "(/,neutralization,acid,_)"] => "(*,acid,(/,neutralization,acid,_))";
+                "(*,acid,soda)", ["acid", "(/,reaction,acid,_)"] => "(*,acid,(/,reaction,acid,_))";
+                "(*,acid,soda)", ["acid", "(\\,neutralization,acid,_)"] => "(*,acid,(\\,neutralization,acid,_))";
+                "(*,acid,soda)", ["acid", "base"] => "(*,acid,base)";
+                "(*,b,a)", ["b", "(/,like,b,_)"] => "(*,b,(/,like,b,_))";
+                "(*,num)", ["(/,num,_)"] => "(*,(/,num,_))";
+                "(*,num)", ["0"] => "(*,0)";
+                "(*,tim,tom)", ["(/,uncle,tom,_)", "tom"] => "(*,(/,uncle,tom,_),tom)";
+                "(*,{key1},lock)", ["(&,key,(/,open,_,{lock1}))", "lock"] => "(*,(&,key,(/,open,_,{lock1})),lock)";
+                "(*,{key1},lock)", ["(/,open,_,{lock1})", "lock"] => "(*,(/,open,_,{lock1}),lock)";
+                "(*,{key1},lock)", ["(|,key,(/,open,_,{lock1}))", "lock"] => "(*,(|,key,(/,open,_,{lock1})),lock)";
+                "(*,{key1},lock)", ["key", "lock"] => "(*,key,lock)";
+                "(*,{key1},lock1)", ["(/,open,_,lock)", "lock1"] => "(*,(/,open,_,lock),lock1)";
+                "(*,{key1},lock1)", ["(/,open,_,lock1)", "lock1"] => "(*,(/,open,_,lock1),lock1)";
+                "(*,{key1},lock1)", ["(/,open,_,{lock1})", "lock1"] => "(*,(/,open,_,{lock1}),lock1)";
+                "(*,{key1},lock1)", ["(|,(/,open,_,lock1),(/,open,_,{lock1}))", "lock1"] => "(*,(|,(/,open,_,lock1),(/,open,_,{lock1})),lock1)";
+                "(*,{key1},lock1)", ["(|,key,(/,open,_,{lock1}))", "lock1"] => "(*,(|,key,(/,open,_,{lock1})),lock1)";
+                "(*,{key1},lock1)", ["key", "lock1"] => "(*,key,lock1)";
+                "(*,{key1},{lock1})", ["(/,open,_,lock)", "{lock1}"] => "(*,(/,open,_,lock),{lock1})";
+                "(*,{key1},{lock1})", ["(/,open,_,{lock1})", "{lock1}"] => "(*,(/,open,_,{lock1}),{lock1})";
+                "(*,{key1},{lock1})", ["key", "{lock1}"] => "(*,key,{lock1})";
+                "(/,(*,(/,num,_)),_)", ["(*,num)"] => "(/,(*,num),_)";
+                "(/,(*,b,(/,like,b,_)),_,a)", ["(*,b,a)", "a"] => "(/,(*,b,a),_,a)";
+                "(/,(*,num),_)", ["(*,0)"] => "(/,(*,0),_)";
+                "(/,(*,tim,tom),tom,_)", ["tom", "uncle"] => "(/,uncle,tom,_)";
+                "(/,(/,num,_),_)", ["0"] => "(/,0,_)";
+                "(/,0,_)", ["(&,num,(/,(*,(/,num,_)),_))"] => "(/,(&,num,(/,(*,(/,num,_)),_)),_)";
+                "(/,0,_)", ["(/,num,_)"] => "(/,(/,num,_),_)";
+                "(/,0,_)", ["num"] => "(/,num,_)";
+                "(/,like,_,a)", ["like", "(/,like,b,_)"] => "(/,like,_,(/,like,b,_))";
+                "(/,like,b,_)", ["(/,like,_,a)", "like"] => "(/,like,(/,like,_,a),_)";
+                "(/,neutralization,_,base)", ["neutralization", "(/,neutralization,acid,_)"] => "(/,neutralization,_,(/,neutralization,acid,_))";
+                "(/,neutralization,_,base)", ["neutralization", "(\\,neutralization,acid,_)"] => "(/,neutralization,_,(\\,neutralization,acid,_))";
+                "(/,neutralization,_,base)", ["neutralization", "soda"] => "(/,neutralization,_,soda)";
+                "(/,neutralization,_,base)", ["reaction", "base"] => "(/,reaction,_,base)";
+                "(/,neutralization,_,soda)", ["neutralization", "(/,neutralization,acid,_)"] => "(/,neutralization,_,(/,neutralization,acid,_))";
+                "(/,neutralization,_,soda)", ["neutralization", "(/,reaction,acid,_)"] => "(/,neutralization,_,(/,reaction,acid,_))";
+                "(/,neutralization,_,soda)", ["neutralization", "base"] => "(/,neutralization,_,base)";
+                "(/,neutralization,acid,_)", ["acid", "reaction"] => "(/,reaction,acid,_)";
+                "(/,num,_)", ["(*,0)"] => "(/,(*,0),_)";
+                "(/,num,_)", ["(/,num,_)"] => "(/,(/,num,_),_)";
+                "(/,num,_)", ["0"] => "(/,0,_)";
+                "(/,open,_,(|,lock,(/,open,{key1},_)))", ["open", "{lock1}"] => "(/,open,_,{lock1})";
+                "(/,open,_,{lock1})", ["open", "(|,lock,(/,open,{key1},_))"] => "(/,open,_,(|,lock,(/,open,{key1},_)))";
+                "(/,open,_,{lock1})", ["open", "lock"] => "(/,open,_,lock)";
+                "(/,reaction,_,base)", ["(*,acid,soda)", "base"] => "(/,(*,acid,soda),_,base)";
+                "(/,reaction,_,base)", ["neutralization", "base"] => "(/,neutralization,_,base)";
+                "(/,reaction,_,base)", ["reaction", "(/,neutralization,acid,_)"] => "(/,reaction,_,(/,neutralization,acid,_))";
+                "(/,reaction,_,base)", ["reaction", "soda"] => "(/,reaction,_,soda)";
+                "(/,reaction,_,soda)", ["neutralization", "soda"] => "(/,neutralization,_,soda)";
+                "(/,reaction,_,soda)", ["reaction", "(/,neutralization,acid,_)"] => "(/,reaction,_,(/,neutralization,acid,_))";
+                "(/,reaction,_,soda)", ["reaction", "(/,reaction,acid,_)"] => "(/,reaction,_,(/,reaction,acid,_))";
+                "(/,reaction,_,soda)", ["reaction", "(\\,neutralization,acid,_)"] => "(/,reaction,_,(\\,neutralization,acid,_))";
+                "(/,reaction,_,soda)", ["reaction", "(\\,reaction,acid,_)"] => "(/,reaction,_,(\\,reaction,acid,_))";
+                "(/,reaction,_,soda)", ["reaction", "base"] => "(/,reaction,_,base)";
+                "(/,reaction,acid,_)", ["acid", "(*,acid,soda)"] => "(/,(*,acid,soda),acid,_)";
+                "(/,reaction,acid,_)", ["acid", "neutralization"] => "(/,neutralization,acid,_)";
+                "(/,uncle,_,tom)", ["(*,tim,tom)", "tom"] => "(/,(*,tim,tom),_,tom)";
+                "(/,uncle,tim,_)", ["(/,uncle,_,tom)", "uncle"] => "(/,uncle,(/,uncle,_,tom),_)";
+                "(/,uncle,tim,_)", ["tim", "(*,tim,tom)"] => "(/,(*,tim,tom),tim,_)";
+                "(/,uncle,tom,_)", ["tom", "(*,tim,tom)"] => "(/,(*,tim,tom),tom,_)";
+                "(\\,(*,b,a),_,(/,like,b,_))", ["like", "(/,like,b,_)"] => "(\\,like,_,(/,like,b,_))";
+                "(\\,REPRESENT,_,CAT)", ["REPRESENT", "(\\,REPRESENT,_,CAT)"] => "(\\,REPRESENT,_,(\\,REPRESENT,_,CAT))";
+                "(\\,neutralization,_,(/,neutralization,acid,_))", ["neutralization", "soda"] => "(\\,neutralization,_,soda)";
+                "(\\,neutralization,_,(/,reaction,acid,_))", ["neutralization", "(/,neutralization,acid,_)"] => "(\\,neutralization,_,(/,neutralization,acid,_))";
+                "(\\,neutralization,_,(/,reaction,acid,_))", ["neutralization", "(\\,neutralization,acid,_)"] => "(\\,neutralization,_,(\\,neutralization,acid,_))";
+                "(\\,neutralization,_,(/,reaction,acid,_))", ["neutralization", "(|,base,(\\,reaction,acid,_))"] => "(\\,neutralization,_,(|,base,(\\,reaction,acid,_)))";
+                "(\\,neutralization,_,(/,reaction,acid,_))", ["neutralization", "base"] => "(\\,neutralization,_,base)";
+                "(\\,neutralization,_,(/,reaction,acid,_))", ["neutralization", "soda"] => "(\\,neutralization,_,soda)";
+                "(\\,neutralization,_,base)", ["neutralization", "(/,neutralization,acid,_)"] => "(\\,neutralization,_,(/,neutralization,acid,_))";
+                "(\\,neutralization,_,base)", ["neutralization", "soda"] => "(\\,neutralization,_,soda)";
+                "(\\,neutralization,_,base)", ["reaction", "base"] => "(\\,reaction,_,base)";
+                "(\\,neutralization,_,soda)", ["neutralization", "(/,neutralization,acid,_)"] => "(\\,neutralization,_,(/,neutralization,acid,_))";
+                "(\\,neutralization,_,soda)", ["neutralization", "(/,reaction,acid,_)"] => "(\\,neutralization,_,(/,reaction,acid,_))";
+                "(\\,neutralization,_,soda)", ["neutralization", "(\\,neutralization,acid,_)"] => "(\\,neutralization,_,(\\,neutralization,acid,_))";
+                "(\\,neutralization,_,soda)", ["neutralization", "(\\,reaction,acid,_)"] => "(\\,neutralization,_,(\\,reaction,acid,_))";
+                "(\\,neutralization,_,soda)", ["neutralization", "base"] => "(\\,neutralization,_,base)";
+                "(\\,neutralization,acid,_)", ["(\\,reaction,_,base)", "neutralization"] => "(\\,neutralization,(\\,reaction,_,base),_)";
+                "(\\,neutralization,acid,_)", ["acid", "reaction"] => "(\\,reaction,acid,_)";
+                "(\\,reaction,(\\,reaction,_,soda),_)", ["(\\,reaction,_,base)", "reaction"] => "(\\,reaction,(\\,reaction,_,base),_)";
+                "(\\,reaction,_,base)", ["(*,acid,soda)", "base"] => "(\\,(*,acid,soda),_,base)";
+                "(\\,reaction,_,base)", ["neutralization", "base"] => "(\\,neutralization,_,base)";
+                "(\\,reaction,_,base)", ["reaction", "soda"] => "(\\,reaction,_,soda)";
+                "(\\,reaction,_,soda)", ["neutralization", "soda"] => "(\\,neutralization,_,soda)";
+                "(\\,reaction,_,soda)", ["reaction", "(/,neutralization,acid,_)"] => "(\\,reaction,_,(/,neutralization,acid,_))";
+                "(\\,reaction,_,soda)", ["reaction", "(/,reaction,acid,_)"] => "(\\,reaction,_,(/,reaction,acid,_))";
+                "(\\,reaction,_,soda)", ["reaction", "(\\,neutralization,acid,_)"] => "(\\,reaction,_,(\\,neutralization,acid,_))";
+                "(\\,reaction,_,soda)", ["reaction", "(\\,reaction,acid,_)"] => "(\\,reaction,_,(\\,reaction,acid,_))";
+                "(\\,reaction,_,soda)", ["reaction", "base"] => "(\\,reaction,_,base)";
+                "(\\,reaction,acid,_)", ["acid", "(*,acid,soda)"] => "(\\,(*,acid,soda),acid,_)";
+                "(\\,reaction,acid,_)", ["acid", "neutralization"] => "(\\,neutralization,acid,_)";
+                "(|,(&,animal,gull),(&,bird,robin))", ["(&,animal,gull)", "swimmer"] => "(|,swimmer,(&,animal,gull))";
+                "(|,(&,flyer,{Birdie}),{Birdie,Tweety})", ["(&,flyer,{Birdie})", "(|,[yellow],{Birdie})"] => "(|,[yellow],{Birdie},(&,flyer,{Birdie}))";
+                "(|,(&,flyer,{Birdie}),{Birdie,Tweety})", ["(&,flyer,{Birdie})", "(|,[yellow],{Tweety})"] => "(|,[yellow],{Tweety},(&,flyer,{Birdie}))";
+                "(|,(/,neutralization,_,(\\,neutralization,acid,_)),(/,reaction,_,base))", ["(/,neutralization,_,base)", "(/,reaction,_,base)"] => "(|,(/,neutralization,_,base),(/,reaction,_,base))";
+                "(|,(/,neutralization,_,(\\,neutralization,acid,_)),(/,reaction,_,base))", ["acid", "(/,reaction,_,base)"] => "(|,acid,(/,reaction,_,base))";
+                "(|,(/,neutralization,_,base),(/,reaction,_,base))", ["(/,neutralization,_,base)", "acid"] => "(|,acid,(/,neutralization,_,base))";
+                "(|,(/,neutralization,_,base),(/,reaction,_,soda))", ["(/,neutralization,_,base)", "(/,neutralization,_,(\\,neutralization,acid,_))"] => "(|,(/,neutralization,_,base),(/,neutralization,_,(\\,neutralization,acid,_)))";
+                "(|,(/,neutralization,_,base),(/,reaction,_,soda))", ["(/,neutralization,_,base)", "(/,reaction,_,(\\,neutralization,acid,_))"] => "(|,(/,neutralization,_,base),(/,reaction,_,(\\,neutralization,acid,_)))";
+                "(|,(/,neutralization,_,base),(/,reaction,_,soda))", ["(/,neutralization,_,base)", "(/,reaction,_,base)"] => "(|,(/,neutralization,_,base),(/,reaction,_,base))";
+                "(|,(/,neutralization,_,base),(/,reaction,_,soda))", ["(/,neutralization,_,base)", "acid"] => "(|,acid,(/,neutralization,_,base))";
+                "(|,(/,neutralization,_,soda),(/,reaction,_,base))", ["(/,neutralization,_,base)", "(/,reaction,_,base)"] => "(|,(/,neutralization,_,base),(/,reaction,_,base))";
+                "(|,(/,neutralization,_,soda),(/,reaction,_,base))", ["(/,reaction,_,soda)", "(/,reaction,_,base)"] => "(|,(/,reaction,_,base),(/,reaction,_,soda))";
+                "(|,(/,neutralization,_,soda),(/,reaction,_,base))", ["acid", "(/,reaction,_,base)"] => "(|,acid,(/,reaction,_,base))";
+                "(|,(/,num,_),(/,(*,num),_))", ["(/,num,_)", "0"] => "(|,0,(/,num,_))";
+                "(|,(\\,REPRESENT,_,CAT),(\\,(\\,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish))", ["(\\,REPRESENT,_,CAT)", "(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish)"] => "(|,(\\,REPRESENT,_,CAT),(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish))";
+                "(|,(\\,REPRESENT,_,CAT),(\\,(\\,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish))", ["cat", "(\\,(\\,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish)"] => "(|,cat,(\\,(\\,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish))";
+                "(|,CAT,(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish))", ["(\\,(\\,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish)", "(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish)"] => "(|,(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish),(\\,(\\,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish))";
+                "(|,[strong],(~,youth,girl))", ["(~,boy,girl)", "(~,youth,girl)"] => "(|,(~,boy,girl),(~,youth,girl))";
+                "(|,[strong],(~,youth,girl))", ["boy", "(~,youth,girl)"] => "(|,boy,(~,youth,girl))";
+                "(|,[with_wings],[yellow],{Birdie})", ["[with_wings]", "(|,flyer,{Tweety})", "{Birdie}"] => "(|,flyer,[with_wings],{Birdie},{Tweety})";
+                "(|,[with_wings],[yellow],{Birdie})", ["[with_wings]", "flyer", "{Birdie}"] => "(|,flyer,[with_wings],{Birdie})";
+                "(|,[with_wings],[yellow],{Birdie})", ["[with_wings]", "{Tweety}", "{Birdie}"] => "(|,[with_wings],{Birdie},{Tweety})";
+                "(|,[with_wings],[yellow],{Birdie})", ["flyer", "[yellow]", "{Birdie}"] => "(|,flyer,[yellow],{Birdie})";
+                "(|,[with_wings],[yellow],{Birdie})", ["robin", "[yellow]", "{Birdie}"] => "(|,robin,[yellow],{Birdie})";
+                "(|,[with_wings],{Birdie})", ["flyer", "{Birdie}"] => "(|,flyer,{Birdie})";
+                "(|,[with_wings],{Birdie})", ["robin", "{Birdie}"] => "(|,robin,{Birdie})";
+                "(|,[with_wings],{Birdie})", ["{Tweety}", "{Birdie}"] => "{Birdie,Tweety}";
+                "(|,[with_wings],{Birdie},(&,bird,(|,[yellow],{Birdie})))", ["flyer", "{Birdie}", "(&,bird,(|,[yellow],{Birdie}))"] => "(|,flyer,{Birdie},(&,bird,(|,[yellow],{Birdie})))";
+                "(|,[with_wings],{Birdie},(&,bird,(|,[yellow],{Birdie})))", ["robin", "{Birdie}", "(&,bird,(|,[yellow],{Birdie}))"] => "(|,robin,{Birdie},(&,bird,(|,[yellow],{Birdie})))";
+                "(|,[with_wings],{Birdie},(&,flyer,[yellow]))", ["[with_wings]", "{Birdie}", "(|,[with_wings],{Birdie})"] => "(|,[with_wings],{Birdie})";
+                "(|,[yellow],{Birdie})", ["(&,flyer,{Birdie})", "{Birdie}"] => "(|,{Birdie},(&,flyer,{Birdie}))";
+                "(|,[yellow],{Birdie})", ["[yellow]", "[with_wings]"] => None;
+                "(|,[yellow],{Birdie})", ["[yellow]", "bird"] => "(|,bird,[yellow])";
+                "(|,[yellow],{Birdie})", ["[yellow]", "flyer"] => "(|,flyer,[yellow])";
+                "(|,[yellow],{Birdie})", ["[yellow]", "{Tweety}"] => "(|,[yellow],{Tweety})";
+                "(|,[yellow],{Birdie})", ["flyer", "{Birdie}"] => "(|,flyer,{Birdie})";
+                "(|,[yellow],{Birdie})", ["{Tweety}", "{Birdie}"] => "{Birdie,Tweety}";
+                "(|,[yellow],{Birdie},(&,flyer,{Birdie}))", ["flyer", "{Birdie}", "(&,flyer,{Birdie})"] => "(|,flyer,{Birdie},(&,flyer,{Birdie}))";
+                "(|,[yellow],{Birdie},(&,flyer,{Birdie}))", ["{Tweety}", "{Birdie}", "(&,flyer,{Birdie})"] => "(|,(&,flyer,{Birdie}),{Birdie,Tweety})";
+                "(|,[yellow],{Tweety})", ["flyer", "{Tweety}"] => "(|,flyer,{Tweety})";
+                "(|,[yellow],{Tweety})", ["{Birdie}", "{Tweety}"] => "{Birdie,Tweety}";
+                "(|,acid,(/,neutralization,_,soda))", ["acid", "(/,reaction,_,base)"] => "(|,acid,(/,reaction,_,base))";
+                "(|,acid,(\\,reaction,_,base))", ["acid", "(\\,neutralization,_,base)"] => "(|,acid,(\\,neutralization,_,base))";
+                "(|,acid,(\\,reaction,_,soda))", ["acid", "(\\,neutralization,_,base)"] => "(|,acid,(\\,neutralization,_,base))";
+                "(|,acid,(\\,reaction,_,soda))", ["acid", "(\\,neutralization,_,soda)"] => "(|,acid,(\\,neutralization,_,soda))";
+                "(|,animal,gull)", ["animal", "robin"] => "(|,animal,robin)";
+                "(|,animal,gull)", ["animal", "swan"] => "(|,animal,swan)";
+                "(|,animal,gull)", ["animal", "swimmer"] => "(|,animal,swimmer)";
+                "(|,base,(/,reaction,acid,_))", ["base", "(/,neutralization,acid,_)"] => "(|,base,(/,neutralization,acid,_))";
+                "(|,base,(\\,reaction,acid,_))", ["base", "(/,reaction,acid,_)"] => "(|,base,(/,reaction,acid,_))";
+                "(|,base,(\\,reaction,acid,_))", ["base", "(\\,neutralization,acid,_)"] => "(|,base,(\\,neutralization,acid,_))";
+                "(|,base,(\\,reaction,acid,_))", ["base", "soda"] => "(|,base,soda)";
+                "(|,bird,(&,robin,tiger))", ["bird", "animal"] => "(|,animal,bird)";
+                "(|,bird,(&,robin,tiger))", ["bird", "swimmer"] => "(|,bird,swimmer)";
+                "(|,bird,[yellow])", ["bird", "flyer"] => "(|,bird,flyer)";
+                "(|,bird,[yellow])", ["bird", "{Birdie}"] => "(|,bird,{Birdie})";
+                "(|,bird,[yellow])", ["bird", "{Tweety}"] => "(|,bird,{Tweety})";
+                "(|,bird,[yellow],{Birdie})", ["bird", "flyer", "{Birdie}"] => "(|,bird,flyer,{Birdie})";
+                "(|,bird,[yellow],{Birdie})", ["bird", "{Tweety}", "{Birdie}"] => "(|,bird,{Birdie},{Tweety})";
+                "(|,bird,{Birdie})", ["bird", "[with_wings]"] => "(|,bird,[with_wings])";
+                "(|,bird,{Birdie})", ["bird", "[yellow]"] => "(|,bird,[yellow])";
+                "(|,bird,{Birdie})", ["bird", "flyer"] => "(|,bird,flyer)";
+                "(|,bird,{Birdie})", ["bird", "{Tweety}"] => "(|,bird,{Tweety})";
+                "(|,bird,{Tweety})", ["bird", "(|,bird,flyer)"] => "(|,bird,flyer)";
+                "(|,boy,girl)", ["youth", "girl"] => "(|,girl,youth)";
+                "(|,chess,competition)", ["chess", "(|,chess,sport)"] => "(|,chess,sport)";
+                "(|,chess,competition)", ["chess", "sport"] => "(|,chess,sport)";
+                "(|,chess,competition)", ["sport", "competition"] => "(|,competition,sport)";
+                "(|,chess,sport)", ["chess", "competition"] => "(|,chess,competition)";
+                "(|,chess,sport)", ["competition", "sport"] => "(|,competition,sport)";
+                "(|,competition,sport)", ["chess", "sport"] => "(|,chess,sport)";
+                "(|,competition,sport)", ["competition", "chess"] => "(|,chess,competition)";
+                "(|,flyer,[with_wings])", ["flyer", "robin"] => "(|,flyer,robin)";
+                "(|,flyer,[with_wings])", ["flyer", "{Birdie}"] => "(|,flyer,{Birdie})";
+                "(|,flyer,[with_wings])", ["flyer", "{Tweety}"] => "(|,flyer,{Tweety})";
+                "(|,flyer,[yellow])", ["flyer", "(&,flyer,{Birdie})"] => "(|,flyer,(&,flyer,{Birdie}))";
+                "(|,flyer,[yellow])", ["flyer", "{Birdie}"] => "(|,flyer,{Birdie})";
+                "(|,flyer,[yellow])", ["flyer", "{Tweety}"] => "(|,flyer,{Tweety})";
+                "(|,flyer,[yellow],(&,flyer,{Birdie}))", ["flyer", "{Birdie}", "(&,flyer,{Birdie})"] => "(|,flyer,{Birdie},(&,flyer,{Birdie}))";
+                "(|,flyer,[yellow],{Birdie})", ["flyer", "(&,flyer,{Birdie})", "{Birdie}"] => "(|,flyer,{Birdie},(&,flyer,{Birdie}))";
+                "(|,flyer,[yellow],{Birdie})", ["flyer", "(|,flyer,{Tweety})", "{Birdie}"] => "(|,flyer,{Birdie},{Tweety})";
+                "(|,flyer,[yellow],{Birdie})", ["flyer", "{Tweety}", "{Birdie}"] => "(|,flyer,{Birdie},{Tweety})";
+                "(|,key,(/,open,_,lock))", ["key", "(/,open,_,{lock1})"] => "(|,key,(/,open,_,{lock1}))";
+                "(|,key,(/,open,_,lock))", ["key", "{key1}"] => "(|,key,{key1})";
+                "(|,neutralization,(*,(\\,reaction,_,soda),base))", ["neutralization", "reaction"] => "(|,neutralization,reaction)";
+                "(|,neutralization,(*,acid,soda))", ["neutralization", "(*,acid,(\\,neutralization,acid,_))"] => "(|,neutralization,(*,acid,(\\,neutralization,acid,_)))";
+                "(|,neutralization,(*,acid,soda))", ["neutralization", "(*,acid,base)"] => "(|,neutralization,(*,acid,base))";
+                "(|,neutralization,(*,acid,soda))", ["neutralization", "reaction"] => "(|,neutralization,reaction)";
+                "(|,reaction,(*,acid,soda))", ["reaction", "(*,acid,base)"] => "(|,reaction,(*,acid,base))";
+                "(|,reaction,(*,acid,soda))", ["reaction", "neutralization"] => "(|,neutralization,reaction)";
+                "(|,robin,[yellow],{Birdie})", ["robin", "(|,flyer,{Tweety})", "{Birdie}"] => "(|,flyer,robin,{Birdie},{Tweety})";
+                "(|,robin,[yellow],{Birdie})", ["robin", "flyer", "{Birdie}"] => "(|,flyer,robin,{Birdie})";
+                "(|,robin,[yellow],{Birdie})", ["robin", "{Tweety}", "{Birdie}"] => "(|,robin,{Birdie},{Tweety})";
+                "(|,robin,tiger)", ["robin", "animal"] => "(|,animal,robin)";
+                "(|,robin,tiger)", ["robin", "bird"] => "(|,bird,robin)";
+                "(|,robin,tiger)", ["robin", "swimmer"] => "(|,robin,swimmer)";
+                "(|,soda,(\\,neutralization,acid,_))", ["(/,neutralization,acid,_)", "(\\,neutralization,acid,_)"] => "(|,(/,neutralization,acid,_),(\\,neutralization,acid,_))";
+                "(|,soda,(\\,neutralization,acid,_))", ["(/,reaction,acid,_)", "(\\,neutralization,acid,_)"] => "(|,(/,reaction,acid,_),(\\,neutralization,acid,_))";
+                "(|,soda,(\\,neutralization,acid,_))", ["base", "(\\,neutralization,acid,_)"] => "(|,base,(\\,neutralization,acid,_))";
+                "(|,tiger,(&,bird,robin))", ["tiger", "(|,animal,swimmer)"] => "(|,animal,swimmer,tiger)";
+                "(|,tiger,(&,bird,robin))", ["tiger", "animal"] => "(|,animal,tiger)";
+                "(|,tiger,(&,bird,robin))", ["tiger", "swimmer"] => "(|,swimmer,tiger)";
+                "(|,{key1},(/,open,_,lock))", ["(/,open,_,{lock1})", "(/,open,_,lock)"] => "(|,(/,open,_,lock),(/,open,_,{lock1}))";
+                "(|,{key1},(/,open,_,lock))", ["(|,key,(/,open,_,{lock1}))", "(/,open,_,lock)"] => "(|,key,(/,open,_,lock),(/,open,_,{lock1}))";
+                "(|,{key1},(/,open,_,lock))", ["key", "(/,open,_,lock)"] => "(|,key,(/,open,_,lock))";
+                "(~,(/,(*,tim,tom),tom,_),tim)", ["(/,(*,tim,tom),tom,_)", "(/,uncle,tom,_)"] => "(~,(/,(*,tim,tom),tom,_),(/,uncle,tom,_))";
+                "(~,[strong],girl)", ["(~,boy,girl)", "girl"] => "(~,(~,boy,girl),girl)";
+                "(~,[strong],girl)", ["boy", "girl"] => "(~,boy,girl)";
+                "(~,boy,girl)", ["[strong]", "girl"] => "(~,[strong],girl)";
+                "(~,boy,girl)", ["youth", "girl"] => "(~,youth,girl)";
+                "(~,youth,girl)", ["(|,boy,girl)", "girl"] => "(~,(|,boy,girl),girl)";
+                "[bright]", ["smart"] => "[smart]";
+                "[smart]", ["bright"] => "[bright]";
+                "{Birdie}", ["Tweety"] => "{Tweety}";
+                "{Mars,Pluto,Saturn,Venus}", ["Mars", "Venus"] => "{Mars,Venus}";
+                "{Tweety}", ["Birdie"] => "{Birdie}";
+            }
+            ok!()
+        }
+
+        #[test]
+        fn can_extract() -> AResult {
+            macro_once! {
+                // * 🚩模式：词项字符串⇒预期
+                macro test($($term:expr => $expected:expr)*) {
+                    $(
+                        assert_eq!(term!($term).as_compound().unwrap().can_extract_to_inner(), $expected);
+                    )*
+                }
+                // * 🚩正例
+                "(&&, A)" => true
+                "(||, A)" => true
+                "(&, A)" => true
+                "(|, A)" => true
+                "(-, A, B)" => true
+                "(~, A, B)" => true
+                // * 🚩反例
+                "{A}" => false
+                "[A]" => false
+            }
+            ok!()
+        }
+
+        #[test]
+        fn reduce_components() -> AResult {
+            fn test(t: Term, to_reduce: &Term) {
+                let c = t.as_compound().unwrap();
+                let new_c = c.reduce_components(to_reduce);
+                // TODO: 需要等到「完整实现」之后才能测试
+            }
+            ok!()
+        }
+
+        #[test]
+        fn set_component() -> AResult {
+            // TODO: 等待「制作词项」所有方法均完成
+            ok!()
+        }
+    }
+
+    mod statement {
+        use super::*;
 
         #[test]
         fn make_statement_relation() -> AResult {
@@ -3128,53 +3171,6 @@ mod tests {
             }
             ok!()
         }
-    }
-
-    mod compound {
-        use super::*;
-
-        #[test]
-        fn can_extract() -> AResult {
-            macro_once! {
-                // * 🚩模式：词项字符串⇒预期
-                macro test($($term:expr => $expected:expr)*) {
-                    $(
-                        assert_eq!(term!($term).as_compound().unwrap().can_extract_to_inner(), $expected);
-                    )*
-                }
-                // * 🚩正例
-                "(&&, A)" => true
-                "(||, A)" => true
-                "(&, A)" => true
-                "(|, A)" => true
-                "(-, A, B)" => true
-                "(~, A, B)" => true
-                // * 🚩反例
-                "{A}" => false
-                "[A]" => false
-            }
-            ok!()
-        }
-
-        #[test]
-        fn reduce_components() -> AResult {
-            fn test(t: Term, to_reduce: &Term) {
-                let c = t.as_compound().unwrap();
-                let new_c = c.reduce_components(to_reduce);
-                // TODO: 需要等到「完整实现」之后才能测试
-            }
-            ok!()
-        }
-
-        #[test]
-        fn set_component() -> AResult {
-            // TODO: 等待「制作词项」所有方法均完成
-            ok!()
-        }
-    }
-
-    mod statement {
-        use super::*;
 
         #[cfg(TODO)] // TODO: 有待复用
         #[test]
