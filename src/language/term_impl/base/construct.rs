@@ -12,23 +12,10 @@ impl Term {
         identifier: impl Into<String>,
         components: TermComponents,
     ) -> Self {
-        // 使用默认值构造
-        let mut term = Self {
+        Self {
             identifier: identifier.into(),
             components,
-            is_constant: true, // 取默认值
-        };
-        // 初始化「是否常量」为「是否不含变量」 | ⚠️后续可能会被修改
-        term.is_constant = !term.contain_var();
-        // 返回
-        term
-    }
-
-    /// 从「语句」初始化
-    /// * 🎯应对OpenNARS中「语句内初始化词项⇒必定是『常量』」的情形
-    /// * 🎯后续遇到异常的「是常量」情况，便于追溯
-    pub fn init_from_sentence(&mut self) {
-        self.is_constant = true;
+        }
     }
 
     // 原子词项 //

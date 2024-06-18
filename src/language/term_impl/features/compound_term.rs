@@ -697,13 +697,6 @@ impl CompoundTermRefMut<'_> {
         self.components()[index] = term;
     }
 
-    /// 重命名变量后，更新「是常量」
-    pub fn update_after_rename_variables(&mut self) {
-        // * 🚩【2024-06-14 13:32:50】↓此句源自OpenNARS
-        self.inner.is_constant = true;
-        // * ✅无需「重命名」
-    }
-
     /// 🆕对于「可交换词项」重排其中的元素
     /// * 🚩【2024-06-13 18:05:40】只在「应用替换」时用到
     /// * 🚩【2024-06-14 13:37:46】使用「内存交换」魔法代码
@@ -1501,32 +1494,6 @@ pub(crate) mod tests {
                 "<A <-> B>"[1] = "X" => "<A <-> X>" // ! 可交换词项解析时重排
                 "<A ==> B>"[0] = "a" => "<a ==> B>"
                 "<A <=> B>"[1] = "X" => "<A <=> X>" // ! 可交换词项解析时重排
-            }
-            ok!()
-        }
-
-        #[test]
-        pub fn update_after_rename_variables() -> AResult {
-            macro_once! {
-                macro test($($term:literal)*) {$(
-                    let mut t = term!($term);
-                    // * 🚩验证是否会修改`is_constant`
-                    t.is_constant = false;
-                    t.as_compound_mut().unwrap().update_after_rename_variables();
-                    assert!(t.is_constant);
-                )*}
-                "{A}"
-                "(--, A)"
-                "(-, A, B)"
-                "(~, A, B)"
-                "{A, B, C}"
-                "[A, B, C]"
-                "(*, A, B, C)"
-                "(/, A, B, C, _)"
-                "<A --> B>"
-                "<A <-> B>"
-                "<A ==> B>"
-                "<A <=> B>"
             }
             ok!()
         }

@@ -20,6 +20,7 @@
 
 use crate::io::symbols::*;
 use crate::language::*;
+use nar_dev_utils::matches_or;
 
 impl Term {
     /// 用于判断是否为「变量词项」
@@ -29,6 +30,29 @@ impl Term {
         matches!(
             self.identifier.as_str(),
             VAR_INDEPENDENT | VAR_DEPENDENT | VAR_QUERY
+        )
+    }
+
+    /// 🆕用于判断「是否为独立变量」
+    pub fn instanceof_variable_i(&self) -> bool {
+        self.identifier == VAR_INDEPENDENT
+    }
+
+    /// 🆕用于判断「是否为非独变量」
+    pub fn instanceof_variable_d(&self) -> bool {
+        self.identifier == VAR_DEPENDENT
+    }
+
+    /// 🆕用于判断「是否为查询变量」
+    pub fn instanceof_variable_q(&self) -> bool {
+        self.identifier == VAR_QUERY
+    }
+
+    /// 尝试匹配出「变量」，并返回其中的编号（若有）
+    pub fn as_variable(&self) -> Option<usize> {
+        matches_or!(
+            ?self.components,
+            TermComponents::Variable(n) => n
         )
     }
 
@@ -53,7 +77,35 @@ impl Term {
     /// - (for `CompoundTerm`) check if the term contains free variable
     #[inline(always)]
     pub fn is_constant(&self) -> bool {
-        self.is_constant
+        !self.contains_sole_variable()
+    }
+
+    /// 🆕检查自身是否包含有「孤立非查询变量」
+    /// * 📄复刻自OpenNARS改版逻辑
+    fn contains_sole_variable(&self) -> bool {
+        use std::collections::HashMap;
+
+        /// * 🚩计算「非查询变量数目集」
+        fn variable_count_map(this: &Term) -> HashMap<usize, usize> {
+            let mut var_count_map = HashMap::new();
+            this.for_each_atom(&mut |atom| {
+                if let Some(n) = atom.as_variable() {
+                    // * 🚩非查询变量
+                    if !atom.instanceof_variable_q() {
+                        let new_value = match var_count_map.get(&n) {
+                            Some(count) => count + 1,
+                            None => 1,
+                        };
+                        var_count_map.insert(n, new_value);
+                    }
+                }
+            });
+            var_count_map
+        }
+
+        // * 🚩计算并过滤
+        let var_count_map = variable_count_map(self);
+        var_count_map.values().any(|&count| count < 2)
     }
 
     /// 📄OpenNARS `Variable.containVar` 方法
@@ -153,9 +205,14 @@ mod tests {
             "<A --> var_word>" => true
             "<A --> $var_word>" => false
             "<A --> #var_word>" => false
-            "<A --> ?var_word>" => false
-            "<<A --> $1> ==> <B --> $1>>" => false
-            // ! ↑参考自OpenNARS：最初是false，但在「作为语句输入」后，转变为true
+            // * 📌【2024-06-19 02:27:06】现在改版中成功的项：
+            // 查询变量
+            "<A --> ?var_word>" => true
+            "<?this --> ?that>" => true
+            // 封闭词项
+            "<<A --> $1> ==> <B --> $1>>" => true
+            "<<$2 --> $1> ==> <$1 --> $2>>" => true
+            "(*, $1, $1)" => true
         }
         ok!()
     }

@@ -72,14 +72,15 @@ pub struct Term {
     /// * 🚩通过单一的「复合组分」实现「组合」功能
     pub(in crate::language) components: TermComponents,
 
-    /// 自由属性「是否为常量」
-    /// * 🎯用于决定其在记忆区、NAL-6推理中的行为
-    /// * ❓为何要设置成「结构属性」：会在系统构造「语句」时改变
-    ///   * 📝源自OpenNARS：构造语句时所直接涉及的词项均为「常量词项」，必须进入记忆区
-    /// * 📄OpenNARS `isConstant` 属性
-    /// * 📜默认为`true`
-    /// * 📌此属性影响到「语义判等」的行为
-    pub(in crate::language) is_constant: bool,
+    // 自由属性「是否为常量」
+    // * 🎯用于决定其在记忆区、NAL-6推理中的行为
+    // * ❓为何要设置成「结构属性」：会在系统构造「语句」时改变
+    //   * 📝源自OpenNARS：构造语句时所直接涉及的词项均为「常量词项」，必须进入记忆区
+    // * 📄OpenNARS `isConstant` 属性
+    // * 📜默认为`true`
+    // * 📌此属性影响到「语义判等」的行为
+    // * ✅【2024-06-19 02:07:04】现已无用：在OpenNARS改版中验证了「运行时动态判断，不影响单步推理结果」
+    // pub(in crate::language) is_constant: bool,
 }
 
 /// 复合词项组分
