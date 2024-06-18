@@ -17,7 +17,6 @@ pub use compound_term::*;
 // 变量
 // * 📄OpenNARS `nars.language.Variable`
 pub mod variable;
-pub use variable::*;
 
 // 像
 // * 📄OpenNARS `nars.language.ImageXXt`

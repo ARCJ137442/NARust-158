@@ -105,7 +105,6 @@ impl Term {
     }
 }
 
-// TODO: 后续有待明了：变量「预先重命名」问题
 // * 🚩此处的「变量词项」一开始就应该是个数值，从「具名变量」变为「数字变量」
 /// 词项⇒词法Narsese
 impl From<&Term> for TermLexical {
@@ -114,9 +113,13 @@ impl From<&Term> for TermLexical {
         let (id, comp) = value.id_comp();
         match (id, comp) {
             // 专用 / 集合词项 | 默认已排序
-            (SET_EXT_OPERATOR | SET_INT_OPERATOR, Compound(v)) => {
+            (SET_EXT_OPERATOR, Compound(v)) => {
                 let v = v.iter().map(TermLexical::from).collect::<Vec<_>>();
-                Self::new_compound(id, v)
+                Self::new_set(SET_EXT_OPENER, v, SET_EXT_CLOSER)
+            }
+            (SET_INT_OPERATOR, Compound(v)) => {
+                let v = v.iter().map(TermLexical::from).collect::<Vec<_>>();
+                Self::new_set(SET_INT_OPENER, v, SET_INT_CLOSER)
             }
             //  陈述
             (

@@ -168,7 +168,7 @@ impl Term {
     #[inline(always)]
     fn _process_image_terms(terms: impl Into<Vec<Term>>) -> Result<TermComponents> {
         // 转换词项列表
-        let mut terms = terms.into();
+        let terms = terms.into();
         // 检索像占位符位置
         let i_placeholder = terms.iter().position(Term::is_placeholder);
         // 检查占位符索引范围

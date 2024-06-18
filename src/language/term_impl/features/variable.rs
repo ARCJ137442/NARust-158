@@ -5,11 +5,9 @@
 //!   * ⚠️涉及「变量统一」「变量重命名」等逻辑，放置在专用的「变量推理」代码中
 //!
 //! # 方法列表
-//! 🕒最后更新：【2024-04-24 14:32:52】
+//! 🕒最后更新：【2024-06-19 02:05:25】
 //!
 //! * `isConstant`
-//! * `renameVariables`
-//! * `applySubstitute`
 //! * `getType` => `getVariableType`
 //! * `containVarI`
 //! * `containVarD`
@@ -20,11 +18,8 @@
 //!
 //! A variable term, which does not correspond to a concept
 
-use term_impl::features::compound_term::CompoundTermRef;
-
 use crate::io::symbols::*;
 use crate::language::*;
-use std::collections::HashMap;
 
 impl Term {
     /// 用于判断是否为「变量词项」
@@ -46,6 +41,8 @@ impl Term {
     ///   * 📝然后这个「是否常量」会在「记忆区」中被认作「是否能从中获取概念」的依据：`if (!term.isConstant()) { return null; }`
     /// * 🚩【2024-04-21 23:46:12】现在变为「只读属性」：接受OpenNARS中有关「设置语句时/替换变量后 变为『常量』」的设定
     ///   * 💫【2024-04-22 00:03:10】后续仍然有一堆复杂逻辑要考虑
+    ///
+    /// TODO: 【2024-06-19 02:06:12】跟随最新改版更新，删去字段并铺开实现此功能
     ///
     /// # 📄OpenNARS
     ///
@@ -118,6 +115,7 @@ impl TermComponents {
         self.iter().any(Term::contain_var)
     }
 }
+
 /// 单元测试
 #[cfg(test)]
 mod tests {

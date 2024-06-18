@@ -853,13 +853,17 @@ impl Term {
     /// # 📄OpenNARS
     /// Make a symmetric Statement from given components and temporal information,
     /// called by the rules
-    pub fn new_sym_statement(template: CompoundTermRef, subject: Term, predicate: Term) -> Self {
+    pub fn make_statement_symmetric(
+        template: CompoundTermRef,
+        subject: Term,
+        predicate: Term,
+    ) -> Option<Term> {
         let identifier = template.identifier();
         match identifier {
             // 继承⇒相似
-            INHERITANCE_RELATION => Term::new_similarity(subject, predicate),
+            INHERITANCE_RELATION => Self::make_similarity(subject, predicate),
             // 蕴含⇒等价
-            IMPLICATION_RELATION => Term::new_equivalence(subject, predicate),
+            IMPLICATION_RELATION => Self::make_equivalence(subject, predicate),
             // 其它⇒panic
             _ => unimplemented!("不支持的标识符：{identifier:?}"),
         }
@@ -976,7 +980,10 @@ impl CompoundTermRef<'_> {
     ) -> Option<Term> {
         let mut components = self.clone_components();
         // * 🚩试着作为复合词项
-        let success = match (self.is_same_type(component_to_reduce), self.as_compound()) {
+        let success = match (
+            self.is_same_type(component_to_reduce),
+            component_to_reduce.as_compound(),
+        ) {
             // * 🚩同类⇒移除所有
             (
                 true,
@@ -1003,7 +1010,7 @@ impl CompoundTermRef<'_> {
                 false => None,
             },
             // * 🚩空集⇒始终失败
-            _ => None,
+            0 => None,
         }
     }
 
@@ -1092,18 +1099,112 @@ mod tests {
     mod concrete_type {
         use super::*;
 
+        fn test_make_one(term: Term, expected: Option<Term>, make: fn(Term) -> Option<Term>) {
+            // * 🚩格式化字符串，以备后用
+            let term_str = term.to_string();
+            // * 🚩传入两个词项所有权，制作新词项
+            let out = make(term);
+            // * 🚩检验
+            assert_eq!(
+                out,
+                expected,
+                "{term_str:?} => {} != {}",
+                format_option_term(&out),
+                format_option_term(&expected)
+            );
+        }
+
+        fn test_make_one_f(make: fn(Term) -> Option<Term>) -> impl Fn(Term, Option<Term>) {
+            move |term, expected| test_make_one(term, expected, make)
+        }
+
+        fn test_make_two(
+            term1: Term,
+            term2: Term,
+            expected: Option<Term>,
+            make: fn(Term, Term) -> Option<Term>,
+        ) {
+            // * 🚩格式化字符串，以备后用
+            let term1_str = term1.to_string();
+            let term2_str = term2.to_string();
+            // * 🚩传入两个词项所有权，制作新词项
+            let out = make(term1, term2);
+            // * 🚩检验
+            assert_eq!(
+                out,
+                expected,
+                "{term1_str:?}, {term2_str:?} => {} != {}",
+                format_option_term(&out),
+                format_option_term(&expected)
+            );
+        }
+
+        fn test_make_two_f(
+            make: fn(Term, Term) -> Option<Term>,
+        ) -> impl Fn(Term, Term, Option<Term>) {
+            move |t1, t2, expected| test_make_two(t1, t2, expected, make)
+        }
+
+        fn test_make_arg(
+            terms: Vec<Term>,
+            expected: Option<Term>,
+            make: fn(Vec<Term>) -> Option<Term>,
+        ) {
+            // * 🚩格式化字符串，以备后用
+            let terms_str = format!("{terms:?}");
+            // * 🚩传入两个词项所有权，制作新词项
+            let out = make(terms);
+            // * 🚩检验
+            assert_eq!(
+                out,
+                expected,
+                "{terms_str:?} => {} != {}",
+                format_option_term(&out),
+                format_option_term(&expected)
+            );
+        }
+
+        fn test_make_arg_f(
+            make: fn(Vec<Term>) -> Option<Term>,
+        ) -> impl Fn(Vec<Term>, Option<Term>) {
+            move |argument, expected| test_make_arg(argument, expected, make)
+        }
+
+        fn test_make_image_from_product_f(
+            make: fn(CompoundTermRef, &Term, usize) -> Option<Term>,
+        ) -> impl Fn(Term, Term, usize, Term) {
+            move |p, relation, index, expected| {
+                let product = p.as_compound().expect("解析出的不是复合词项！");
+                let image = make(product, &relation, index).expect("词项制作失败！");
+                assert_eq!(
+                    image, expected,
+                    "{product}, {relation}, {index} => {image} != {expected}"
+                );
+            }
+        }
+
+        fn test_make_image_from_image_f(
+            make: fn(CompoundTermRef, &Term, usize) -> Option<Term>,
+        ) -> impl Fn(Term, Term, usize, Term) {
+            move |i, component, index, expected| {
+                let old_image = i.as_compound().expect("解析出的不是复合词项！");
+                let image = make(old_image, &component, index).expect("词项制作失败！");
+                assert_eq!(
+                    image, expected,
+                    "{old_image}, {component}, {index} => {image} != {expected}"
+                );
+            }
+        }
+
         /* SetExt */
 
         #[test]
         fn make_set_ext() -> AResult {
+            let test = test_make_one_f(Term::make_set_ext);
             macro_once! {
-                // * 🚩模式：词项列表 ⇒ 预期词项
+                // * 🚩模式：参数列表 ⇒ 预期词项
                 macro test($($t:tt => $expected:tt;)*) {
-                    $(
-                        let out = Term::make_set_ext(term!($t));
-                        let expected = option_term!($expected);
-                        assert_eq!(out, expected);
-                    )*
+                    $( test(term!($t) ,option_term!($expected)); )*
                 }
                 "tom" => "{tom}";
                 "Tweety" => "{Tweety}";
@@ -1118,15 +1219,11 @@ mod tests {
 
         #[test]
         fn make_set_ext_arg() -> AResult {
+            let test = test_make_arg_f(Term::make_set_ext_arg);
             macro_once! {
-                // * 🚩模式：词项列表 ⇒ 预期词项
+                // * 🚩模式：参数列表 ⇒ 预期词项
                 macro test($($argument:tt => $expected:tt;)*) {
-                    $(
-                        let argument: Vec<_> = term!($argument).into();
-                        let set = Term::make_set_ext_arg(argument);
-                        let expected = option_term!($expected);
-                        assert_eq!(set, expected);
-                    )*
+                    $( test(term!($argument).into(), option_term!($expected)); )*
                 }
                 [] => None;
                 ["?49"] => "{?49}";
@@ -1147,14 +1244,11 @@ mod tests {
 
         #[test]
         fn make_set_int() -> AResult {
+            let test = test_make_one_f(Term::make_set_int);
             macro_once! {
-                // * 🚩模式：词项列表 ⇒ 预期词项
-                macro test($($t:tt => $expected:expr;)*) {
-                    $(
-                        let out = Term::make_set_int(term!($t)).expect("解析词项失败！");
-                        let expected = term!($expected);
-                        assert_eq!(out, expected);
-                    )*
+                // * 🚩模式：参数列表 ⇒ 预期词项
+                macro test($($t:tt => $expected:tt;)*) {
+                    $( test(term!($t) ,option_term!($expected)); )*
                 }
                 "[1]" => "[[1]]";
                 "[{1}]" => "[[{1}]]";
@@ -1168,15 +1262,11 @@ mod tests {
 
         #[test]
         fn make_set_int_arg() -> AResult {
+            let test = test_make_arg_f(Term::make_set_int_arg);
             macro_once! {
-                // * 🚩模式：词项列表 ⇒ 预期词项
+                // * 🚩模式：参数列表 ⇒ 预期词项
                 macro test($($argument:tt => $expected:tt;)*) {
-                    $(
-                        let argument: Vec<_> = term!($argument).into();
-                        let set = Term::make_set_int_arg(argument);
-                        let expected = option_term!($expected);
-                        assert_eq!(set, expected);
-                    )*
+                    $( test(term!($argument).into(), option_term!($expected)); )*
                 }
                 [] => None;
                 ["1", "2"] => "[1, 2]";
@@ -1204,94 +1294,45 @@ mod tests {
 
         #[test]
         fn make_intersection_ext() -> AResult {
+            let test = test_make_two_f(Term::make_intersection_ext);
             macro_once! {
                 // * 🚩模式：函数参数 ⇒ 预期词项
                 macro test($($term1:tt, $term2:tt => $expected:tt;)*) {
-                    $(
-                        let term1 = term!($term1);
-                        let term2 = term!($term2);
-                        let out = Term::make_intersection_ext(term1.clone(), term2.clone());
-                        let expected = option_term!($expected);
-                        assert_eq!(
-                            out, expected,
-                            "{term1}, {term2} => {} != {}",
-                            format_option_term(&out),format_option_term(&expected)
-                        );
-                    )*
+                    $( test(term!($term1), term!($term2), option_term!($expected)); )*
                 }
                 // * ℹ️用例均源自OpenNARS实际运行
                 // 集合之间的交集
-                "{Pluto,Saturn}", "{Mars,Pluto,Venus}" => "{Pluto}";
-                "{Mars,Pluto,Venus}", "{Pluto,Saturn}" => "{Pluto}";
-                "[with_wings]", "[yellow]" => "[with_wings,yellow]";
                 "[with_wings]", "[with_wings,yellow]" => "[with_wings,with_wings,yellow]";
-                "[yellow]", "[with_wings]" => "[with_wings,yellow]";
                 "[with_wings]", "[with_wings]" => "[with_wings,with_wings]";
-                "[with_wings]", "[yellow]" => "[with_wings,yellow]";
-                "[yellow]", "[with_wings]" => "[with_wings,yellow]";
+                "{Mars,Pluto,Venus}", "{Pluto,Saturn}" => "{Pluto}";
                 "{Mars,Venus}", "{Pluto,Saturn}" => None;
+                "{Pluto,Saturn}", "{Mars,Pluto,Venus}" => "{Pluto}";
                 "{Tweety}", "{Birdie}" => None;
-                "{Pluto,Saturn}", "{Mars,Venus}" => None;
                 // 其它情形
-                "robin", "swan" => "(&,robin,swan)";
-                "flyer", "{Birdie}" => "(&,flyer,{Birdie})";
-                "{Birdie}", "bird" => "(&,bird,{Birdie})";
-                "bird", "(|,#1,flyer)" => "(&,bird,(|,#1,flyer))";
                 "#1", "bird" => "(&,#1,bird)";
-                "(&,flyer,{Birdie})", "[yellow]" => "(&,flyer,[yellow],{Birdie})";
-                "bird", "[yellow]" => "(&,bird,[yellow])";
-                "chess", "sport" => "(&,chess,sport)";
-                "bird", "{Birdie}" => "(&,bird,{Birdie})";
-                "(|,bird,flyer)", "(|,bird,{Birdie})" => "(&,(|,bird,flyer),(|,bird,{Birdie}))";
-                "swan", "robin" => "(&,robin,swan)";
-                "(&,flyer,{Birdie})", "(&,bird,[yellow])" => "(&,bird,flyer,[yellow],{Birdie})";
-                "robin", "bird" => "(&,bird,robin)";
-                "robin", "{Tweety}" => "(&,robin,{Tweety})";
-                "bird", "[with-wings]" => "(&,bird,[with-wings])";
-                "bird", "animal" => "(&,animal,bird)";
-                "bird", "swan" => "(&,bird,swan)";
-                "competition", "sport" => "(&,competition,sport)";
-                "flyer", "[yellow]" => "(&,flyer,[yellow])";
-                "flyer", "#1" => "(&,#1,flyer)";
-                "bird", "tiger" => "(&,bird,tiger)";
-                "#1", "{Tweety}" => "(&,#1,{Tweety})";
-                "<{Tweety} --> bird>", "<bird --> fly>" => "(&,<bird --> fly>,<{Tweety} --> bird>)";
-                "swimmer", "animal" => "(&,animal,swimmer)";
-                "(&,bird,{Birdie})", "[yellow]" => "(&,bird,[yellow],{Birdie})";
-                "flyer", "(&,bird,[yellow])" => "(&,bird,flyer,[yellow])";
-                "{Birdie}", "[with-wings]" => "(&,[with-wings],{Birdie})";
-                "flyer", "[with-wings]" => "(&,flyer,[with-wings])";
                 "#1", "{Birdie}" => "(&,#1,{Birdie})";
-                "chess", "competition" => "(&,chess,competition)";
-                "[strong]", "(~,youth,girl)" => "(&,[strong],(~,youth,girl))";
-                "robin", "swimmer" => "(&,robin,swimmer)";
-                "sport", "chess" => "(&,chess,sport)";
-                "bird", "flyer" => "(&,bird,flyer)";
-                "swimmer", "bird" => "(&,bird,swimmer)";
-                "animal", "bird" => "(&,animal,bird)";
-                "swan", "swimmer" => "(&,swan,swimmer)";
-                "flyer", "(&,bird,{Birdie})" => "(&,bird,flyer,{Birdie})";
-                "flyer", "bird" => "(&,bird,flyer)";
-                "bird", "swimmer" => "(&,bird,swimmer)";
-                "(|,flyer,{Birdie})", "[with-wings]" => "(&,[with-wings],(|,flyer,{Birdie}))";
-                "animal", "swimmer" => "(&,animal,swimmer)";
-                "key", "{key1}" => "(&,key,{key1})";
-                "{Birdie}", "[with_wings]" => "(&,[with_wings],{Birdie})";
-                "bird", "#1" => "(&,#1,bird)";
-                "robin", "tiger" => "(&,robin,tiger)";
-                "swimmer", "robin" => "(&,robin,swimmer)";
-                "(|,flyer,{Birdie})", "(|,#1,flyer)" => "(&,(|,#1,flyer),(|,flyer,{Birdie}))";
-                "(|,bird,flyer)", "#1" => "(&,#1,(|,bird,flyer))";
-                "bird", "{Tweety}" => "(&,bird,{Tweety})";
-                "robin", "{Birdie}" => "(&,robin,{Birdie})";
-                "swan", "bird" => "(&,bird,swan)";
-                "bird", "robin" => "(&,bird,robin)";
-                "#1", "{lock1}" => "(&,#1,{lock1})";
-                "{Tweety}", "#1" => "(&,#1,{Tweety})";
-                "(|,bird,flyer)", "(|,bird,{Tweety})" => "(&,(|,bird,flyer),(|,bird,{Tweety}))";
-                "lock1", "#1" => "(&,#1,lock1)";
-                "[yellow]", "bird" => "(&,bird,[yellow])";
+                "(&,bird,{Birdie})", "[yellow]" => "(&,bird,[yellow],{Birdie})";
                 "(&,bird,{Birdie})", "flyer" => "(&,bird,flyer,{Birdie})";
+                "(&,flyer,{Birdie})", "(&,bird,[yellow])" => "(&,bird,flyer,[yellow],{Birdie})";
+                "(|,bird,flyer)", "#1" => "(&,#1,(|,bird,flyer))";
+                "(|,bird,flyer)", "(|,bird,{Birdie})" => "(&,(|,bird,flyer),(|,bird,{Birdie}))";
+                "(|,flyer,{Birdie})", "(|,#1,flyer)" => "(&,(|,#1,flyer),(|,flyer,{Birdie}))";
+                "(|,flyer,{Birdie})", "[with-wings]" => "(&,[with-wings],(|,flyer,{Birdie}))";
+                "<{Tweety} --> bird>", "<bird --> fly>" => "(&,<bird --> fly>,<{Tweety} --> bird>)";
+                "[strong]", "(~,youth,girl)" => "(&,[strong],(~,youth,girl))";
+                "[yellow]", "bird" => "(&,bird,[yellow])";
+                "animal", "bird" => "(&,animal,bird)";
+                "bird", "#1" => "(&,#1,bird)";
+                "bird", "(|,#1,flyer)" => "(&,bird,(|,#1,flyer))";
+                "bird", "[with-wings]" => "(&,bird,[with-wings])";
+                "bird", "[yellow]" => "(&,bird,[yellow])";
+                "bird", "{Birdie}" => "(&,bird,{Birdie})";
+                "flyer", "(&,bird,[yellow])" => "(&,bird,flyer,[yellow])";
+                "flyer", "(&,bird,{Birdie})" => "(&,bird,flyer,{Birdie})";
+                "{Birdie}", "[with-wings]" => "(&,[with-wings],{Birdie})";
+                "{Birdie}", "[with_wings]" => "(&,[with_wings],{Birdie})";
+                "{Birdie}", "bird" => "(&,bird,{Birdie})";
+                "{Tweety}", "#1" => "(&,#1,{Tweety})";
             }
             ok!()
         }
@@ -1299,134 +1340,69 @@ mod tests {
         /* IntersectionInt */
         #[test]
         fn make_intersection_int() -> AResult {
+            let test = test_make_two_f(Term::make_intersection_int);
             macro_once! {
                 // * 🚩模式：函数参数 ⇒ 预期词项
                 macro test($($term1:tt, $term2:tt => $expected:tt;)*) {
-                    $(
-                        let term1 = term!($term1);
-                        let term2 = term!($term2);
-                        let out = Term::make_intersection_int(term1.clone(), term2.clone());
-                        let expected = option_term!($expected);
-                        assert_eq!(
-                            out, expected,
-                            "{term1}, {term2} => {} != {}",
-                            format_option_term(&out),format_option_term(&expected)
-                        );
-                    )*
+                    $( test(term!($term1), term!($term2), option_term!($expected)); )*
                 }
-                // * ℹ️用例均源自OpenNARS实际运行"(|,flyer,{Tweety})", "{Birdie}" => "(|,flyer,{Birdie},{Tweety})";
-                "(|,#1,bird)", "{Birdie}" => "(|,#1,bird,{Birdie})";
-                "[with_wings]", "[yellow]" => None;
-                "animal", "bird" => "(|,animal,bird)";
-                "[with-wings]", "{Tweety}" => "(|,[with-wings],{Tweety})";
-                "{Tweety}", "#1" => "(|,#1,{Tweety})";
-                "(&,#1,{lock1})", "lock1" => "(|,lock1,(&,#1,{lock1}))";
-                "{Mars,Venus}", "{Pluto,Saturn}" => "{Mars,Pluto,Saturn,Venus}";
-                "neutralization", "reaction" => "(|,neutralization,reaction)";
-                "[strong]", "(~,youth,girl)" => "(|,[strong],(~,youth,girl))";
-                "robin", "[with-wings]" => "(|,robin,[with-wings])";
-                "robin", "{Tweety}" => "(|,robin,{Tweety})";
-                "[with_wings]", "{Birdie}" => "(|,[with_wings],{Birdie})";
-                "bird", "(&,bird,{Birdie})" => "(|,bird,(&,bird,{Birdie}))";
-                "bird", "tiger" => "(|,bird,tiger)";
-                "(|,flyer,[with_wings])", "{Birdie}" => "(|,flyer,[with_wings],{Birdie})";
-                "boy", "girl" => "(|,boy,girl)";
-                "chess", "(|,chess,sport)" => "(|,chess,sport)";
-                "(&,flyer,{Birdie})", "[yellow]" => "(|,[yellow],(&,flyer,{Birdie}))";
-                "sport", "competition" => "(|,competition,sport)";
-                "flyer", "(|,bird,flyer)" => "(|,bird,flyer)";
-                "bird", "{Birdie}" => "(|,bird,{Birdie})";
-                "(&,bird,{Birdie})", "[yellow]" => "(|,[yellow],(&,bird,{Birdie}))";
-                "flyer", "[with_wings]" => "(|,flyer,[with_wings])";
-                "flyer", "[with-wings]" => "(|,flyer,[with-wings])";
-                "robin", "(|,#1,{Birdie})" => "(|,#1,robin,{Birdie})";
-                "(|,flyer,{Birdie})", "[with-wings]" => "(|,flyer,[with-wings],{Birdie})";
-                "(|,bird,robin)", "{Birdie}" => "(|,bird,robin,{Birdie})";
-                "#1", "{lock1}" => "(|,#1,{lock1})";
-                "{Birdie}", "bird" => "(|,bird,{Birdie})";
-                "swimmer", "animal" => "(|,animal,swimmer)";
-                "(~,boy,girl)", "(~,youth,girl)" => "(|,(~,boy,girl),(~,youth,girl))";
-                "[with-wings]", "(|,bird,flyer)" => "(|,bird,flyer,[with-wings])";
-                "bird", "flyer" => "(|,bird,flyer)";
-                "(&,flyer,{Birdie})", "(&,bird,{Birdie})" => "(|,(&,bird,{Birdie}),(&,flyer,{Birdie}))";
+                // * ℹ️用例均源自OpenNARS实际运行
                 "#1", "(&,bird,{Birdie})" => "(|,#1,(&,bird,{Birdie}))";
-                "robin", "[yellow]" => "(|,robin,[yellow])";
-                "{Tweety}", "{Birdie}" => "{Birdie,Tweety}";
-                "#1", "robin" => "(|,#1,robin)";
-                "(&,[with-wings],{Birdie})", "(&,bird,flyer)" => "(|,(&,bird,flyer),(&,[with-wings],{Birdie}))";
-                "[with_wings]", "(|,bird,{Birdie})" => "(|,bird,[with_wings],{Birdie})";
-                "competition", "chess" => "(|,chess,competition)";
-                "[with-wings]", "(&,bird,[yellow])" => "(|,[with-wings],(&,bird,[yellow]))";
-                "[with_wings]", "[with-wings]" => None;
-                "bird", "(|,flyer,[with-wings])" => "(|,bird,flyer,[with-wings])";
-                "flyer", "(&,bird,[yellow])" => "(|,flyer,(&,bird,[yellow]))";
-                "{Birdie}", "(|,[with_wings],(&,bird,[with-wings]))" => "(|,[with_wings],{Birdie},(&,bird,[with-wings]))";
-                "chess", "competition" => "(|,chess,competition)";
-                "[with-wings]", "{Birdie}" => "(|,[with-wings],{Birdie})";
-                "swan", "bird" => "(|,bird,swan)";
-                "(|,bird,flyer)", "(|,bird,{Birdie})" => "(|,bird,flyer,{Birdie})";
-                "[with-wings]", "[with_wings,yellow]" => None;
-                "{Pluto,Saturn}", "{Mars,Pluto,Venus}" => "{Mars,Pluto,Saturn,Venus}";
-                "flyer", "[yellow]" => "(|,flyer,[yellow])";
-                "flyer", "{Birdie}" => "(|,flyer,{Birdie})";
-                "bird", "robin" => "(|,bird,robin)";
-                "bird", "animal" => "(|,animal,bird)";
-                "(|,bird,flyer)", "{Birdie}" => "(|,bird,flyer,{Birdie})";
-                "animal", "swimmer" => "(|,animal,swimmer)";
-                "robin", "swimmer" => "(|,robin,swimmer)";
-                "bird", "(|,#1,flyer)" => "(|,#1,bird,flyer)";
-                "{Birdie}", "[with_wings]" => "(|,[with_wings],{Birdie})";
-                "swan", "animal" => "(|,animal,swan)";
-                "(&,bird,{Birdie})", "flyer" => "(|,flyer,(&,bird,{Birdie}))";
-                "boy", "(~,youth,girl)" => "(|,boy,(~,youth,girl))";
-                "#1", "{Tweety}" => "(|,#1,{Tweety})";
                 "#1", "bird" => "(|,#1,bird)";
-                "[with_wings]", "(&,bird,{Birdie})" => "(|,[with_wings],(&,bird,{Birdie}))";
-                "flyer", "(&,bird,{Birdie})" => "(|,flyer,(&,bird,{Birdie}))";
-                "bird", "{Tweety}" => "(|,bird,{Tweety})";
-                "robin", "bird" => "(|,bird,robin)";
-                "{Mars,Pluto,Venus}", "{Pluto,Saturn}" => "{Mars,Pluto,Saturn,Venus}";
-                "(&,flyer,{Birdie})", "(&,bird,[yellow])" => "(|,(&,bird,[yellow]),(&,flyer,{Birdie}))";
-                "robin", "animal" => "(|,animal,robin)";
-                "[with-wings]", "(&,bird,flyer)" => "(|,[with-wings],(&,bird,flyer))";
-                "robin", "swan" => "(|,robin,swan)";
-                "robin", "#1" => "(|,#1,robin)";
-                "chess", "sport" => "(|,chess,sport)";
-                "robin", "tiger" => "(|,robin,tiger)";
-                "youth", "girl" => "(|,girl,youth)";
-                "bird", "(&,flyer,{Birdie})" => "(|,bird,(&,flyer,{Birdie}))";
-                "swimmer", "bird" => "(|,bird,swimmer)";
-                "bird", "(|,bird,flyer)" => "(|,bird,flyer)";
-                "lock1", "#1" => "(|,#1,lock1)";
-                "robin", "(&,bird,[with-wings])" => "(|,robin,(&,bird,[with-wings]))";
-                "bird", "swimmer" => "(|,bird,swimmer)";
-                "flyer", "(&,bird,[with-wings])" => "(|,flyer,(&,bird,[with-wings]))";
-                "flyer", "bird" => "(|,bird,flyer)";
-                "swimmer", "robin" => "(|,robin,swimmer)";
-                "bird", "swan" => "(|,bird,swan)";
-                "swan", "robin" => "(|,robin,swan)";
-                "flyer", "#1" => "(|,#1,flyer)";
-                "(|,#1,flyer)", "{Tweety}" => "(|,#1,flyer,{Tweety})";
-                "robin", "{Birdie}" => "(|,robin,{Birdie})";
-                "(|,bird,flyer)", "#1" => "(|,#1,bird,flyer)";
-                "[with-wings]", "(&,bird,{Birdie})" => "(|,[with-wings],(&,bird,{Birdie}))";
-                "[yellow]", "bird" => "(|,bird,[yellow])";
-                "(|,flyer,{Birdie})", "(|,#1,flyer)" => "(|,#1,flyer,{Birdie})";
-                "{Birdie}", "[with-wings]" => "(|,[with-wings],{Birdie})";
-                "(|,[with-wings],(&,bird,[yellow]))", "flyer" => "(|,flyer,[with-wings],(&,bird,[yellow]))";
-                "bird", "#1" => "(|,#1,bird)";
-                "[with_wings]", "bird" => "(|,bird,[with_wings])";
-                "bird", "[yellow]" => "(|,bird,[yellow])";
-                "{key1}", "key" => "(|,key,{key1})";
-                "flyer", "(&,flyer,{Birdie})" => "(|,flyer,(&,flyer,{Birdie}))";
-                "[with_wings]", "(&,bird,[with-wings])" => "(|,[with_wings],(&,bird,[with-wings]))";
-                "#1", "lock1" => "(|,#1,lock1)";
-                "flyer", "{Tweety}" => "(|,flyer,{Tweety})";
-                "[with-wings]", "#1" => "(|,#1,[with-wings])";
                 "#1", "{Birdie}" => "(|,#1,{Birdie})";
-                "competition", "sport" => "(|,competition,sport)";
-                "sport", "chess" => "(|,chess,sport)";
+                "(&,#1,{lock1})", "lock1" => "(|,lock1,(&,#1,{lock1}))";
+                "(&,[with-wings],{Birdie})", "(&,bird,flyer)" => "(|,(&,bird,flyer),(&,[with-wings],{Birdie}))";
+                "(&,bird,{Birdie})", "[yellow]" => "(|,[yellow],(&,bird,{Birdie}))";
+                "(&,bird,{Birdie})", "flyer" => "(|,flyer,(&,bird,{Birdie}))";
+                "(&,flyer,{Birdie})", "(&,bird,[yellow])" => "(|,(&,bird,[yellow]),(&,flyer,{Birdie}))";
+                "(&,flyer,{Birdie})", "(&,bird,{Birdie})" => "(|,(&,bird,{Birdie}),(&,flyer,{Birdie}))";
+                "(|,#1,bird)", "{Birdie}" => "(|,#1,bird,{Birdie})";
+                "(|,[with-wings],(&,bird,[yellow]))", "flyer" => "(|,flyer,[with-wings],(&,bird,[yellow]))";
+                "(|,bird,flyer)", "#1" => "(|,#1,bird,flyer)";
+                "(|,bird,flyer)", "(|,bird,{Birdie})" => "(|,bird,flyer,{Birdie})";
+                "(|,bird,flyer)", "{Birdie}" => "(|,bird,flyer,{Birdie})";
+                "(|,flyer,[with_wings])", "{Birdie}" => "(|,flyer,[with_wings],{Birdie})";
+                "(|,flyer,{Birdie})", "(|,#1,flyer)" => "(|,#1,flyer,{Birdie})";
+                "(|,flyer,{Birdie})", "[with-wings]" => "(|,flyer,[with-wings],{Birdie})";
+                "(|,flyer,{Tweety})", "{Birdie}" => "(|,flyer,{Birdie},{Tweety})";
+                "(~,boy,girl)", "(~,youth,girl)" => "(|,(~,boy,girl),(~,youth,girl))";
+                "[strong]", "(~,youth,girl)" => "(|,[strong],(~,youth,girl))";
+                "[with-wings]", "#1" => "(|,#1,[with-wings])";
+                "[with-wings]", "(&,bird,[yellow])" => "(|,[with-wings],(&,bird,[yellow]))";
+                "[with-wings]", "(&,bird,flyer)" => "(|,[with-wings],(&,bird,flyer))";
+                "[with-wings]", "(&,bird,{Birdie})" => "(|,[with-wings],(&,bird,{Birdie}))";
+                "[with-wings]", "(|,bird,flyer)" => "(|,bird,flyer,[with-wings])";
+                "[with-wings]", "[with_wings,yellow]" => None;
+                "[with-wings]", "{Birdie}" => "(|,[with-wings],{Birdie})";
+                "[with_wings]", "(&,bird,[with-wings])" => "(|,[with_wings],(&,bird,[with-wings]))";
+                "[with_wings]", "(&,bird,{Birdie})" => "(|,[with_wings],(&,bird,{Birdie}))";
+                "[with_wings]", "(|,bird,{Birdie})" => "(|,bird,[with_wings],{Birdie})";
+                "[with_wings]", "[with-wings]" => None;
+                "[with_wings]", "[yellow]" => None;
+                "[with_wings]", "bird" => "(|,bird,[with_wings])";
+                "[with_wings]", "{Birdie}" => "(|,[with_wings],{Birdie})";
+                "animal", "bird" => "(|,animal,bird)";
+                "bird", "#1" => "(|,#1,bird)";
+                "bird", "(&,bird,{Birdie})" => "(|,bird,(&,bird,{Birdie}))";
+                "bird", "(|,#1,flyer)" => "(|,#1,bird,flyer)";
+                "bird", "(|,bird,flyer)" => "(|,bird,flyer)";
+                "bird", "(|,flyer,[with-wings])" => "(|,bird,flyer,[with-wings])";
                 "bird", "[with-wings]" => "(|,bird,[with-wings])";
+                "bird", "[yellow]" => "(|,bird,[yellow])";
+                "bird", "{Birdie}" => "(|,bird,{Birdie})";
+                "boy", "(~,youth,girl)" => "(|,boy,(~,youth,girl))";
+                "flyer", "(&,bird,[with-wings])" => "(|,flyer,(&,bird,[with-wings]))";
+                "flyer", "(&,bird,[yellow])" => "(|,flyer,(&,bird,[yellow]))";
+                "robin", "(|,#1,{Birdie})" => "(|,#1,robin,{Birdie})";
+                "{Birdie}", "(|,[with_wings],(&,bird,[with-wings]))" => "(|,[with_wings],{Birdie},(&,bird,[with-wings]))";
+                "{Birdie}", "[with-wings]" => "(|,[with-wings],{Birdie})";
+                "{Birdie}", "[with_wings]" => "(|,[with_wings],{Birdie})";
+                "{Birdie}", "bird" => "(|,bird,{Birdie})";
+                "{Mars,Pluto,Venus}", "{Pluto,Saturn}" => "{Mars,Pluto,Saturn,Venus}";
+                "{Mars,Venus}", "{Pluto,Saturn}" => "{Mars,Pluto,Saturn,Venus}";
+                "{Pluto,Saturn}", "{Mars,Pluto,Venus}" => "{Mars,Pluto,Saturn,Venus}";
+                "{Tweety}", "#1" => "(|,#1,{Tweety})";
+                "{Tweety}", "{Birdie}" => "{Birdie,Tweety}";
             }
             ok!()
         }
@@ -1435,15 +1411,11 @@ mod tests {
 
         #[test]
         fn make_difference_ext_arg() -> AResult {
+            let test = test_make_arg_f(Term::make_difference_ext_arg);
             macro_once! {
-                // * 🚩模式：词项列表 ⇒ 预期词项
+                // * 🚩模式：参数列表 ⇒ 预期词项
                 macro test($($arg_list:tt => $expected:expr;)*) {
-                    $(
-                        let arg_list: Vec<_> = term!($arg_list).into();
-                        let out = Term::make_difference_ext_arg(arg_list).expect("解析词项失败！");
-                        let expected = term!($expected);
-                        assert_eq!(out, expected);
-                    )*
+                    $( test(term!($arg_list).into(), option_term!($expected)); )*
                 }
                 // * ℹ️用例均源自OpenNARS实际运行
                 ["swimmer", "bird"] => "(-,swimmer,bird)";
@@ -1456,62 +1428,34 @@ mod tests {
 
         #[test]
         fn make_difference_ext() -> AResult {
+            let test = test_make_two_f(Term::make_difference_ext);
             macro_once! {
-                // * 🚩模式：词项列表 ⇒ 预期词项
+                // * 🚩模式：参数列表 ⇒ 预期词项
                 macro test($($term1:tt, $term2:tt => $expected:expr;)*) {
-                    $(
-                        let term1 = term!($term1);
-                        let term2 = term!($term2);
-                        let out = Term::make_difference_ext(term1.clone(), term2.clone());
-                        let expected = option_term!($expected);
-                        assert_eq!(
-                            out, expected,
-                            "{term1}, {term2} => {} != {}",
-                            format_option_term(&out), format_option_term(&expected)
-                        );
-                    )*
+                    $( test(term!($term1), term!($term2), option_term!($expected)); )*
                 }
                 // * ℹ️用例均源自OpenNARS实际运行
-                "[yellow]", "bird" => "(-,[yellow],bird)";
-                "(|,bird,{Birdie})", "[with_wings]" => "(-,(|,bird,{Birdie}),[with_wings])";
-                "bird", "[yellow]" => "(-,bird,[yellow])";
-                "bird", "[with_wings]" => "(-,bird,[with_wings])";
-                "[yellow]", "{Birdie}" => "(-,[yellow],{Birdie})";
-                "(|,[yellow],{Birdie})", "flyer" => "(-,(|,[yellow],{Birdie}),flyer)";
-                "(|,chess,competition)", "(|,competition,sport)" => "(-,(|,chess,competition),(|,competition,sport))";
-                "{Mars,Pluto,Venus}", "{Pluto,Saturn}" => "{Mars,Venus}";
-                "(|,[yellow],{Birdie})", "bird" => "(-,(|,[yellow],{Birdie}),bird)";
-                "swan", "swimmer" => "(-,swan,swimmer)";
-                "(|,flyer,{Birdie})", "[with_wings]" => "(-,(|,flyer,{Birdie}),[with_wings])";
-                "swan", "flyer" => "(-,swan,flyer)";
-                "(|,[yellow],{Birdie})", "[with_wings]" => "(-,(|,[yellow],{Birdie}),[with_wings])";
-                "robin", "bird" => "(-,robin,bird)";
-                "[yellow]", "[with_wings]" => "(-,[yellow],[with_wings])";
-                "swimmer", "swan" => "(-,swimmer,swan)";
-                "bird", "swimmer" => "(-,bird,swimmer)";
-                "{Birdie}", "flyer" => "(-,{Birdie},flyer)";
-                "(&,bird,flyer)", "[with_wings]" => "(-,(&,bird,flyer),[with_wings])";
-                "(/,open,_,#1)", "(/,open,_,{lock1})" => "(-,(/,open,_,#1),(/,open,_,{lock1}))";
-                "flyer", "[with_wings]" => "(-,flyer,[with_wings])";
-                "swan", "animal" => "(-,swan,animal)";
                 "(&,bird,(|,[yellow],{Birdie}))", "[with_wings]" => "(-,(&,bird,(|,[yellow],{Birdie})),[with_wings])";
-                "bird", "flyer" => "(-,bird,flyer)";
-                "mammal", "swimmer" => "(-,mammal,swimmer)";
-                "(|,flyer,[yellow])", "{Birdie}" => "(-,(|,flyer,[yellow]),{Birdie})";
-                "(&,flyer,{Birdie})", "[with_wings]" => "(-,(&,flyer,{Birdie}),[with_wings])";
-                "swimmer", "animal" => "(-,swimmer,animal)";
-                "(|,flyer,[with_wings])", "[yellow]" => "(-,(|,flyer,[with_wings]),[yellow])";
-                "animal", "swimmer" => "(-,animal,swimmer)";
-                "bird", "animal" => "(-,bird,animal)";
-                "(|,bird,flyer)", "[with_wings]" => "(-,(|,bird,flyer),[with_wings])";
-                "{Birdie}", "[with_wings]" => "(-,{Birdie},[with_wings])";
-                "(|,bird,swimmer)", "animal" => "(-,(|,bird,swimmer),animal)";
-                "(|,flyer,[yellow])", "[with_wings]" => "(-,(|,flyer,[yellow]),[with_wings])";
+                "(&,bird,flyer)", "[with_wings]" => "(-,(&,bird,flyer),[with_wings])";
                 "(&,flyer,[yellow])", "[with_wings]" => "(-,(&,flyer,[yellow]),[with_wings])";
-                "(|,bird,{Birdie})", "[yellow]" => "(-,(|,bird,{Birdie}),[yellow])";
-                "swimmer", "bird" => "(-,swimmer,bird)";
-                "swan", "bird" => "(-,swan,bird)";
-                "robin", "animal" => "(-,robin,animal)";
+                "(&,flyer,{Birdie})", "[with_wings]" => "(-,(&,flyer,{Birdie}),[with_wings])";
+                "(/,open,_,#1)", "(/,open,_,{lock1})" => "(-,(/,open,_,#1),(/,open,_,{lock1}))";
+                "(|,[yellow],{Birdie})", "[with_wings]" => "(-,(|,[yellow],{Birdie}),[with_wings])";
+                "(|,[yellow],{Birdie})", "bird" => "(-,(|,[yellow],{Birdie}),bird)";
+                "(|,bird,flyer)", "[with_wings]" => "(-,(|,bird,flyer),[with_wings])";
+                "(|,bird,swimmer)", "animal" => "(-,(|,bird,swimmer),animal)";
+                "(|,bird,{Birdie})", "[with_wings]" => "(-,(|,bird,{Birdie}),[with_wings])";
+                "(|,chess,competition)", "(|,competition,sport)" => "(-,(|,chess,competition),(|,competition,sport))";
+                "(|,flyer,[with_wings])", "[yellow]" => "(-,(|,flyer,[with_wings]),[yellow])";
+                "(|,flyer,[yellow])", "{Birdie}" => "(-,(|,flyer,[yellow]),{Birdie})";
+                "[yellow]", "[with_wings]" => "(-,[yellow],[with_wings])";
+                "[yellow]", "bird" => "(-,[yellow],bird)";
+                "[yellow]", "{Birdie}" => "(-,[yellow],{Birdie})";
+                "animal", "swimmer" => "(-,animal,swimmer)";
+                "bird", "[with_wings]" => "(-,bird,[with_wings])";
+                "{Birdie}", "[with_wings]" => "(-,{Birdie},[with_wings])";
+                "{Birdie}", "flyer" => "(-,{Birdie},flyer)";
+                "{Mars,Pluto,Venus}", "{Pluto,Saturn}" => "{Mars,Venus}";
             }
             ok!()
         }
@@ -1520,15 +1464,11 @@ mod tests {
 
         #[test]
         fn make_difference_int_arg() -> AResult {
+            let test = test_make_arg_f(Term::make_difference_int_arg);
             macro_once! {
-                // * 🚩模式：词项列表 ⇒ 预期词项
+                // * 🚩模式：参数列表 ⇒ 预期词项
                 macro test($($arg_list:tt => $expected:expr;)*) {
-                    $(
-                        let arg_list: Vec<_> = term!($arg_list).into();
-                        let out = Term::make_difference_int_arg(arg_list).expect("解析词项失败！");
-                        let expected = term!($expected);
-                        assert_eq!(out, expected);
-                    )*
+                    $( test(term!($arg_list).into(), option_term!($expected)); )*
                 }
                 // * ℹ️用例均源自OpenNARS实际运行
                 ["(~,boy,girl)", "girl"] => "(~,(~,boy,girl),girl)";
@@ -1544,66 +1484,32 @@ mod tests {
 
         #[test]
         fn make_difference_int() -> AResult {
+            let test = test_make_two_f(Term::make_difference_int);
             macro_once! {
-                // * 🚩模式：词项列表 ⇒ 预期词项
+                // * 🚩模式：参数列表 ⇒ 预期词项
                 macro test($($term1:tt, $term2:tt => $expected:expr;)*) {
-                    $(
-                        let term1 = term!($term1);
-                        let term2 = term!($term2);
-                        let out = Term::make_difference_int(term1.clone(), term2.clone());
-                        let expected = option_term!($expected);
-                        assert_eq!(
-                            out, expected,
-                            "{term1}, {term2} => {} != {}",
-                            format_option_term(&out), format_option_term(&expected)
-                        );
-                    )*
+                    $( test(term!($term1), term!($term2), option_term!($expected)); )*
                 }
                 // * ℹ️用例均源自OpenNARS实际运行
-                "{Birdie}", "(|,flyer,robin)" => "(~,{Birdie},(|,flyer,robin))";
-                "{Tweety}", "(|,flyer,robin)" => "(~,{Tweety},(|,flyer,robin))";
-                "swimmer", "bird" => "(~,swimmer,bird)";
-                "bird", "robin" => "(~,bird,robin)";
-                "tiger", "swan" => "(~,tiger,swan)";
-                "sport", "chess" => "(~,sport,chess)";
-                "robin", "bird" => "(~,robin,bird)";
-                "(&,flyer,{Tweety})", "robin" => "(~,(&,flyer,{Tweety}),robin)";
-                "(/,open,_,lock)", "{key1}" => "(~,(/,open,_,lock),{key1})";
-                "swan", "robin" => "(~,swan,robin)";
-                "tiger", "robin" => "(~,tiger,robin)";
-                "{Tweety}", "robin" => "(~,{Tweety},robin)";
-                "(&,flyer,{Birdie})", "(&,flyer,robin)" => "(~,(&,flyer,{Birdie}),(&,flyer,robin))";
-                "boy", "girl" => "(~,boy,girl)";
-                "animal", "robin" => "(~,animal,robin)";
-                "(/,(*,tim,tom),tom,_)", "(/,uncle,tom,_)" => "(~,(/,(*,tim,tom),tom,_),(/,uncle,tom,_))";
-                "bird", "(|,robin,tiger)" => "(~,bird,(|,robin,tiger))";
-                "(/,(*,tim,tom),tom,_)", "tim" => "(~,(/,(*,tim,tom),tom,_),tim)";
                 "(&,bird,robin)", "tiger" => "(~,(&,bird,robin),tiger)";
-                "youth", "girl" => "(~,youth,girl)";
-                "(|,flyer,[with_wings],{Birdie})", "robin" => "(~,(|,flyer,[with_wings],{Birdie}),robin)";
-                "(|,bird,robin)", "tiger" => "(~,(|,bird,robin),tiger)";
-                "(&,flyer,{Tweety})", "(&,flyer,robin)" => "(~,(&,flyer,{Tweety}),(&,flyer,robin))";
-                "swan", "bird" => "(~,swan,bird)";
-                "swan", "tiger" => "(~,swan,tiger)";
-                "swimmer", "swan" => "(~,swimmer,swan)";
-                "chess", "sport" => "(~,chess,sport)";
-                "tiger", "bird" => "(~,tiger,bird)";
+                "(&,flyer,{Birdie})", "(&,flyer,robin)" => "(~,(&,flyer,{Birdie}),(&,flyer,robin))";
                 "(&,flyer,{Birdie})", "robin" => "(~,(&,flyer,{Birdie}),robin)";
-                "(|,boy,girl)", "girl" => "(~,(|,boy,girl),girl)";
-                "tiger", "swimmer" => "(~,tiger,swimmer)";
-                "flyer", "robin" => "(~,flyer,robin)";
-                "{Tweety}", "(&,flyer,robin)" => "(~,{Tweety},(&,flyer,robin))";
-                "swimmer", "robin" => "(~,swimmer,robin)";
+                "(/,(*,tim,tom),tom,_)", "(/,uncle,tom,_)" => "(~,(/,(*,tim,tom),tom,_),(/,uncle,tom,_))";
+                "(/,(*,tim,tom),tom,_)", "tim" => "(~,(/,(*,tim,tom),tom,_),tim)";
+                "(/,open,_,lock)", "{key1}" => "(~,(/,open,_,lock),{key1})";
+                "(|,bird,robin)", "tiger" => "(~,(|,bird,robin),tiger)";
+                "(|,flyer,[with_wings],{Birdie})", "robin" => "(~,(|,flyer,[with_wings],{Birdie}),robin)";
+                "(|,flyer,{Birdie})", "robin" => "(~,(|,flyer,{Birdie}),robin)";
+                "(~,boy,girl)", "girl" => "(~,(~,boy,girl),girl)";
+                "[strong]", "girl" => "(~,[strong],girl)";
                 "animal", "bird" => "(~,animal,bird)";
                 "bird", "#1" => "(~,bird,#1)";
-                "{lock1}", "#1" => "(~,{lock1},#1)";
+                "bird", "(|,robin,tiger)" => "(~,bird,(|,robin,tiger))";
+                "{Birdie}", "(|,flyer,robin)" => "(~,{Birdie},(|,flyer,robin))";
                 "{Birdie}", "robin" => "(~,{Birdie},robin)";
-                "(~,boy,girl)", "girl" => "(~,(~,boy,girl),girl)";
+                "{Tweety}", "(&,flyer,robin)" => "(~,{Tweety},(&,flyer,robin))";
                 "{Tweety}", "(|,robin,[yellow],{Birdie})" => "(~,{Tweety},(|,robin,[yellow],{Birdie}))";
-                "swimmer", "tiger" => "(~,swimmer,tiger)";
-                "swimmer", "#1" => "(~,swimmer,#1)";
-                "[strong]", "girl" => "(~,[strong],girl)";
-                "(|,flyer,{Birdie})", "robin" => "(~,(|,flyer,{Birdie}),robin)";
+                "{lock1}", "#1" => "(~,{lock1},#1)";
             }
             ok!()
         }
@@ -1612,15 +1518,11 @@ mod tests {
 
         #[test]
         fn make_image_ext_vec() -> AResult {
+            let test = test_make_arg_f(Term::make_image_ext_vec);
             macro_once! {
-                // * 🚩模式：词项列表 ⇒ 预期词项
+                // * 🚩模式：参数列表 ⇒ 预期词项
                 macro test($($arg_list:tt => $expected:expr;)*) {
-                    $(
-                        let arg_list: Vec<_> = term!($arg_list).into();
-                        let image = Term::make_image_ext_vec(arg_list).expect("解析词项失败！");
-                        let expected = term!($expected);
-                        assert_eq!(image, expected);
-                    )*
+                    $( test(term!($arg_list).into(), option_term!($expected)); )*
                 }
                 ["reaction", "_", "base"] => "(/,reaction,_,base)";
                 ["reaction", "acid", "_"] => "(/,reaction,acid,_)";
@@ -1632,18 +1534,11 @@ mod tests {
 
         #[test]
         fn make_image_ext_from_product() -> AResult {
+            let test = test_make_image_from_product_f(Term::make_image_ext_from_product);
             macro_once! {
-                // * 🚩模式：词项列表 ⇒ 预期词项
+                // * 🚩模式：参数列表 ⇒ 预期词项
                 macro test($($product:tt, $relation:tt, $index:tt => $expected:expr;)*) {
-                    $(
-                        let p = term!($product);
-                        let product = p.as_compound().expect("解析出的不是复合词项！");
-                        let relation = term!($relation);
-                        let index = $index;
-                        let image = Term::make_image_ext_from_product(product, &relation, index).expect("词项制作失败！");
-                        let expected = term!($expected);
-                        assert_eq!(image, expected, "{product}, {relation}, {index} => {image} != {expected}");
-                    )*
+                    $( test( term!($product), term!($relation), $index, term!($expected) ); )*
                 }
                 // * ℹ️用例均源自OpenNARS实际运行
                 "(*,$1,sunglasses)", "own",                1 => "(/,own,$1,_)";
@@ -1668,18 +1563,11 @@ mod tests {
 
         #[test]
         fn make_image_ext_from_image() -> AResult {
+            let test = test_make_image_from_image_f(Term::make_image_ext_from_image);
             macro_once! {
-                // * 🚩模式：词项列表 ⇒ 预期词项
+                // * 🚩模式：参数列表 ⇒ 预期词项
                 macro test($($image:tt, $component:tt, $index:tt => $expected:expr;)*) {
-                    $(
-                        let i = term!($image);
-                        let image = i.as_compound().expect("解析出的不是复合词项！");
-                        let component = term!($component);
-                        let index = $index;
-                        let image = Term::make_image_ext_from_image(image, &component, index).expect("词项制作失败！");
-                        let expected = term!($expected);
-                        assert_eq!(image, expected, "{image}, {component}, {index} => {image} != {expected}");
-                    )*
+                    $( test( term!($image), term!($component), $index, term!($expected) ); )*
                 }
                 // * ℹ️用例均源自OpenNARS实际运行
                 "(/,open,{key1},_)",   "lock",   0 => "(/,open,_,lock)";
@@ -1696,15 +1584,11 @@ mod tests {
 
         #[test]
         fn make_image_int_vec() -> AResult {
+            let test = test_make_arg_f(Term::make_image_int_vec);
             macro_once! {
-                // * 🚩模式：词项列表 ⇒ 预期词项
+                // * 🚩模式：参数列表 ⇒ 预期词项
                 macro test($($arg_list:tt => $expected:expr;)*) {
-                    $(
-                        let arg_list: Vec<_> = term!($arg_list).into();
-                        let image = Term::make_image_int_vec(arg_list).expect("解析词项失败！");
-                        let expected = term!($expected);
-                        assert_eq!(image, expected);
-                    )*
+                    $( test(term!($arg_list).into(), option_term!($expected)); )*
                 }
                 // * ℹ️用例均源自OpenNARS实际运行
                 ["reaction", "_", "base"]       => r"(\,reaction,_,base)";
@@ -1717,18 +1601,11 @@ mod tests {
 
         #[test]
         fn make_image_int_from_product() -> AResult {
+            let test = test_make_image_from_product_f(Term::make_image_int_from_product);
             macro_once! {
-                // * 🚩模式：词项列表 ⇒ 预期词项
+                // * 🚩模式：参数列表 ⇒ 预期词项
                 macro test($($product:tt, $relation:tt, $index:tt => $expected:expr;)*) {
-                    $(
-                        let p = term!($product);
-                        let product = p.as_compound().expect("解析出的不是复合词项！");
-                        let relation = term!($relation);
-                        let index = $index;
-                        let image = Term::make_image_int_from_product(product, &relation, index).expect("词项制作失败！");
-                        let expected = term!($expected);
-                        assert_eq!(image, expected, "{product}, {relation}, {index} => {image} != {expected}");
-                    )*
+                    $( test( term!($product), term!($relation), $index, term!($expected) ); )*
                 }
                 // * ℹ️用例均源自OpenNARS实际运行
                 r"(*,(/,num,_))",                       "#1",                0 => r"(\,#1,_)";
@@ -1769,18 +1646,11 @@ mod tests {
 
         #[test]
         fn make_image_int_from_image() -> AResult {
+            let test = test_make_image_from_image_f(Term::make_image_int_from_image);
             macro_once! {
-                // * 🚩模式：词项列表 ⇒ 预期词项
+                // * 🚩模式：参数列表 ⇒ 预期词项
                 macro test($($image:tt, $component:tt, $index:tt => $expected:expr;)*) {
-                    $(
-                        let i = term!($image);
-                        let image = i.as_compound().expect("解析出的不是复合词项！");
-                        let component = term!($component);
-                        let index = $index;
-                        let image = Term::make_image_int_from_image(image, &component, index).expect("词项制作失败！");
-                        let expected = term!($expected);
-                        assert_eq!(image, expected, "{image}, {component}, {index} => {image} != {expected}");
-                    )*
+                    $( test( term!($image), term!($component), $index, term!($expected) ); )*
                 }
                 // * ℹ️用例均源自OpenNARS实际运行
                 r"(\,R,_,eat,fish)",           "cat",                       2 => r"(\,R,cat,eat,_)";
@@ -1809,36 +1679,43 @@ mod tests {
     mod compound {
         use super::*;
 
+        fn test_make_term_with_identifier_f(
+            make: fn(&str, Vec<Term>) -> Option<Term>,
+        ) -> impl Fn(&str, Vec<Term>, Option<Term>) {
+            move |identifier, terms, expected| {
+                let terms_str = terms
+                    .iter()
+                    .map(|t| format!("\"{t}\""))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                let out = make(identifier, terms);
+                assert_eq!(
+                    out,
+                    expected,
+                    "{identifier:?}, {terms_str} => {} != {}",
+                    format_option_term(&out),
+                    format_option_term(&expected),
+                );
+            }
+        }
+
         #[test]
         fn make_compound_term_from_identifier() -> AResult {
+            fn make(identifier: &str, terms: Vec<Term>) -> Option<Term> {
+                Term::make_compound_term_from_identifier(identifier, terms)
+            }
+            let test = test_make_term_with_identifier_f(make);
             macro_once! {
                 // * 🚩模式：参数列表 ⇒ 预期词项
                 macro test($($identifier:tt, $terms:tt => $expected:tt;)*) {
-                    $(
-                        let identifier = $identifier;
-                        let terms: Vec<Term> = term!($terms).into();
-                        let terms_str = terms.iter().map(|t| format!("\"{t}\"")).collect::<Vec<_>>().join(", ");
-                        let out = Term::make_compound_term_from_identifier(
-                            identifier,
-                            terms
-                        );
-                        let expected = option_term!($expected);
-                        assert_eq!(
-                            out, expected,
-                            "{identifier:?}, {terms_str} => {} != {}",
-                            format_option_term(&out),
-                            format_option_term(&expected),
-                        );
-                    )*
+                    $( test($identifier, term!($terms).into(), option_term!($expected)); )*
                 }
                 // * ℹ️用例均源自OpenNARS实际运行
                 "&", ["(&,robin,{Tweety})", "{Birdie}"] => "(&,robin,{Birdie},{Tweety})";
                 "&", ["(/,neutralization,_,(\\,neutralization,acid,_))", "acid"] => "(&,acid,(/,neutralization,_,(\\,neutralization,acid,_)))";
                 "&", ["(/,neutralization,_,base)", "(/,reaction,_,base)"] => "(&,(/,neutralization,_,base),(/,reaction,_,base))";
                 "&", ["(/,neutralization,_,base)", "acid"] => "(&,acid,(/,neutralization,_,base))";
-                "&", ["(/,open,_,lock)", "key"] => "(&,key,(/,open,_,lock))";
                 "&", ["(/,open,_,{lock1})", "(/,open,_,lock)"] => "(&,(/,open,_,lock),(/,open,_,{lock1}))";
-                "&", ["(/,reaction,_,soda)", "(/,reaction,_,base)"] => "(&,(/,reaction,_,base),(/,reaction,_,soda))";
                 "&", ["(\\,REPRESENT,_,CAT)", "(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish)"] => "(&,(\\,REPRESENT,_,CAT),(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish))";
                 "&", ["(\\,reaction,_,soda)", "(\\,neutralization,_,base)"] => "(&,(\\,neutralization,_,base),(\\,reaction,_,soda))";
                 "&", ["(|,(/,open,_,lock1),(/,open,_,{lock1}))", "(/,open,_,lock)"] => "(&,(/,open,_,lock),(|,(/,open,_,lock1),(/,open,_,{lock1})))";
@@ -1846,67 +1723,31 @@ mod tests {
                 "&", ["(|,key,(/,open,_,{lock1}))", "(/,open,_,lock)"] => "(&,(/,open,_,lock),(|,key,(/,open,_,{lock1})))";
                 "&", ["acid", "(/,reaction,_,base)"] => "(&,acid,(/,reaction,_,base))";
                 "&", ["acid", "(\\,neutralization,_,base)"] => "(&,acid,(\\,neutralization,_,base))";
-                "&", ["acid", "(\\,neutralization,_,soda)"] => "(&,acid,(\\,neutralization,_,soda))";
                 "&", ["animal", "(&,robin,swan)"] => "(&,animal,robin,swan)";
                 "&", ["animal", "(|,animal,swimmer)"] => "(&,animal,(|,animal,swimmer))";
                 "&", ["animal", "gull"] => "(&,animal,gull)";
-                "&", ["animal", "swan"] => "(&,animal,swan)";
-                "&", ["animal", "swimmer"] => "(&,animal,swimmer)";
-                "&", ["base", "(/,reaction,acid,_)"] => "(&,base,(/,reaction,acid,_))";
-                "&", ["base", "(\\,neutralization,acid,_)"] => "(&,base,(\\,neutralization,acid,_))";
-                "&", ["base", "soda"] => "(&,base,soda)";
-                "&", ["bird", "animal"] => "(&,animal,bird)";
                 "&", ["bird", "robin", "{Birdie}", "(|,[yellow],{Birdie})"] => "(&,bird,robin,{Birdie},(|,[yellow],{Birdie}))";
-                "&", ["bird", "swimmer"] => "(&,bird,swimmer)";
-                "&", ["chess", "competition"] => "(&,chess,competition)";
-                "&", ["competition", "sport"] => "(&,competition,sport)";
                 "&", ["flyer", "[with_wings]"] => "(&,flyer,[with_wings])";
-                "&", ["flyer", "[yellow]"] => "(&,flyer,[yellow])";
-                "&", ["flyer", "bird"] => "(&,bird,flyer)";
-                "&", ["flyer", "robin"] => "(&,flyer,robin)";
                 "&", ["flyer", "{Birdie}", "(|,[with_wings],{Birdie})"] => "(&,flyer,{Birdie},(|,[with_wings],{Birdie}))";
                 "&", ["flyer", "{Birdie}"] => "(&,flyer,{Birdie})";
-                "&", ["flyer", "{Tweety}", "(|,[with_wings],{Birdie})"] => "(&,flyer,{Tweety},(|,[with_wings],{Birdie}))";
-                "&", ["flyer", "{Tweety}"] => "(&,flyer,{Tweety})";
-                "&", ["key", "(/,open,_,lock)"] => "(&,key,(/,open,_,lock))";
                 "&", ["key", "(/,open,_,{lock1})"] => "(&,key,(/,open,_,{lock1}))";
-                "&", ["key", "{key1}"] => "(&,key,{key1})";
                 "&", ["neutralization", "(*,(\\,neutralization,_,base),base)"] => "(&,neutralization,(*,(\\,neutralization,_,base),base))";
                 "&", ["neutralization", "(*,acid,(/,reaction,acid,_))"] => "(&,neutralization,(*,acid,(/,reaction,acid,_)))";
                 "&", ["neutralization", "(*,acid,base)"] => "(&,neutralization,(*,acid,base))";
-                "&", ["neutralization", "(*,acid,soda)"] => "(&,neutralization,(*,acid,soda))";
-                "&", ["neutralization", "reaction"] => "(&,neutralization,reaction)";
                 "&", ["num", "(/,num,_)"] => "(&,num,(/,num,_))";
-                "&", ["reaction", "neutralization"] => "(&,neutralization,reaction)";
-                "&", ["robin", "animal"] => "(&,animal,robin)";
-                "&", ["robin", "bird"] => "(&,bird,robin)";
-                "&", ["robin", "swimmer"] => "(&,robin,swimmer)";
-                "&", ["robin", "{Birdie}"] => "(&,robin,{Birdie})";
-                "&", ["tiger", "animal"] => "(&,animal,tiger)";
-                "&", ["tiger", "swimmer"] => "(&,swimmer,tiger)";
                 "&", ["{Birdie}", "(|,flyer,{Tweety})"] => "(&,{Birdie},(|,flyer,{Tweety}))";
                 "&", ["{Birdie}", "{Tweety}"] => None;
-                "&", ["{Tweety}", "(|,bird,{Birdie})"] => "(&,{Tweety},(|,bird,{Birdie}))";
-                "&", ["{Tweety}", "{Birdie}"] => None;
                 "&&", ["<robin --> [chirping]>", "<robin --> [flying]>"] => "(&&,<robin --> [chirping]>,<robin --> [flying]>)";
-                "&&", ["<robin --> [chirping]>", "<robin --> [with_wings]>"] => "(&&,<robin --> [chirping]>,<robin --> [with_wings]>)";
                 "&&", ["<robin --> [chirping]>"] => "<robin --> [chirping]>";
-                "&&", ["<robin --> [flying]>", "<robin --> [with_wings]>"] => "(&&,<robin --> [flying]>,<robin --> [with_wings]>)";
-                "&&", ["<robin --> [flying]>"] => "<robin --> [flying]>";
-                "&&", ["<robin --> [living]>"] => "<robin --> [living]>";
-                "&&", ["<robin --> [with_wings]>"] => "<robin --> [with_wings]>";
                 "&&", ["<robin --> bird>", "(||,(&&,<robin --> [flying]>,<robin --> [with_wings]>),<robin --> bird>)"] => "(&&,<robin --> bird>,(||,(&&,<robin --> [flying]>,<robin --> [with_wings]>),<robin --> bird>))";
                 "&&", ["<robin --> bird>", "<robin --> [flying]>", "<robin --> [with_wings]>"] => "(&&,<robin --> bird>,<robin --> [flying]>,<robin --> [with_wings]>)";
                 "&&", ["<robin --> bird>", "<robin --> [flying]>"] => "(&&,<robin --> bird>,<robin --> [flying]>)";
-                "&&", ["<robin --> bird>", "<robin --> [with_wings]>"] => "(&&,<robin --> bird>,<robin --> [with_wings]>)";
                 "&&", ["<robin --> bird>"] => "<robin --> bird>";
                 "&&", ["<robin --> flyer>", "<(*,robin,worms) --> food>"] => "(&&,<robin --> flyer>,<(*,robin,worms) --> food>)";
                 "&&", ["<robin --> flyer>", "<robin --> bird>", "<(*,robin,worms) --> food>"] => "(&&,<robin --> bird>,<robin --> flyer>,<(*,robin,worms) --> food>)";
                 "&&", ["<robin --> flyer>", "<robin --> bird>", "<worms --> (/,food,robin,_)>"] => "(&&,<robin --> bird>,<robin --> flyer>,<worms --> (/,food,robin,_)>)";
                 "&&", ["<robin --> flyer>", "<robin --> bird>"] => "(&&,<robin --> bird>,<robin --> flyer>)";
                 "&&", ["<robin --> flyer>", "<worms --> (/,food,robin,_)>"] => "(&&,<robin --> flyer>,<worms --> (/,food,robin,_)>)";
-                "&&", ["<robin --> flyer>"] => "<robin --> flyer>";
-                "&&", ["<robin --> swimmer>"] => "<robin --> swimmer>";
                 "*", ["(&,key,(/,open,_,{lock1}))", "lock"] => "(*,(&,key,(/,open,_,{lock1})),lock)";
                 "*", ["(&,num,(/,(*,(/,num,_)),_))"] => "(*,(&,num,(/,(*,(/,num,_)),_)))";
                 "*", ["(*,num)"] => "(*,(*,num))";
@@ -1915,40 +1756,25 @@ mod tests {
                 "*", ["(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>)", "<(*,CAT,FISH) --> FOOD>"] => "(*,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),<(*,CAT,FISH) --> FOOD>)";
                 "*", ["(/,num,_)"] => "(*,(/,num,_))";
                 "*", ["(/,open,_,lock)", "lock"] => "(*,(/,open,_,lock),lock)";
-                "*", ["(/,open,_,lock)", "lock1"] => "(*,(/,open,_,lock),lock1)";
                 "*", ["(/,open,_,lock)", "{lock1}"] => "(*,(/,open,_,lock),{lock1})";
-                "*", ["(/,open,_,lock1)", "lock1"] => "(*,(/,open,_,lock1),lock1)";
                 "*", ["(/,open,_,{lock1})", "lock"] => "(*,(/,open,_,{lock1}),lock)";
-                "*", ["(/,open,_,{lock1})", "lock1"] => "(*,(/,open,_,{lock1}),lock1)";
                 "*", ["(/,open,_,{lock1})", "{lock1}"] => "(*,(/,open,_,{lock1}),{lock1})";
-                "*", ["(/,uncle,tom,_)", "tom"] => "(*,(/,uncle,tom,_),tom)";
                 "*", ["(\\,neutralization,_,base)", "base"] => "(*,(\\,neutralization,_,base),base)";
                 "*", ["(|,(/,open,_,lock1),(/,open,_,{lock1}))", "lock1"] => "(*,(|,(/,open,_,lock1),(/,open,_,{lock1})),lock1)";
                 "*", ["(|,key,(/,open,_,{lock1}))", "lock"] => "(*,(|,key,(/,open,_,{lock1})),lock)";
-                "*", ["(|,key,(/,open,_,{lock1}))", "lock1"] => "(*,(|,key,(/,open,_,{lock1})),lock1)";
                 "*", ["0"] => "(*,0)";
                 "*", ["a", "b"] => "(*,a,b)";
                 "*", ["acid", "(&,soda,(/,neutralization,acid,_))"] => "(*,acid,(&,soda,(/,neutralization,acid,_)))";
                 "*", ["acid", "(/,neutralization,acid,_)"] => "(*,acid,(/,neutralization,acid,_))";
-                "*", ["acid", "(/,reaction,acid,_)"] => "(*,acid,(/,reaction,acid,_))";
                 "*", ["acid", "(\\,neutralization,acid,_)"] => "(*,acid,(\\,neutralization,acid,_))";
-                "*", ["acid", "(\\,reaction,acid,_)"] => "(*,acid,(\\,reaction,acid,_))";
                 "*", ["acid", "(|,base,(\\,reaction,acid,_))"] => "(*,acid,(|,base,(\\,reaction,acid,_)))";
-                "*", ["acid", "(|,soda,(\\,neutralization,acid,_))"] => "(*,acid,(|,soda,(\\,neutralization,acid,_)))";
-                "*", ["acid", "base"] => "(*,acid,base)";
-                "*", ["acid", "soda"] => "(*,acid,soda)";
-                "*", ["key", "lock"] => "(*,key,lock)";
-                "*", ["key", "lock1"] => "(*,key,lock1)";
                 "*", ["key", "{lock1}"] => "(*,key,{lock1})";
-                "*", ["num"] => "(*,num)";
                 "*", ["{key1}", "lock1"] => "(*,{key1},lock1)";
                 "[]", ["bright"] => "[bright]";
-                "[]", ["smart"] => "[smart]";
                 "{}", ["Birdie"] => "{Birdie}";
                 "{}", ["Mars", "Venus"] => "{Mars,Venus}";
                 "|", ["(&,animal,gull)", "swimmer"] => "(|,swimmer,(&,animal,gull))";
                 "|", ["(&,flyer,{Birdie})", "(|,[yellow],{Birdie})"] => "(|,[yellow],{Birdie},(&,flyer,{Birdie}))";
-                "|", ["(&,flyer,{Birdie})", "(|,[yellow],{Tweety})"] => "(|,[yellow],{Tweety},(&,flyer,{Birdie}))";
                 "|", ["(&,flyer,{Birdie})", "{Birdie}"] => "(|,{Birdie},(&,flyer,{Birdie}))";
                 "|", ["(/,neutralization,_,base)", "(/,reaction,_,(\\,neutralization,acid,_))"] => "(|,(/,neutralization,_,base),(/,reaction,_,(\\,neutralization,acid,_)))";
                 "|", ["(/,neutralization,_,base)", "(/,reaction,_,base)"] => "(|,(/,neutralization,_,base),(/,reaction,_,base))";
@@ -1956,8 +1782,6 @@ mod tests {
                 "|", ["(/,neutralization,acid,_)", "(\\,neutralization,acid,_)"] => "(|,(/,neutralization,acid,_),(\\,neutralization,acid,_))";
                 "|", ["(/,num,_)", "0"] => "(|,0,(/,num,_))";
                 "|", ["(/,open,_,{lock1})", "(/,open,_,lock)"] => "(|,(/,open,_,lock),(/,open,_,{lock1}))";
-                "|", ["(/,reaction,_,soda)", "(/,reaction,_,base)"] => "(|,(/,reaction,_,base),(/,reaction,_,soda))";
-                "|", ["(/,reaction,acid,_)", "(\\,neutralization,acid,_)"] => "(|,(/,reaction,acid,_),(\\,neutralization,acid,_))";
                 "|", ["(\\,REPRESENT,_,CAT)", "(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish)"] => "(|,(\\,REPRESENT,_,CAT),(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish))";
                 "|", ["(|,key,(/,open,_,{lock1}))", "(/,open,_,lock)"] => "(|,key,(/,open,_,lock),(/,open,_,{lock1}))";
                 "|", ["(~,boy,girl)", "(~,youth,girl)"] => "(|,(~,boy,girl),(~,youth,girl))";
@@ -1967,67 +1791,29 @@ mod tests {
                 "|", ["[with_wings]", "{Tweety}", "{Birdie}"] => "(|,[with_wings],{Birdie},{Tweety})";
                 "|", ["[yellow]", "[with_wings]"] => None;
                 "|", ["[yellow]", "bird"] => "(|,bird,[yellow])";
-                "|", ["[yellow]", "flyer"] => "(|,flyer,[yellow])";
                 "|", ["[yellow]", "{Tweety}"] => "(|,[yellow],{Tweety})";
                 "|", ["acid", "(/,reaction,_,base)"] => "(|,acid,(/,reaction,_,base))";
                 "|", ["acid", "(\\,neutralization,_,base)"] => "(|,acid,(\\,neutralization,_,base))";
-                "|", ["acid", "(\\,neutralization,_,soda)"] => "(|,acid,(\\,neutralization,_,soda))";
                 "|", ["animal", "robin"] => "(|,animal,robin)";
-                "|", ["animal", "swan"] => "(|,animal,swan)";
-                "|", ["animal", "swimmer"] => "(|,animal,swimmer)";
-                "|", ["base", "(/,neutralization,acid,_)"] => "(|,base,(/,neutralization,acid,_))";
-                "|", ["base", "(/,reaction,acid,_)"] => "(|,base,(/,reaction,acid,_))";
-                "|", ["base", "(\\,neutralization,acid,_)"] => "(|,base,(\\,neutralization,acid,_))";
-                "|", ["base", "soda"] => "(|,base,soda)";
                 "|", ["bird", "[with_wings]"] => "(|,bird,[with_wings])";
-                "|", ["bird", "[yellow]"] => "(|,bird,[yellow])";
-                "|", ["bird", "animal"] => "(|,animal,bird)";
                 "|", ["bird", "flyer", "{Birdie}"] => "(|,bird,flyer,{Birdie})";
-                "|", ["bird", "flyer"] => "(|,bird,flyer)";
-                "|", ["bird", "swimmer"] => "(|,bird,swimmer)";
                 "|", ["bird", "{Birdie}"] => "(|,bird,{Birdie})";
                 "|", ["bird", "{Tweety}", "{Birdie}"] => "(|,bird,{Birdie},{Tweety})";
-                "|", ["bird", "{Tweety}"] => "(|,bird,{Tweety})";
                 "|", ["boy", "(~,youth,girl)"] => "(|,boy,(~,youth,girl))";
                 "|", ["chess", "(|,chess,sport)"] => "(|,chess,sport)";
-                "|", ["chess", "competition"] => "(|,chess,competition)";
-                "|", ["chess", "sport"] => "(|,chess,sport)";
-                "|", ["competition", "chess"] => "(|,chess,competition)";
-                "|", ["competition", "sport"] => "(|,competition,sport)";
                 "|", ["flyer", "(&,flyer,{Birdie})", "{Birdie}"] => "(|,flyer,{Birdie},(&,flyer,{Birdie}))";
                 "|", ["flyer", "(&,flyer,{Birdie})"] => "(|,flyer,(&,flyer,{Birdie}))";
                 "|", ["flyer", "(|,flyer,{Tweety})", "{Birdie}"] => "(|,flyer,{Birdie},{Tweety})";
                 "|", ["flyer", "[yellow]", "{Birdie}"] => "(|,flyer,[yellow],{Birdie})";
-                "|", ["flyer", "robin"] => "(|,flyer,robin)";
                 "|", ["flyer", "{Birdie}", "(&,bird,(|,[yellow],{Birdie}))"] => "(|,flyer,{Birdie},(&,bird,(|,[yellow],{Birdie})))";
                 "|", ["flyer", "{Birdie}", "(&,flyer,{Birdie})"] => "(|,flyer,{Birdie},(&,flyer,{Birdie}))";
-                "|", ["flyer", "{Birdie}"] => "(|,flyer,{Birdie})";
-                "|", ["flyer", "{Tweety}", "{Birdie}"] => "(|,flyer,{Birdie},{Tweety})";
-                "|", ["flyer", "{Tweety}"] => "(|,flyer,{Tweety})";
-                "|", ["key", "(/,open,_,lock)"] => "(|,key,(/,open,_,lock))";
                 "|", ["key", "(/,open,_,{lock1})"] => "(|,key,(/,open,_,{lock1}))";
-                "|", ["key", "{key1}"] => "(|,key,{key1})";
                 "|", ["neutralization", "(*,acid,(\\,neutralization,acid,_))"] => "(|,neutralization,(*,acid,(\\,neutralization,acid,_)))";
                 "|", ["neutralization", "(*,acid,base)"] => "(|,neutralization,(*,acid,base))";
-                "|", ["neutralization", "reaction"] => "(|,neutralization,reaction)";
-                "|", ["reaction", "(*,acid,base)"] => "(|,reaction,(*,acid,base))";
-                "|", ["reaction", "neutralization"] => "(|,neutralization,reaction)";
                 "|", ["robin", "(|,flyer,{Tweety})", "{Birdie}"] => "(|,flyer,robin,{Birdie},{Tweety})";
-                "|", ["robin", "[yellow]", "{Birdie}"] => "(|,robin,[yellow],{Birdie})";
-                "|", ["robin", "animal"] => "(|,animal,robin)";
-                "|", ["robin", "bird"] => "(|,bird,robin)";
-                "|", ["robin", "flyer", "{Birdie}"] => "(|,flyer,robin,{Birdie})";
-                "|", ["robin", "swimmer"] => "(|,robin,swimmer)";
-                "|", ["robin", "{Birdie}", "(&,bird,(|,[yellow],{Birdie}))"] => "(|,robin,{Birdie},(&,bird,(|,[yellow],{Birdie})))";
-                "|", ["robin", "{Birdie}"] => "(|,robin,{Birdie})";
-                "|", ["robin", "{Tweety}", "{Birdie}"] => "(|,robin,{Birdie},{Tweety})";
-                "|", ["sport", "competition"] => "(|,competition,sport)";
                 "|", ["tiger", "(|,animal,swimmer)"] => "(|,animal,swimmer,tiger)";
-                "|", ["tiger", "animal"] => "(|,animal,tiger)";
-                "|", ["tiger", "swimmer"] => "(|,swimmer,tiger)";
                 "|", ["{Birdie}", "{Tweety}"] => "{Birdie,Tweety}";
                 "|", ["{Tweety}", "{Birdie}", "(&,flyer,{Birdie})"] => "(|,(&,flyer,{Birdie}),{Birdie,Tweety})";
-                "|", ["{Tweety}", "{Birdie}"] => "{Birdie,Tweety}";
                 "~", ["(/,(*,tim,tom),tom,_)", "(/,uncle,tom,_)"] => "(~,(/,(*,tim,tom),tom,_),(/,uncle,tom,_))";
                 "~", ["(|,boy,girl)", "girl"] => "(~,(|,boy,girl),girl)";
                 "~", ["(~,boy,girl)", "girl"] => "(~,(~,boy,girl),girl)";
@@ -2039,68 +1825,61 @@ mod tests {
 
         #[test]
         fn make_compound_term() -> AResult {
+            fn test(template: Term, terms: Vec<Term>, expected: Option<Term>) {
+                let terms_str = terms
+                    .iter()
+                    .map(|t| format!("\"{t}\""))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                let out = Term::make_compound_term(
+                    template.as_compound().expect("模板不是复合词项！"),
+                    terms,
+                );
+                assert_eq!(
+                    out,
+                    expected,
+                    "\"{template}\", {terms_str} => {} != {}",
+                    format_option_term(&out),
+                    format_option_term(&expected),
+                );
+            }
             macro_once! {
                 // * 🚩模式：参数列表 ⇒ 预期词项
                 macro test($($template:tt, $terms:tt => $expected:tt;)*) {
                     $(
-                        let template = term!($template);
-                        let terms: Vec<Term> = term!($terms).into();
-                        let terms_str = terms.iter().map(|t| format!("\"{t}\"")).collect::<Vec<_>>().join(", ");
-                        let out = Term::make_compound_term(
-                            template.as_compound().expect("模板不是复合词项！"),
-                            terms
-                        );
-                        let expected = option_term!($expected);
-                        assert_eq!(
-                            out, expected,
-                            "\"{template}\", {terms_str} => {} != {}",
-                            format_option_term(&out),
-                            format_option_term(&expected),
+                        test(
+                            term!($template),
+                            term!($terms).into(),
+                            option_term!($expected),
                         );
                     )*
                 }
                 // * ℹ️用例均源自OpenNARS实际运行
                 "(&&,<robin --> [chirping]>,<robin --> [flying]>)", ["<robin --> [chirping]>"] => "<robin --> [chirping]>";
-                "(&&,<robin --> [chirping]>,<robin --> [flying]>)", ["<robin --> [flying]>"] => "<robin --> [flying]>";
                 "(&&,<robin --> [chirping]>,<robin --> [flying]>)", ["<robin --> bird>", "<robin --> [flying]>"] => "(&&,<robin --> bird>,<robin --> [flying]>)";
                 "(&&,<robin --> [chirping]>,<robin --> [flying]>,<robin --> [with_wings]>)", ["<robin --> [chirping]>", "<robin --> [flying]>"] => "(&&,<robin --> [chirping]>,<robin --> [flying]>)";
-                "(&&,<robin --> [chirping]>,<robin --> [flying]>,<robin --> [with_wings]>)", ["<robin --> [chirping]>", "<robin --> [with_wings]>"] => "(&&,<robin --> [chirping]>,<robin --> [with_wings]>)";
-                "(&&,<robin --> [chirping]>,<robin --> [flying]>,<robin --> [with_wings]>)", ["<robin --> [flying]>", "<robin --> [with_wings]>"] => "(&&,<robin --> [flying]>,<robin --> [with_wings]>)";
                 "(&&,<robin --> [chirping]>,<robin --> [flying]>,<robin --> [with_wings]>)", ["<robin --> bird>", "<robin --> [flying]>", "<robin --> [with_wings]>"] => "(&&,<robin --> bird>,<robin --> [flying]>,<robin --> [with_wings]>)";
                 "(&&,<robin --> [chirping]>,<robin --> [with_wings]>)", ["<robin --> [chirping]>", "<robin --> bird>"] => "(&&,<robin --> bird>,<robin --> [chirping]>)";
-                "(&&,<robin --> [chirping]>,<robin --> [with_wings]>)", ["<robin --> [chirping]>"] => "<robin --> [chirping]>";
-                "(&&,<robin --> [chirping]>,<robin --> [with_wings]>)", ["<robin --> [with_wings]>"] => "<robin --> [with_wings]>";
-                "(&&,<robin --> [chirping]>,<robin --> [with_wings]>)", ["<robin --> bird>", "<robin --> [with_wings]>"] => "(&&,<robin --> bird>,<robin --> [with_wings]>)";
-                "(&&,<robin --> [flying]>,<robin --> [with_wings]>)", ["<robin --> [flying]>"] => "<robin --> [flying]>";
-                "(&&,<robin --> [flying]>,<robin --> [with_wings]>)", ["<robin --> [with_wings]>"] => "<robin --> [with_wings]>";
                 "(&&,<robin --> bird>,<robin --> [flying]>)", ["<robin --> [flying]>"] => "<robin --> [flying]>";
                 "(&&,<robin --> bird>,<robin --> [flying]>)", ["<robin --> bird>"] => "<robin --> bird>";
                 "(&&,<robin --> bird>,<robin --> [flying]>,<robin --> [with_wings]>)", ["<robin --> [flying]>", "<robin --> [with_wings]>"] => "(&&,<robin --> [flying]>,<robin --> [with_wings]>)";
                 "(&&,<robin --> bird>,<robin --> [flying]>,<robin --> [with_wings]>)", ["<robin --> bird>", "<robin --> [flying]>", "<robin --> bird>"] => "(&&,<robin --> bird>,<robin --> [flying]>)";
                 "(&&,<robin --> bird>,<robin --> [flying]>,<robin --> [with_wings]>)", ["<robin --> bird>", "<robin --> [flying]>"] => "(&&,<robin --> bird>,<robin --> [flying]>)";
-                "(&&,<robin --> bird>,<robin --> [flying]>,<robin --> [with_wings]>)", ["<robin --> bird>", "<robin --> [with_wings]>"] => "(&&,<robin --> bird>,<robin --> [with_wings]>)";
-                "(&&,<robin --> bird>,<robin --> [living]>)", ["<robin --> [living]>"] => "<robin --> [living]>";
                 "(&&,<robin --> bird>,<robin --> [living]>)", ["<robin --> bird>", "(||,(&&,<robin --> [flying]>,<robin --> [with_wings]>),<robin --> bird>)"] => "(&&,<robin --> bird>,(||,(&&,<robin --> [flying]>,<robin --> [with_wings]>),<robin --> bird>))";
                 "(&&,<robin --> bird>,<robin --> [living]>)", ["<robin --> bird>", "<robin --> [flying]>", "<robin --> [with_wings]>"] => "(&&,<robin --> bird>,<robin --> [flying]>,<robin --> [with_wings]>)";
                 "(&&,<robin --> bird>,<robin --> [living]>)", ["<robin --> bird>", "<robin --> [flying]>"] => "(&&,<robin --> bird>,<robin --> [flying]>)";
                 "(&&,<robin --> bird>,<robin --> [living]>)", ["<robin --> bird>", "<robin --> bird>", "<robin --> [flying]>"] => "(&&,<robin --> bird>,<robin --> [flying]>)";
-                "(&&,<robin --> bird>,<robin --> [living]>)", ["<robin --> bird>"] => "<robin --> bird>";
                 "(&&,<robin --> flyer>,<(*,robin,worms) --> food>)", ["<robin --> flyer>", "<worms --> (/,food,robin,_)>"] => "(&&,<robin --> flyer>,<worms --> (/,food,robin,_)>)";
                 "(&&,<robin --> flyer>,<robin --> [chirping]>)", ["<robin --> flyer>", "<robin --> bird>"] => "(&&,<robin --> bird>,<robin --> flyer>)";
-                "(&&,<robin --> flyer>,<robin --> [chirping]>)", ["<robin --> flyer>"] => "<robin --> flyer>";
                 "(&&,<robin --> flyer>,<robin --> [chirping]>,<(*,robin,worms) --> food>)", ["<robin --> flyer>", "<(*,robin,worms) --> food>"] => "(&&,<robin --> flyer>,<(*,robin,worms) --> food>)";
                 "(&&,<robin --> flyer>,<robin --> [chirping]>,<(*,robin,worms) --> food>)", ["<robin --> flyer>", "<robin --> bird>", "<(*,robin,worms) --> food>"] => "(&&,<robin --> bird>,<robin --> flyer>,<(*,robin,worms) --> food>)";
                 "(&&,<robin --> flyer>,<robin --> [chirping]>,<worms --> (/,food,robin,_)>)", ["<robin --> flyer>", "<robin --> bird>", "<worms --> (/,food,robin,_)>"] => "(&&,<robin --> bird>,<robin --> flyer>,<worms --> (/,food,robin,_)>)";
                 "(&&,<robin --> flyer>,<robin --> [chirping]>,<worms --> (/,food,robin,_)>)", ["<robin --> flyer>", "<worms --> (/,food,robin,_)>"] => "(&&,<robin --> flyer>,<worms --> (/,food,robin,_)>)";
                 "(&&,<robin --> flyer>,<worms --> (/,food,robin,_)>)", ["<robin --> flyer>", "<(*,robin,worms) --> food>"] => "(&&,<robin --> flyer>,<(*,robin,worms) --> food>)";
-                "(&&,<robin --> swimmer>,<robin --> [flying]>)", ["<robin --> [flying]>"] => "<robin --> [flying]>";
-                "(&&,<robin --> swimmer>,<robin --> [flying]>)", ["<robin --> swimmer>"] => "<robin --> swimmer>";
                 "(&,(/,neutralization,_,(\\,neutralization,acid,_)),(/,reaction,_,base))", ["(/,neutralization,_,(\\,neutralization,acid,_))", "acid"] => "(&,acid,(/,neutralization,_,(\\,neutralization,acid,_)))";
                 "(&,(/,neutralization,_,(\\,neutralization,acid,_)),(/,reaction,_,base))", ["acid", "(/,reaction,_,base)"] => "(&,acid,(/,reaction,_,base))";
                 "(&,(/,neutralization,_,base),(/,reaction,_,soda))", ["(/,neutralization,_,base)", "(/,reaction,_,base)"] => "(&,(/,neutralization,_,base),(/,reaction,_,base))";
                 "(&,(/,neutralization,_,base),(/,reaction,_,soda))", ["(/,neutralization,_,base)", "acid"] => "(&,acid,(/,neutralization,_,base))";
-                "(&,(/,neutralization,_,soda),(/,reaction,_,base))", ["(/,neutralization,_,base)", "(/,reaction,_,base)"] => "(&,(/,neutralization,_,base),(/,reaction,_,base))";
-                "(&,(/,neutralization,_,soda),(/,reaction,_,base))", ["(/,reaction,_,soda)", "(/,reaction,_,base)"] => "(&,(/,reaction,_,base),(/,reaction,_,soda))";
                 "(&,(/,neutralization,_,soda),(/,reaction,_,base))", ["acid", "(/,reaction,_,base)"] => "(&,acid,(/,reaction,_,base))";
                 "(&,(/,open,_,lock),(/,open,_,{lock1}))", ["(/,open,_,lock)", "key"] => "(&,key,(/,open,_,lock))";
                 "(&,(\\,REPRESENT,_,CAT),(\\,(\\,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish))", ["(\\,REPRESENT,_,CAT)", "(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish)"] => "(&,(\\,REPRESENT,_,CAT),(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish))";
@@ -2110,36 +1889,21 @@ mod tests {
                 "(&,(|,bird,flyer),(|,bird,{Birdie}))", ["{Tweety}", "(|,bird,{Birdie})"] => "(&,{Tweety},(|,bird,{Birdie}))";
                 "(&,[with_wings],{Birdie})", ["(&,robin,{Tweety})", "{Birdie}"] => "(&,robin,{Birdie},{Tweety})";
                 "(&,[with_wings],{Birdie})", ["flyer", "{Birdie}"] => "(&,flyer,{Birdie})";
-                "(&,[with_wings],{Birdie})", ["robin", "{Birdie}"] => "(&,robin,{Birdie})";
                 "(&,[with_wings],{Birdie})", ["{Tweety}", "{Birdie}"] => None;
-                "(&,[yellow],{Birdie})", ["{Tweety}", "{Birdie}"] => None;
                 "(&,acid,(/,neutralization,_,soda))", ["acid", "(/,reaction,_,base)"] => "(&,acid,(/,reaction,_,base))";
                 "(&,acid,(\\,reaction,_,base))", ["acid", "(\\,neutralization,_,base)"] => "(&,acid,(\\,neutralization,_,base))";
-                "(&,acid,(\\,reaction,_,soda))", ["acid", "(\\,neutralization,_,soda)"] => "(&,acid,(\\,neutralization,_,soda))";
                 "(&,animal,(|,animal,swimmer))", ["animal", "gull"] => "(&,animal,gull)";
                 "(&,animal,(|,bird,swimmer))", ["animal", "(&,robin,swan)"] => "(&,animal,robin,swan)";
-                "(&,animal,(|,bird,swimmer))", ["animal", "swan"] => "(&,animal,swan)";
                 "(&,animal,gull)", ["animal", "(|,animal,swimmer)"] => "(&,animal,(|,animal,swimmer))";
                 "(&,animal,gull)", ["animal", "swan"] => "(&,animal,swan)";
-                "(&,animal,gull)", ["animal", "swimmer"] => "(&,animal,swimmer)";
                 "(&,base,(\\,reaction,acid,_))", ["base", "(/,reaction,acid,_)"] => "(&,base,(/,reaction,acid,_))";
-                "(&,base,(\\,reaction,acid,_))", ["base", "(\\,neutralization,acid,_)"] => "(&,base,(\\,neutralization,acid,_))";
                 "(&,base,(\\,reaction,acid,_))", ["base", "soda"] => "(&,base,soda)";
-                "(&,bird,(|,robin,tiger))", ["bird", "animal"] => "(&,animal,bird)";
-                "(&,bird,(|,robin,tiger))", ["bird", "swimmer"] => "(&,bird,swimmer)";
                 "(&,bird,[with_wings],{Birdie},(|,[yellow],{Birdie}))", ["bird", "robin", "{Birdie}", "(|,[yellow],{Birdie})"] => "(&,bird,robin,{Birdie},(|,[yellow],{Birdie}))";
-                "(&,chess,sport)", ["chess", "competition"] => "(&,chess,competition)";
-                "(&,chess,sport)", ["competition", "sport"] => "(&,competition,sport)";
                 "(&,flyer,[with_wings])", ["flyer", "(&,robin,{Tweety})"] => "(&,flyer,robin,{Tweety})";
                 "(&,flyer,[with_wings])", ["flyer", "robin"] => "(&,flyer,robin)";
                 "(&,flyer,[with_wings])", ["flyer", "{Birdie}"] => "(&,flyer,{Birdie})";
-                "(&,flyer,[with_wings])", ["flyer", "{Tweety}"] => "(&,flyer,{Tweety})";
-                "(&,flyer,[yellow])", ["flyer", "{Birdie}"] => "(&,flyer,{Birdie})";
-                "(&,flyer,[yellow])", ["flyer", "{Tweety}"] => "(&,flyer,{Tweety})";
                 "(&,flyer,[yellow],(|,[with_wings],{Birdie}))", ["flyer", "{Birdie}", "(|,[with_wings],{Birdie})"] => "(&,flyer,{Birdie},(|,[with_wings],{Birdie}))";
-                "(&,flyer,[yellow],(|,[with_wings],{Birdie}))", ["flyer", "{Tweety}", "(|,[with_wings],{Birdie})"] => "(&,flyer,{Tweety},(|,[with_wings],{Birdie}))";
                 "(&,flyer,{Birdie})", ["flyer", "[with_wings]"] => "(&,flyer,[with_wings])";
-                "(&,flyer,{Birdie})", ["flyer", "[yellow]"] => "(&,flyer,[yellow])";
                 "(&,flyer,{Birdie})", ["flyer", "bird"] => "(&,bird,flyer)";
                 "(&,flyer,{Birdie})", ["flyer", "{Tweety}"] => "(&,flyer,{Tweety})";
                 "(&,key,(/,open,_,lock))", ["key", "(/,open,_,{lock1})"] => "(&,key,(/,open,_,{lock1}))";
@@ -2151,13 +1915,7 @@ mod tests {
                 "(&,neutralization,(*,acid,soda))", ["neutralization", "(*,acid,base)"] => "(&,neutralization,(*,acid,base))";
                 "(&,neutralization,(*,acid,soda))", ["neutralization", "reaction"] => "(&,neutralization,reaction)";
                 "(&,num,(/,(*,0),_))", ["num", "(/,num,_)"] => "(&,num,(/,num,_))";
-                "(&,reaction,(*,acid,soda))", ["reaction", "neutralization"] => "(&,neutralization,reaction)";
-                "(&,robin,tiger)", ["robin", "animal"] => "(&,animal,robin)";
-                "(&,robin,tiger)", ["robin", "bird"] => "(&,bird,robin)";
-                "(&,robin,tiger)", ["robin", "swimmer"] => "(&,robin,swimmer)";
                 "(&,tiger,(|,bird,robin))", ["bird", "(|,bird,robin)"] => "(&,bird,(|,bird,robin))";
-                "(&,tiger,(|,bird,robin))", ["tiger", "animal"] => "(&,animal,tiger)";
-                "(&,tiger,(|,bird,robin))", ["tiger", "swimmer"] => "(&,swimmer,tiger)";
                 "(&,{Birdie},(|,flyer,[yellow]))", ["{Birdie}", "(|,flyer,{Tweety})"] => "(&,{Birdie},(|,flyer,{Tweety}))";
                 "(&,{Birdie},(|,flyer,[yellow]))", ["{Birdie}", "{Tweety}"] => None;
                 "(&,{key1},(/,open,_,lock))", ["(/,open,_,{lock1})", "(/,open,_,lock)"] => "(&,(/,open,_,lock),(/,open,_,{lock1}))";
@@ -2172,10 +1930,8 @@ mod tests {
                 "(*,(/,(/,num,_),_))", ["(/,num,_)"] => "(*,(/,num,_))";
                 "(*,(/,num,_))", ["(/,(/,num,_),_)"] => "(*,(/,(/,num,_),_))";
                 "(*,(/,num,_))", ["0"] => "(*,0)";
-                "(*,(/,num,_))", ["num"] => "(*,num)";
                 "(*,(/,open,_,lock1),lock1)", ["{key1}", "lock1"] => "(*,{key1},lock1)";
                 "(*,(\\,reaction,_,base),base)", ["(\\,neutralization,_,base)", "base"] => "(*,(\\,neutralization,_,base),base)";
-                "(*,(\\,reaction,_,soda),base)", ["(\\,neutralization,_,base)", "base"] => "(*,(\\,neutralization,_,base),base)";
                 "(*,(\\,reaction,_,soda),base)", ["acid", "base"] => "(*,acid,base)";
                 "(*,(|,key,(/,open,_,{lock1})),lock)", ["(/,open,_,lock)", "lock"] => "(*,(/,open,_,lock),lock)";
                 "(*,0)", ["(&,num,(/,(*,(/,num,_)),_))"] => "(*,(&,num,(/,(*,(/,num,_)),_)))";
@@ -2186,37 +1942,18 @@ mod tests {
                 "(*,a,b)", ["(/,like,b,_)", "b"] => "(*,(/,like,b,_),b)";
                 "(*,a,b)", ["a", "(/,like,_,a)"] => "(*,a,(/,like,_,a))";
                 "(*,acid,(&,soda,(/,neutralization,acid,_)))", ["acid", "(/,reaction,acid,_)"] => "(*,acid,(/,reaction,acid,_))";
-                "(*,acid,(/,neutralization,acid,_))", ["acid", "base"] => "(*,acid,base)";
                 "(*,acid,(/,reaction,acid,_))", ["acid", "(&,soda,(/,neutralization,acid,_))"] => "(*,acid,(&,soda,(/,neutralization,acid,_)))";
                 "(*,acid,(/,reaction,acid,_))", ["acid", "(/,neutralization,acid,_)"] => "(*,acid,(/,neutralization,acid,_))";
                 "(*,acid,(/,reaction,acid,_))", ["acid", "(\\,neutralization,acid,_)"] => "(*,acid,(\\,neutralization,acid,_))";
-                "(*,acid,(/,reaction,acid,_))", ["acid", "(\\,reaction,acid,_)"] => "(*,acid,(\\,reaction,acid,_))";
                 "(*,acid,(/,reaction,acid,_))", ["acid", "(|,base,(\\,reaction,acid,_))"] => "(*,acid,(|,base,(\\,reaction,acid,_)))";
-                "(*,acid,(/,reaction,acid,_))", ["acid", "(|,soda,(\\,neutralization,acid,_))"] => "(*,acid,(|,soda,(\\,neutralization,acid,_)))";
-                "(*,acid,(/,reaction,acid,_))", ["acid", "base"] => "(*,acid,base)";
-                "(*,acid,(/,reaction,acid,_))", ["acid", "soda"] => "(*,acid,soda)";
-                "(*,acid,base)", ["acid", "(/,neutralization,acid,_)"] => "(*,acid,(/,neutralization,acid,_))";
                 "(*,acid,base)", ["acid", "(\\,neutralization,acid,_)"] => "(*,acid,(\\,neutralization,acid,_))";
                 "(*,acid,base)", ["acid", "soda"] => "(*,acid,soda)";
-                "(*,acid,soda)", ["(/,neutralization,_,soda)", "soda"] => "(*,(/,neutralization,_,soda),soda)";
-                "(*,acid,soda)", ["acid", "(/,neutralization,acid,_)"] => "(*,acid,(/,neutralization,acid,_))";
-                "(*,acid,soda)", ["acid", "(/,reaction,acid,_)"] => "(*,acid,(/,reaction,acid,_))";
-                "(*,acid,soda)", ["acid", "(\\,neutralization,acid,_)"] => "(*,acid,(\\,neutralization,acid,_))";
-                "(*,acid,soda)", ["acid", "base"] => "(*,acid,base)";
-                "(*,b,a)", ["b", "(/,like,b,_)"] => "(*,b,(/,like,b,_))";
-                "(*,num)", ["(/,num,_)"] => "(*,(/,num,_))";
-                "(*,num)", ["0"] => "(*,0)";
-                "(*,tim,tom)", ["(/,uncle,tom,_)", "tom"] => "(*,(/,uncle,tom,_),tom)";
                 "(*,{key1},lock)", ["(&,key,(/,open,_,{lock1}))", "lock"] => "(*,(&,key,(/,open,_,{lock1})),lock)";
                 "(*,{key1},lock)", ["(/,open,_,{lock1})", "lock"] => "(*,(/,open,_,{lock1}),lock)";
                 "(*,{key1},lock)", ["(|,key,(/,open,_,{lock1}))", "lock"] => "(*,(|,key,(/,open,_,{lock1})),lock)";
                 "(*,{key1},lock)", ["key", "lock"] => "(*,key,lock)";
                 "(*,{key1},lock1)", ["(/,open,_,lock)", "lock1"] => "(*,(/,open,_,lock),lock1)";
-                "(*,{key1},lock1)", ["(/,open,_,lock1)", "lock1"] => "(*,(/,open,_,lock1),lock1)";
-                "(*,{key1},lock1)", ["(/,open,_,{lock1})", "lock1"] => "(*,(/,open,_,{lock1}),lock1)";
                 "(*,{key1},lock1)", ["(|,(/,open,_,lock1),(/,open,_,{lock1}))", "lock1"] => "(*,(|,(/,open,_,lock1),(/,open,_,{lock1})),lock1)";
-                "(*,{key1},lock1)", ["(|,key,(/,open,_,{lock1}))", "lock1"] => "(*,(|,key,(/,open,_,{lock1})),lock1)";
-                "(*,{key1},lock1)", ["key", "lock1"] => "(*,key,lock1)";
                 "(*,{key1},{lock1})", ["(/,open,_,lock)", "{lock1}"] => "(*,(/,open,_,lock),{lock1})";
                 "(*,{key1},{lock1})", ["(/,open,_,{lock1})", "{lock1}"] => "(*,(/,open,_,{lock1}),{lock1})";
                 "(*,{key1},{lock1})", ["key", "{lock1}"] => "(*,key,{lock1})";
@@ -2230,78 +1967,33 @@ mod tests {
                 "(/,0,_)", ["num"] => "(/,num,_)";
                 "(/,like,_,a)", ["like", "(/,like,b,_)"] => "(/,like,_,(/,like,b,_))";
                 "(/,like,b,_)", ["(/,like,_,a)", "like"] => "(/,like,(/,like,_,a),_)";
-                "(/,neutralization,_,base)", ["neutralization", "(/,neutralization,acid,_)"] => "(/,neutralization,_,(/,neutralization,acid,_))";
                 "(/,neutralization,_,base)", ["neutralization", "(\\,neutralization,acid,_)"] => "(/,neutralization,_,(\\,neutralization,acid,_))";
                 "(/,neutralization,_,base)", ["neutralization", "soda"] => "(/,neutralization,_,soda)";
-                "(/,neutralization,_,base)", ["reaction", "base"] => "(/,reaction,_,base)";
-                "(/,neutralization,_,soda)", ["neutralization", "(/,neutralization,acid,_)"] => "(/,neutralization,_,(/,neutralization,acid,_))";
-                "(/,neutralization,_,soda)", ["neutralization", "(/,reaction,acid,_)"] => "(/,neutralization,_,(/,reaction,acid,_))";
-                "(/,neutralization,_,soda)", ["neutralization", "base"] => "(/,neutralization,_,base)";
-                "(/,neutralization,acid,_)", ["acid", "reaction"] => "(/,reaction,acid,_)";
                 "(/,num,_)", ["(*,0)"] => "(/,(*,0),_)";
-                "(/,num,_)", ["(/,num,_)"] => "(/,(/,num,_),_)";
-                "(/,num,_)", ["0"] => "(/,0,_)";
                 "(/,open,_,(|,lock,(/,open,{key1},_)))", ["open", "{lock1}"] => "(/,open,_,{lock1})";
                 "(/,open,_,{lock1})", ["open", "(|,lock,(/,open,{key1},_))"] => "(/,open,_,(|,lock,(/,open,{key1},_)))";
                 "(/,open,_,{lock1})", ["open", "lock"] => "(/,open,_,lock)";
                 "(/,reaction,_,base)", ["(*,acid,soda)", "base"] => "(/,(*,acid,soda),_,base)";
-                "(/,reaction,_,base)", ["neutralization", "base"] => "(/,neutralization,_,base)";
-                "(/,reaction,_,base)", ["reaction", "(/,neutralization,acid,_)"] => "(/,reaction,_,(/,neutralization,acid,_))";
-                "(/,reaction,_,base)", ["reaction", "soda"] => "(/,reaction,_,soda)";
-                "(/,reaction,_,soda)", ["neutralization", "soda"] => "(/,neutralization,_,soda)";
-                "(/,reaction,_,soda)", ["reaction", "(/,neutralization,acid,_)"] => "(/,reaction,_,(/,neutralization,acid,_))";
-                "(/,reaction,_,soda)", ["reaction", "(/,reaction,acid,_)"] => "(/,reaction,_,(/,reaction,acid,_))";
-                "(/,reaction,_,soda)", ["reaction", "(\\,neutralization,acid,_)"] => "(/,reaction,_,(\\,neutralization,acid,_))";
-                "(/,reaction,_,soda)", ["reaction", "(\\,reaction,acid,_)"] => "(/,reaction,_,(\\,reaction,acid,_))";
-                "(/,reaction,_,soda)", ["reaction", "base"] => "(/,reaction,_,base)";
                 "(/,reaction,acid,_)", ["acid", "(*,acid,soda)"] => "(/,(*,acid,soda),acid,_)";
-                "(/,reaction,acid,_)", ["acid", "neutralization"] => "(/,neutralization,acid,_)";
-                "(/,uncle,_,tom)", ["(*,tim,tom)", "tom"] => "(/,(*,tim,tom),_,tom)";
-                "(/,uncle,tim,_)", ["(/,uncle,_,tom)", "uncle"] => "(/,uncle,(/,uncle,_,tom),_)";
-                "(/,uncle,tim,_)", ["tim", "(*,tim,tom)"] => "(/,(*,tim,tom),tim,_)";
-                "(/,uncle,tom,_)", ["tom", "(*,tim,tom)"] => "(/,(*,tim,tom),tom,_)";
                 "(\\,(*,b,a),_,(/,like,b,_))", ["like", "(/,like,b,_)"] => "(\\,like,_,(/,like,b,_))";
                 "(\\,REPRESENT,_,CAT)", ["REPRESENT", "(\\,REPRESENT,_,CAT)"] => "(\\,REPRESENT,_,(\\,REPRESENT,_,CAT))";
                 "(\\,neutralization,_,(/,neutralization,acid,_))", ["neutralization", "soda"] => "(\\,neutralization,_,soda)";
                 "(\\,neutralization,_,(/,reaction,acid,_))", ["neutralization", "(/,neutralization,acid,_)"] => "(\\,neutralization,_,(/,neutralization,acid,_))";
                 "(\\,neutralization,_,(/,reaction,acid,_))", ["neutralization", "(\\,neutralization,acid,_)"] => "(\\,neutralization,_,(\\,neutralization,acid,_))";
                 "(\\,neutralization,_,(/,reaction,acid,_))", ["neutralization", "(|,base,(\\,reaction,acid,_))"] => "(\\,neutralization,_,(|,base,(\\,reaction,acid,_)))";
-                "(\\,neutralization,_,(/,reaction,acid,_))", ["neutralization", "base"] => "(\\,neutralization,_,base)";
-                "(\\,neutralization,_,(/,reaction,acid,_))", ["neutralization", "soda"] => "(\\,neutralization,_,soda)";
                 "(\\,neutralization,_,base)", ["neutralization", "(/,neutralization,acid,_)"] => "(\\,neutralization,_,(/,neutralization,acid,_))";
                 "(\\,neutralization,_,base)", ["neutralization", "soda"] => "(\\,neutralization,_,soda)";
-                "(\\,neutralization,_,base)", ["reaction", "base"] => "(\\,reaction,_,base)";
-                "(\\,neutralization,_,soda)", ["neutralization", "(/,neutralization,acid,_)"] => "(\\,neutralization,_,(/,neutralization,acid,_))";
-                "(\\,neutralization,_,soda)", ["neutralization", "(/,reaction,acid,_)"] => "(\\,neutralization,_,(/,reaction,acid,_))";
-                "(\\,neutralization,_,soda)", ["neutralization", "(\\,neutralization,acid,_)"] => "(\\,neutralization,_,(\\,neutralization,acid,_))";
-                "(\\,neutralization,_,soda)", ["neutralization", "(\\,reaction,acid,_)"] => "(\\,neutralization,_,(\\,reaction,acid,_))";
-                "(\\,neutralization,_,soda)", ["neutralization", "base"] => "(\\,neutralization,_,base)";
                 "(\\,neutralization,acid,_)", ["(\\,reaction,_,base)", "neutralization"] => "(\\,neutralization,(\\,reaction,_,base),_)";
-                "(\\,neutralization,acid,_)", ["acid", "reaction"] => "(\\,reaction,acid,_)";
                 "(\\,reaction,(\\,reaction,_,soda),_)", ["(\\,reaction,_,base)", "reaction"] => "(\\,reaction,(\\,reaction,_,base),_)";
                 "(\\,reaction,_,base)", ["(*,acid,soda)", "base"] => "(\\,(*,acid,soda),_,base)";
-                "(\\,reaction,_,base)", ["neutralization", "base"] => "(\\,neutralization,_,base)";
-                "(\\,reaction,_,base)", ["reaction", "soda"] => "(\\,reaction,_,soda)";
-                "(\\,reaction,_,soda)", ["neutralization", "soda"] => "(\\,neutralization,_,soda)";
-                "(\\,reaction,_,soda)", ["reaction", "(/,neutralization,acid,_)"] => "(\\,reaction,_,(/,neutralization,acid,_))";
-                "(\\,reaction,_,soda)", ["reaction", "(/,reaction,acid,_)"] => "(\\,reaction,_,(/,reaction,acid,_))";
-                "(\\,reaction,_,soda)", ["reaction", "(\\,neutralization,acid,_)"] => "(\\,reaction,_,(\\,neutralization,acid,_))";
-                "(\\,reaction,_,soda)", ["reaction", "(\\,reaction,acid,_)"] => "(\\,reaction,_,(\\,reaction,acid,_))";
-                "(\\,reaction,_,soda)", ["reaction", "base"] => "(\\,reaction,_,base)";
                 "(\\,reaction,acid,_)", ["acid", "(*,acid,soda)"] => "(\\,(*,acid,soda),acid,_)";
-                "(\\,reaction,acid,_)", ["acid", "neutralization"] => "(\\,neutralization,acid,_)";
                 "(|,(&,animal,gull),(&,bird,robin))", ["(&,animal,gull)", "swimmer"] => "(|,swimmer,(&,animal,gull))";
                 "(|,(&,flyer,{Birdie}),{Birdie,Tweety})", ["(&,flyer,{Birdie})", "(|,[yellow],{Birdie})"] => "(|,[yellow],{Birdie},(&,flyer,{Birdie}))";
-                "(|,(&,flyer,{Birdie}),{Birdie,Tweety})", ["(&,flyer,{Birdie})", "(|,[yellow],{Tweety})"] => "(|,[yellow],{Tweety},(&,flyer,{Birdie}))";
                 "(|,(/,neutralization,_,(\\,neutralization,acid,_)),(/,reaction,_,base))", ["(/,neutralization,_,base)", "(/,reaction,_,base)"] => "(|,(/,neutralization,_,base),(/,reaction,_,base))";
                 "(|,(/,neutralization,_,(\\,neutralization,acid,_)),(/,reaction,_,base))", ["acid", "(/,reaction,_,base)"] => "(|,acid,(/,reaction,_,base))";
                 "(|,(/,neutralization,_,base),(/,reaction,_,base))", ["(/,neutralization,_,base)", "acid"] => "(|,acid,(/,neutralization,_,base))";
                 "(|,(/,neutralization,_,base),(/,reaction,_,soda))", ["(/,neutralization,_,base)", "(/,neutralization,_,(\\,neutralization,acid,_))"] => "(|,(/,neutralization,_,base),(/,neutralization,_,(\\,neutralization,acid,_)))";
-                "(|,(/,neutralization,_,base),(/,reaction,_,soda))", ["(/,neutralization,_,base)", "(/,reaction,_,(\\,neutralization,acid,_))"] => "(|,(/,neutralization,_,base),(/,reaction,_,(\\,neutralization,acid,_)))";
                 "(|,(/,neutralization,_,base),(/,reaction,_,soda))", ["(/,neutralization,_,base)", "(/,reaction,_,base)"] => "(|,(/,neutralization,_,base),(/,reaction,_,base))";
-                "(|,(/,neutralization,_,base),(/,reaction,_,soda))", ["(/,neutralization,_,base)", "acid"] => "(|,acid,(/,neutralization,_,base))";
-                "(|,(/,neutralization,_,soda),(/,reaction,_,base))", ["(/,neutralization,_,base)", "(/,reaction,_,base)"] => "(|,(/,neutralization,_,base),(/,reaction,_,base))";
-                "(|,(/,neutralization,_,soda),(/,reaction,_,base))", ["(/,reaction,_,soda)", "(/,reaction,_,base)"] => "(|,(/,reaction,_,base),(/,reaction,_,soda))";
                 "(|,(/,neutralization,_,soda),(/,reaction,_,base))", ["acid", "(/,reaction,_,base)"] => "(|,acid,(/,reaction,_,base))";
                 "(|,(/,num,_),(/,(*,num),_))", ["(/,num,_)", "0"] => "(|,0,(/,num,_))";
                 "(|,(\\,REPRESENT,_,CAT),(\\,(\\,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish))", ["(\\,REPRESENT,_,CAT)", "(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish)"] => "(|,(\\,REPRESENT,_,CAT),(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish))";
@@ -2313,85 +2005,44 @@ mod tests {
                 "(|,[with_wings],[yellow],{Birdie})", ["[with_wings]", "flyer", "{Birdie}"] => "(|,flyer,[with_wings],{Birdie})";
                 "(|,[with_wings],[yellow],{Birdie})", ["[with_wings]", "{Tweety}", "{Birdie}"] => "(|,[with_wings],{Birdie},{Tweety})";
                 "(|,[with_wings],[yellow],{Birdie})", ["flyer", "[yellow]", "{Birdie}"] => "(|,flyer,[yellow],{Birdie})";
-                "(|,[with_wings],[yellow],{Birdie})", ["robin", "[yellow]", "{Birdie}"] => "(|,robin,[yellow],{Birdie})";
                 "(|,[with_wings],{Birdie})", ["flyer", "{Birdie}"] => "(|,flyer,{Birdie})";
-                "(|,[with_wings],{Birdie})", ["robin", "{Birdie}"] => "(|,robin,{Birdie})";
                 "(|,[with_wings],{Birdie})", ["{Tweety}", "{Birdie}"] => "{Birdie,Tweety}";
                 "(|,[with_wings],{Birdie},(&,bird,(|,[yellow],{Birdie})))", ["flyer", "{Birdie}", "(&,bird,(|,[yellow],{Birdie}))"] => "(|,flyer,{Birdie},(&,bird,(|,[yellow],{Birdie})))";
-                "(|,[with_wings],{Birdie},(&,bird,(|,[yellow],{Birdie})))", ["robin", "{Birdie}", "(&,bird,(|,[yellow],{Birdie}))"] => "(|,robin,{Birdie},(&,bird,(|,[yellow],{Birdie})))";
                 "(|,[with_wings],{Birdie},(&,flyer,[yellow]))", ["[with_wings]", "{Birdie}", "(|,[with_wings],{Birdie})"] => "(|,[with_wings],{Birdie})";
                 "(|,[yellow],{Birdie})", ["(&,flyer,{Birdie})", "{Birdie}"] => "(|,{Birdie},(&,flyer,{Birdie}))";
                 "(|,[yellow],{Birdie})", ["[yellow]", "[with_wings]"] => None;
                 "(|,[yellow],{Birdie})", ["[yellow]", "bird"] => "(|,bird,[yellow])";
-                "(|,[yellow],{Birdie})", ["[yellow]", "flyer"] => "(|,flyer,[yellow])";
                 "(|,[yellow],{Birdie})", ["[yellow]", "{Tweety}"] => "(|,[yellow],{Tweety})";
-                "(|,[yellow],{Birdie})", ["flyer", "{Birdie}"] => "(|,flyer,{Birdie})";
-                "(|,[yellow],{Birdie})", ["{Tweety}", "{Birdie}"] => "{Birdie,Tweety}";
                 "(|,[yellow],{Birdie},(&,flyer,{Birdie}))", ["flyer", "{Birdie}", "(&,flyer,{Birdie})"] => "(|,flyer,{Birdie},(&,flyer,{Birdie}))";
                 "(|,[yellow],{Birdie},(&,flyer,{Birdie}))", ["{Tweety}", "{Birdie}", "(&,flyer,{Birdie})"] => "(|,(&,flyer,{Birdie}),{Birdie,Tweety})";
-                "(|,[yellow],{Tweety})", ["flyer", "{Tweety}"] => "(|,flyer,{Tweety})";
-                "(|,[yellow],{Tweety})", ["{Birdie}", "{Tweety}"] => "{Birdie,Tweety}";
                 "(|,acid,(/,neutralization,_,soda))", ["acid", "(/,reaction,_,base)"] => "(|,acid,(/,reaction,_,base))";
                 "(|,acid,(\\,reaction,_,base))", ["acid", "(\\,neutralization,_,base)"] => "(|,acid,(\\,neutralization,_,base))";
-                "(|,acid,(\\,reaction,_,soda))", ["acid", "(\\,neutralization,_,base)"] => "(|,acid,(\\,neutralization,_,base))";
-                "(|,acid,(\\,reaction,_,soda))", ["acid", "(\\,neutralization,_,soda)"] => "(|,acid,(\\,neutralization,_,soda))";
                 "(|,animal,gull)", ["animal", "robin"] => "(|,animal,robin)";
-                "(|,animal,gull)", ["animal", "swan"] => "(|,animal,swan)";
-                "(|,animal,gull)", ["animal", "swimmer"] => "(|,animal,swimmer)";
-                "(|,base,(/,reaction,acid,_))", ["base", "(/,neutralization,acid,_)"] => "(|,base,(/,neutralization,acid,_))";
                 "(|,base,(\\,reaction,acid,_))", ["base", "(/,reaction,acid,_)"] => "(|,base,(/,reaction,acid,_))";
-                "(|,base,(\\,reaction,acid,_))", ["base", "(\\,neutralization,acid,_)"] => "(|,base,(\\,neutralization,acid,_))";
                 "(|,base,(\\,reaction,acid,_))", ["base", "soda"] => "(|,base,soda)";
                 "(|,bird,(&,robin,tiger))", ["bird", "animal"] => "(|,animal,bird)";
-                "(|,bird,(&,robin,tiger))", ["bird", "swimmer"] => "(|,bird,swimmer)";
                 "(|,bird,[yellow])", ["bird", "flyer"] => "(|,bird,flyer)";
                 "(|,bird,[yellow])", ["bird", "{Birdie}"] => "(|,bird,{Birdie})";
-                "(|,bird,[yellow])", ["bird", "{Tweety}"] => "(|,bird,{Tweety})";
                 "(|,bird,[yellow],{Birdie})", ["bird", "flyer", "{Birdie}"] => "(|,bird,flyer,{Birdie})";
                 "(|,bird,[yellow],{Birdie})", ["bird", "{Tweety}", "{Birdie}"] => "(|,bird,{Birdie},{Tweety})";
                 "(|,bird,{Birdie})", ["bird", "[with_wings]"] => "(|,bird,[with_wings])";
-                "(|,bird,{Birdie})", ["bird", "[yellow]"] => "(|,bird,[yellow])";
                 "(|,bird,{Birdie})", ["bird", "flyer"] => "(|,bird,flyer)";
                 "(|,bird,{Birdie})", ["bird", "{Tweety}"] => "(|,bird,{Tweety})";
                 "(|,bird,{Tweety})", ["bird", "(|,bird,flyer)"] => "(|,bird,flyer)";
-                "(|,boy,girl)", ["youth", "girl"] => "(|,girl,youth)";
                 "(|,chess,competition)", ["chess", "(|,chess,sport)"] => "(|,chess,sport)";
-                "(|,chess,competition)", ["chess", "sport"] => "(|,chess,sport)";
-                "(|,chess,competition)", ["sport", "competition"] => "(|,competition,sport)";
-                "(|,chess,sport)", ["chess", "competition"] => "(|,chess,competition)";
-                "(|,chess,sport)", ["competition", "sport"] => "(|,competition,sport)";
-                "(|,competition,sport)", ["chess", "sport"] => "(|,chess,sport)";
-                "(|,competition,sport)", ["competition", "chess"] => "(|,chess,competition)";
-                "(|,flyer,[with_wings])", ["flyer", "robin"] => "(|,flyer,robin)";
-                "(|,flyer,[with_wings])", ["flyer", "{Birdie}"] => "(|,flyer,{Birdie})";
-                "(|,flyer,[with_wings])", ["flyer", "{Tweety}"] => "(|,flyer,{Tweety})";
                 "(|,flyer,[yellow])", ["flyer", "(&,flyer,{Birdie})"] => "(|,flyer,(&,flyer,{Birdie}))";
-                "(|,flyer,[yellow])", ["flyer", "{Birdie}"] => "(|,flyer,{Birdie})";
-                "(|,flyer,[yellow])", ["flyer", "{Tweety}"] => "(|,flyer,{Tweety})";
                 "(|,flyer,[yellow],(&,flyer,{Birdie}))", ["flyer", "{Birdie}", "(&,flyer,{Birdie})"] => "(|,flyer,{Birdie},(&,flyer,{Birdie}))";
                 "(|,flyer,[yellow],{Birdie})", ["flyer", "(&,flyer,{Birdie})", "{Birdie}"] => "(|,flyer,{Birdie},(&,flyer,{Birdie}))";
                 "(|,flyer,[yellow],{Birdie})", ["flyer", "(|,flyer,{Tweety})", "{Birdie}"] => "(|,flyer,{Birdie},{Tweety})";
-                "(|,flyer,[yellow],{Birdie})", ["flyer", "{Tweety}", "{Birdie}"] => "(|,flyer,{Birdie},{Tweety})";
                 "(|,key,(/,open,_,lock))", ["key", "(/,open,_,{lock1})"] => "(|,key,(/,open,_,{lock1}))";
                 "(|,key,(/,open,_,lock))", ["key", "{key1}"] => "(|,key,{key1})";
                 "(|,neutralization,(*,(\\,reaction,_,soda),base))", ["neutralization", "reaction"] => "(|,neutralization,reaction)";
                 "(|,neutralization,(*,acid,soda))", ["neutralization", "(*,acid,(\\,neutralization,acid,_))"] => "(|,neutralization,(*,acid,(\\,neutralization,acid,_)))";
                 "(|,neutralization,(*,acid,soda))", ["neutralization", "(*,acid,base)"] => "(|,neutralization,(*,acid,base))";
                 "(|,neutralization,(*,acid,soda))", ["neutralization", "reaction"] => "(|,neutralization,reaction)";
-                "(|,reaction,(*,acid,soda))", ["reaction", "(*,acid,base)"] => "(|,reaction,(*,acid,base))";
-                "(|,reaction,(*,acid,soda))", ["reaction", "neutralization"] => "(|,neutralization,reaction)";
                 "(|,robin,[yellow],{Birdie})", ["robin", "(|,flyer,{Tweety})", "{Birdie}"] => "(|,flyer,robin,{Birdie},{Tweety})";
-                "(|,robin,[yellow],{Birdie})", ["robin", "flyer", "{Birdie}"] => "(|,flyer,robin,{Birdie})";
-                "(|,robin,[yellow],{Birdie})", ["robin", "{Tweety}", "{Birdie}"] => "(|,robin,{Birdie},{Tweety})";
-                "(|,robin,tiger)", ["robin", "animal"] => "(|,animal,robin)";
-                "(|,robin,tiger)", ["robin", "bird"] => "(|,bird,robin)";
-                "(|,robin,tiger)", ["robin", "swimmer"] => "(|,robin,swimmer)";
                 "(|,soda,(\\,neutralization,acid,_))", ["(/,neutralization,acid,_)", "(\\,neutralization,acid,_)"] => "(|,(/,neutralization,acid,_),(\\,neutralization,acid,_))";
-                "(|,soda,(\\,neutralization,acid,_))", ["(/,reaction,acid,_)", "(\\,neutralization,acid,_)"] => "(|,(/,reaction,acid,_),(\\,neutralization,acid,_))";
-                "(|,soda,(\\,neutralization,acid,_))", ["base", "(\\,neutralization,acid,_)"] => "(|,base,(\\,neutralization,acid,_))";
                 "(|,tiger,(&,bird,robin))", ["tiger", "(|,animal,swimmer)"] => "(|,animal,swimmer,tiger)";
-                "(|,tiger,(&,bird,robin))", ["tiger", "animal"] => "(|,animal,tiger)";
-                "(|,tiger,(&,bird,robin))", ["tiger", "swimmer"] => "(|,swimmer,tiger)";
                 "(|,{key1},(/,open,_,lock))", ["(/,open,_,{lock1})", "(/,open,_,lock)"] => "(|,(/,open,_,lock),(/,open,_,{lock1}))";
                 "(|,{key1},(/,open,_,lock))", ["(|,key,(/,open,_,{lock1}))", "(/,open,_,lock)"] => "(|,key,(/,open,_,lock),(/,open,_,{lock1}))";
                 "(|,{key1},(/,open,_,lock))", ["key", "(/,open,_,lock)"] => "(|,key,(/,open,_,lock))";
@@ -2402,22 +2053,22 @@ mod tests {
                 "(~,boy,girl)", ["youth", "girl"] => "(~,youth,girl)";
                 "(~,youth,girl)", ["(|,boy,girl)", "girl"] => "(~,(|,boy,girl),girl)";
                 "[bright]", ["smart"] => "[smart]";
-                "[smart]", ["bright"] => "[bright]";
                 "{Birdie}", ["Tweety"] => "{Tweety}";
                 "{Mars,Pluto,Saturn,Venus}", ["Mars", "Venus"] => "{Mars,Venus}";
-                "{Tweety}", ["Birdie"] => "{Birdie}";
             }
             ok!()
         }
 
         #[test]
         fn can_extract() -> AResult {
+            fn test(term: Term, expected: bool) {
+                let compound = term.as_compound().unwrap();
+                assert_eq!(compound.can_extract_to_inner(), expected);
+            }
             macro_once! {
                 // * 🚩模式：词项字符串⇒预期
                 macro test($($term:expr => $expected:expr)*) {
-                    $(
-                        assert_eq!(term!($term).as_compound().unwrap().can_extract_to_inner(), $expected);
-                    )*
+                    $( test(term!($term), $expected); )*
                 }
                 // * 🚩正例
                 "(&&, A)" => true
@@ -2435,17 +2086,416 @@ mod tests {
 
         #[test]
         fn reduce_components() -> AResult {
-            fn test(t: Term, to_reduce: &Term) {
-                let c = t.as_compound().unwrap();
-                let new_c = c.reduce_components(to_reduce);
-                // TODO: 需要等到「完整实现」之后才能测试
+            /// ! 📝【2024-06-18 23:56:37】教训：不要在宏展开里头写过程式代码
+            /// * * ℹ️宏展开里头的代码，每个都是实实在在要「一个个铺开」被编译器看到的
+            /// * * ⚠️若直接在里头写过程式代码，即便代码只有十多行，但若有成百上千个测试用例，则代码行数会成倍增长
+            /// * * 💥过多的代码行数，编译器就会爆炸
+            fn test(compound: Term, term: Term, expected: Option<Term>) {
+                let compound_ref = compound.as_compound().expect("构造出来的不是复合词项");
+                let compound_s = compound.to_string();
+                let term_s = term.to_string();
+                let out = CompoundTermRef::reduce_components(compound_ref, &term);
+                assert_eq!(
+                    out,
+                    expected,
+                    "{compound_s:?}, {term_s:?} => {} != {}",
+                    format_option_term(&out),
+                    format_option_term(&expected),
+                );
+            }
+            macro_once! {
+                // * 🚩模式：参数列表 ⇒ 预期词项
+                macro test($($compound:tt, $term:tt => $expected:tt;)*) {
+                    $( test(term!($compound), term!($term), option_term!($expected)); )*
+                }
+                // * ℹ️用例均源自OpenNARS实际运行
+                "(&&,<(&,bird,gull) --> bird>,<(&,bird,gull) --> [swimmer]>)", "<(&,bird,gull) --> [swimmer]>" => "<(&,bird,gull) --> bird>";
+                "(&&,<(&,bird,swan) --> [bird]>,<(&,bird,swan) --> [swimmer]>)", "<(&,bird,swan) --> [swimmer]>" => "<(&,bird,swan) --> [bird]>";
+                "(&&,<(&,bird,swimmer) --> (&,animal,swimmer)>,<(&,bird,swimmer) --> (|,swan,swimmer)>)", "<(&,bird,swimmer) --> (&,animal,swimmer)>" => "<(&,bird,swimmer) --> (|,swan,swimmer)>";
+                "(&&,<(&,chess,sport) --> chess>,<(&,chess,sport) --> competition>)", "<(&,chess,sport) --> competition>" => "<(&,chess,sport) --> chess>";
+                "(&&,<(&,key,(/,open,_,lock)) --> key>,<(&,key,(/,open,_,lock)) --> (/,open,_,{lock1})>)", "<(&,key,(/,open,_,lock)) --> (/,open,_,{lock1})>" => "<(&,key,(/,open,_,lock)) --> key>";
+                "(&&,<(*,0) --> (*,(/,num,_))>,<{0} --> (*,(/,num,_))>)", "<(*,0) --> (*,(/,num,_))>" => "<{0} --> (*,(/,num,_))>";
+                "(&&,<(*,0) --> (*,{0})>,<(*,(*,0)) --> (*,{0})>)", "<(*,(*,0)) --> (*,{0})>" => "<(*,0) --> (*,{0})>";
+                "(&&,<(*,0) --> (/,num,_)>,<(*,0) --> [num]>)", "<(*,0) --> (/,num,_)>" => "<(*,0) --> [num]>";
+                "(&&,<(*,0) --> num>,<(/,num,_) --> num>)", "<(/,num,_) --> num>" => "<(*,0) --> num>";
+                "(&&,<(*,0) --> num>,<{0} --> num>)", "<(*,0) --> num>" => "<{0} --> num>";
+                "(&&,<(*,0) --> num>,<{0} --> num>)", "<{0} --> num>" => "<(*,0) --> num>";
+                "(&&,<(*,a,b) --> like>,<(*,a,b) --> (*,a,b)>)", "<(*,a,b) --> like>" => "<(*,a,b) --> (*,a,b)>";
+                "(&&,<(*,b,a) --> [like]>,<(*,b,a) --> (*,b,(/,like,_,b))>)", "<(*,b,a) --> [like]>" => "<(*,b,a) --> (*,b,(/,like,_,b))>";
+                "(&&,<(*,b,a) --> like>,<(*,b,a) --> (*,(/,like,b,_),b)>)", "<(*,b,a) --> like>" => "<(*,b,a) --> (*,(/,like,b,_),b)>";
+                "(&&,<(/,(*,(/,num,_)),_) --> (/,num,_)>,<(/,(*,(/,num,_)),_) --> [num]>)", "<(/,(*,(/,num,_)),_) --> (/,num,_)>" => "<(/,(*,(/,num,_)),_) --> [num]>";
+                "(&&,<(/,(/,REPRESENT,_,<{(*,CAT,FISH)} --> FOOD>),_,eat,fish) --> [cat]>,<(/,(/,REPRESENT,_,<{(*,CAT,FISH)} --> FOOD>),_,eat,fish) --> (&,CAT,cat)>)", "<(/,(/,REPRESENT,_,<{(*,CAT,FISH)} --> FOOD>),_,eat,fish) --> [cat]>" => "<(/,(/,REPRESENT,_,<{(*,CAT,FISH)} --> FOOD>),_,eat,fish) --> (&,CAT,cat)>";
+                "(&&,<(/,neutralization,(/,reaction,_,base),_) --> base>,<(/,neutralization,(/,reaction,_,base),_) --> (/,reaction,(/,reaction,_,base),_)>)", "<(/,neutralization,(/,reaction,_,base),_) --> (/,reaction,(/,reaction,_,base),_)>" => "<(/,neutralization,(/,reaction,_,base),_) --> base>";
+                "(&&,<(/,open,_,lock) --> key>,<(/,open,_,lock) --> (/,open,_,{lock1})>)", "<(/,open,_,lock) --> (/,open,_,{lock1})>" => "<(/,open,_,lock) --> key>";
+                "(&&,<(/,open,{key1},_) --> lock>,<(/,open,{key1},_) --> (/,open,key,_)>)", "<(/,open,{key1},_) --> (/,open,key,_)>" => "<(/,open,{key1},_) --> lock>";
+                "(&&,<(|,bird,gull) --> [bird]>,<(|,bird,gull) --> [swimmer]>)", "<(|,bird,gull) --> [swimmer]>" => "<(|,bird,gull) --> [bird]>";
+                "(&&,<(|,robin,swan) --> (&,bird,swimmer)>,<(|,robin,swan) --> (|,bird,swimmer)>)", "<(|,robin,swan) --> (&,bird,swimmer)>" => "<(|,robin,swan) --> (|,bird,swimmer)>";
+                "(&&,<(~,boy,girl) --> [strong]>,<(~,boy,girl) --> [[strong]]>)", "<(~,boy,girl) --> [strong]>" => "<(~,boy,girl) --> [[strong]]>";
+                "(&&,<(~,swan,bird) --> [bird]>,<(~,swan,bird) --> [swimmer]>)", "<(~,swan,bird) --> [swimmer]>" => "<(~,swan,bird) --> [bird]>";
+                "(&&,<0 --> num>,<0 --> {0}>)", "<0 --> num>" => "<0 --> {0}>";
+                "(&&,<?1 --> animal>,<?1 --> [swimmer]>)", "<?1 --> [swimmer]>" => "<?1 --> animal>";
+                "(&&,<CAT --> CAT>,<cat --> CAT>)", "<cat --> CAT>" => "<CAT --> CAT>";
+                "(&&,<[[smart]] --> [bright]>,<[[smart]] --> [[bright]]>)", "<[[smart]] --> [[bright]]>" => "<[[smart]] --> [bright]>";
+                "(&&,<acid --> (/,reaction,_,base)>,<(/,neutralization,_,base) --> (/,reaction,_,base)>)", "<acid --> (/,reaction,_,base)>" => "<(/,neutralization,_,base) --> (/,reaction,_,base)>";
+                "(&&,<animal --> (&,bird,swimmer)>,<animal --> (|,bird,swimmer)>)", "<animal --> (|,bird,swimmer)>" => "<animal --> (&,bird,swimmer)>";
+                "(&&,<animal --> [bird]>,<animal --> (|,bird,swimmer)>)", "<animal --> (|,bird,swimmer)>" => "<animal --> [bird]>";
+                "(&&,<animal <-> robin>,<robin <-> [flying]>)", "<animal <-> robin>" => "<robin <-> [flying]>";
+                "(&&,<animal <-> robin>,<robin <-> [flying]>)", "<robin <-> [flying]>" => "<animal <-> robin>";
+                "(&&,<animal <-> robin>,<robin <-> [flying]>)", "[flying]" => None;
+                "(&&,<animal <-> robin>,<robin <-> [flying]>)", "animal" => None;
+                "(&&,<bird --> (|,robin,swimmer)>,<gull --> (|,robin,swimmer)>)", "<gull --> (|,robin,swimmer)>" => "<bird --> (|,robin,swimmer)>";
+                "(&&,<bird --> [bird]>,<{Tweety} --> [bird]>)", "<{Tweety} --> [bird]>" => "<bird --> [bird]>";
+                "(&&,<bird --> [with_wings]>,<bird --> [[with_wings]]>)", "<bird --> [with_wings]>" => "<bird --> [[with_wings]]>";
+                "(&&,<bird --> animal>,<bird --> [swimmer]>)", "<bird --> [swimmer]>" => "<bird --> animal>";
+                "(&&,<bird --> flyer>,<bird --> {Birdie}>)", "<bird --> {Birdie}>" => "<bird --> flyer>";
+                "(&&,<bird --> flyer>,<{Tweety} --> flyer>)", "<{Tweety} --> flyer>" => "<bird --> flyer>";
+                "(&&,<bird --> {Birdie}>,<{Tweety} --> {Birdie}>)", "<{Tweety} --> {Birdie}>" => "<bird --> {Birdie}>";
+                "(&&,<cat --> [CAT]>,<cat --> (|,CAT,(/,(/,REPRESENT,_,<{(*,CAT,FISH)} --> FOOD>),_,eat,fish))>)", "<cat --> [CAT]>" => "<cat --> (|,CAT,(/,(/,REPRESENT,_,<{(*,CAT,FISH)} --> FOOD>),_,eat,fish))>";
+                "(&&,<cat --> cat>,<cat --> (/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish)>)", "<cat --> (/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish)>" => "<cat --> cat>";
+                "(&&,<chess --> [competition]>,<sport --> [competition]>)", "<sport --> [competition]>" => "<chess --> [competition]>";
+                "(&&,<flyer --> (|,bird,[yellow])>,<{Tweety} --> (|,bird,[yellow])>)", "<{Tweety} --> (|,bird,[yellow])>" => "<flyer --> (|,bird,[yellow])>";
+                "(&&,<gull --> [bird]>,<gull --> (&,bird,swimmer)>)", "<gull --> [bird]>" => "<gull --> (&,bird,swimmer)>";
+                "(&&,<key --> (/,open,_,lock1)>,<(/,open,_,lock) --> (/,open,_,lock1)>)", "<(/,open,_,lock) --> (/,open,_,lock1)>" => "<key --> (/,open,_,lock1)>";
+                "(&&,<key --> (/,open,_,{lock1})>,<{key1} --> (/,open,_,{lock1})>)", "<key --> (/,open,_,{lock1})>" => "<{key1} --> (/,open,_,{lock1})>";
+                "(&&,<key --> (/,open,_,{lock1})>,<{key1} --> (/,open,_,{lock1})>)", "<{key1} --> (/,open,_,{lock1})>" => "<key --> (/,open,_,{lock1})>";
+                "(&&,<key --> (|,key,(/,open,_,{lock1}))>,<{{key1}} --> (|,key,(/,open,_,{lock1}))>)", "<{{key1}} --> (|,key,(/,open,_,{lock1}))>" => "<key --> (|,key,(/,open,_,{lock1}))>";
+                "(&&,<key --> [key]>,<{{key1}} --> [key]>)", "<{{key1}} --> [key]>" => "<key --> [key]>";
+                "(&&,<key --> key>,<key --> (/,open,_,{lock1})>)", "<key --> (/,open,_,{lock1})>" => "<key --> key>";
+                "(&&,<key --> key>,<{{key1}} --> key>)", "<{{key1}} --> key>" => "<key --> key>";
+                "(&&,<key --> {key1}>,<{{key1}} --> {key1}>)", "<key --> {key1}>" => "<{{key1}} --> {key1}>";
+                "(&&,<lock --> lock>,<lock --> (/,open,{key1},_)>)", "<lock --> (/,open,{key1},_)>" => "<lock --> lock>";
+                "(&&,<lock1 --> (/,open,{key1},_)>,<{key1} --> key>)", "<lock1 --> (/,open,{key1},_)>" => "<{key1} --> key>";
+                "(&&,<lock1 --> (/,open,{key1},_)>,<{key1} --> key>)", "<{key1} --> key>" => "<lock1 --> (/,open,{key1},_)>";
+                "(&&,<lock1 --> (/,open,{key1},_)>,<{{key1}} --> key>)", "<lock1 --> (/,open,{key1},_)>" => "<{{key1}} --> key>";
+                "(&&,<lock1 --> [lock]>,<lock1 --> [(/,open,{key1},_)]>)", "<lock1 --> [(/,open,{key1},_)]>" => "<lock1 --> [lock]>";
+                "(&&,<lock1 --> [lock]>,<lock1 --> [(/,open,{key1},_)]>)", "<lock1 --> [lock]>" => "<lock1 --> [(/,open,{key1},_)]>";
+                "(&&,<neutralization --> (*,acid,(/,reaction,acid,_))>,<(*,(/,neutralization,_,base),base) --> (*,acid,(/,reaction,acid,_))>)", "<(*,(/,neutralization,_,base),base) --> (*,acid,(/,reaction,acid,_))>" => "<neutralization --> (*,acid,(/,reaction,acid,_))>";
+                "(&&,<neutralization --> neutralization>,<(*,acid,base) --> neutralization>)", "<(*,acid,base) --> neutralization>" => "<neutralization --> neutralization>";
+                "(&&,<neutralization --> reaction>,<neutralization --> (*,(/,reaction,_,base),base)>)", "<neutralization --> (*,(/,reaction,_,base),base)>" => "<neutralization --> reaction>";
+                "(&&,<neutralization --> reaction>,<neutralization --> (*,(/,reaction,_,base),base)>)", "<neutralization --> reaction>" => "<neutralization --> (*,(/,reaction,_,base),base)>";
+                "(&&,<neutralization --> reaction>,<neutralization --> (*,acid,base)>)", "<neutralization --> (*,acid,base)>" => "<neutralization --> reaction>";
+                "(&&,<robin --> (&,animal,(|,swimmer,(-,animal,swan)))>,<{bird} --> (&,animal,(|,swimmer,(-,animal,swan)))>)", "<{bird} --> (&,animal,(|,swimmer,(-,animal,swan)))>" => "<robin --> (&,animal,(|,swimmer,(-,animal,swan)))>";
+                "(&&,<robin --> (&,animal,swimmer)>,<robin --> (|,swan,swimmer)>)", "<robin --> (&,animal,swimmer)>" => "<robin --> (|,swan,swimmer)>";
+                "(&&,<robin --> (&,bird,[yellow])>,<{Tweety} --> (&,bird,[yellow])>)", "<{Tweety} --> (&,bird,[yellow])>" => "<robin --> (&,bird,[yellow])>";
+                "(&&,<robin --> (&,bird,swimmer)>,<robin --> (-,bird,swimmer)>)", "<robin --> (-,bird,swimmer)>" => "<robin --> (&,bird,swimmer)>";
+                "(&&,<robin --> (&,swimmer,(-,animal,swan))>,<{bird} --> (&,swimmer,(-,animal,swan))>)", "<{bird} --> (&,swimmer,(-,animal,swan))>" => "<robin --> (&,swimmer,(-,animal,swan))>";
+                "(&&,<robin --> (-,animal,swan)>,<{bird} --> (-,animal,swan)>)", "<{bird} --> (-,animal,swan)>" => "<robin --> (-,animal,swan)>";
+                "(&&,<robin --> (|,swan,swimmer)>,<{bird} --> (|,swan,swimmer)>)", "<{bird} --> (|,swan,swimmer)>" => "<robin --> (|,swan,swimmer)>";
+                "(&&,<robin --> (|,swimmer,(-,animal,swan))>,<{robin} --> (|,swimmer,(-,animal,swan))>)", "robin" => None;
+                "(&&,<robin --> [[chirping]]>,<robin --> [[flying]]>)", "robin" => None;
+                "(&&,<robin --> [[chirping]]>,<robin --> [[flying]]>,<robin --> [[living]]>)", "<robin --> [[flying]]>" => "(&&,<robin --> [[chirping]]>,<robin --> [[living]]>)";
+                "(&&,<robin --> [[chirping]]>,<robin --> [[flying]]>,<robin --> [[living]]>)", "robin" => None;
+                "(&&,<robin --> [[flying]]>,<robin --> [[with_wings]]>)", "<robin --> [[flying]]>" => "<robin --> [[with_wings]]>";
+                "(&&,<robin --> [[flying]]>,<robin --> [[with_wings]]>)", "<robin --> [bird]>" => None;
+                "(&&,<robin --> [[with_wings]]>,(||,<robin --> [bird]>,<robin --> [[flying]]>))", "robin" => None;
+                "(&&,<robin --> [animal]>,<robin --> [[flying]]>)", "<robin --> [[flying]]>" => "<robin --> [animal]>";
+                "(&&,<robin --> [animal]>,<robin --> [[flying]]>)", "robin" => None;
+                "(&&,<robin --> [animal]>,<robin --> [bird]>)", "robin" => None;
+                "(&&,<robin --> [bird]>,<robin --> (&,bird,swimmer)>)", "<robin --> (&,bird,swimmer)>" => "<robin --> [bird]>";
+                "(&&,<robin --> [bird]>,<robin --> [[flying]]>)", "<robin --> [[with_wings]]>" => None;
+                "(&&,<robin --> [chirping]>,(||,<robin --> bird>,<robin --> flyer>))", "(||,<robin --> bird>,<robin --> flyer>)" => "<robin --> [chirping]>";
+                "(&&,<robin --> [chirping]>,(||,<robin --> bird>,<robin --> flyer>))", "<robin --> [chirping]>" => "(||,<robin --> bird>,<robin --> flyer>)";
+                "(&&,<robin --> [chirping]>,(||,<robin --> bird>,<robin --> flyer>))", "<robin --> flyer>" => None;
+                "(&&,<robin --> [chirping]>,(||,<robin --> bird>,<robin --> flyer>))", "[chirping]" => None;
+                "(&&,<robin --> [chirping]>,(||,<robin --> bird>,<robin --> flyer>))", "robin" => None;
+                "(&&,<robin --> [chirping]>,<robin --> [flying]>)", "[chirping]" => None;
+                "(&&,<robin --> [chirping]>,<robin --> [flying]>,(||,<robin --> bird>,<robin --> flyer>))", "(||,<robin --> bird>,<robin --> flyer>)" => "(&&,<robin --> [chirping]>,<robin --> [flying]>)";
+                "(&&,<robin --> [chirping]>,<robin --> [flying]>,(||,<robin --> bird>,<robin --> flyer>))", "<robin --> [chirping]>" => "(&&,<robin --> [flying]>,(||,<robin --> bird>,<robin --> flyer>))";
+                "(&&,<robin --> [chirping]>,<robin --> [flying]>,(||,<robin --> bird>,<robin --> flyer>))", "<robin --> bird>" => None;
+                "(&&,<robin --> [chirping]>,<robin --> [flying]>,(||,<robin --> bird>,<robin --> flyer>))", "[chirping]" => None;
+                "(&&,<robin --> [chirping]>,<robin --> [flying]>,(||,<robin --> bird>,<robin --> flyer>))", "robin" => None;
+                "(&&,<robin --> [chirping]>,<robin --> [flying]>,<robin --> [living]>)", "<robin --> [flying]>" => "(&&,<robin --> [chirping]>,<robin --> [living]>)";
+                "(&&,<robin --> [chirping]>,<robin --> [flying]>,<robin --> [living]>)", "[chirping]" => None;
+                "(&&,<robin --> [chirping]>,<robin --> [flying]>,<robin --> [living]>)", "robin" => None;
+                "(&&,<robin --> [chirping]>,<robin --> {Birdie}>)", "<robin --> {Birdie}>" => "<robin --> [chirping]>";
+                "(&&,<robin --> [chirping]>,<robin --> {Birdie}>)", "[chirping]" => None;
+                "(&&,<robin --> [chirping]>,<robin --> {Birdie}>)", "robin" => None;
+                "(&&,<robin --> [chirping]>,<robin --> {Birdie}>)", "{Birdie}" => None;
+                "(&&,<robin --> [flyer]>,<robin --> [[flying]]>)", "<robin --> [bird]>" => None;
+                "(&&,<robin --> animal>,<robin --> [flying]>)", "<robin --> animal>" => "<robin --> [flying]>";
+                "(&&,<robin --> animal>,<robin --> [flying]>)", "[flying]" => None;
+                "(&&,<robin --> animal>,<robin --> [flying]>)", "animal" => None;
+                "(&&,<robin --> flyer>,<(*,robin,worms) --> food>)", "flyer" => None;
+                "(&&,<robin <-> [chirping]>,<robin <-> [flying]>)", "<robin <-> [chirping]>" => "<robin <-> [flying]>";
+                "(&&,<robin <-> [chirping]>,<robin <-> [flying]>)", "[chirping]" => None;
+                "(&&,<robin <-> [chirping]>,<robin <-> [flying]>)", "robin" => None;
+                "(&&,<robin <-> [chirping]>,<robin <-> [flying]>,<robin <-> [with_wings]>)", "<robin <-> [with_wings]>" => "(&&,<robin <-> [chirping]>,<robin <-> [flying]>)";
+                "(&&,<robin <-> [chirping]>,<robin <-> [flying]>,<robin <-> [with_wings]>)", "[chirping]" => None;
+                "(&&,<robin <-> [chirping]>,<robin <-> [flying]>,<robin <-> [with_wings]>)", "robin" => None;
+                "(&&,<robin <=> swimmer>,<robin <=> [flying]>)", "<robin <=> [flying]>" => "<robin <=> swimmer>";
+                "(&&,<robin <=> swimmer>,<robin <=> [flying]>)", "<robin <=> swimmer>" => "<robin <=> [flying]>";
+                "(&&,<robin <=> swimmer>,<robin <=> [flying]>)", "[flying]" => None;
+                "(&&,<robin <=> swimmer>,<robin <=> [flying]>)", "robin" => None;
+                "(&&,<robin ==> [flying]>,<robin ==> [with_wings]>)", "<robin ==> [flying]>" => "<robin ==> [with_wings]>";
+                "(&&,<robin ==> [flying]>,<robin ==> [with_wings]>)", "[flying]" => None;
+                "(&&,<robin ==> [flying]>,<robin ==> [with_wings]>)", "robin" => None;
+                "(&&,<robin ==> swimmer>,<robin ==> [flying]>)", "<robin ==> [flying]>" => "<robin ==> swimmer>";
+                "(&&,<robin ==> swimmer>,<robin ==> [flying]>)", "<robin ==> swimmer>" => "<robin ==> [flying]>";
+                "(&&,<robin ==> swimmer>,<robin ==> [flying]>)", "[flying]" => None;
+                "(&&,<robin ==> swimmer>,<robin ==> [flying]>)", "robin" => None;
+                "(&&,<soda --> [(/,reaction,acid,_)]>,<{base} --> [(/,reaction,acid,_)]>)", "<{base} --> [(/,reaction,acid,_)]>" => "<soda --> [(/,reaction,acid,_)]>";
+                "(&&,<sport --> competition>,<(&,chess,(|,chess,sport)) --> competition>)", "<(&,chess,(|,chess,sport)) --> competition>" => "<sport --> competition>";
+                "(&&,<swan --> [bird]>,<swan --> (|,bird,swimmer)>)", "<swan --> [bird]>" => "<swan --> (|,bird,swimmer)>";
+                "(&&,<swimmer --> animal>,<swimmer --> (|,swimmer,(-,animal,swan))>)", "<swimmer --> animal>" => "<swimmer --> (|,swimmer,(-,animal,swan))>";
+                "(&&,<worms --> (/,food,{Tweety},_)>,<{Tweety} --> [chirping]>)", "[chirping]" => None;
+                "(&&,<worms --> (/,food,{Tweety},_)>,<{Tweety} --> [chirping]>)", "{Tweety}" => None;
+                "(&&,<{(*,a,b)} --> [like]>,<{(*,a,b)} --> (*,b,(/,like,_,b))>)", "<{(*,a,b)} --> [like]>" => "<{(*,a,b)} --> (*,b,(/,like,_,b))>";
+                "(&&,<{(*,a,b)} --> like>,<{(*,b,a)} --> like>)", "<{(*,a,b)} --> like>" => "<{(*,b,a)} --> like>";
+                "(&&,<{(|,boy,girl)} --> [youth]>,<{(|,boy,girl)} --> (|,girl,[strong])>)", "<{(|,boy,girl)} --> [youth]>" => "<{(|,boy,girl)} --> (|,girl,[strong])>";
+                "(&&,<{Tweety} --> (&,[with_wings],(|,flyer,{Birdie}))>,<{{Tweety}} --> (&,[with_wings],(|,flyer,{Birdie}))>)", "<{{Tweety}} --> (&,[with_wings],(|,flyer,{Birdie}))>" => "<{Tweety} --> (&,[with_wings],(|,flyer,{Birdie}))>";
+                "(&&,<{Tweety} --> (&,[with_wings],{Birdie})>,<{{Tweety}} --> (&,[with_wings],{Birdie})>)", "<{{Tweety}} --> (&,[with_wings],{Birdie})>" => "<{Tweety} --> (&,[with_wings],{Birdie})>";
+                "(&&,<{Tweety} --> (&,flyer,[[with_wings]])>,<{{Tweety}} --> (&,flyer,[[with_wings]])>)", "<{{Tweety}} --> (&,flyer,[[with_wings]])>" => "<{Tweety} --> (&,flyer,[[with_wings]])>";
+                "(&&,<{Tweety} --> (|,[[with_wings]],(&,flyer,{Birdie}))>,<{{Tweety}} --> (|,[[with_wings]],(&,flyer,{Birdie}))>)", "<{{Tweety}} --> (|,[[with_wings]],(&,flyer,{Birdie}))>" => "<{Tweety} --> (|,[[with_wings]],(&,flyer,{Birdie}))>";
+                "(&&,<{Tweety} --> (|,bird,[yellow])>,<{{Tweety}} --> (|,bird,[yellow])>)", "<{Tweety} --> (|,bird,[yellow])>" => "<{{Tweety}} --> (|,bird,[yellow])>";
+                "(&&,<{Tweety} --> (|,flyer,[[with_wings]])>,<{{Tweety}} --> (|,flyer,[[with_wings]])>)", "<{{Tweety}} --> (|,flyer,[[with_wings]])>" => "<{Tweety} --> (|,flyer,[[with_wings]])>";
+                "(&&,<{Tweety} --> (|,flyer,[with_wings])>,<{{Tweety}} --> (|,flyer,[with_wings])>)", "<{{Tweety}} --> (|,flyer,[with_wings])>" => "<{Tweety} --> (|,flyer,[with_wings])>";
+                "(&&,<{Tweety} --> (|,flyer,{Birdie})>,<{{Tweety}} --> (|,flyer,{Birdie})>)", "<{{Tweety}} --> (|,flyer,{Birdie})>" => "<{Tweety} --> (|,flyer,{Birdie})>";
+                "(&&,<{Tweety} --> [chirping]>,<(*,{Tweety},worms) --> food>)", "[chirping]" => None;
+                "(&&,<{Tweety} --> [chirping]>,<(*,{Tweety},worms) --> food>)", "{Tweety}" => None;
+                "(&&,<{Tweety} --> [flyer]>,<{{Tweety}} --> [flyer]>)", "<{{Tweety}} --> [flyer]>" => "<{Tweety} --> [flyer]>";
+                "(&&,<{Tweety} --> [yellow]>,<{{Tweety}} --> [yellow]>)", "<{Tweety} --> [yellow]>" => "<{{Tweety}} --> [yellow]>";
+                "(&&,<{Tweety} --> [{Birdie}]>,<{Tweety} --> (&,flyer,[[with_wings]])>)", "<{Tweety} --> [{Birdie}]>" => "<{Tweety} --> (&,flyer,[[with_wings]])>";
+                "(&&,<{Tweety} --> bird>,<{Tweety} --> [with_wings]>)", "<{Tweety} --> [with_wings]>" => "<{Tweety} --> bird>";
+                "(&&,<{Tweety} --> bird>,<{Tweety} --> [with_wings]>)", "<{Tweety} --> bird>" => "<{Tweety} --> [with_wings]>";
+                "(&&,<{Tweety} --> bird>,<{Tweety} --> [with_wings]>)", "[with_wings]" => None;
+                "(&&,<{Tweety} --> bird>,<{Tweety} --> [with_wings]>)", "bird" => None;
+                "(&&,<{Tweety} --> bird>,<{Tweety} --> [with_wings]>)", "{Tweety}" => None;
+                "(&&,<{Tweety} --> flyer>,<(*,{Tweety},worms) --> food>)", "<(*,{Tweety},worms) --> food>" => "<{Tweety} --> flyer>";
+                "(&&,<{Tweety} --> flyer>,<(*,{Tweety},worms) --> food>)", "<{Tweety} --> flyer>" => "<(*,{Tweety},worms) --> food>";
+                "(&&,<{Tweety} --> flyer>,<(*,{Tweety},worms) --> food>)", "flyer" => None;
+                "(&&,<{Tweety} --> flyer>,<(*,{Tweety},worms) --> food>)", "{Tweety}" => None;
+                "(&&,<{Tweety} --> flyer>,<{Tweety} --> [{Birdie}]>)", "<{Tweety} --> [{Birdie}]>" => "<{Tweety} --> flyer>";
+                "(&&,<{Tweety} --> flyer>,<{{Tweety}} --> flyer>)", "<{{Tweety}} --> flyer>" => "<{Tweety} --> flyer>";
+                "(&&,<{[smart]} --> [bright]>,<{[smart]} --> [[bright]]>)", "<{[smart]} --> [[bright]]>" => "<{[smart]} --> [bright]>";
+                "(&&,<{bird} --> animal>,<(&,robin,swimmer) --> animal>)", "<{bird} --> animal>" => "<(&,robin,swimmer) --> animal>";
+                "(&&,<{key1} --> (/,open,_,{lock1})>,<{{key1}} --> (/,open,_,{lock1})>)", "<{key1} --> (/,open,_,{lock1})>" => "<{{key1}} --> (/,open,_,{lock1})>";
+                "(&&,<{key1} --> [key]>,<{lock1} --> [(/,open,key1,_)]>)", "<{key1} --> [key]>" => "<{lock1} --> [(/,open,key1,_)]>";
+                "(&&,<{key1} --> [key]>,<{lock1} --> [(/,open,{key1},_)]>)", "<{key1} --> [key]>" => "<{lock1} --> [(/,open,{key1},_)]>";
+                "(&&,<{key1} --> key>,<{key1} --> (/,open,_,{lock1})>)", "<{key1} --> key>" => "<{key1} --> (/,open,_,{lock1})>";
+                "(&&,<{lock1} --> [lock]>,<{lock1} --> [(/,open,{key1},_)]>)", "<{lock1} --> [(/,open,{key1},_)]>" => "<{lock1} --> [lock]>";
+                "(&&,<{lock1} --> lock>,<{lock1} --> (/,open,key,_)>)", "<{lock1} --> (/,open,key,_)>" => "<{lock1} --> lock>";
+                "(&&,<{robin} --> (&,bird,swimmer)>,<{robin} --> (-,bird,swimmer)>)", "<{robin} --> (-,bird,swimmer)>" => "<{robin} --> (&,bird,swimmer)>";
+                "(&&,<{robin} --> [[chirping]]>,<{robin} --> [[flying]]>)", "<{robin} --> [[chirping]]>" => "<{robin} --> [[flying]]>";
+                "(&&,<{robin} --> [[chirping]]>,<{robin} --> [[flying]]>,<{robin} --> [[with_wings]]>)", "<{robin} --> [[chirping]]>" => "(&&,<{robin} --> [[flying]]>,<{robin} --> [[with_wings]]>)";
+                "(&&,<{robin} --> [[flying]]>,<{robin} --> [[with_wings]]>)", "<{robin} --> [bird]>" => None;
+                "(&&,<{robin} --> [animal]>,<{robin} --> [[flying]]>)", "<{robin} --> [[flying]]>" => "<{robin} --> [animal]>";
+                "(&&,<{robin} --> [animal]>,<{robin} --> [[flying]]>)", "<{robin} --> [animal]>" => "<{robin} --> [[flying]]>";
+                "(&&,<{robin} --> [chirping]>,<{robin} --> [flying]>)", "[chirping]" => None;
+                "(&&,<{robin} --> [chirping]>,<{robin} --> [flying]>,<{robin} --> [with_wings]>)", "[chirping]" => None;
+                "(&&,<{robin} --> [flying]>,<{robin} --> [with_wings]>)", "<{robin} --> [flying]>" => "<{robin} --> [with_wings]>";
+                "(&&,<{robin} --> bird>,<{robin} --> [flying]>)", "<{robin} --> [with_wings]>" => None;
+                "(&&,<{swan} --> [bird]>,<{swan} --> (&,bird,swimmer)>)", "<{swan} --> (&,bird,swimmer)>" => "<{swan} --> [bird]>";
+                "(&&,<{swan} --> [bird]>,<{swan} --> (|,bird,swimmer)>)", "<{swan} --> (|,bird,swimmer)>" => "<{swan} --> [bird]>";
+                "(&&,<{tim} --> [(/,uncle,_,tom)]>,<(/,(*,tim,tom),_,tom) --> [(/,uncle,_,tom)]>)", "<{tim} --> [(/,uncle,_,tom)]>" => "<(/,(*,tim,tom),_,tom) --> [(/,uncle,_,tom)]>";
+                "(&&,<{{key1}} --> key>,<{{key1}} --> [(/,open,_,{lock1})]>)", "<{{key1}} --> [(/,open,_,{lock1})]>" => "<{{key1}} --> key>";
+                "(&&,robin,(--,<robin ==> [flying]>))", "(--,<robin ==> [flying]>)" => "robin";
+                "(&&,robin,(--,<robin ==> [flying]>))", "<robin ==> [flying]>" => None;
+                "(&&,robin,(--,<robin ==> [flying]>))", "robin" => "(--,<robin ==> [flying]>)";
+                "(&&,robin,(--,<robin ==> bird>))", "(--,<robin ==> bird>)" => "robin";
+                "(&&,robin,(--,<robin ==> bird>))", "<robin ==> bird>" => None;
+                "(&&,robin,(--,<robin ==> bird>))", "robin" => "(--,<robin ==> bird>)";
+                "(&&,robin,<robin ==> [chirping]>)", "<robin ==> [chirping]>" => "robin";
+                "(&&,robin,<robin ==> [chirping]>)", "robin" => "<robin ==> [chirping]>";
+                "(&&,robin,<robin ==> [chirping]>,<robin ==> [flying]>)", "(&&,robin,<robin ==> [chirping]>)" => "<robin ==> [flying]>";
+                "(&&,robin,<robin ==> [chirping]>,<robin ==> [flying]>)", "[flying]" => None;
+                "(&&,robin,<robin ==> [chirping]>,<robin ==> [flying]>)", "robin" => "(&&,<robin ==> [chirping]>,<robin ==> [flying]>)";
+                "(&&,robin,<robin ==> [chirping]>,<robin ==> [flying]>,<robin ==> [with_wings]>)", "[flying]" => None;
+                "(&&,robin,<robin ==> [chirping]>,<robin ==> [flying]>,<robin ==> [with_wings]>)", "robin" => "(&&,<robin ==> [chirping]>,<robin ==> [flying]>,<robin ==> [with_wings]>)";
+                "(&&,robin,<robin ==> [chirping]>,<robin ==> [with_wings]>)", "<robin ==> [chirping]>" => "(&&,robin,<robin ==> [with_wings]>)";
+                "(&&,robin,<robin ==> [flying]>)", "[flying]" => None;
+                "(&&,robin,<robin ==> bird>)", "<robin ==> bird>" => "robin";
+                "(&&,robin,<robin ==> bird>)", "bird" => None;
+                "(&&,robin,<robin ==> bird>)", "robin" => "<robin ==> bird>";
+                "(&&,robin,<robin ==> bird>,<robin ==> [flying]>)", "(&&,robin,(--,<robin ==> bird>))" => "(&&,<robin ==> bird>,<robin ==> [flying]>)";
+                "(&&,robin,<robin ==> bird>,<robin ==> [flying]>)", "<robin ==> [flying]>" => "(&&,robin,<robin ==> bird>)";
+                "(&&,robin,<robin ==> bird>,<robin ==> [flying]>)", "<robin ==> bird>" => "(&&,robin,<robin ==> [flying]>)";
+                "(&&,robin,<robin ==> bird>,<robin ==> [flying]>)", "[flying]" => None;
+                "(&&,robin,<robin ==> bird>,<robin ==> [flying]>)", "bird" => None;
+                "(&&,robin,<robin ==> bird>,<robin ==> [flying]>)", "robin" => "(&&,<robin ==> bird>,<robin ==> [flying]>)";
+                "(&,(*,0),(*,(*,0)))", "(*,0)" => "(*,(*,0))";
+                "(&,(/,neutralization,_,base),(/,neutralization,_,soda),(/,reaction,_,(/,reaction,acid,_)))", "(/,reaction,_,(/,reaction,acid,_))" => "(&,(/,neutralization,_,base),(/,neutralization,_,soda))";
+                "(&,(|,bird,robin),(|,robin,swimmer))", "(|,robin,swimmer)" => "(|,bird,robin)";
+                "(&,CAT,(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish))", "CAT" => "(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish)";
+                "(&,animal,swimmer)", "animal" => "swimmer";
+                "(&,bird,[yellow])", "bird" => "[yellow]";
+                "(&,bird,{Birdie})", "bird" => "{Birdie}";
+                "(&,chess,(|,chess,sport))", "chess" => "(|,chess,sport)";
+                "(&,flyer,[[with_wings]])", "flyer" => "[[with_wings]]";
+                "(&,gull,robin,swan)", "robin" => "(&,gull,swan)";
+                "(&,key,(/,open,_,{lock1}))", "key" => "(/,open,_,{lock1})";
+                "(&,tim,(|,{tim},(/,(*,tim,tom),_,tom)))", "tim" => "(|,{tim},(/,(*,tim,tom),_,tom))";
+                "(*,(/,num,_))", "(/,num,_)" => None;
+                "(*,0)", "0" => None;
+                "(*,a,b)", "(*,b,a)" => None;
+                "(-,bird,(-,mammal,swimmer))", "bird" => "(-,mammal,swimmer)";
+                "(-,bird,swimmer)", "bird" => "swimmer";
+                "(-,{Mars,Pluto,Venus},[{Pluto,Saturn}])", "[{Pluto,Saturn}]" => "{Mars,Pluto,Venus}";
+                "(|,(-,{Mars,Pluto,Venus},[{Pluto,Saturn}]),{Pluto,Saturn})", "(-,{Mars,Pluto,Venus},[{Pluto,Saturn}])" => "{Pluto,Saturn}";
+                "(|,[{Pluto,Saturn}],{Mars,Pluto,Venus})", "[{Pluto,Saturn}]" => "{Mars,Pluto,Venus}";
+                "(|,[{Pluto,Saturn}],{Mars,Venus})", "[{Pluto,Saturn}]" => "{Mars,Venus}";
+                "(|,animal,swimmer,(-,animal,swan))", "swimmer" => "(|,animal,(-,animal,swan))";
+                "(|,bird,(-,mammal,swimmer))", "bird" => "(-,mammal,swimmer)";
+                "(|,bird,[yellow])", "bird" => "[yellow]";
+                "(|,bird,robin)", "bird" => "robin";
+                "(|,boy,girl,youth,[strong])", "youth" => "(|,boy,girl,[strong])";
+                "(|,key,(/,open,_,lock))", "key" => "(/,open,_,lock)";
+                "(|,key,(/,open,_,{lock1}))", "key" => "(/,open,_,{lock1})";
+                "(|,like,{(*,a,b)})", "like" => "{(*,a,b)}";
+                "(|,lock,[(/,open,key1,_)])", "lock" => "[(/,open,key1,_)]";
+                "(|,tim,{tim},(/,(*,tim,tom),_,tom))", "tim" => "(|,{tim},(/,(*,tim,tom),_,tom))";
+                "(||,(&&,<robin --> [bird]>,<robin --> [[flying]]>),<robin --> [[with_wings]]>)", "(&&,<robin --> [bird]>,<robin --> [[flying]]>)" => "<robin --> [[with_wings]]>";
+                "(||,(&&,<robin --> [bird]>,<robin --> [[flying]]>),<robin --> [[with_wings]]>)", "<robin --> [[flying]]>" => None;
+                "(||,(&&,<robin --> [bird]>,<robin --> [[flying]]>),<robin --> [[with_wings]]>)", "robin" => None;
+                "(||,(&&,<{robin} --> [[flying]]>,<{robin} --> [[with_wings]]>),<{robin} --> [bird]>)", "(&&,<{robin} --> [[flying]]>,<{robin} --> [[with_wings]]>)" => "<{robin} --> [bird]>";
+                "(||,(&&,<{robin} --> [[flying]]>,<{robin} --> [[with_wings]]>),<{robin} --> [bird]>)", "<{robin} --> [[with_wings]]>" => None;
+                "(||,(&&,<{robin} --> [[flying]]>,<{robin} --> [[with_wings]]>),<{robin} --> [bird]>)", "<{robin} --> [bird]>" => "(&&,<{robin} --> [[flying]]>,<{robin} --> [[with_wings]]>)";
+                "(||,(&&,<{robin} --> bird>,<{robin} --> [flying]>),<{robin} --> [with_wings]>)", "<{robin} --> [flying]>" => None;
+                "(||,(&&,<{robin} --> bird>,<{robin} --> [flying]>),<{robin} --> [with_wings]>)", "[with_wings]" => None;
+                "(||,<robin --> [[flying]]>,<robin --> [[with_wings]]>)", "<robin --> [[flying]]>" => "<robin --> [[with_wings]]>";
+                "(||,<robin --> [[flying]]>,<robin --> [[with_wings]]>)", "robin" => None;
+                "(||,<robin --> [animal]>,<robin --> [bird]>)", "<robin --> [animal]>" => "<robin --> [bird]>";
+                "(||,<robin --> [animal]>,<robin --> [bird]>)", "robin" => None;
+                "(||,<robin --> [bird]>,<robin --> [[flying]]>)", "<robin --> [[flying]]>" => "<robin --> [bird]>";
+                "(||,<robin --> [bird]>,<robin --> [[flying]]>)", "<robin --> [bird]>" => "<robin --> [[flying]]>";
+                "(||,<robin --> [bird]>,<robin --> [[flying]]>)", "robin" => None;
+                "(||,<robin --> bird>,<robin --> [living]>)", "<robin --> [living]>" => "<robin --> bird>";
+                "(||,<robin --> bird>,<robin --> [living]>)", "<robin --> bird>" => "<robin --> [living]>";
+                "(||,<robin --> bird>,<robin --> [living]>)", "[living]" => None;
+                "(||,<robin --> bird>,<robin --> [living]>)", "bird" => None;
+                "(||,<robin --> bird>,<robin --> flyer>)", "<robin --> flyer>" => "<robin --> bird>";
+                "(||,<robin --> bird>,<robin --> flyer>)", "bird" => None;
+                "(||,<robin <-> swimmer>,<robin <-> [flying]>)", "<robin <-> [flying]>" => "<robin <-> swimmer>";
+                "(||,<robin <-> swimmer>,<robin <-> [flying]>)", "<robin <-> swimmer>" => "<robin <-> [flying]>";
+                "(||,<robin <-> swimmer>,<robin <-> [flying]>)", "[flying]" => None;
+                "(||,<robin <-> swimmer>,<robin <-> [flying]>)", "robin" => None;
+                "(||,<robin <=> swimmer>,<robin <=> [flying]>)", "<robin <=> [flying]>" => "<robin <=> swimmer>";
+                "(||,<robin <=> swimmer>,<robin <=> [flying]>)", "<robin <=> swimmer>" => "<robin <=> [flying]>";
+                "(||,<robin <=> swimmer>,<robin <=> [flying]>)", "[flying]" => None;
+                "(||,<robin <=> swimmer>,<robin <=> [flying]>)", "robin" => None;
+                "(||,<robin ==> swimmer>,<robin ==> [flying]>)", "<robin ==> [flying]>" => "<robin ==> swimmer>";
+                "(||,<robin ==> swimmer>,<robin ==> [flying]>)", "<robin ==> swimmer>" => "<robin ==> [flying]>";
+                "(||,<robin ==> swimmer>,<robin ==> [flying]>)", "[flying]" => None;
+                "(||,<robin ==> swimmer>,<robin ==> [flying]>)", "robin" => None;
+                "(||,<{Tweety} --> [with_wings]>,<{Tweety} --> [[with_wings]]>)", "<{Tweety} --> [[with_wings]]>" => "<{Tweety} --> [with_wings]>";
+                "(||,<{Tweety} --> [with_wings]>,<{Tweety} --> [[with_wings]]>)", "<{Tweety} --> [with_wings]>" => "<{Tweety} --> [[with_wings]]>";
+                "(||,<{Tweety} --> [with_wings]>,<{Tweety} --> [[with_wings]]>)", "[with_wings]" => None;
+                "(||,<{Tweety} --> [with_wings]>,<{Tweety} --> [[with_wings]]>)", "{Tweety}" => None;
+                "(||,<{Tweety} --> bird>,<{Tweety} --> [with_wings]>)", "<{Tweety} --> [with_wings]>" => "<{Tweety} --> bird>";
+                "(||,<{Tweety} --> bird>,<{Tweety} --> [with_wings]>)", "<{Tweety} --> bird>" => "<{Tweety} --> [with_wings]>";
+                "(||,<{Tweety} --> bird>,<{Tweety} --> [with_wings]>)", "[with_wings]" => None;
+                "(||,<{Tweety} --> bird>,<{Tweety} --> [with_wings]>)", "bird" => None;
+                "(||,<{Tweety} --> bird>,<{Tweety} --> [with_wings]>)", "{Tweety}" => None;
+                "(||,<{lock1} --> [(/,open,{key1},_)]>,<{{lock1}} --> [(/,open,key1,_)]>)", "<{lock1} --> [(/,open,{key1},_)]>" => "<{{lock1}} --> [(/,open,key1,_)]>";
+                "(||,<{lock1} --> [(/,open,{key1},_)]>,<{{lock1}} --> [(/,open,key1,_)]>)", "<{{lock1}} --> [(/,open,key1,_)]>" => "<{lock1} --> [(/,open,{key1},_)]>";
+                "(~,boy,girl)", "boy" => "girl";
+                "[(*,acid,base)]", "(*,acid,base)" => None;
+                "[(/,reaction,_,base)]", "(/,reaction,_,base)" => None;
+                "[acid]", "acid" => None;
+                "[{Mars,Pluto,Venus}]", "{Mars,Pluto,Venus}" => None;
+                "[{Pluto,Saturn}]", "{Pluto,Saturn}" => None;
+                "{(*,a,b)}", "(*,a,b)" => None;
+                "{(/,num,_)}", "(/,num,_)" => None;
+                "{(|,boy,girl)}", "(|,boy,girl)" => None;
+                "{(~,boy,girl)}", "(~,boy,girl)" => None;
+                "{0}", "0" => None;
+                "{Mars,Pluto,Saturn,Venus}", "{Mars,Pluto,Venus}" => None;
+                "{Mars,Pluto,Saturn,Venus}", "{Pluto,Saturn}" => "{Mars,Venus}";
+                "{Mars,Pluto,Venus}", "{Mars,Venus}" => None;
+                "{[bright]}", "[bright]" => None;
             }
             ok!()
         }
 
         #[test]
         fn set_component() -> AResult {
-            // TODO: 等待「制作词项」所有方法均完成
+            /// ! 📝【2024-06-18 23:56:37】教训：不要在宏展开里头写过程式代码
+            /// * * ℹ️宏展开里头的代码，每个都是实实在在要「一个个铺开」被编译器看到的
+            /// * * ⚠️若直接在里头写过程式代码，即便代码只有十多行，但若有成百上千个测试用例，则代码行数会成倍增长
+            /// * * 💥过多的代码行数，编译器就会爆炸
+            fn test(compound: Term, index: usize, term: Option<Term>, expected: Option<Term>) {
+                let compound_ref = compound.as_compound().expect("构造出来的不是复合词项");
+                let compound_s = compound.to_string();
+                let term_s = format_option_term(&term);
+                let out = CompoundTermRef::set_component(compound_ref, index, term);
+                assert_eq!(
+                    out,
+                    expected,
+                    "{compound_s:?}, {index:?}, {term_s:?} => {} != {}",
+                    format_option_term(&out),
+                    format_option_term(&expected),
+                );
+            }
+            macro_once! {
+                // * 🚩模式：参数列表 ⇒ 预期词项
+                macro test($($compound:tt, $index:tt, $term:tt => $expected:tt;)*) {
+                    $( test(term!($compound), $index, option_term!($term), option_term!($expected)); )*
+                }
+                // * ℹ️用例均源自OpenNARS实例运行
+                // ! ⚠️【2024-06-19 01:35:33】若在「可交换词项」中使用，则可能因为「呈现顺序与实际顺序不同」导致用例错误
+                // * 📝OpenNARS基本只会在「合取」中使用——这导致版本间因「排序方式不同」而在测试用例上有偏差"(*, <robin --> [chirping]>, <robin --> [flying]>)", 0, "<robin --> bird>" => "(*, <robin --> bird>, <robin --> [flying]>)"
+                "(*, <robin --> [chirping]>, <robin --> [flying]>, (||, <robin --> bird>, <robin --> flyer>))", 0, None => "(*, <robin --> [flying]>, (||, <robin --> bird>, <robin --> flyer>))";
+                "(*, <robin --> [chirping]>, <robin --> [flying]>, <robin --> [living]>)", 0, None => "(*, <robin --> [flying]>, <robin --> [living]>)";
+                "(*, <robin --> [chirping]>, <robin --> [flying]>, <robin --> [living]>)", 2, None => "(*, <robin --> [chirping]>, <robin --> [flying]>)";
+                "(*, <robin --> [chirping]>, <robin --> [flying]>, <robin --> [with_wings]>)", 0, "<robin --> bird>" => "(*, <robin --> bird>, <robin --> [flying]>, <robin --> [with_wings]>)";
+                "(*, <robin --> [chirping]>, <robin --> [flying]>, <robin --> [with_wings]>)", 0, None => "(*, <robin --> [flying]>, <robin --> [with_wings]>)";
+                "(*, <robin --> [chirping]>, <robin --> [flying]>, <robin --> [with_wings]>)", 1, None => "(*, <robin --> [chirping]>, <robin --> [with_wings]>)";
+                "(*, <robin --> [chirping]>, <robin --> [flying]>, <robin --> [with_wings]>)", 2, "(||, <robin --> bird>, <robin --> flyer>)" => "(*, <robin --> [chirping]>, <robin --> [flying]>, (||, <robin --> bird>, <robin --> flyer>))";
+                "(*, <robin --> [chirping]>, <robin --> [flying]>, <robin --> [with_wings]>)", 2, "<robin --> [living]>" => "(*, <robin --> [chirping]>, <robin --> [flying]>, <robin --> [living]>)";
+                "(*, <robin --> [chirping]>, <robin --> [flying]>, <robin --> [with_wings]>)", 2, "<robin --> bird>" => "(*, <robin --> [chirping]>, <robin --> [flying]>, <robin --> bird>)";
+                "(*, <robin --> [chirping]>, <robin --> [flying]>, <robin --> [with_wings]>)", 2, None => "(*, <robin --> [chirping]>, <robin --> [flying]>)";
+                "(*, <robin --> [chirping]>, <robin --> [with_wings]>)", 0, "<robin --> bird>" => "(*, <robin --> bird>, <robin --> [with_wings]>)";
+                "(*, <robin --> [chirping]>, <robin --> [with_wings]>)", 1, "(||, <robin --> bird>, <robin --> flyer>)" => "(*, <robin --> [chirping]>, (||, <robin --> bird>, <robin --> flyer>))";
+                "(*, <robin --> [chirping]>, <robin --> [with_wings]>)", 1, "<robin --> [living]>" => "(*, <robin --> [chirping]>, <robin --> [living]>)";
+                "(*, <robin --> [chirping]>, <robin --> [with_wings]>)", 1, "<robin --> bird>" => "(*, <robin --> [chirping]>, <robin --> bird>)";
+                "(*, <robin --> [chirping]>, <robin --> [with_wings]>)", 1, "<robin --> flyer>" => "(*, <robin --> [chirping]>, <robin --> flyer>)";
+                "(*, <robin --> [chirping]>, <robin --> [with_wings]>, <(*, robin, worms) --> food>)", 0, "<robin --> bird>" => "(*, <robin --> bird>, <robin --> [with_wings]>, <(*, robin, worms) --> food>)";
+                "(*, <robin --> [chirping]>, <robin --> [with_wings]>, <(*, robin, worms) --> food>)", 0, None => "(*, <robin --> [with_wings]>, <(*, robin, worms) --> food>)";
+                "(*, <robin --> [chirping]>, <robin --> [with_wings]>, <worms --> (/, food, robin, _)>)", 0, None => "(*, <robin --> [with_wings]>, <worms --> (/, food, robin, _)>)";
+                "(*, <robin --> [flying]>, <robin --> [with_wings]>)", 1, "(||, <robin --> bird>, <robin --> flyer>)" => "(*, <robin --> [flying]>, (||, <robin --> bird>, <robin --> flyer>))";
+                "(*, <robin --> [flying]>, <robin --> [with_wings]>)", 1, "<robin --> bird>" => "(*, <robin --> [flying]>, <robin --> bird>)";
+                "(*, <robin --> flyer>, <(*, robin, worms) --> food>)", 0, "<robin --> bird>" => "(*, <robin --> bird>, <(*, robin, worms) --> food>)";
+                "(*, <robin --> flyer>, <robin --> [chirping]>, <(*, robin, worms) --> food>)", 1, "<robin --> bird>" => "(*, <robin --> flyer>, <robin --> bird>, <(*, robin, worms) --> food>)";
+                "(*, <robin --> flyer>, <robin --> [chirping]>, <(*, robin, worms) --> food>)", 1, None => "(*, <robin --> flyer>, <(*, robin, worms) --> food>)";
+                "(*, <robin --> flyer>, <robin --> [chirping]>, <worms --> (/, food, robin, _)>)", 0, None => "(*, <robin --> [chirping]>, <worms --> (/, food, robin, _)>)";
+                "(*, <robin --> flyer>, <robin --> [chirping]>, <worms --> (/, food, robin, _)>)", 1, "<robin --> bird>" => "(*, <robin --> flyer>, <robin --> bird>, <worms --> (/, food, robin, _)>)";
+                "(*, <robin <-> [chirping]>, <robin <-> [flying]>)", 0, "<bird <-> robin>" => "(*, <bird <-> robin>, <robin <-> [flying]>)";
+                "(*, <robin <-> [chirping]>, <robin <-> [flying]>, <robin <-> [with_wings]>)", 0, "<bird <-> robin>" => "(*, <bird <-> robin>, <robin <-> [flying]>, <robin <-> [with_wings]>)";
+                "(*, <robin <-> [chirping]>, <robin <-> [flying]>, <robin <-> [with_wings]>)", 0, None => "(*, <robin <-> [flying]>, <robin <-> [with_wings]>)";
+                "(*, <robin <-> [chirping]>, <robin <-> [flying]>, <robin <-> [with_wings]>)", 1, None => "(*, <robin <-> [chirping]>, <robin <-> [with_wings]>)";
+                "(*, <robin <-> [chirping]>, <robin <-> [flying]>, <robin <-> [with_wings]>)", 2, None => "(*, <robin <-> [chirping]>, <robin <-> [flying]>)";
+                "(*, <robin <-> [chirping]>, <robin <-> [with_wings]>)", 1, "<bird <-> robin>" => "(*, <robin <-> [chirping]>, <bird <-> robin>)";
+                "(*, <robin <-> [flying]>, <robin <-> [with_wings]>)", 1, "<bird <-> robin>" => "(*, <robin <-> [flying]>, <bird <-> robin>)";
+                "(*, <worms --> (/, food, {Tweety}, _)>, <{Tweety} --> flyer>, <{Tweety} --> [chirping]>)", 1, None => "(*, <worms --> (/, food, {Tweety}, _)>, <{Tweety} --> [chirping]>)";
+                "(*, <{Tweety} --> flyer>, <{Tweety} --> [chirping]>, <(*, {Tweety}, worms) --> food>)", 0, None => "(*, <{Tweety} --> [chirping]>, <(*, {Tweety}, worms) --> food>)";
+                "(*, <{Tweety} --> flyer>, <{Tweety} --> [chirping]>, <(*, {Tweety}, worms) --> food>)", 1, None => "(*, <{Tweety} --> flyer>, <(*, {Tweety}, worms) --> food>)";
+                "(*, <{Tweety} --> flyer>, <{Tweety} --> [chirping]>, <(*, {Tweety}, worms) --> food>)", 2, None => "(*, <{Tweety} --> flyer>, <{Tweety} --> [chirping]>)";
+                "(*, <{robin} --> [chirping]>, <{robin} --> [flying]>, <{robin} --> [with_wings]>)", 0, None => "(*, <{robin} --> [flying]>, <{robin} --> [with_wings]>)";
+                "(*, <{robin} --> [chirping]>, <{robin} --> [flying]>, <{robin} --> [with_wings]>)", 1, None => "(*, <{robin} --> [chirping]>, <{robin} --> [with_wings]>)";
+                "(*, <{robin} --> [chirping]>, <{robin} --> [flying]>, <{robin} --> [with_wings]>)", 2, None => "(*, <{robin} --> [chirping]>, <{robin} --> [flying]>)";
+                "(*, <{robin} --> [flying]>, <{robin} --> [with_wings]>)", 1, "<{robin} --> bird>" => "(*, <{robin} --> [flying]>, <{robin} --> bird>)";
+                "(*, robin, <robin ==> [chirping]>, <robin ==> [flying]>)", 0, None => "(*, <robin ==> [chirping]>, <robin ==> [flying]>)";
+                "(*, robin, <robin ==> [chirping]>, <robin ==> [flying]>)", 1, None => "(*, robin, <robin ==> [flying]>)";
+                "(*, robin, <robin ==> [chirping]>, <robin ==> [flying]>)", 2, None => "(*, robin, <robin ==> [chirping]>)";
+                "(*, robin, <robin ==> [chirping]>, <robin ==> [flying]>, <robin ==> [with_wings]>)", 0, None => "(*, <robin ==> [chirping]>, <robin ==> [flying]>, <robin ==> [with_wings]>)";
+                "(*, robin, <robin ==> [chirping]>, <robin ==> [flying]>, <robin ==> [with_wings]>)", 1, None => "(*, robin, <robin ==> [flying]>, <robin ==> [with_wings]>)";
+                "(*, robin, <robin ==> [chirping]>, <robin ==> [flying]>, <robin ==> [with_wings]>)", 2, None => "(*, robin, <robin ==> [chirping]>, <robin ==> [with_wings]>)";
+                "(*, robin, <robin ==> [chirping]>, <robin ==> [flying]>, <robin ==> [with_wings]>)", 3, None => "(*, robin, <robin ==> [chirping]>, <robin ==> [flying]>)";
+                "(*, robin, <robin ==> [chirping]>, <robin ==> [with_wings]>)", 0, None => "(*, <robin ==> [chirping]>, <robin ==> [with_wings]>)";
+                "(*, robin, <robin ==> [chirping]>, <robin ==> [with_wings]>)", 1, None => "(*, robin, <robin ==> [with_wings]>)";
+                "(*, robin, <robin ==> [chirping]>, <robin ==> [with_wings]>)", 2, None => "(*, robin, <robin ==> [chirping]>)";
+                "(*, robin, <robin ==> [flying]>, <robin ==> [with_wings]>)", 0, None => "(*, <robin ==> [flying]>, <robin ==> [with_wings]>)";
+                "(*, robin, <robin ==> [flying]>, <robin ==> [with_wings]>)", 1, None => "(*, robin, <robin ==> [with_wings]>)";
+                "(*, robin, <robin ==> [flying]>, <robin ==> [with_wings]>)", 2, None => "(*, robin, <robin ==> [flying]>)";
+                "(*, robin, <robin ==> bird>, <robin ==> [flying]>)", 0, None => "(*, <robin ==> bird>, <robin ==> [flying]>)";
+                "(*, robin, <robin ==> bird>, <robin ==> [flying]>)", 1, None => "(*, robin, <robin ==> [flying]>)";
+                "(*, robin, <robin ==> bird>, <robin ==> [flying]>)", 2, None => "(*, robin, <robin ==> bird>)";
+                "(*, robin, <robin ==> bird>, <robin ==> [living]>)", 0, None => "(*, <robin ==> bird>, <robin ==> [living]>)";
+                "(*, robin, <robin ==> bird>, <robin ==> [living]>)", 1, None => "(*, robin, <robin ==> [living]>)";
+                "(*, robin, <robin ==> bird>, <robin ==> [living]>)", 2, None => "(*, robin, <robin ==> bird>)";
+                "(*, robin, <robin ==> swimmer>, <robin ==> [flying]>)", 0, None => "(*, <robin ==> swimmer>, <robin ==> [flying]>)";
+                "(*, robin, <robin ==> swimmer>, <robin ==> [flying]>)", 1, None => "(*, robin, <robin ==> [flying]>)";
+                "(*, robin, <robin ==> swimmer>, <robin ==> [flying]>)", 2, None => "(*, robin, <robin ==> swimmer>)";
+            }
             ok!()
         }
     }
@@ -2455,733 +2505,509 @@ mod tests {
 
         #[test]
         fn make_statement_relation() -> AResult {
+            fn test(relation: &str, subject: Term, predicate: Term, expected: Option<Term>) {
+                let out =
+                    Term::make_statement_relation(relation, subject.clone(), predicate.clone());
+                assert_eq!(
+                    out,
+                    expected,
+                    "\"{relation}\", \"{subject}\", \"{predicate}\" => {} != {}",
+                    format_option_term(&out),
+                    format_option_term(&expected),
+                );
+            }
             macro_once! {
                 // * 🚩模式：参数列表 ⇒ 预期词项
                 macro test($($relation:tt, $subject:tt, $predicate:tt => $expected:tt;)*) {
-                    $(
-                        let relation = $relation; // 字符
-                        let subject = term!($subject);
-                        let predicate = term!($predicate);
-                        let out = Term::make_statement_relation(relation, subject.clone(), predicate.clone());
-                        let expected = option_term!($expected);
-                        assert_eq!(
-                            out, expected,
-                            "\"{relation}\", \"{subject}\", \"{predicate}\" => {} != {}",
-                            format_option_term(&out),
-                            format_option_term(&expected),
-                        );
-                    )*
+                    $( test($relation, term!($subject), term!($predicate), option_term!($expected)); )*
                 }
                 // * ℹ️用例均源自OpenNARS实际运行
-                "==>", "(&&,<robin --> bird>,<robin --> [flying]>)", "<robin --> [living]>" => "<(&&,<robin --> bird>,<robin --> [flying]>) ==> <robin --> [living]>>";
-                "<->", "{Birdie}", "{Tweety}" => "<{Birdie} <-> {Tweety}>";
-                "<->", "bird", "swan" => "<bird <-> swan>";
-                "==>", "<robin --> [flying]>", "<robin --> animal>" => "<<robin --> [flying]> ==> <robin --> animal>>";
-                "-->", "(-,swimmer,animal)", "(-,swimmer,bird)" => "<(-,swimmer,animal) --> (-,swimmer,bird)>";
-                "==>", "(&&,<robin --> [flying]>,<robin --> [with_wings]>)", "<robin --> [living]>" => "<(&&,<robin --> [flying]>,<robin --> [with_wings]>) ==> <robin --> [living]>>";
-                "-->", "?120", "claimedByBob" => "<?120 --> claimedByBob>";
-                "<->", "[bright]", "[smart]" => "<[bright] <-> [smart]>";
-                "-->", "{Tweety}", "bird" => "<{Tweety} --> bird>";
-                "-->", "(*,CAT,FISH)", "FOOD" => "<(*,CAT,FISH) --> FOOD>";
-                "-->", "?120", "swimmer" => "<?120 --> swimmer>";
-                "-->", "neutralization", "(*,acid,base)" => "<neutralization --> (*,acid,base)>";
-                "-->", "(*,(*,(*,0)))", "num" => "<(*,(*,(*,0))) --> num>";
-                "-->", "{key1}", "(/,open,_,{lock1})" => "<{key1} --> (/,open,_,{lock1})>";
-                "-->", "(*,bird,plant)", "?120" => "<(*,bird,plant) --> ?120>";
-                "-->", "robin", "animal" => "<robin --> animal>";
-                "-->", "gull", "swimmer" => "<gull --> swimmer>";
-                "-->", "bird", "swan" => "<bird --> swan>";
-                "==>", "(&&,<robin --> [flying]>,<robin --> [with_wings]>)", "<robin --> bird>" => "<(&&,<robin --> [flying]>,<robin --> [with_wings]>) ==> <robin --> bird>>";
-                "-->", "swan", "(-,swimmer,bird)" => "<swan --> (-,swimmer,bird)>";
-                "-->", "planetX", "{Mars,Pluto,Venus}" => "<planetX --> {Mars,Pluto,Venus}>";
-                "-->", "(/,neutralization,_,base)", "?120" => "<(/,neutralization,_,base) --> ?120>";
-                "==>", "(&&,<robin --> [chirping]>,<robin --> [flying]>)", "<robin --> bird>" => "<(&&,<robin --> [chirping]>,<robin --> [flying]>) ==> <robin --> bird>>";
-                "==>", "<robin --> [flying]>", "<robin --> bird>" => "<<robin --> [flying]> ==> <robin --> bird>>";
-                "-->", "(~,swimmer,swan)", "bird" => "<(~,swimmer,swan) --> bird>";
-                "<=>", "<robin --> bird>", "<robin --> [flying]>" => "<<robin --> bird> <=> <robin --> [flying]>>";
-                "-->", "robin", "[living]" => "<robin --> [living]>";
-                "-->", "bird", "animal" => "<bird --> animal>";
-                "==>", "<robin --> bird>", "(&&,<robin --> animal>,<robin --> [flying]>)" => "<<robin --> bird> ==> (&&,<robin --> animal>,<robin --> [flying]>)>";
-                "==>", "(&&,<robin --> swimmer>,<robin --> [flying]>)", "<robin --> bird>" => "<(&&,<robin --> swimmer>,<robin --> [flying]>) ==> <robin --> bird>>";
-                "-->", "0", "(/,num,_)" => "<0 --> (/,num,_)>";
-                "-->", "(&,swan,swimmer)", "bird" => "<(&,swan,swimmer) --> bird>";
-                "-->", "{key1}", "key" => "<{key1} --> key>";
-                "==>", "(--,<robin --> bird>)", "<robin --> [flying]>" => "<(--,<robin --> bird>) ==> <robin --> [flying]>>";
-                "==>", "(&&,<robin --> bird>,<robin --> [living]>)", "<robin --> animal>" => "<(&&,<robin --> bird>,<robin --> [living]>) ==> <robin --> animal>>";
-                "-->", "swan", "(|,bird,swimmer)" => "<swan --> (|,bird,swimmer)>";
-                "-->", "[smart]", "[bright]" => "<[smart] --> [bright]>";
-                "-->", "robin", "(-,mammal,swimmer)" => "<robin --> (-,mammal,swimmer)>";
-                "--]", "raven", "black" => "<raven --> [black]>";
                 "-->", "(&,<bird --> fly>,<{Tweety} --> bird>)", "claimedByBob" => "<(&,<bird --> fly>,<{Tweety} --> bird>) --> claimedByBob>";
-                "-->", "(*,b,a)", "like" => "<(*,b,a) --> like>";
-                "-->", "{Tweety}", "flyer" => "<{Tweety} --> flyer>";
-                "<->", "gull", "swan" => "<gull <-> swan>";
                 "-->", "(&,bird,swimmer)", "(&,animal,swimmer)" => "<(&,bird,swimmer) --> (&,animal,swimmer)>";
-                "-->", "acid", "(/,reaction,_,base)" => "<acid --> (/,reaction,_,base)>";
-                "==>", "<robin --> bird>", "<robin --> animal>" => "<<robin --> bird> ==> <robin --> animal>>";
-                "-->", "base", "(/,reaction,acid,_)" => "<base --> (/,reaction,acid,_)>";
-                "-->", "swimmer", "bird" => "<swimmer --> bird>";
-                "-->", "cat", "(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish)" => "<cat --> (/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish)>";
-                "<=>", "<robin --> animal>", "<robin --> bird>" => "<<robin --> animal> <=> <robin --> bird>>";
-                "==>", "<robin --> [flying]>", "<robin --> [with_beak]>" => "<<robin --> [flying]> ==> <robin --> [with_beak]>>";
-                "-->", "{Tweety}", "[with_wings]" => "<{Tweety} --> [with_wings]>";
-                "==>", "(&&,<robin --> [chirping]>,<robin --> [with_wings]>)", "<robin --> bird>" => "<(&&,<robin --> [chirping]>,<robin --> [with_wings]>) ==> <robin --> bird>>";
-                "{-]", "Tweety", "yellow" => "<{Tweety} --> [yellow]>";
-                "-->", "swan", "bird" => "<swan --> bird>";
-                "-->", "chess", "competition" => "<chess --> competition>";
-                "-->", "robin", "[with_wings]" => "<robin --> [with_wings]>";
-                "-->", "robin", "[with_beak]" => "<robin --> [with_beak]>";
-                "-->", "tiger", "animal" => "<tiger --> animal>";
-                "-->", "bird", "swimmer" => "<bird --> swimmer>";
-                "-->", "lock1", "lock" => "<lock1 --> lock>";
-                "==>", "<robin --> bird>", "<robin --> [flying]>" => "<<robin --> bird> ==> <robin --> [flying]>>";
-                "-->", "robin", "bird" => "<robin --> bird>";
-                "-->", "(*,a,b)", "like" => "<(*,a,b) --> like>";
-                "-->", "robin", "swimmer" => "<robin --> swimmer>";
-                "<->", "bright", "smart" => "<bright <-> smart>";
-                "-->", "(~,boy,girl)", "[strong]" => "<(~,boy,girl) --> [strong]>";
-                "-->", "robin", "[chirping]" => "<robin --> [chirping]>";
+                "-->", "(&,swan,swimmer)", "bird" => "<(&,swan,swimmer) --> bird>";
+                "-->", "(*,(*,(*,0)))", "num" => "<(*,(*,(*,0))) --> num>";
+                "-->", "(*,CAT,FISH)", "FOOD" => "<(*,CAT,FISH) --> FOOD>";
+                "-->", "(*,bird,plant)", "?120" => "<(*,bird,plant) --> ?120>";
+                "-->", "(-,swimmer,animal)", "(-,swimmer,bird)" => "<(-,swimmer,animal) --> (-,swimmer,bird)>";
+                "-->", "(/,neutralization,_,base)", "?120" => "<(/,neutralization,_,base) --> ?120>";
                 "-->", "(|,boy,girl)", "youth" => "<(|,boy,girl) --> youth>";
-                "-->", "{Tweety}", "{Birdie}" => "<{Tweety} --> {Birdie}>";
-                "-->", "{?49}", "swimmer" => "<{?49} --> swimmer>";
-                "<->", "robin", "swan" => "<robin <-> swan>";
-                "-->", "(*,acid,base)", "reaction" => "<(*,acid,base) --> reaction>";
-                "-->", "{lock1}", "lock" => "<{lock1} --> lock>";
-                "-->", "neutralization", "reaction" => "<neutralization --> reaction>";
-                "-->", "swan", "swimmer" => "<swan --> swimmer>";
-                "-->", "sport", "competition" => "<sport --> competition>";
+                "-->", "(~,boy,girl)", "[strong]" => "<(~,boy,girl) --> [strong]>";
+                "-->", "(~,swimmer,swan)", "bird" => "<(~,swimmer,swan) --> bird>";
+                "-->", "0", "(/,num,_)" => "<0 --> (/,num,_)>";
                 "-->", "0", "num" => "<0 --> num>";
+                "-->", "?120", "claimedByBob" => "<?120 --> claimedByBob>";
+                "-->", "[smart]", "[bright]" => "<[smart] --> [bright]>";
+                "-->", "acid", "(/,reaction,_,base)" => "<acid --> (/,reaction,_,base)>";
+                "-->", "cat", "(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish)" => "<cat --> (/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish)>";
+                "-->", "neutralization", "(*,acid,base)" => "<neutralization --> (*,acid,base)>";
+                "-->", "planetX", "{Mars,Pluto,Venus}" => "<planetX --> {Mars,Pluto,Venus}>";
                 "-->", "planetX", "{Pluto,Saturn}" => "<planetX --> {Pluto,Saturn}>";
-                "-->", "robin", "(-,bird,swimmer)" => "<robin --> (-,bird,swimmer)>";
-                "-->", "tim", "(/,uncle,_,tom)" => "<tim --> (/,uncle,_,tom)>";
-                "-->", "bird", "fly" => "<bird --> fly>";
-                "{--", "Tweety", "bird" => "<{Tweety} --> bird>";
                 "-->", "robin", "(&,bird,swimmer)" => "<robin --> (&,bird,swimmer)>";
-                "-->", "?49", "swimmer" => "<?49 --> swimmer>";
-                "-->", "cat", "CAT" => "<cat --> CAT>";
-                "<->", "Birdie", "Tweety" => "<Birdie <-> Tweety>";
-                "-->", "robin", "[flying]" => "<robin --> [flying]>";
-                "-->", "soda", "base" => "<soda --> base>";
-                "-->", "tim", "(/,uncle,tom,_)" => "<tim --> (/,uncle,tom,_)>";
-                "==>", "(--,<robin --> [flying]>)", "<robin --> bird>" => "<(--,<robin --> [flying]>) ==> <robin --> bird>>";
-                "==>", "(&&,<robin --> [chirping]>,<robin --> [flying]>,<robin --> [with_wings]>)", "<robin --> bird>" => "<(&&,<robin --> [chirping]>,<robin --> [flying]>,<robin --> [with_wings]>) ==> <robin --> bird>>";
+                "-->", "robin", "(-,bird,swimmer)" => "<robin --> (-,bird,swimmer)>";
                 "-->", "robin", "(|,bird,swimmer)" => "<robin --> (|,bird,swimmer)>";
+                "-->", "robin", "[chirping]" => "<robin --> [chirping]>";
+                "-->", "{?49}", "swimmer" => "<{?49} --> swimmer>";
+                "-->", "{Tweety}", "[with_wings]" => "<{Tweety} --> [with_wings]>";
+                "-->", "{Tweety}", "bird" => "<{Tweety} --> bird>";
+                "-->", "{Tweety}", "{Birdie}" => "<{Tweety} --> {Birdie}>";
+                "-->", "{key1}", "(/,open,_,{lock1})" => "<{key1} --> (/,open,_,{lock1})>";
+                "--]", "raven", "black" => "<raven --> [black]>";
+                "<->", "Birdie", "Tweety" => "<Birdie <-> Tweety>";
+                "<->", "[bright]", "[smart]" => "<[bright] <-> [smart]>";
+                "<->", "{Birdie}", "{Tweety}" => "<{Birdie} <-> {Tweety}>";
+                "<=>", "<robin --> animal>", "<robin --> bird>" => "<<robin --> animal> <=> <robin --> bird>>";
+                "<=>", "<robin --> bird>", "<robin --> [flying]>" => "<<robin --> bird> <=> <robin --> [flying]>>";
+                "==>", "(&&,<robin --> [chirping]>,<robin --> [flying]>)", "<robin --> bird>" => "<(&&,<robin --> [chirping]>,<robin --> [flying]>) ==> <robin --> bird>>";
+                "==>", "(&&,<robin --> [chirping]>,<robin --> [flying]>,<robin --> [with_wings]>)", "<robin --> bird>" => "<(&&,<robin --> [chirping]>,<robin --> [flying]>,<robin --> [with_wings]>) ==> <robin --> bird>>";
+                "==>", "(&&,<robin --> [flying]>,<robin --> [with_wings]>)", "<robin --> [living]>" => "<(&&,<robin --> [flying]>,<robin --> [with_wings]>) ==> <robin --> [living]>>";
+                "==>", "(&&,<robin --> bird>,<robin --> [flying]>)", "<robin --> [living]>" => "<(&&,<robin --> bird>,<robin --> [flying]>) ==> <robin --> [living]>>";
+                "==>", "(&&,<robin --> bird>,<robin --> [living]>)", "<robin --> animal>" => "<(&&,<robin --> bird>,<robin --> [living]>) ==> <robin --> animal>>";
+                "==>", "(--,<robin --> [flying]>)", "<robin --> bird>" => "<(--,<robin --> [flying]>) ==> <robin --> bird>>";
+                "==>", "(--,<robin --> bird>)", "<robin --> [flying]>" => "<(--,<robin --> bird>) ==> <robin --> [flying]>>";
+                "==>", "<robin --> [flying]>", "<robin --> [with_beak]>" => "<<robin --> [flying]> ==> <robin --> [with_beak]>>";
+                "==>", "<robin --> [flying]>", "<robin --> animal>" => "<<robin --> [flying]> ==> <robin --> animal>>";
+                "==>", "<robin --> bird>", "(&&,<robin --> animal>,<robin --> [flying]>)" => "<<robin --> bird> ==> (&&,<robin --> animal>,<robin --> [flying]>)>";
+                "==>", "<robin --> bird>", "<robin --> [flying]>" => "<<robin --> bird> ==> <robin --> [flying]>>";
+                "==>", "<robin --> bird>", "<robin --> animal>" => "<<robin --> bird> ==> <robin --> animal>>";
+                "{--", "Tweety", "bird" => "<{Tweety} --> bird>";
+                "{-]", "Tweety", "yellow" => "<{Tweety} --> [yellow]>";
             }
             ok!()
         }
 
         #[test]
         fn make_statement() -> AResult {
+            fn test(template: Term, subject: Term, predicate: Term, expected: Option<Term>) {
+                let out = Term::make_statement(
+                    template.as_statement().unwrap(),
+                    subject.clone(),
+                    predicate.clone(),
+                );
+                assert_eq!(
+                    out,
+                    expected,
+                    "\"{template}\", \"{subject}\", \"{predicate}\" => {} != {}",
+                    format_option_term(&out),
+                    format_option_term(&expected),
+                );
+            }
             macro_once! {
                 // * 🚩模式：参数列表 ⇒ 预期词项
                 macro test($($template:tt, $subject:tt, $predicate:tt => $expected:tt;)*) {
-                    $(
-                        let template = term!($template);
-                        let subject = term!($subject);
-                        let predicate = term!($predicate);
-                        let out = Term::make_statement(template.as_statement().unwrap(), subject.clone(), predicate.clone());
-                        let expected = option_term!($expected);
-                        assert_eq!(
-                            out, expected,
-                            "\"{template}\", \"{subject}\", \"{predicate}\" => {} != {}",
-                            format_option_term(&out),
-                            format_option_term(&expected),
-                        );
-                    )*
+                    $( test(term!($template), term!($subject), term!($predicate), option_term!($expected)); )*
                 }
                 // * ℹ️用例均源自OpenNARS实际运行
-                "<[smart] --> [bright]>", "[bright]", "[smart]" => "<[bright] --> [smart]>";
-                "<swan --> (&,bird,swimmer)>", "(|,robin,swan)", "(&,bird,swimmer)" => "<(|,robin,swan) --> (&,bird,swimmer)>";
-                "<{Tweety} --> flyer>", "(|,[with_wings],{Birdie})", "flyer" => "<(|,[with_wings],{Birdie}) --> flyer>";
-                "<(*,0) --> (*,(/,num,_))>", "0", "(/,num,_)" => "<0 --> (/,num,_)>";
-                "<{Tweety} --> [with_wings]>", "{Tweety}", "(|,[with_wings],(&,flyer,{Birdie}))" => "<{Tweety} --> (|,[with_wings],(&,flyer,{Birdie}))>";
-                "<robin --> animal>", "(|,robin,tiger)", "animal" => "<(|,robin,tiger) --> animal>";
-                "<(|,bird,{Tweety}) --> (|,bird,{Birdie})>", "{Tweety}", "{Birdie}" => "<{Tweety} --> {Birdie}>";
-                "<{key1} --> (/,open,_,{lock1})>", "(/,open,_,{lock1})", "key" => "<(/,open,_,{lock1}) --> key>";
-                "<(&&,<robin --> [chirping]>,<robin --> [flying]>,<robin --> [with_wings]>) ==> <robin --> bird>>", "(&&,<robin --> [flying]>,<robin --> [with_wings]>)", "<robin --> bird>" => "<(&&,<robin --> [flying]>,<robin --> [with_wings]>) ==> <robin --> bird>>";
-                "<(*,0) --> (*,(/,num,_))>", "(*,(/,num,_))", "(*,num)" => "<(*,(/,num,_)) --> (*,num)>";
-                "<planetX --> {Mars,Venus}>", "{Mars,Venus}", "{Pluto,Saturn}" => "<{Mars,Venus} --> {Pluto,Saturn}>";
-                "<robin --> bird>", "animal", "robin" => "<animal --> robin>";
-                "<{Tweety} --> (&,bird,flyer)>", "{Tweety}", "flyer" => "<{Tweety} --> flyer>";
-                "<(|,boy,girl) --> youth>", "boy", "youth" => "<boy --> youth>";
-                "<a --> (/,like,b,_)>", "(/,like,_,(/,like,b,_))", "(/,like,_,a)" => "<(/,like,_,(/,like,b,_)) --> (/,like,_,a)>";
-                "<{Tweety} --> flyer>", "{Tweety}", "(|,flyer,[yellow],{Birdie})" => "<{Tweety} --> (|,flyer,[yellow],{Birdie})>";
-                "<(|,robin,swimmer) --> bird>", "swimmer", "bird" => "<swimmer --> bird>";
-                "<planetX --> {Pluto,Saturn}>", "{Pluto,Saturn}", "{Mars,Pluto,Saturn,Venus}" => "<{Pluto,Saturn} --> {Mars,Pluto,Saturn,Venus}>";
-                "<?1 --> swimmer>", "animal", "swimmer" => "<animal --> swimmer>";
-                "<<robin --> [with_wings]> ==> <robin --> bird>>", "<robin --> flyer>", "<robin --> bird>" => "<<robin --> flyer> ==> <robin --> bird>>";
-                "<(/,open,_,lock) --> (&,key,(/,open,_,{lock1}))>", "(/,open,_,lock)", "key" => "<(/,open,_,lock) --> key>";
-                "<{Tweety} --> [with_wings]>", "[with_wings]", "flyer" => "<[with_wings] --> flyer>";
-                "<(*,a,b) --> like>", "like", "(*,(/,like,b,_),b)" => "<like --> (*,(/,like,b,_),b)>";
-                "<{key1} --> key>", "{key1}", "(/,open,_,{lock1})" => "<{key1} --> (/,open,_,{lock1})>";
-                "<{key1} --> (/,open,_,{lock1})>", "{key1}", "(|,key,(/,open,_,{lock1}))" => "<{key1} --> (|,key,(/,open,_,{lock1}))>";
-                "<bird --> (&,animal,swimmer)>", "bird", "swimmer" => "<bird --> swimmer>";
-                "<flyer <-> [with_wings]>", "(|,flyer,{Birdie})", "(|,[with_wings],{Birdie})" => "<(|,flyer,{Birdie}) <-> (|,[with_wings],{Birdie})>";
-                "<(*,(*,0)) --> (*,(*,(/,num,_)))>", "(*,(*,(/,num,_)))", "(*,(*,num))" => "<(*,(*,(/,num,_))) --> (*,(*,num))>";
-                "<(&&,<robin --> [flying]>,<robin --> [with_wings]>) ==> <robin --> bird>>", "<robin --> [flying]>", "<robin --> bird>" => "<<robin --> [flying]> ==> <robin --> bird>>";
-                "<{Tweety} --> [with_wings]>", "(|,flyer,{Birdie})", "[with_wings]" => "<(|,flyer,{Birdie}) --> [with_wings]>";
-                "<gull --> swimmer>", "swan", "swimmer" => "<swan --> swimmer>";
-                "<{Tweety} --> bird>", "flyer", "bird" => "<flyer --> bird>";
-                "<(*,num) --> (*,(/,num,_))>", "num", "(/,num,_)" => "<num --> (/,num,_)>";
-                "<{Tweety} --> [with_wings]>", "(&,flyer,{Tweety})", "(&,flyer,[with_wings])" => "<(&,flyer,{Tweety}) --> (&,flyer,[with_wings])>";
-                "<(&&,<robin --> bird>,<robin --> [flying]>) ==> <robin --> [living]>>", "<robin --> bird>", "<robin --> [with_wings]>" => "<<robin --> bird> ==> <robin --> [with_wings]>>";
-                "<{Tweety} --> (|,[with_wings],{Birdie})>", "(&,flyer,[yellow])", "(|,[with_wings],{Birdie})" => "<(&,flyer,[yellow]) --> (|,[with_wings],{Birdie})>";
-                "<{key1} --> (&,key,(/,open,_,{lock1}))>", "{key1}", "(/,open,_,{lock1})" => "<{key1} --> (/,open,_,{lock1})>";
-                "<num <-> (/,num,_)>", "(/,num,_)", "(/,(/,num,_),_)" => "<(/,num,_) <-> (/,(/,num,_),_)>";
-                "<(&&,<robin --> bird>,<robin --> [flying]>) ==> <robin --> [living]>>", "<robin --> [flying]>", "<robin --> [living]>" => "<<robin --> [flying]> ==> <robin --> [living]>>";
-                "<robin --> swan>", "animal", "robin" => "<animal --> robin>";
-                "<{Tweety} --> flyer>", "flyer", "{Birdie}" => "<flyer --> {Birdie}>";
-                "<(~,boy,girl) --> (~,youth,girl)>", "boy", "(~,youth,girl)" => "<boy --> (~,youth,girl)>";
-                "<bird --> swimmer>", "(|,bird,swan)", "swimmer" => "<(|,bird,swan) --> swimmer>";
-                "<bird --> {Birdie}>", "bird", "(|,bird,{Birdie})" => None;
-                "<robin --> bird>", "robin", "swan" => "<robin --> swan>";
-                "<(*,0) --> num>", "(/,(*,0),_)", "(/,num,_)" => "<(/,(*,0),_) --> (/,num,_)>";
-                "<robin --> animal>", "swimmer", "robin" => "<swimmer --> robin>";
-                "<robin --> bird>", "(|,robin,swan)", "bird" => "<(|,robin,swan) --> bird>";
-                "<{Tweety} --> [with_wings]>", "(|,robin,{Tweety})", "[with_wings]" => "<(|,robin,{Tweety}) --> [with_wings]>";
-                "<robin --> animal>", "robin", "swimmer" => "<robin --> swimmer>";
-                "<0 --> num>", "num", "(/,num,_)" => "<num --> (/,num,_)>";
-                "<bird --> swimmer>", "animal", "swimmer" => "<animal --> swimmer>";
-                "<(*,(*,0)) --> (*,(*,(/,num,_)))>", "(*,(*,num))", "(*,(*,(/,num,_)))" => "<(*,(*,num)) --> (*,(*,(/,num,_)))>";
-                "<planetX --> {Mars,Pluto,Venus}>", "planetX", "{Pluto}" => "<planetX --> {Pluto}>";
-                "<{lock1} --> lock>", "{lock1}", "(&,lock,(/,open,{key1},_))" => "<{lock1} --> (&,lock,(/,open,{key1},_))>";
-                "<robin --> bird>", "robin", "(|,animal,bird)" => "<robin --> (|,animal,bird)>";
-                "<(/,(*,tim,tom),tom,_) --> (/,uncle,tom,_)>", "tom", "tom" => None;
-                "<cat --> CAT>", "CAT", "(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish)" => "<CAT --> (/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish)>";
-                "<{Tweety} --> flyer>", "flyer", "bird" => "<flyer --> bird>";
-                "<swimmer --> animal>", "(&,robin,swimmer)", "animal" => "<(&,robin,swimmer) --> animal>";
-                "<{Tweety} --> (&,[with_wings],{Birdie})>", "{Tweety}", "[with_wings]" => "<{Tweety} --> [with_wings]>";
-                "<swimmer --> animal>", "swimmer", "robin" => "<swimmer --> robin>";
-                "<chess --> competition>", "sport", "competition" => "<sport --> competition>";
-                "<cat --> CAT>", "(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish)", "CAT" => "<(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish) --> CAT>";
-                "<(*,(*,(*,0))) --> num>", "num", "(*,(*,(*,(/,num,_))))" => "<num --> (*,(*,(*,(/,num,_))))>";
-                "<robin --> [with_wings]>", "(|,robin,{Birdie})", "(|,[with_wings],{Birdie})" => "<(|,robin,{Birdie}) --> (|,[with_wings],{Birdie})>";
-                "<robin --> bird>", "bird", "swimmer" => "<bird --> swimmer>";
-                "<soda --> (/,reaction,acid,_)>", "soda", "(/,neutralization,acid,_)" => "<soda --> (/,neutralization,acid,_)>";
-                "<(*,acid,base) --> reaction>", "neutralization", "reaction" => "<neutralization --> reaction>";
-                "<{key1} --> (|,key,(/,open,_,{lock1}))>", "{key1}", "(/,open,_,{lock1})" => "<{key1} --> (/,open,_,{lock1})>";
-                "<(&&,<robin --> bird>,<robin --> [flying]>) ==> <robin --> [living]>>", "<robin --> bird>", "<robin --> [living]>" => "<<robin --> bird> ==> <robin --> [living]>>";
-                "<bird --> animal>", "(&,bird,robin)", "animal" => "<(&,bird,robin) --> animal>";
-                "<swimmer --> bird>", "bird", "animal" => "<bird --> animal>";
-                "<{lock1} --> lock>", "{lock1}", "(|,lock,(/,open,{key1},_))" => "<{lock1} --> (|,lock,(/,open,{key1},_))>";
-                "<(&&,<robin --> [flying]>,<robin --> [with_wings]>) ==> <robin --> [living]>>", "<robin --> [flying]>", "<robin --> [living]>" => "<<robin --> [flying]> ==> <robin --> [living]>>";
-                "<acid --> (/,reaction,_,base)>", "(&,acid,(/,neutralization,_,base))", "(/,reaction,_,base)" => "<(&,acid,(/,neutralization,_,base)) --> (/,reaction,_,base)>";
-                "<(|,robin,swimmer) --> animal>", "swimmer", "animal" => "<swimmer --> animal>";
-                "<swan --> (&,bird,swimmer)>", "robin", "swan" => "<robin --> swan>";
-                "<robin --> animal>", "bird", "robin" => "<bird --> robin>";
-                "<{Tweety} --> (|,flyer,[yellow])>", "bird", "(|,flyer,[yellow])" => "<bird --> (|,flyer,[yellow])>";
-                "<(&,robin,{Tweety}) --> [with_wings]>", "(&,robin,{Birdie},{Tweety})", "(&,[with_wings],{Birdie})" => "<(&,robin,{Birdie},{Tweety}) --> (&,[with_wings],{Birdie})>";
-                "<robin <-> swan>", "robin", "bird" => "<bird <-> robin>";
-                "<{Tweety} --> flyer>", "{Tweety}", "(&,flyer,[yellow])" => "<{Tweety} --> (&,flyer,[yellow])>";
-                "<bird --> animal>", "bird", "tiger" => "<bird --> tiger>";
-                "<(/,neutralization,_,base) --> (/,reaction,_,base)>", "neutralization", "reaction" => "<neutralization --> reaction>";
-                "<{?1} --> swimmer>", "{?1}", "robin" => "<{?1} --> robin>";
-                "<(~,boy,girl) --> [strong]>", "(~,boy,girl)", "(|,[strong],(~,youth,girl))" => "<(~,boy,girl) --> (|,[strong],(~,youth,girl))>";
-                "<robin --> [with_wings]>", "(|,flyer,robin)", "(|,flyer,[with_wings])" => "<(|,flyer,robin) --> (|,flyer,[with_wings])>";
-                "<{Tweety} --> (&,[with_wings],{Birdie})>", "{Tweety}", "{Birdie}" => "<{Tweety} --> {Birdie}>";
-                "<{Tweety} --> (|,bird,flyer)>", "{Tweety}", "(|,bird,flyer,{Birdie})" => "<{Tweety} --> (|,bird,flyer,{Birdie})>";
-                "<{Tweety} --> [with_wings]>", "robin", "{Tweety}" => "<robin --> {Tweety}>";
-                "<robin --> bird>", "(&,robin,swimmer)", "bird" => "<(&,robin,swimmer) --> bird>";
-                "<{Tweety} --> [yellow]>", "(|,flyer,{Tweety})", "(|,flyer,[yellow])" => "<(|,flyer,{Tweety}) --> (|,flyer,[yellow])>";
-                "<planetX --> {Mars,Pluto,Venus}>", "planetX", "{Mars,Pluto,Saturn,Venus}" => "<planetX --> {Mars,Pluto,Saturn,Venus}>";
-                "<robin --> (|,bird,swimmer)>", "swan", "robin" => "<swan --> robin>";
-                "<(&&,<robin --> bird>,<robin --> [flying]>) ==> <robin --> animal>>", "<robin --> bird>", "<robin --> animal>" => "<<robin --> bird> ==> <robin --> animal>>";
-                "<planetX --> {Pluto,Saturn}>", "planetX", "{Mars,Pluto,Saturn,Venus}" => "<planetX --> {Mars,Pluto,Saturn,Venus}>";
-                "<neutralization --> reaction>", "(/,neutralization,_,base)", "(/,reaction,_,base)" => "<(/,neutralization,_,base) --> (/,reaction,_,base)>";
-                "<(&&,<robin --> [flying]>,<robin --> [with_wings]>) ==> <robin --> [living]>>", "<robin --> [with_wings]>", "<robin --> [living]>" => "<<robin --> [with_wings]> ==> <robin --> [living]>>";
-                "<(&,bird,swimmer) --> (&,animal,swimmer)>", "swimmer", "swimmer" => None;
-                "<cat --> CAT>", "cat", "(&,CAT,(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish))" => "<cat --> (&,CAT,(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish))>";
-                "<neutralization <-> reaction>", "(/,neutralization,_,base)", "(/,reaction,_,base)" => "<(/,neutralization,_,base) <-> (/,reaction,_,base)>";
-                "<robin --> [with_wings]>", "{Tweety}", "robin" => "<{Tweety} --> robin>";
-                "<(*,(*,0)) --> (*,(*,(/,num,_)))>", "(*,0)", "(*,(/,num,_))" => "<(*,0) --> (*,(/,num,_))>";
-                "<0 --> num>", "(*,0)", "(*,num)" => "<(*,0) --> (*,num)>";
-                "<(|,robin,swan) --> (|,bird,swimmer)>", "robin", "bird" => "<robin --> bird>";
-                "<robin --> bird>", "(&,robin,swan)", "bird" => "<(&,robin,swan) --> bird>";
-                "<{Tweety} --> bird>", "bird", "{Birdie}" => "<bird --> {Birdie}>";
-                "<{Tweety} --> (&,bird,{Birdie})>", "{Tweety}", "{Birdie}" => "<{Tweety} --> {Birdie}>";
-                "<(&&,<robin --> [flying]>,<robin --> [with_wings]>) ==> <robin --> animal>>", "(&&,<robin --> [flying]>,<robin --> [with_wings]>)", "(||,<robin --> animal>,<robin --> bird>)" => "<(&&,<robin --> [flying]>,<robin --> [with_wings]>) ==> (||,<robin --> animal>,<robin --> bird>)>";
-                "<(/,open,_,lock) --> (/,open,_,{lock1})>", "(/,open,_,lock)", "(&,key,(/,open,_,{lock1}))" => "<(/,open,_,lock) --> (&,key,(/,open,_,{lock1}))>";
-                "<(|,chess,sport) --> (|,chess,competition)>", "sport", "competition" => "<sport --> competition>";
+                "<(&&,<robin --> [chirping]>,<robin --> [flying]>) ==> <robin --> bird>>", "(&&,<robin --> bird>,<robin --> [flying]>)", "<robin --> bird>" => None;"<(&&,<robin --> [chirping]>,<robin --> [flying]>) ==> <robin --> bird>>", "<robin --> [chirping]>", "<robin --> bird>" => "<<robin --> [chirping]> ==> <robin --> bird>>";
+                "<(&&,<robin --> [chirping]>,<robin --> [flying]>,<robin --> [with_wings]>) ==> <robin --> bird>>", "(&&,<robin --> [chirping]>,<robin --> [flying]>)", "<robin --> bird>" => "<(&&,<robin --> [chirping]>,<robin --> [flying]>) ==> <robin --> bird>>";
                 "<(&&,<robin --> [chirping]>,<robin --> [flying]>,<robin --> [with_wings]>) ==> <robin --> bird>>", "(&&,<robin --> bird>,<robin --> [flying]>,<robin --> [with_wings]>)", "<robin --> bird>" => None;
-                "<(|,robin,swan) --> (&,bird,swimmer)>", "(|,robin,swan)", "swimmer" => "<(|,robin,swan) --> swimmer>";
-                "<(*,0) --> (*,num)>", "(*,(*,0))", "(*,(*,num))" => "<(*,(*,0)) --> (*,(*,num))>";
-                "<robin --> bird>", "(~,swimmer,robin)", "bird" => "<(~,swimmer,robin) --> bird>";
-                "<{Tweety} --> (|,bird,flyer)>", "(|,bird,{Birdie})", "(|,bird,flyer)" => "<(|,bird,{Birdie}) --> (|,bird,flyer)>";
-                "<(/,neutralization,_,base) --> ?1>", "(/,reaction,_,base)", "?1" => "<(/,reaction,_,base) --> ?1>";
-                "<(&,robin,swimmer) --> animal>", "(&,robin,swimmer)", "(|,animal,bird)" => "<(&,robin,swimmer) --> (|,animal,bird)>";
-                "<{Tweety} --> flyer>", "flyer", "[with_wings]" => "<flyer --> [with_wings]>";
-                "<(&&,<robin --> [chirping]>,<robin --> [with_wings]>) ==> <robin --> bird>>", "<robin --> [with_wings]>", "<robin --> bird>" => "<<robin --> [with_wings]> ==> <robin --> bird>>";
-                "<{Tweety} --> (&,[yellow],{Birdie})>", "{Tweety}", "{Birdie}" => "<{Tweety} --> {Birdie}>";
-                "<robin --> swimmer>", "robin", "bird" => "<robin --> bird>";
-                "<robin --> bird>", "bird", "robin" => "<bird --> robin>";
-                "<{Tweety} --> [with_wings]>", "{Tweety}", "(&,flyer,[with_wings])" => "<{Tweety} --> (&,flyer,[with_wings])>";
-                "<bright <-> smart>", "[bright]", "[smart]" => "<[bright] <-> [smart]>";
-                "<(&&,<robin --> [chirping]>,<robin --> [flying]>) ==> <robin --> bird>>", "<robin --> [chirping]>", "<robin --> bird>" => "<<robin --> [chirping]> ==> <robin --> bird>>";
-                "<{key1} --> (|,key,(/,open,_,{lock1}))>", "{key1}", "(|,key,(/,open,_,{lock1}))" => "<{key1} --> (|,key,(/,open,_,{lock1}))>";
-                "<{Tweety} --> [with_wings]>", "{Tweety}", "(|,[with_wings],{Birdie})" => "<{Tweety} --> (|,[with_wings],{Birdie})>";
-                "<tim --> (/,uncle,_,tom)>", "(/,uncle,tom,_)", "(/,uncle,_,tom)" => "<(/,uncle,tom,_) --> (/,uncle,_,tom)>";
+                "<(&&,<robin --> [chirping]>,<robin --> [with_wings]>) ==> <robin --> bird>>", "(&&,<robin --> bird>,<robin --> [chirping]>)", "<robin --> bird>" => None;
+                "<(&&,<robin --> [flying]>,<robin --> [with_wings]>) ==> <robin --> [living]>>", "<robin --> [flying]>", "<robin --> [living]>" => "<<robin --> [flying]> ==> <robin --> [living]>>";
+                "<(&&,<robin --> [flying]>,<robin --> [with_wings]>) ==> <robin --> [living]>>", "<robin --> [with_wings]>", "<robin --> bird>" => "<<robin --> [with_wings]> ==> <robin --> bird>>";
+                "<(&&,<robin --> [flying]>,<robin --> [with_wings]>) ==> <robin --> animal>>", "(&&,<robin --> [flying]>,<robin --> [with_wings]>)", "(&&,<robin --> animal>,<robin --> bird>)" => "<(&&,<robin --> [flying]>,<robin --> [with_wings]>) ==> (&&,<robin --> animal>,<robin --> bird>)>";
+                "<(&&,<robin --> [flying]>,<robin --> [with_wings]>) ==> <robin --> animal>>", "(&&,<robin --> [flying]>,<robin --> [with_wings]>)", "(||,<robin --> animal>,<robin --> bird>)" => "<(&&,<robin --> [flying]>,<robin --> [with_wings]>) ==> (||,<robin --> animal>,<robin --> bird>)>";
+                "<(&&,<robin --> [flying]>,<robin --> [with_wings]>) ==> <robin --> animal>>", "<robin --> animal>", "<robin --> bird>" => "<<robin --> animal> ==> <robin --> bird>>";
+                "<(&&,<robin --> bird>,<robin --> [flying]>) ==> <robin --> [living]>>", "<robin --> [flying]>", "<robin --> [living]>" => "<<robin --> [flying]> ==> <robin --> [living]>>";
+                "<(&&,<robin --> bird>,<robin --> [flying]>) ==> <robin --> [living]>>", "<robin --> bird>", "<robin --> [living]>" => "<<robin --> bird> ==> <robin --> [living]>>";
+                "<(&&,<robin --> bird>,<robin --> [flying]>) ==> <robin --> animal>>", "<robin --> [flying]>", "<robin --> animal>" => "<<robin --> [flying]> ==> <robin --> animal>>";
+                "<(&&,<robin --> bird>,<robin --> [flying]>) ==> <robin --> animal>>", "<robin --> bird>", "<robin --> animal>" => "<<robin --> bird> ==> <robin --> animal>>";
+                "<(&&,<robin --> bird>,<robin --> [flying]>,<robin --> [with_wings]>) ==> <robin --> animal>>", "(&&,<robin --> [flying]>,<robin --> [with_wings]>)", "<robin --> animal>" => "<(&&,<robin --> [flying]>,<robin --> [with_wings]>) ==> <robin --> animal>>";
+                "<(&&,<robin --> bird>,<robin --> [flying]>,<robin --> [with_wings]>) ==> <robin --> animal>>", "(&&,<robin --> bird>,<robin --> [flying]>)", "<robin --> animal>" => "<(&&,<robin --> bird>,<robin --> [flying]>) ==> <robin --> animal>>";
+                "<(&&,<robin --> bird>,<robin --> [living]>) ==> <robin --> animal>>", "(&&,<robin --> bird>,<robin --> [flying]>)", "<robin --> animal>" => "<(&&,<robin --> bird>,<robin --> [flying]>) ==> <robin --> animal>>";
+                "<(&&,<robin --> bird>,<robin --> [living]>) ==> <robin --> animal>>", "(&&,<robin --> bird>,<robin --> [flying]>,<robin --> [with_wings]>)", "<robin --> animal>" => "<(&&,<robin --> bird>,<robin --> [flying]>,<robin --> [with_wings]>) ==> <robin --> animal>>";
+                "<(&&,<robin --> flyer>,<robin --> [chirping]>) ==> <robin --> bird>>", "(&&,<robin --> bird>,<robin --> flyer>)", "<robin --> bird>" => None;
+                "<(&&,<robin --> flyer>,<robin --> [chirping]>,<(*,robin,worms) --> food>) ==> <robin --> bird>>", "(&&,<robin --> bird>,<robin --> flyer>,<(*,robin,worms) --> food>)", "<robin --> bird>" => None;
+                "<(&&,<robin --> flyer>,<robin --> [chirping]>,<(*,robin,worms) --> food>) ==> <robin --> bird>>", "(&&,<robin --> flyer>,<(*,robin,worms) --> food>)", "<robin --> bird>" => "<(&&,<robin --> flyer>,<(*,robin,worms) --> food>) ==> <robin --> bird>>";
+                "<(&&,<robin --> flyer>,<robin --> [chirping]>,<worms --> (/,food,robin,_)>) ==> <robin --> bird>>", "(&&,<robin --> bird>,<robin --> flyer>,<worms --> (/,food,robin,_)>)", "<robin --> bird>" => None;
+                "<(&,bird,swimmer) --> (&,animal,swimmer)>", "bird", "animal" => "<bird --> animal>";
+                "<(&,bird,swimmer) --> (&,animal,swimmer)>", "swimmer", "swimmer" => None;
+                "<(&,chess,sport) --> competition>", "chess", "competition" => "<chess --> competition>";
                 "<(&,robin,swan) --> (&,bird,swimmer)>", "(&,robin,swan)", "bird" => "<(&,robin,swan) --> bird>";
                 "<(&,robin,swimmer) --> animal>", "(&,robin,swimmer)", "(&,animal,bird)" => "<(&,robin,swimmer) --> (&,animal,bird)>";
-                "<{Tweety} --> {Birdie}>", "{Tweety}", "(&,[with_wings],{Birdie})" => "<{Tweety} --> (&,[with_wings],{Birdie})>";
-                "<swimmer --> bird>", "swimmer", "swan" => "<swimmer --> swan>";
-                "<tiger --> animal>", "tiger", "swimmer" => "<tiger --> swimmer>";
-                "<(*,(*,0)) --> (*,(*,(/,num,_)))>", "(*,(*,0))", "(|,(*,(*,num)),(*,(*,(/,num,_))))" => "<(*,(*,0)) --> (|,(*,(*,num)),(*,(*,(/,num,_))))>";
-                "<{Birdie} --> [yellow]>", "{Birdie}", "(|,flyer,[yellow])" => "<{Birdie} --> (|,flyer,[yellow])>";
-                "<sport --> chess>", "sport", "(&,chess,competition)" => "<sport --> (&,chess,competition)>";
-                "<(&&,<robin --> [chirping]>,<robin --> [flying]>,<robin --> [with_wings]>) ==> <robin --> bird>>", "(&&,<robin --> [chirping]>,<robin --> [with_wings]>)", "<robin --> bird>" => "<(&&,<robin --> [chirping]>,<robin --> [with_wings]>) ==> <robin --> bird>>";
-                "<{Tweety} --> [with_wings]>", "(&,robin,{Tweety})", "[with_wings]" => "<(&,robin,{Tweety}) --> [with_wings]>";
-                "<?1 --> swimmer>", "animal", "?1" => "<animal --> ?1>";
-                "<swimmer --> robin>", "(|,animal,swimmer)", "robin" => "<(|,animal,swimmer) --> robin>";
-                "<{Tweety} --> flyer>", "{Tweety}", "(&,flyer,[with_wings])" => "<{Tweety} --> (&,flyer,[with_wings])>";
-                "<{Birdie} --> [with_wings]>", "{Tweety}", "[with_wings]" => "<{Tweety} --> [with_wings]>";
-                "<(|,robin,swimmer) --> bird>", "animal", "bird" => "<animal --> bird>";
-                "<swimmer --> bird>", "animal", "bird" => "<animal --> bird>";
-                "<robin --> bird>", "(~,swan,robin)", "bird" => "<(~,swan,robin) --> bird>";
-                "<swimmer --> bird>", "swan", "swimmer" => "<swan --> swimmer>";
-                "<{Tweety} --> flyer>", "{Tweety}", "(|,flyer,(&,[with_wings],{Birdie}))" => "<{Tweety} --> (|,flyer,(&,[with_wings],{Birdie}))>";
-                "<tim --> (/,uncle,tom,_)>", "(~,(/,(*,tim,tom),tom,_),tim)", "(/,uncle,tom,_)" => "<(~,(/,(*,tim,tom),tom,_),tim) --> (/,uncle,tom,_)>";
-                "<robin --> [with_wings]>", "(&,flyer,robin)", "(&,flyer,[with_wings])" => "<(&,flyer,robin) --> (&,flyer,[with_wings])>";
-                "<planetX --> {Mars,Pluto,Saturn,Venus}>", "{Mars,Pluto,Venus}", "{Mars,Pluto,Saturn,Venus}" => "<{Mars,Pluto,Venus} --> {Mars,Pluto,Saturn,Venus}>";
-                "<{Tweety} --> flyer>", "flyer", "[yellow]" => "<flyer --> [yellow]>";
-                "<(|,boy,girl) --> youth>", "(|,boy,girl)", "youth" => "<(|,boy,girl) --> youth>";
-                "<robin --> [with_wings]>", "(|,robin,{Birdie})", "[with_wings]" => "<(|,robin,{Birdie}) --> [with_wings]>";
-                "<(|,robin,swan) --> (|,bird,swimmer)>", "swan", "swimmer" => "<swan --> swimmer>";
-                "<robin --> animal>", "(&,robin,swimmer)", "animal" => "<(&,robin,swimmer) --> animal>";
-                "<bird --> swimmer>", "robin", "bird" => "<robin --> bird>";
-                "<(|,bird,swan) --> swimmer>", "swan", "swimmer" => "<swan --> swimmer>";
-                "<{Tweety} --> (&,flyer,(|,[yellow],{Birdie}))>", "{Tweety}", "(|,[yellow],{Birdie})" => "<{Tweety} --> (|,[yellow],{Birdie})>";
-                "<(&&,<robin --> [chirping]>,<robin --> [flying]>) ==> <robin --> bird>>", "(&&,<robin --> bird>,<robin --> [flying]>)", "<robin --> bird>" => None;
-                "<(-,swimmer,animal) --> (-,swimmer,bird)>", "bird", "animal" => "<bird --> animal>";
-                "<(/,neutralization,_,base) --> (/,reaction,_,base)>", "(/,neutralization,_,base)", "acid" => "<(/,neutralization,_,base) --> acid>";
-                "<{Tweety} --> {Birdie}>", "bird", "{Birdie}" => "<bird --> {Birdie}>";
-                "<{Tweety} --> {Birdie}>", "{Tweety}", "(|,bird,{Birdie})" => "<{Tweety} --> (|,bird,{Birdie})>";
-                "<robin --> animal>", "bird", "animal" => "<bird --> animal>";
-                "<swan --> swimmer>", "swan", "(|,bird,swimmer)" => "<swan --> (|,bird,swimmer)>";
-                "<soda --> base>", "soda", "(/,reaction,acid,_)" => "<soda --> (/,reaction,acid,_)>";
-                "<(--,<robin --> [flying]>) ==> <robin --> bird>>", "(--,<robin --> bird>)", "<robin --> [flying]>" => "<(--,<robin --> bird>) ==> <robin --> [flying]>>";
-                "<{Tweety} --> (&,bird,flyer)>", "{Tweety}", "bird" => "<{Tweety} --> bird>";
-                "<bird --> animal>", "(|,bird,robin)", "animal" => "<(|,bird,robin) --> animal>";
-                "<0 --> (/,num,_)>", "(/,num,_)", "num" => "<(/,num,_) --> num>";
-                "<robin --> swimmer>", "animal", "robin" => "<animal --> robin>";
-                "<robin --> [with_wings]>", "{Birdie}", "robin" => "<{Birdie} --> robin>";
-                "<(&,robin,swimmer) --> bird>", "(&,robin,swimmer)", "(&,animal,bird)" => "<(&,robin,swimmer) --> (&,animal,bird)>";
-                "<(&,robin,swimmer) --> bird>", "bird", "animal" => "<bird --> animal>";
-                "<(|,bird,{Tweety}) --> (|,bird,{Birdie})>", "bird", "bird" => None;
-                "<(/,open,_,lock) --> (/,open,_,{lock1})>", "{lock1}", "lock" => "<{lock1} --> lock>";
-                "<{Tweety} --> flyer>", "{Tweety}", "(&,flyer,(|,[with_wings],{Birdie}))" => "<{Tweety} --> (&,flyer,(|,[with_wings],{Birdie}))>";
-                "<(*,a,b) --> like>", "(*,(/,like,b,_),b)", "like" => "<(*,(/,like,b,_),b) --> like>";
-                "<robin --> animal>", "robin", "tiger" => "<robin --> tiger>";
-                "<chess --> competition>", "(&,chess,sport)", "competition" => "<(&,chess,sport) --> competition>";
-                "<[bright] <-> [smart]>", "bright", "smart" => "<bright <-> smart>";
-                "<(/,(*,tim,tom),_,tom) --> (/,uncle,_,tom)>", "tom", "tom" => None;
-                "<(&,robin,swan) --> (&,bird,swimmer)>", "(&,robin,swan)", "swimmer" => "<(&,robin,swan) --> swimmer>";
-                "<{Tweety} --> flyer>", "flyer", "(|,[yellow],{Birdie})" => "<flyer --> (|,[yellow],{Birdie})>";
-                "<(*,0) --> (*,num)>", "(*,(/,num,_))", "(*,num)" => "<(*,(/,num,_)) --> (*,num)>";
-                "<{key1} --> key>", "(/,open,_,{lock1})", "key" => "<(/,open,_,{lock1}) --> key>";
-                "<tiger --> robin>", "(|,swan,tiger)", "robin" => "<(|,swan,tiger) --> robin>";
-                "<(|,boy,girl) --> youth>", "youth", "(|,boy,girl)" => "<youth --> (|,boy,girl)>";
-                "<(*,b,a) --> (*,b,(/,like,b,_))>", "a", "(/,like,b,_)" => "<a --> (/,like,b,_)>";
-                "<{Tweety} --> (|,bird,flyer)>", "{Tweety}", "(&,(|,bird,flyer),(|,bird,{Birdie}))" => "<{Tweety} --> (&,(|,bird,flyer),(|,bird,{Birdie}))>";
-                "<b --> (/,like,_,a)>", "(*,a,b)", "(*,a,(/,like,_,a))" => "<(*,a,b) --> (*,a,(/,like,_,a))>";
-                "<tiger --> robin>", "(&,swan,tiger)", "robin" => "<(&,swan,tiger) --> robin>";
-                "<swan --> (|,bird,swimmer)>", "swan", "robin" => "<swan --> robin>";
-                "<{Tweety} --> {Birdie}>", "(|,bird,{Tweety})", "(|,bird,{Birdie})" => "<(|,bird,{Tweety}) --> (|,bird,{Birdie})>";
-                "<(|,robin,swimmer) --> bird>", "(|,robin,swimmer)", "(|,animal,bird)" => "<(|,robin,swimmer) --> (|,animal,bird)>";
-                "<robin --> animal>", "(|,bird,robin)", "animal" => "<(|,bird,robin) --> animal>";
-                "<bird --> swimmer>", "bird", "(|,animal,swimmer)" => "<bird --> (|,animal,swimmer)>";
-                "<tim --> (/,uncle,tom,_)>", "(/,uncle,tom,_)", "(/,uncle,_,tom)" => "<(/,uncle,tom,_) --> (/,uncle,_,tom)>";
-                "<tiger --> robin>", "swan", "tiger" => "<swan --> tiger>";
-                "<robin --> [with_wings]>", "robin", "{Tweety}" => "<robin --> {Tweety}>";
-                "<{Tweety} --> flyer>", "flyer", "(|,[with_wings],{Birdie})" => "<flyer --> (|,[with_wings],{Birdie})>";
-                "<{Tweety} --> flyer>", "bird", "flyer" => "<bird --> flyer>";
-                "<Birdie <-> Tweety>", "Birdie", "Tweety" => "<Birdie <-> Tweety>";
-                "<bird --> swimmer>", "bird", "swan" => "<bird --> swan>";
-                "<{Tweety} --> flyer>", "(&,[with_wings],{Birdie})", "flyer" => "<(&,[with_wings],{Birdie}) --> flyer>";
-                "<tim --> (/,uncle,tom,_)>", "tim", "(/,(*,tim,tom),tom,_)" => "<tim --> (/,(*,tim,tom),tom,_)>";
-                "<robin --> [with_wings]>", "robin", "(|,flyer,[with_wings])" => "<robin --> (|,flyer,[with_wings])>";
-                "<[bright] --> [smart]>", "[smart]", "[bright]" => "<[smart] --> [bright]>";
-                "<(~,boy,girl) --> (~,youth,girl)>", "boy", "youth" => "<boy --> youth>";
-                "<{Birdie} <-> {Tweety}>", "{Tweety}", "bird" => "<bird <-> {Tweety}>";
-                "<swan --> (|,bird,swimmer)>", "(&,robin,swan)", "(|,bird,swimmer)" => "<(&,robin,swan) --> (|,bird,swimmer)>";
-                "<robin --> bird>", "robin", "animal" => "<robin --> animal>";
-                "<{Tweety} --> {Birdie}>", "{Tweety}", "(|,[with_wings],{Birdie})" => "<{Tweety} --> (|,[with_wings],{Birdie})>";
-                "<{Birdie} --> flyer>", "{Tweety}", "flyer" => "<{Tweety} --> flyer>";
-                "<(&&,<robin --> [chirping]>,<robin --> [with_wings]>) ==> <robin --> bird>>", "(&&,<robin --> bird>,<robin --> [with_wings]>)", "<robin --> bird>" => None;
-                "<CAT --> (/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish)>", "CAT", "(|,CAT,(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish))" => None;
-                "<(&&,<robin --> bird>,<robin --> [living]>) ==> <robin --> animal>>", "(&&,<robin --> bird>,<robin --> [flying]>)", "<robin --> animal>" => "<(&&,<robin --> bird>,<robin --> [flying]>) ==> <robin --> animal>>";
-                "<{Tweety} --> (&,flyer,[yellow])>", "{Tweety}", "flyer" => "<{Tweety} --> flyer>";
-                "<(|,bird,{Tweety}) --> (|,bird,flyer)>", "{Tweety}", "flyer" => "<{Tweety} --> flyer>";
-                "<{Tweety} --> {Birdie}>", "{Tweety}", "(|,flyer,{Birdie})" => "<{Tweety} --> (|,flyer,{Birdie})>";
-                "<{Tweety} --> [with_wings]>", "flyer", "[with_wings]" => "<flyer --> [with_wings]>";
-                "<{Tweety} --> flyer>", "{Tweety}", "(&,flyer,{Birdie})" => "<{Tweety} --> (&,flyer,{Birdie})>";
-                "<(/,neutralization,_,base) --> ?1>", "?1", "(/,reaction,_,base)" => "<?1 --> (/,reaction,_,base)>";
-                "<swan --> (&,bird,swimmer)>", "swan", "bird" => "<swan --> bird>";
-                "<swan --> swimmer>", "(~,swimmer,swan)", "swimmer" => None;
-                "<robin --> bird>", "(|,robin,swimmer)", "bird" => "<(|,robin,swimmer) --> bird>";
-                "<bird --> swimmer>", "(&,bird,swan)", "swimmer" => "<(&,bird,swan) --> swimmer>";
-                "<(/,(*,tim,tom),tom,_) --> (/,uncle,tom,_)>", "(*,tim,tom)", "uncle" => "<(*,tim,tom) --> uncle>";
-                "<(|,robin,swimmer) --> bird>", "bird", "animal" => "<bird --> animal>";
-                "<robin --> (-,bird,swimmer)>", "robin", "swimmer" => "<robin --> swimmer>";
-                "<(&&,<robin --> flyer>,<robin --> [chirping]>,<(*,robin,worms) --> food>) ==> <robin --> bird>>", "(&&,<robin --> bird>,<robin --> flyer>,<(*,robin,worms) --> food>)", "<robin --> bird>" => None;
-                "<planetX --> {Mars,Pluto,Saturn,Venus}>", "{Mars,Pluto,Saturn,Venus}", "{Mars,Pluto,Venus}" => "<{Mars,Pluto,Saturn,Venus} --> {Mars,Pluto,Venus}>";
-                "<?1 --> claimedByBob>", "(&,<bird --> fly>,<{Tweety} --> bird>)", "?1" => "<(&,<bird --> fly>,<{Tweety} --> bird>) --> ?1>";
-                "<?1 --> swimmer>", "?1", "animal" => "<?1 --> animal>";
-                "<robin --> swimmer>", "(&,bird,robin)", "swimmer" => "<(&,bird,robin) --> swimmer>";
-                "<{?1} --> swimmer>", "{?1}", "bird" => "<{?1} --> bird>";
-                "<(*,acid,base) --> reaction>", "reaction", "neutralization" => "<reaction --> neutralization>";
-                "<tim --> (/,uncle,tom,_)>", "(/,uncle,_,tom)", "(/,uncle,tom,_)" => "<(/,uncle,_,tom) --> (/,uncle,tom,_)>";
-                "<(*,b,a) --> (*,b,(/,like,b,_))>", "b", "b" => None;
-                "<swan --> swimmer>", "gull", "swimmer" => "<gull --> swimmer>";
-                "<neutralization --> (*,acid,base)>", "reaction", "neutralization" => "<reaction --> neutralization>";
-                "<{Tweety} --> bird>", "{Tweety}", "(|,bird,{Birdie})" => "<{Tweety} --> (|,bird,{Birdie})>";
-                "<(*,a,b) --> like>", "(*,a,b)", "(|,like,(*,(/,like,b,_),b))" => "<(*,a,b) --> (|,like,(*,(/,like,b,_),b))>";
-                "<(|,bird,{Tweety}) --> (|,bird,flyer)>", "bird", "bird" => None;
-                "<reaction --> neutralization>", "(/,reaction,acid,_)", "(/,neutralization,acid,_)" => "<(/,reaction,acid,_) --> (/,neutralization,acid,_)>";
-                "<0 --> (/,num,_)>", "0", "num" => "<0 --> num>";
-                "<swan --> swimmer>", "(&,swan,swimmer)", "swimmer" => None;
-                "<<robin --> [with_wings]> ==> <robin --> bird>>", "<robin --> [with_wings]>", "(&&,<robin --> bird>,<robin --> [living]>)" => "<<robin --> [with_wings]> ==> (&&,<robin --> bird>,<robin --> [living]>)>";
-                "<robin --> bird>", "swan", "bird" => "<swan --> bird>";
-                "<robin --> bird>", "robin", "swimmer" => "<robin --> swimmer>";
-                "<(&,robin,swimmer) --> bird>", "animal", "bird" => "<animal --> bird>";
-                "<num <-> (/,num,_)>", "(*,num)", "(*,(/,num,_))" => "<(*,num) <-> (*,(/,num,_))>";
-                "<(|,robin,{Tweety}) --> [with_wings]>", "robin", "[with_wings]" => "<robin --> [with_wings]>";
-                "<(/,open,_,lock) --> (/,open,_,{lock1})>", "(/,open,_,lock)", "(|,key,(/,open,_,{lock1}))" => "<(/,open,_,lock) --> (|,key,(/,open,_,{lock1}))>";
-                "<bird --> swimmer>", "swan", "bird" => "<swan --> bird>";
-                "<(/,open,_,lock) --> (/,open,_,{lock1})>", "open", "open" => None;
-                "<(*,0) --> (*,num)>", "(*,num)", "(*,(/,num,_))" => "<(*,num) --> (*,(/,num,_))>";
-                "<{key1} --> (/,open,_,{lock1})>", "{key1}", "(&,key,(/,open,_,{lock1}))" => "<{key1} --> (&,key,(/,open,_,{lock1}))>";
-                "<planetX --> {Mars,Venus}>", "planetX", "{Mars,Pluto,Saturn,Venus}" => "<planetX --> {Mars,Pluto,Saturn,Venus}>";
-                "<(/,reaction,acid,_) --> soda>", "(/,reaction,acid,_)", "(&,soda,(/,neutralization,acid,_))" => "<(/,reaction,acid,_) --> (&,soda,(/,neutralization,acid,_))>";
-                "<bird --> swimmer>", "robin", "swimmer" => "<robin --> swimmer>";
-                "<(&&,<robin --> bird>,<robin --> [living]>) ==> <robin --> animal>>", "<robin --> bird>", "<robin --> animal>" => "<<robin --> bird> ==> <robin --> animal>>";
-                "<robin --> animal>", "(|,robin,swan)", "animal" => "<(|,robin,swan) --> animal>";
-                "<swimmer --> robin>", "bird", "robin" => "<bird --> robin>";
-                "<swan --> swimmer>", "swan", "(&,bird,swimmer)" => "<swan --> (&,bird,swimmer)>";
-                "<0 --> num>", "(/,num,_)", "num" => "<(/,num,_) --> num>";
-                "<(&&,<robin --> bird>,<robin --> [living]>) ==> <robin --> animal>>", "(&&,<robin --> bird>,<robin --> [flying]>,<robin --> [with_wings]>)", "<robin --> animal>" => "<(&&,<robin --> bird>,<robin --> [flying]>,<robin --> [with_wings]>) ==> <robin --> animal>>";
-                "<bird --> swimmer>", "swimmer", "animal" => "<swimmer --> animal>";
-                "<{Tweety} --> flyer>", "[yellow]", "flyer" => "<[yellow] --> flyer>";
-                "<(/,neutralization,_,base) --> ?1>", "(/,neutralization,_,base)", "(/,reaction,_,base)" => "<(/,neutralization,_,base) --> (/,reaction,_,base)>";
-                "<sport --> competition>", "(|,chess,sport)", "competition" => "<(|,chess,sport) --> competition>";
-                "<(&&,<robin --> flyer>,<robin --> [chirping]>) ==> <robin --> bird>>", "<robin --> flyer>", "<robin --> bird>" => "<<robin --> flyer> ==> <robin --> bird>>";
-                "<(&,chess,sport) --> competition>", "chess", "competition" => "<chess --> competition>";
-                "<(&&,<robin --> flyer>,<robin --> [chirping]>,<worms --> (/,food,robin,_)>) ==> <robin --> bird>>", "(&&,<robin --> bird>,<robin --> flyer>,<worms --> (/,food,robin,_)>)", "<robin --> bird>" => None;
-                "<{Tweety} --> {Birdie}>", "{Tweety}", "(&,flyer,{Birdie})" => "<{Tweety} --> (&,flyer,{Birdie})>";
-                "<robin --> bird>", "swimmer", "bird" => "<swimmer --> bird>";
-                "<sport --> competition>", "sport", "chess" => "<sport --> chess>";
-                "<{key1} --> (&,key,(/,open,_,{lock1}))>", "{key1}", "key" => "<{key1} --> key>";
-                "<{Tweety} --> (&,flyer,[yellow])>", "{Tweety}", "[yellow]" => "<{Tweety} --> [yellow]>";
-                "<(|,acid,(/,neutralization,_,base)) --> (/,reaction,_,base)>", "acid", "(/,reaction,_,base)" => "<acid --> (/,reaction,_,base)>";
-                "<(|,bird,robin) --> animal>", "bird", "animal" => "<bird --> animal>";
-                "<<robin --> [with_wings]> ==> <robin --> bird>>", "<robin --> [with_wings]>", "(||,<robin --> bird>,<robin --> [living]>)" => "<<robin --> [with_wings]> ==> (||,<robin --> bird>,<robin --> [living]>)>";
-                "<(*,0) --> (*,(/,num,_))>", "(*,(*,0))", "(*,(*,(/,num,_)))" => "<(*,(*,0)) --> (*,(*,(/,num,_)))>";
-                "<(|,boy,girl) --> (|,girl,youth)>", "boy", "girl" => "<boy --> girl>";
-                "<sport --> competition>", "sport", "(|,chess,competition)" => "<sport --> (|,chess,competition)>";
-                "<tim --> (/,uncle,tom,_)>", "(|,tim,(/,(*,tim,tom),tom,_))", "(/,uncle,tom,_)" => "<(|,tim,(/,(*,tim,tom),tom,_)) --> (/,uncle,tom,_)>";
-                "<(&&,<robin --> bird>,<robin --> [flying]>,<robin --> [with_wings]>) ==> <robin --> animal>>", "(&&,<robin --> bird>,<robin --> [with_wings]>)", "<robin --> animal>" => "<(&&,<robin --> bird>,<robin --> [with_wings]>) ==> <robin --> animal>>";
-                "<(&&,<robin --> bird>,<robin --> [flying]>) ==> <robin --> animal>>", "<robin --> [flying]>", "<robin --> animal>" => "<<robin --> [flying]> ==> <robin --> animal>>";
-                "<(/,open,_,lock) --> key>", "(/,open,_,lock)", "(&,key,(/,open,_,{lock1}))" => "<(/,open,_,lock) --> (&,key,(/,open,_,{lock1}))>";
-                "<{Tweety} --> (|,bird,flyer)>", "(|,bird,flyer)", "(|,bird,{Birdie})" => "<(|,bird,flyer) --> (|,bird,{Birdie})>";
-                "<(&&,<robin --> bird>,<robin --> [living]>) ==> <robin --> animal>>", "<robin --> [living]>", "<robin --> animal>" => "<<robin --> [living]> ==> <robin --> animal>>";
-                "<{Tweety} --> [with_wings]>", "[with_wings]", "(&,flyer,{Birdie})" => "<[with_wings] --> (&,flyer,{Birdie})>";
-                "<a --> (/,like,b,_)>", "(*,a,b)", "(*,(/,like,b,_),b)" => "<(*,a,b) --> (*,(/,like,b,_),b)>";
-                "<robin --> (&,animal,bird)>", "robin", "bird" => "<robin --> bird>";
-                "<(&&,<robin --> flyer>,<robin --> [chirping]>,<(*,robin,worms) --> food>) ==> <robin --> bird>>", "(&&,<robin --> flyer>,<(*,robin,worms) --> food>)", "<robin --> bird>" => "<(&&,<robin --> flyer>,<(*,robin,worms) --> food>) ==> <robin --> bird>>";
-                "<swimmer --> robin>", "robin", "swan" => "<robin --> swan>";
-                "<(/,(*,tim,tom),tom,_) --> (/,uncle,tom,_)>", "(/,(*,tim,tom),tom,_)", "tim" => "<(/,(*,tim,tom),tom,_) --> tim>";
-                "<tiger --> animal>", "(&,robin,tiger)", "animal" => "<(&,robin,tiger) --> animal>";
-                "<(/,neutralization,_,base) --> (/,reaction,_,base)>", "(|,acid,(/,neutralization,_,base))", "(/,reaction,_,base)" => "<(|,acid,(/,neutralization,_,base)) --> (/,reaction,_,base)>";
-                "<robin --> (&,animal,bird)>", "robin", "animal" => "<robin --> animal>";
-                "<robin --> [with_wings]>", "robin", "{Birdie}" => "<robin --> {Birdie}>";
-                "<{Tweety} --> (&,flyer,(|,[yellow],{Birdie}))>", "{Tweety}", "flyer" => "<{Tweety} --> flyer>";
-                "<(&&,<robin --> swimmer>,<robin --> [flying]>) ==> <robin --> bird>>", "<robin --> swimmer>", "<robin --> bird>" => "<<robin --> swimmer> ==> <robin --> bird>>";
-                "<swan --> (|,bird,swimmer)>", "(|,robin,swan)", "(|,bird,swimmer)" => "<(|,robin,swan) --> (|,bird,swimmer)>";
-                "<{key1} --> key>", "key", "(/,open,_,{lock1})" => "<key --> (/,open,_,{lock1})>";
-                "<robin --> animal>", "(&,bird,robin)", "animal" => "<(&,bird,robin) --> animal>";
-                "<boy --> youth>", "(~,boy,girl)", "(~,youth,girl)" => "<(~,boy,girl) --> (~,youth,girl)>";
-                "<(&&,<robin --> [flying]>,<robin --> [with_wings]>) ==> <robin --> animal>>", "<robin --> bird>", "<robin --> animal>" => "<<robin --> bird> ==> <robin --> animal>>";
-                "<bird --> animal>", "bird", "swimmer" => "<bird --> swimmer>";
-                "<tim --> (/,uncle,_,tom)>", "(/,uncle,_,tom)", "(/,uncle,tom,_)" => "<(/,uncle,_,tom) --> (/,uncle,tom,_)>";
-                "<(~,boy,girl) --> (&,[strong],(~,youth,girl))>", "(~,boy,girl)", "(&,[strong],(~,youth,girl))" => "<(~,boy,girl) --> (&,[strong],(~,youth,girl))>";
-                "<[with_wings] --> {Birdie}>", "[with_wings]", "{Tweety}" => "<[with_wings] --> {Tweety}>";
+                "<(&,robin,swimmer) --> animal>", "(&,robin,swimmer)", "(|,animal,bird)" => "<(&,robin,swimmer) --> (|,animal,bird)>";
                 "<(&,robin,{Tweety}) --> [with_wings]>", "(&,flyer,robin,{Tweety})", "(&,flyer,[with_wings])" => "<(&,flyer,robin,{Tweety}) --> (&,flyer,[with_wings])>";
-                "<tiger --> animal>", "(&,robin,tiger)", "(&,animal,robin)" => "<(&,robin,tiger) --> (&,animal,robin)>";
-                "<swan --> (&,bird,swimmer)>", "(&,robin,swan)", "(&,bird,swimmer)" => "<(&,robin,swan) --> (&,bird,swimmer)>";
-                "<sport --> chess>", "sport", "(|,chess,competition)" => "<sport --> (|,chess,competition)>";
-                "<sport --> chess>", "chess", "competition" => "<chess --> competition>";
-                "<{Tweety} --> flyer>", "{Tweety}", "(|,bird,flyer)" => "<{Tweety} --> (|,bird,flyer)>";
-                "<(|,boy,girl) --> (~,youth,girl)>", "(~,youth,girl)", "(|,boy,girl)" => "<(~,youth,girl) --> (|,boy,girl)>";
-                "<soda --> base>", "(/,reaction,acid,_)", "soda" => "<(/,reaction,acid,_) --> soda>";
-                "<{key1} --> (/,open,_,{lock1})>", "key", "(/,open,_,{lock1})" => "<key --> (/,open,_,{lock1})>";
-                "<robin --> (-,bird,swimmer)>", "robin", "bird" => "<robin --> bird>";
-                "<{Tweety} --> flyer>", "{Tweety}", "(|,flyer,[with_wings])" => "<{Tweety} --> (|,flyer,[with_wings])>";
-                "<(~,boy,girl) --> [strong]>", "[strong]", "(~,youth,girl)" => "<[strong] --> (~,youth,girl)>";
-                "<robin --> animal>", "tiger", "robin" => "<tiger --> robin>";
-                "<robin --> animal>", "(&,robin,swan)", "animal" => "<(&,robin,swan) --> animal>";
-                "<{Tweety} --> {Birdie}>", "{Birdie}", "[yellow]" => "<{Birdie} --> [yellow]>";
-                "<swimmer --> robin>", "swimmer", "animal" => "<swimmer --> animal>";
-                "<bird --> (&,animal,swimmer)>", "bird", "animal" => "<bird --> animal>";
-                "<{Tweety} --> {Birdie}>", "{Tweety}", "(&,bird,{Birdie})" => "<{Tweety} --> (&,bird,{Birdie})>";
-                "<swimmer --> robin>", "(&,animal,swimmer)", "robin" => "<(&,animal,swimmer) --> robin>";
-                "<planetX --> {Pluto,Saturn}>", "{Mars,Pluto,Venus}", "{Pluto,Saturn}" => "<{Mars,Pluto,Venus} --> {Pluto,Saturn}>";
-                "<{Tweety} --> {Birdie}>", "{Birdie}", "flyer" => "<{Birdie} --> flyer>";
-                "<{Tweety} --> [with_wings]>", "{Tweety}", "(&,[with_wings],(|,flyer,{Birdie}))" => "<{Tweety} --> (&,[with_wings],(|,flyer,{Birdie}))>";
-                "<{Mars,Pluto,Saturn,Venus} --> {Mars,Pluto,Venus}>", "{Saturn}", "{Mars,Pluto,Venus}" => "<{Saturn} --> {Mars,Pluto,Venus}>";
-                "<{Tweety} --> [with_wings]>", "{Birdie,Tweety}", "(|,[with_wings],{Birdie})" => "<{Birdie,Tweety} --> (|,[with_wings],{Birdie})>";
-                "<{Tweety} --> flyer>", "{Tweety}", "(|,flyer,{Birdie})" => "<{Tweety} --> (|,flyer,{Birdie})>";
-                "<robin --> [with_wings]>", "(|,robin,{Tweety})", "[with_wings]" => "<(|,robin,{Tweety}) --> [with_wings]>";
-                "<acid --> (/,reaction,_,base)>", "(|,acid,(/,neutralization,_,base))", "(/,reaction,_,base)" => "<(|,acid,(/,neutralization,_,base)) --> (/,reaction,_,base)>";
-                "<{Tweety} --> {Birdie}>", "{Tweety}", "(|,[yellow],{Birdie})" => "<{Tweety} --> (|,[yellow],{Birdie})>";
-                "<{Tweety} --> bird>", "{Tweety}", "(&,bird,{Birdie})" => "<{Tweety} --> (&,bird,{Birdie})>";
-                "<{Mars,Pluto,Saturn,Venus} --> {Mars,Pluto,Venus}>", "{Venus}", "{Mars,Pluto,Venus}" => "<{Venus} --> {Mars,Pluto,Venus}>";
-                "<tim --> (/,uncle,tom,_)>", "(/,(*,tim,tom),tom,_)", "tim" => "<(/,(*,tim,tom),tom,_) --> tim>";
-                "<planetX --> {Pluto,Saturn}>", "planetX", "{Mars,Venus}" => "<planetX --> {Mars,Venus}>";
-                "<soda --> (/,reaction,acid,_)>", "(/,neutralization,acid,_)", "soda" => "<(/,neutralization,acid,_) --> soda>";
-                "<(&&,<robin --> [chirping]>,<robin --> [flying]>,<robin --> [with_wings]>) ==> <robin --> bird>>", "(&&,<robin --> [chirping]>,<robin --> [flying]>)", "<robin --> bird>" => "<(&&,<robin --> [chirping]>,<robin --> [flying]>) ==> <robin --> bird>>";
-                "<(&&,<robin --> [flying]>,<robin --> [with_wings]>) ==> <robin --> animal>>", "(&&,<robin --> [flying]>,<robin --> [with_wings]>)", "(&&,<robin --> animal>,<robin --> bird>)" => "<(&&,<robin --> [flying]>,<robin --> [with_wings]>) ==> (&&,<robin --> animal>,<robin --> bird>)>";
-                "<neutralization --> (*,acid,base)>", "neutralization", "reaction" => "<neutralization --> reaction>";
-                "<(*,a,b) --> like>", "(*,a,b)", "(&,like,(*,(/,like,b,_),b))" => "<(*,a,b) --> (&,like,(*,(/,like,b,_),b))>";
-                "<sport --> competition>", "(&,chess,sport)", "competition" => "<(&,chess,sport) --> competition>";
-                "<(/,open,_,lock) --> (&,key,(/,open,_,{lock1}))>", "(/,open,_,lock)", "(/,open,_,{lock1})" => "<(/,open,_,lock) --> (/,open,_,{lock1})>";
-                "<[yellow] <-> {Birdie}>", "(|,flyer,[yellow])", "(|,flyer,{Birdie})" => "<(|,flyer,[yellow]) <-> (|,flyer,{Birdie})>";
-                "<bird --> swimmer>", "swimmer", "robin" => "<swimmer --> robin>";
-                "<{Tweety} --> flyer>", "{Tweety}", "(&,bird,flyer)" => "<{Tweety} --> (&,bird,flyer)>";
-                "<{Tweety} --> (&,flyer,{Birdie})>", "{Tweety}", "flyer" => "<{Tweety} --> flyer>";
-                "<(/,neutralization,_,base) --> (/,reaction,_,base)>", "acid", "(/,neutralization,_,base)" => "<acid --> (/,neutralization,_,base)>";
-                "<{Tweety} --> flyer>", "[with_wings]", "flyer" => "<[with_wings] --> flyer>";
-                "<planetX --> {Pluto,Saturn}>", "planetX", "{Pluto}" => "<planetX --> {Pluto}>";
-                "<(~,boy,girl) --> [strong]>", "boy", "[strong]" => "<boy --> [strong]>";
-                "<(/,reaction,acid,_) --> soda>", "(/,neutralization,acid,_)", "soda" => "<(/,neutralization,acid,_) --> soda>";
-                "<(|,robin,{Tweety}) --> [with_wings]>", "{Tweety}", "[with_wings]" => "<{Tweety} --> [with_wings]>";
-                "<(|,robin,tiger) --> animal>", "tiger", "animal" => "<tiger --> animal>";
-                "<robin --> bird>", "bird", "animal" => "<bird --> animal>";
-                "<planetX --> {Mars,Venus}>", "{Pluto,Saturn}", "{Mars,Venus}" => "<{Pluto,Saturn} --> {Mars,Venus}>";
-                "<(/,(*,tim,tom),tom,_) --> (/,uncle,tom,_)>", "tim", "(/,(*,tim,tom),tom,_)" => "<tim --> (/,(*,tim,tom),tom,_)>";
-                "<<robin --> [with_wings]> ==> <robin --> [living]>>", "<robin --> flyer>", "<robin --> [living]>" => "<<robin --> flyer> ==> <robin --> [living]>>";
-                "<chess --> competition>", "(|,chess,sport)", "competition" => "<(|,chess,sport) --> competition>";
-                "<swan --> swimmer>", "swimmer", "bird" => "<swimmer --> bird>";
-                "<robin --> (-,mammal,swimmer)>", "robin", "swimmer" => "<robin --> swimmer>";
-                "<(|,robin,swan) --> (&,bird,swimmer)>", "(|,robin,swan)", "bird" => "<(|,robin,swan) --> bird>";
-                "<{Tweety} --> (&,bird,{Birdie})>", "{Tweety}", "bird" => "<{Tweety} --> bird>";
-                "<chess --> competition>", "chess", "(|,chess,competition)" => None;
-                "<(/,open,_,lock) --> key>", "(/,open,_,{lock1})", "key" => "<(/,open,_,{lock1}) --> key>";
-                "<(&&,<robin --> bird>,<robin --> [flying]>,<robin --> [with_wings]>) ==> <robin --> animal>>", "(&&,<robin --> bird>,<robin --> [flying]>)", "<robin --> animal>" => "<(&&,<robin --> bird>,<robin --> [flying]>) ==> <robin --> animal>>";
-                "<(/,num,_) --> num>", "(*,(/,num,_))", "(*,num)" => "<(*,(/,num,_)) --> (*,num)>";
-                "<robin --> swimmer>", "(|,bird,robin)", "swimmer" => "<(|,bird,robin) --> swimmer>";
-                "<(/,open,_,lock) --> key>", "key", "(/,open,_,{lock1})" => "<key --> (/,open,_,{lock1})>";
-                "<{lock1} --> lock>", "lock", "(/,open,{key1},_)" => "<lock --> (/,open,{key1},_)>";
-                "<[yellow] --> {Birdie}>", "(|,flyer,[yellow])", "(|,flyer,{Birdie})" => "<(|,flyer,[yellow]) --> (|,flyer,{Birdie})>";
-                "<chess --> competition>", "(~,sport,chess)", "competition" => "<(~,sport,chess) --> competition>";
-                "<(*,a,b) --> (&,like,(*,(/,like,b,_),b))>", "(*,a,b)", "(&,like,(*,(/,like,b,_),b))" => "<(*,a,b) --> (&,like,(*,(/,like,b,_),b))>";
-                "<{Tweety} --> [with_wings]>", "{Tweety}", "robin" => "<{Tweety} --> robin>";
-                "<chess --> competition>", "chess", "sport" => "<chess --> sport>";
-                "<{Birdie} <-> {Tweety}>", "Birdie", "Tweety" => "<Birdie <-> Tweety>";
-                "<bird --> swimmer>", "bird", "(&,animal,swimmer)" => "<bird --> (&,animal,swimmer)>";
-                "<{Tweety} --> flyer>", "(|,[yellow],{Birdie})", "flyer" => "<(|,[yellow],{Birdie}) --> flyer>";
-                "<(|,chess,sport) --> competition>", "sport", "competition" => "<sport --> competition>";
-                "<planetX --> {Mars,Pluto,Venus}>", "{Mars,Pluto,Venus}", "{Pluto,Saturn}" => "<{Mars,Pluto,Venus} --> {Pluto,Saturn}>";
-                "<robin --> animal>", "(|,robin,swimmer)", "animal" => "<(|,robin,swimmer) --> animal>";
-                "<[yellow] <-> {Birdie}>", "[yellow]", "{Tweety}" => "<[yellow] <-> {Tweety}>";
-                "<(|,robin,swan) --> (|,bird,swimmer)>", "swan", "(|,bird,swimmer)" => "<swan --> (|,bird,swimmer)>";
-                "<{Tweety} --> (&,[yellow],{Birdie})>", "{Tweety}", "[yellow]" => "<{Tweety} --> [yellow]>";
-                "<(/,(*,0),_) --> (/,num,_)>", "(*,(/,(*,0),_))", "(*,(/,num,_))" => "<(*,(/,(*,0),_)) --> (*,(/,num,_))>";
-                "<{Tweety} --> [with_wings]>", "{Tweety}", "(|,flyer,[with_wings],{Birdie})" => "<{Tweety} --> (|,flyer,[with_wings],{Birdie})>";
-                "<(/,neutralization,_,base) --> (/,reaction,_,base)>", "(&,acid,(/,neutralization,_,base))", "(/,reaction,_,base)" => "<(&,acid,(/,neutralization,_,base)) --> (/,reaction,_,base)>";
-                "<{Tweety} --> bird>", "bird", "flyer" => "<bird --> flyer>";
-                "<(/,reaction,acid,_) --> soda>", "(/,reaction,acid,_)", "(|,soda,(/,neutralization,acid,_))" => "<(/,reaction,acid,_) --> (|,soda,(/,neutralization,acid,_))>";
-                "<(&&,<robin --> [flying]>,<robin --> [with_wings]>) ==> <robin --> animal>>", "<robin --> animal>", "<robin --> bird>" => "<<robin --> animal> ==> <robin --> bird>>";
-                "<cat --> (&,CAT,(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish))>", "cat", "(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish)" => "<cat --> (/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish)>";
-                "<{lock1} --> (&,lock,(/,open,{key1},_))>", "{lock1}", "lock" => "<{lock1} --> lock>";
-                "<(/,(*,tim,tom),tom,_) --> (/,uncle,tom,_)>", "(|,tim,(/,(*,tim,tom),tom,_))", "(/,uncle,tom,_)" => "<(|,tim,(/,(*,tim,tom),tom,_)) --> (/,uncle,tom,_)>";
-                "<{lock1} --> lock>", "(/,open,_,lock)", "(/,open,_,{lock1})" => "<(/,open,_,lock) --> (/,open,_,{lock1})>";
-                "<robin --> [with_wings]>", "(&,robin,{Tweety})", "[with_wings]" => "<(&,robin,{Tweety}) --> [with_wings]>";
-                "<robin --> swan>", "robin", "bird" => "<robin --> bird>";
-                "<{Tweety} --> [with_wings]>", "[with_wings]", "(|,flyer,{Birdie})" => "<[with_wings] --> (|,flyer,{Birdie})>";
-                "<?1 --> claimedByBob>", "?1", "(&,<bird --> fly>,<{Tweety} --> bird>)" => "<?1 --> (&,<bird --> fly>,<{Tweety} --> bird>)>";
-                "<(|,boy,girl) --> youth>", "girl", "youth" => "<girl --> youth>";
-                "<(&,robin,swan) --> (&,bird,swimmer)>", "swan", "swimmer" => "<swan --> swimmer>";
-                "<boy --> [strong]>", "(~,boy,girl)", "(~,[strong],girl)" => "<(~,boy,girl) --> (~,[strong],girl)>";
-                "<(|,robin,swimmer) --> bird>", "robin", "bird" => "<robin --> bird>";
-                "<(&&,<robin --> flyer>,<robin --> [chirping]>) ==> <robin --> bird>>", "(&&,<robin --> bird>,<robin --> flyer>)", "<robin --> bird>" => None;
-                "<tim --> (/,uncle,tom,_)>", "(&,tim,(/,(*,tim,tom),tom,_))", "(/,uncle,tom,_)" => "<(&,tim,(/,(*,tim,tom),tom,_)) --> (/,uncle,tom,_)>";
-                "<{Tweety} --> [yellow]>", "{Tweety}", "(|,flyer,[yellow])" => "<{Tweety} --> (|,flyer,[yellow])>";
-                "<robin --> swimmer>", "robin", "animal" => "<robin --> animal>";
-                "<swimmer --> animal>", "(|,robin,swimmer)", "animal" => "<(|,robin,swimmer) --> animal>";
-                "<(|,bird,robin) --> animal>", "robin", "animal" => "<robin --> animal>";
-                "<(~,boy,girl) --> [strong]>", "(~,youth,girl)", "[strong]" => "<(~,youth,girl) --> [strong]>";
-                "<robin --> bird>", "swan", "robin" => "<swan --> robin>";
-                "<(~,boy,girl) --> [strong]>", "(~,boy,girl)", "[strong]" => "<(~,boy,girl) --> [strong]>";
-                "<swan --> (|,bird,swimmer)>", "robin", "swan" => "<robin --> swan>";
-                "<(/,(*,tim,tom),tom,_) --> (/,uncle,tom,_)>", "(&,tim,(/,(*,tim,tom),tom,_))", "(/,uncle,tom,_)" => "<(&,tim,(/,(*,tim,tom),tom,_)) --> (/,uncle,tom,_)>";
-                "<{Tweety} --> {Birdie}>", "{Birdie}", "bird" => "<{Birdie} --> bird>";
-                "<{Tweety} --> [yellow]>", "{Birdie,Tweety}", "(|,[yellow],{Birdie})" => "<{Birdie,Tweety} --> (|,[yellow],{Birdie})>";
+                "<(&,robin,{Tweety}) --> [with_wings]>", "(&,robin,{Birdie},{Tweety})", "(&,[with_wings],{Birdie})" => "<(&,robin,{Birdie},{Tweety}) --> (&,[with_wings],{Birdie})>";
+                "<(*,(*,(*,0))) --> num>", "(*,(*,(*,(/,num,_))))", "num" => "<(*,(*,(*,(/,num,_)))) --> num>";
+                "<(*,(*,(*,0))) --> num>", "num", "(*,(*,(*,(/,num,_))))" => "<num --> (*,(*,(*,(/,num,_))))>";
+                "<(*,(*,0)) --> (*,(*,(/,num,_)))>", "(*,(*,(*,0)))", "(*,(*,(*,(/,num,_))))" => "<(*,(*,(*,0))) --> (*,(*,(*,(/,num,_))))>";
+                "<(*,(*,0)) --> (*,(*,(/,num,_)))>", "(*,(*,(/,num,_)))", "(*,(*,num))" => "<(*,(*,(/,num,_))) --> (*,(*,num))>";
                 "<(*,(*,0)) --> (*,(*,(/,num,_)))>", "(*,(*,0))", "(&,(*,(*,num)),(*,(*,(/,num,_))))" => "<(*,(*,0)) --> (&,(*,(*,num)),(*,(*,(/,num,_))))>";
-                "<bird --> swimmer>", "(&,bird,robin)", "swimmer" => "<(&,bird,robin) --> swimmer>";
-                "<(--,<robin --> bird>) ==> <robin --> [flying]>>", "(--,<robin --> [flying]>)", "<robin --> bird>" => "<(--,<robin --> [flying]>) ==> <robin --> bird>>";
-                "<(*,0) --> (*,(/,num,_))>", "(*,num)", "(*,(/,num,_))" => "<(*,num) --> (*,(/,num,_))>";
-                "<robin --> bird>", "animal", "bird" => "<animal --> bird>";
-                "<(|,chess,sport) --> competition>", "chess", "competition" => "<chess --> competition>";
-                "<(|,boy,girl) --> youth>", "(|,boy,girl)", "(~,youth,girl)" => "<(|,boy,girl) --> (~,youth,girl)>";
-                "<planetX --> {Mars,Pluto,Venus}>", "{Pluto,Saturn}", "{Mars,Pluto,Venus}" => "<{Pluto,Saturn} --> {Mars,Pluto,Venus}>";
-                "<(|,boy,girl) --> youth>", "(~,(|,boy,girl),girl)", "(~,youth,girl)" => "<(~,(|,boy,girl),girl) --> (~,youth,girl)>";
-                "<boy --> youth>", "(|,boy,girl)", "(|,girl,youth)" => "<(|,boy,girl) --> (|,girl,youth)>";
-                "<sport --> competition>", "(|,chess,sport)", "(|,chess,competition)" => "<(|,chess,sport) --> (|,chess,competition)>";
-                "<(&&,<robin --> [chirping]>,<robin --> [with_wings]>) ==> <robin --> bird>>", "(&&,<robin --> bird>,<robin --> [chirping]>)", "<robin --> bird>" => None;
-                "<reaction --> neutralization>", "(/,reaction,_,base)", "(/,neutralization,_,base)" => "<(/,reaction,_,base) --> (/,neutralization,_,base)>";
-                "<robin --> animal>", "robin", "bird" => "<robin --> bird>";
-                "<(*,0) --> (*,num)>", "(*,0)", "(&,(*,num),(*,(/,num,_)))" => "<(*,0) --> (&,(*,num),(*,(/,num,_)))>";
-                "<(*,0) --> (*,num)>", "0", "num" => "<0 --> num>";
-                "<{Birdie} --> [yellow]>", "(&,flyer,{Birdie})", "(&,flyer,[yellow])" => "<(&,flyer,{Birdie}) --> (&,flyer,[yellow])>";
-                "<robin --> swimmer>", "bird", "robin" => "<bird --> robin>";
-                "<(&&,<robin --> bird>,<robin --> [flying]>,<robin --> [with_wings]>) ==> <robin --> animal>>", "(&&,<robin --> [flying]>,<robin --> [with_wings]>)", "<robin --> animal>" => "<(&&,<robin --> [flying]>,<robin --> [with_wings]>) ==> <robin --> animal>>";
-                "<robin --> (|,bird,swimmer)>", "(|,robin,swan)", "(|,bird,swimmer)" => "<(|,robin,swan) --> (|,bird,swimmer)>";
-                "<(-,swimmer,animal) --> (-,swimmer,bird)>", "swimmer", "swimmer" => None;
-                "<robin --> bird>", "robin", "(&,animal,bird)" => "<robin --> (&,animal,bird)>";
-                "<(&,robin,swimmer) --> bird>", "(&,robin,swimmer)", "(|,animal,bird)" => "<(&,robin,swimmer) --> (|,animal,bird)>";
-                "<{Birdie} --> flyer>", "(&,flyer,{Birdie})", "flyer" => None;
-                "<acid --> (/,reaction,_,base)>", "(/,neutralization,_,base)", "acid" => "<(/,neutralization,_,base) --> acid>";
-                "<(/,neutralization,_,base) --> (/,reaction,_,base)>", "base", "base" => None;
-                "<robin --> [with_wings]>", "(&,robin,{Birdie})", "[with_wings]" => "<(&,robin,{Birdie}) --> [with_wings]>";
-                "<{Tweety} --> flyer>", "{Birdie}", "flyer" => "<{Birdie} --> flyer>";
-                "<sport --> chess>", "competition", "chess" => "<competition --> chess>";
-                "<{Tweety} --> (|,[with_wings],{Birdie})>", "{Tweety}", "(&,flyer,[yellow],(|,[with_wings],{Birdie}))" => "<{Tweety} --> (&,flyer,[yellow],(|,[with_wings],{Birdie}))>";
-                "<(&&,<robin --> [flying]>,<robin --> [with_wings]>) ==> <robin --> bird>>", "<robin --> [with_wings]>", "<robin --> bird>" => "<<robin --> [with_wings]> ==> <robin --> bird>>";
-                "<robin --> swan>", "robin", "gull" => "<robin --> gull>";
-                "<num --> (/,num,_)>", "(*,num)", "(*,(/,num,_))" => "<(*,num) --> (*,(/,num,_))>";
-                "<(&,robin,swimmer) --> animal>", "bird", "animal" => "<bird --> animal>";
-                "<{Birdie} --> [yellow]>", "{Birdie}", "(|,[yellow],{Birdie})" => None;
-                "<swimmer --> animal>", "robin", "swimmer" => "<robin --> swimmer>";
-                "<planetX --> {Mars,Pluto,Venus}>", "planetX", "{Mars,Venus}" => "<planetX --> {Mars,Venus}>";
-                "<robin --> swan>", "robin", "animal" => "<robin --> animal>";
-                "<{Tweety} --> {Birdie}>", "flyer", "{Birdie}" => "<flyer --> {Birdie}>";
-                "<swimmer --> robin>", "swan", "robin" => "<swan --> robin>";
-                "<{Tweety} --> [with_wings]>", "{Tweety}", "(&,flyer,[with_wings],{Birdie})" => "<{Tweety} --> (&,flyer,[with_wings],{Birdie})>";
-                "<swimmer --> bird>", "swimmer", "bird" => "<swimmer --> bird>";
-                "<robin --> (|,bird,swimmer)>", "robin", "swan" => "<robin --> swan>";
-                "<bird --> animal>", "tiger", "bird" => "<tiger --> bird>";
-                "<(*,tim,tom) --> uncle>", "(/,(*,tim,tom),_,tom)", "(/,uncle,_,tom)" => "<(/,(*,tim,tom),_,tom) --> (/,uncle,_,tom)>";
-                "<{lock1} --> (|,lock,(/,open,{key1},_))>", "(/,open,_,(|,lock,(/,open,{key1},_)))", "(/,open,_,{lock1})" => "<(/,open,_,(|,lock,(/,open,{key1},_))) --> (/,open,_,{lock1})>";
-                "<b --> (/,like,_,a)>", "(/,like,(/,like,_,a),_)", "(/,like,b,_)" => "<(/,like,(/,like,_,a),_) --> (/,like,b,_)>";
-                "<bird --> animal>", "bird", "robin" => "<bird --> robin>";
-                "<(*,tim,tom) --> uncle>", "(/,(*,tim,tom),tim,_)", "(/,uncle,tim,_)" => "<(/,(*,tim,tom),tim,_) --> (/,uncle,tim,_)>";
-                "<(/,reaction,acid,_) --> soda>", "soda", "(/,neutralization,acid,_)" => "<soda --> (/,neutralization,acid,_)>";
-                "<{Birdie} <-> {Tweety}>", "{Birdie}", "{Tweety}" => "<{Birdie} <-> {Tweety}>";
-                "<(/,neutralization,acid,_) <-> (/,reaction,acid,_)>", "acid", "acid" => None;
-                "<{Tweety} --> (&,flyer,[with_wings])>", "{Tweety}", "flyer" => "<{Tweety} --> flyer>";
-                "<swan --> (&,bird,swimmer)>", "swan", "swimmer" => "<swan --> swimmer>";
-                "<bird --> animal>", "(|,bird,tiger)", "animal" => "<(|,bird,tiger) --> animal>";
-                "<{Tweety} --> {Birdie}>", "{Tweety}", "(&,[yellow],{Birdie})" => "<{Tweety} --> (&,[yellow],{Birdie})>";
-                "<0 --> (/,num,_)>", "(*,0)", "(*,(/,num,_))" => "<(*,0) --> (*,(/,num,_))>";
-                "<{Tweety} --> flyer>", "flyer", "(&,[with_wings],{Birdie})" => "<flyer --> (&,[with_wings],{Birdie})>";
-                "<swan --> (&,bird,swimmer)>", "swan", "robin" => "<swan --> robin>";
-                "<(|,robin,tiger) --> animal>", "robin", "animal" => "<robin --> animal>";
-                "<(/,(*,tim,tom),tom,_) --> (/,uncle,tom,_)>", "(~,(/,(*,tim,tom),tom,_),tim)", "(/,uncle,tom,_)" => "<(~,(/,(*,tim,tom),tom,_),tim) --> (/,uncle,tom,_)>";
-                "<neutralization <-> reaction>", "(/,neutralization,acid,_)", "(/,reaction,acid,_)" => "<(/,neutralization,acid,_) <-> (/,reaction,acid,_)>";
-                "<(~,boy,girl) --> [strong]>", "(~,boy,girl)", "(&,[strong],(~,youth,girl))" => "<(~,boy,girl) --> (&,[strong],(~,youth,girl))>";
-                "<lock1 --> lock>", "lock", "lock1" => "<lock --> lock1>";
-                "<{Tweety} --> (|,bird,flyer)>", "(|,bird,{Tweety})", "(|,bird,flyer)" => "<(|,bird,{Tweety}) --> (|,bird,flyer)>";
-                "<cat --> (&,CAT,(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish))>", "cat", "CAT" => "<cat --> CAT>";
-                "<{Tweety} --> (|,[with_wings],{Birdie})>", "{Tweety}", "(|,[with_wings],{Birdie},(&,flyer,[yellow]))" => "<{Tweety} --> (|,[with_wings],{Birdie},(&,flyer,[yellow]))>";
-                "<base --> (/,reaction,acid,_)>", "(/,neutralization,acid,_)", "base" => "<(/,neutralization,acid,_) --> base>";
-                "<{Tweety} --> (&,flyer,[with_wings])>", "{Tweety}", "[with_wings]" => "<{Tweety} --> [with_wings]>";
-                "<swimmer --> bird>", "swimmer", "(&,animal,bird)" => "<swimmer --> (&,animal,bird)>";
-                "<(|,bird,swan) --> swimmer>", "bird", "swimmer" => "<bird --> swimmer>";
-                "<{Tweety} --> flyer>", "{Tweety}", "(&,flyer,(|,[yellow],{Birdie}))" => "<{Tweety} --> (&,flyer,(|,[yellow],{Birdie}))>";
-                "<{Mars,Pluto,Saturn,Venus} --> {Mars,Pluto,Venus}>", "{Pluto}", "{Mars,Pluto,Venus}" => "<{Pluto} --> {Mars,Pluto,Venus}>";
-                "<{Tweety} --> (|,[with_wings],{Birdie})>", "(|,[with_wings],{Birdie})", "(&,flyer,[yellow])" => "<(|,[with_wings],{Birdie}) --> (&,flyer,[yellow])>";
-                "<{Tweety} --> {Birdie}>", "[with_wings]", "{Birdie}" => "<[with_wings] --> {Birdie}>";
-                "<{Tweety} --> flyer>", "{Tweety}", "(|,flyer,[yellow])" => "<{Tweety} --> (|,flyer,[yellow])>";
-                "<(|,boy,girl) --> (|,girl,youth)>", "girl", "youth" => "<girl --> youth>";
-                "<{Tweety} --> flyer>", "{Tweety}", "(|,flyer,[with_wings],{Birdie})" => "<{Tweety} --> (|,flyer,[with_wings],{Birdie})>";
-                "<0 --> (/,num,_)>", "num", "(/,num,_)" => "<num --> (/,num,_)>";
-                "<{Tweety} --> flyer>", "{Tweety}", "(&,flyer,[with_wings],{Birdie})" => "<{Tweety} --> (&,flyer,[with_wings],{Birdie})>";
-                "<(*,0) --> (*,num)>", "(*,0)", "(|,(*,num),(*,(/,num,_)))" => "<(*,0) --> (|,(*,num),(*,(/,num,_)))>";
-                "<acid --> (/,reaction,_,base)>", "acid", "(/,neutralization,_,base)" => "<acid --> (/,neutralization,_,base)>";
-                "<(&,bird,swimmer) --> (&,animal,swimmer)>", "bird", "animal" => "<bird --> animal>";
+                "<(*,(*,0)) --> (*,(*,(/,num,_)))>", "(*,(*,0))", "(|,(*,(*,num)),(*,(*,(/,num,_))))" => "<(*,(*,0)) --> (|,(*,(*,num)),(*,(*,(/,num,_))))>";
+                "<(*,(*,0)) --> (*,(*,(/,num,_)))>", "(*,(*,num))", "(*,(*,(/,num,_)))" => "<(*,(*,num)) --> (*,(*,(/,num,_)))>";
+                "<(*,(*,0)) --> (*,(*,(/,num,_)))>", "(*,0)", "(*,(/,num,_))" => "<(*,0) --> (*,(/,num,_))>";
+                "<(*,0) --> (*,(/,num,_))>", "(*,(*,0))", "(*,(*,(/,num,_)))" => "<(*,(*,0)) --> (*,(*,(/,num,_)))>";
+                "<(*,0) --> (*,(/,num,_))>", "(*,(/,num,_))", "(*,num)" => "<(*,(/,num,_)) --> (*,num)>";
                 "<(*,0) --> (*,(/,num,_))>", "(*,0)", "(&,(*,num),(*,(/,num,_)))" => "<(*,0) --> (&,(*,num),(*,(/,num,_)))>";
                 "<(*,0) --> (*,(/,num,_))>", "(*,0)", "(|,(*,num),(*,(/,num,_)))" => "<(*,0) --> (|,(*,num),(*,(/,num,_)))>";
-                "<robin --> (|,bird,swimmer)>", "(&,robin,swan)", "(|,bird,swimmer)" => "<(&,robin,swan) --> (|,bird,swimmer)>";
-                "<(/,open,_,lock) --> (/,open,_,{lock1})>", "key", "(/,open,_,{lock1})" => "<key --> (/,open,_,{lock1})>";
-                "<(|,robin,tiger) --> animal>", "(|,robin,tiger)", "animal" => "<(|,robin,tiger) --> animal>";
-                "<robin --> animal>", "swan", "robin" => "<swan --> robin>";
-                "<cat --> CAT>", "cat", "(|,CAT,(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish))" => "<cat --> (|,CAT,(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish))>";
-                "<(|,chess,sport) --> competition>", "(|,chess,sport)", "(|,chess,competition)" => "<(|,chess,sport) --> (|,chess,competition)>";
-                "<(/,open,_,lock) --> key>", "(/,open,_,lock)", "(|,key,(/,open,_,{lock1}))" => "<(/,open,_,lock) --> (|,key,(/,open,_,{lock1}))>";
-                "<sport --> competition>", "(~,chess,sport)", "competition" => "<(~,chess,sport) --> competition>";
-                "<{?1} --> swimmer>", "robin", "{?1}" => "<robin --> {?1}>";
-                "<robin --> bird>", "swimmer", "robin" => "<swimmer --> robin>";
-                "<(/,open,_,lock) --> (/,open,_,{lock1})>", "(/,open,_,{lock1})", "key" => "<(/,open,_,{lock1}) --> key>";
-                "<a --> (/,like,b,_)>", "(*,b,a)", "(*,b,(/,like,b,_))" => "<(*,b,a) --> (*,b,(/,like,b,_))>";
-                "<{Tweety} --> bird>", "{Tweety}", "(|,bird,flyer)" => "<{Tweety} --> (|,bird,flyer)>";
-                "<{Tweety} --> [yellow]>", "{Tweety}", "(|,[yellow],{Birdie})" => "<{Tweety} --> (|,[yellow],{Birdie})>";
-                "<(&&,<robin --> [flying]>,<robin --> [with_wings]>) ==> <robin --> [living]>>", "<robin --> [with_wings]>", "<robin --> bird>" => "<<robin --> [with_wings]> ==> <robin --> bird>>";
-                "<robin --> animal>", "robin", "swan" => "<robin --> swan>";
-                "<(*,(*,(*,0))) --> num>", "(*,(*,(*,(/,num,_))))", "num" => "<(*,(*,(*,(/,num,_)))) --> num>";
-                "<swimmer --> robin>", "animal", "swimmer" => "<animal --> swimmer>";
-                "<(&,robin,swan) --> (&,bird,swimmer)>", "robin", "bird" => "<robin --> bird>";
-                "<swan --> bird>", "gull", "bird" => "<gull --> bird>";
-                "<robin --> [with_wings]>", "robin", "flyer" => "<robin --> flyer>";
-                "<planetX --> {Pluto,Saturn}>", "{Pluto,Saturn}", "{Mars,Pluto,Venus}" => "<{Pluto,Saturn} --> {Mars,Pluto,Venus}>";
-                "<tiger --> robin>", "tiger", "swan" => "<tiger --> swan>";
-                "<planetX --> {Pluto,Saturn}>", "{Mars,Pluto,Saturn,Venus}", "{Pluto,Saturn}" => "<{Mars,Pluto,Saturn,Venus} --> {Pluto,Saturn}>";
-                "<(/,(*,tim,tom),_,tom) --> (/,uncle,_,tom)>", "(*,tim,tom)", "uncle" => "<(*,tim,tom) --> uncle>";
-                "<{Tweety} --> {Birdie}>", "{Birdie}", "[with_wings]" => "<{Birdie} --> [with_wings]>";
-                "<(|,acid,(/,neutralization,_,base)) --> (/,reaction,_,base)>", "(/,neutralization,_,base)", "(/,reaction,_,base)" => "<(/,neutralization,_,base) --> (/,reaction,_,base)>";
-                "<swan --> swimmer>", "bird", "swimmer" => "<bird --> swimmer>";
-                "<swimmer --> bird>", "swimmer", "(|,animal,bird)" => "<swimmer --> (|,animal,bird)>";
-                "<(|,robin,swan) --> (|,bird,swimmer)>", "robin", "(|,bird,swimmer)" => "<robin --> (|,bird,swimmer)>";
-                "<(|,chess,sport) --> (|,chess,competition)>", "chess", "chess" => None;
-                "<(&&,<robin --> [chirping]>,<robin --> [with_wings]>) ==> <robin --> bird>>", "<robin --> [chirping]>", "<robin --> bird>" => "<<robin --> [chirping]> ==> <robin --> bird>>";
-                "<(*,(*,0)) --> (*,(*,(/,num,_)))>", "(*,(*,(*,0)))", "(*,(*,(*,(/,num,_))))" => "<(*,(*,(*,0))) --> (*,(*,(*,(/,num,_))))>";
-                "<(|,robin,swimmer) --> bird>", "(|,robin,swimmer)", "(&,animal,bird)" => "<(|,robin,swimmer) --> (&,animal,bird)>";
-                "<swan --> robin>", "bird", "robin" => "<bird --> robin>";
-                "<{key1} --> key>", "{key1}", "(&,key,(/,open,_,{lock1}))" => "<{key1} --> (&,key,(/,open,_,{lock1}))>";
-                "<(&&,<robin --> [chirping]>,<robin --> [flying]>) ==> <robin --> bird>>", "<robin --> [flying]>", "<robin --> bird>" => "<<robin --> [flying]> ==> <robin --> bird>>";
-                "<{key1} --> key>", "{key1}", "(|,key,(/,open,_,{lock1}))" => "<{key1} --> (|,key,(/,open,_,{lock1}))>";
-                "<chess --> competition>", "sport", "chess" => "<sport --> chess>";
-                "<bird --> swimmer>", "(|,bird,robin)", "swimmer" => "<(|,bird,robin) --> swimmer>";
-                "<{Tweety} --> bird>", "{Birdie}", "bird" => "<{Birdie} --> bird>";
+                "<(*,0) --> (*,(/,num,_))>", "(*,num)", "(*,(/,num,_))" => "<(*,num) --> (*,(/,num,_))>";
+                "<(*,0) --> (*,(/,num,_))>", "0", "(/,num,_)" => "<0 --> (/,num,_)>";
+                "<(*,0) --> (*,num)>", "(*,(*,0))", "(*,(*,num))" => "<(*,(*,0)) --> (*,(*,num))>";
+                "<(*,0) --> (*,num)>", "(*,(/,num,_))", "(*,num)" => "<(*,(/,num,_)) --> (*,num)>";
+                "<(*,0) --> (*,num)>", "(*,0)", "(&,(*,num),(*,(/,num,_)))" => "<(*,0) --> (&,(*,num),(*,(/,num,_)))>";
+                "<(*,0) --> (*,num)>", "(*,0)", "(|,(*,num),(*,(/,num,_)))" => "<(*,0) --> (|,(*,num),(*,(/,num,_)))>";
+                "<(*,0) --> (*,num)>", "(*,num)", "(*,(/,num,_))" => "<(*,num) --> (*,(/,num,_))>";
+                "<(*,0) --> (*,num)>", "0", "num" => "<0 --> num>";
+                "<(*,0) --> num>", "(/,(*,0),_)", "(/,num,_)" => "<(/,(*,0),_) --> (/,num,_)>";
+                "<(*,a,b) --> (&,like,(*,(/,like,b,_),b))>", "(*,a,b)", "(&,like,(*,(/,like,b,_),b))" => "<(*,a,b) --> (&,like,(*,(/,like,b,_),b))>";
+                "<(*,a,b) --> like>", "(*,(/,like,b,_),b)", "like" => "<(*,(/,like,b,_),b) --> like>";
+                "<(*,a,b) --> like>", "(*,a,b)", "(&,like,(*,(/,like,b,_),b))" => "<(*,a,b) --> (&,like,(*,(/,like,b,_),b))>";
+                "<(*,a,b) --> like>", "(*,a,b)", "(|,like,(*,(/,like,b,_),b))" => "<(*,a,b) --> (|,like,(*,(/,like,b,_),b))>";
+                "<(*,a,b) --> like>", "like", "(*,(/,like,b,_),b)" => "<like --> (*,(/,like,b,_),b)>";
+                "<(*,acid,base) --> reaction>", "neutralization", "reaction" => "<neutralization --> reaction>";
+                "<(*,b,a) --> (*,b,(/,like,b,_))>", "a", "(/,like,b,_)" => "<a --> (/,like,b,_)>";
+                "<(*,b,a) --> (*,b,(/,like,b,_))>", "b", "b" => None;
                 "<(*,num) <-> (*,(/,num,_))>", "num", "(/,num,_)" => "<num <-> (/,num,_)>";
-                "<(*,tim,tom) --> uncle>", "(/,(*,tim,tom),tom,_)", "(/,uncle,tom,_)" => "<(/,(*,tim,tom),tom,_) --> (/,uncle,tom,_)>";
-                "<(&&,<robin --> swimmer>,<robin --> [flying]>) ==> <robin --> bird>>", "<robin --> [flying]>", "<robin --> bird>" => "<<robin --> [flying]> ==> <robin --> bird>>";
-                "<(~,boy,girl) --> (~,youth,girl)>", "girl", "(~,youth,girl)" => None;
-                "<{Birdie} --> [yellow]>", "(|,flyer,{Birdie})", "(|,flyer,[yellow])" => "<(|,flyer,{Birdie}) --> (|,flyer,[yellow])>";
+                "<(*,tim,tom) --> uncle>", "(/,(*,tim,tom),_,tom)", "(/,uncle,_,tom)" => "<(/,(*,tim,tom),_,tom) --> (/,uncle,_,tom)>";
+                "<(-,swimmer,animal) --> (-,swimmer,bird)>", "bird", "animal" => "<bird --> animal>";
+                "<(-,swimmer,animal) --> (-,swimmer,bird)>", "swimmer", "swimmer" => None;
+                "<(--,<robin --> [flying]>) ==> <robin --> bird>>", "(--,<robin --> bird>)", "<robin --> [flying]>" => "<(--,<robin --> bird>) ==> <robin --> [flying]>>";
+                "<(--,<robin --> bird>) ==> <robin --> [flying]>>", "(--,<robin --> [flying]>)", "<robin --> bird>" => "<(--,<robin --> [flying]>) ==> <robin --> bird>>";
+                "<(/,(*,0),_) --> (/,num,_)>", "(*,(/,(*,0),_))", "(*,(/,num,_))" => "<(*,(/,(*,0),_)) --> (*,(/,num,_))>";
+                "<(/,(*,tim,tom),_,tom) --> (/,uncle,_,tom)>", "(*,tim,tom)", "uncle" => "<(*,tim,tom) --> uncle>";
+                "<(/,(*,tim,tom),_,tom) --> (/,uncle,_,tom)>", "tom", "tom" => None;
+                "<(/,(*,tim,tom),tom,_) --> (/,uncle,tom,_)>", "(&,tim,(/,(*,tim,tom),tom,_))", "(/,uncle,tom,_)" => "<(&,tim,(/,(*,tim,tom),tom,_)) --> (/,uncle,tom,_)>";
+                "<(/,(*,tim,tom),tom,_) --> (/,uncle,tom,_)>", "(/,(*,tim,tom),tom,_)", "tim" => "<(/,(*,tim,tom),tom,_) --> tim>";
+                "<(/,(*,tim,tom),tom,_) --> (/,uncle,tom,_)>", "(|,tim,(/,(*,tim,tom),tom,_))", "(/,uncle,tom,_)" => "<(|,tim,(/,(*,tim,tom),tom,_)) --> (/,uncle,tom,_)>";
+                "<(/,(*,tim,tom),tom,_) --> (/,uncle,tom,_)>", "(~,(/,(*,tim,tom),tom,_),tim)", "(/,uncle,tom,_)" => "<(~,(/,(*,tim,tom),tom,_),tim) --> (/,uncle,tom,_)>";
+                "<(/,(*,tim,tom),tom,_) --> (/,uncle,tom,_)>", "tim", "(/,(*,tim,tom),tom,_)" => "<tim --> (/,(*,tim,tom),tom,_)>";
+                "<(/,neutralization,_,base) --> (/,reaction,_,base)>", "(&,acid,(/,neutralization,_,base))", "(/,reaction,_,base)" => "<(&,acid,(/,neutralization,_,base)) --> (/,reaction,_,base)>";
+                "<(/,neutralization,_,base) --> (/,reaction,_,base)>", "(/,neutralization,_,base)", "acid" => "<(/,neutralization,_,base) --> acid>";
+                "<(/,neutralization,_,base) --> (/,reaction,_,base)>", "(|,acid,(/,neutralization,_,base))", "(/,reaction,_,base)" => "<(|,acid,(/,neutralization,_,base)) --> (/,reaction,_,base)>";
+                "<(/,neutralization,_,base) --> (/,reaction,_,base)>", "acid", "(/,neutralization,_,base)" => "<acid --> (/,neutralization,_,base)>";
+                "<(/,neutralization,_,base) --> (/,reaction,_,base)>", "base", "base" => None;
+                "<(/,neutralization,_,base) --> (/,reaction,_,base)>", "neutralization", "reaction" => "<neutralization --> reaction>";
+                "<(/,neutralization,_,base) --> ?1>", "(/,neutralization,_,base)", "(/,reaction,_,base)" => "<(/,neutralization,_,base) --> (/,reaction,_,base)>";
+                "<(/,neutralization,_,base) --> ?1>", "(/,reaction,_,base)", "?1" => "<(/,reaction,_,base) --> ?1>";
+                "<(/,neutralization,_,base) --> ?1>", "?1", "(/,reaction,_,base)" => "<?1 --> (/,reaction,_,base)>";
+                "<(/,neutralization,acid,_) <-> (/,reaction,acid,_)>", "acid", "acid" => None;
+                "<(/,num,_) --> num>", "(*,(/,num,_))", "(*,num)" => "<(*,(/,num,_)) --> (*,num)>";
+                "<(/,open,_,lock) --> (&,key,(/,open,_,{lock1}))>", "(/,open,_,lock)", "(/,open,_,{lock1})" => "<(/,open,_,lock) --> (/,open,_,{lock1})>";
+                "<(/,open,_,lock) --> (&,key,(/,open,_,{lock1}))>", "(/,open,_,lock)", "key" => "<(/,open,_,lock) --> key>";
+                "<(/,open,_,lock) --> (/,open,_,{lock1})>", "(/,open,_,lock)", "(&,key,(/,open,_,{lock1}))" => "<(/,open,_,lock) --> (&,key,(/,open,_,{lock1}))>";
+                "<(/,open,_,lock) --> (/,open,_,{lock1})>", "(/,open,_,lock)", "(|,key,(/,open,_,{lock1}))" => "<(/,open,_,lock) --> (|,key,(/,open,_,{lock1}))>";
+                "<(/,open,_,lock) --> (/,open,_,{lock1})>", "(/,open,_,{lock1})", "key" => "<(/,open,_,{lock1}) --> key>";
+                "<(/,open,_,lock) --> (/,open,_,{lock1})>", "key", "(/,open,_,{lock1})" => "<key --> (/,open,_,{lock1})>";
+                "<(/,open,_,lock) --> (/,open,_,{lock1})>", "open", "open" => None;
+                "<(/,open,_,lock) --> (/,open,_,{lock1})>", "{lock1}", "lock" => "<{lock1} --> lock>";
+                "<(/,open,_,lock) --> key>", "(/,open,_,lock)", "(&,key,(/,open,_,{lock1}))" => "<(/,open,_,lock) --> (&,key,(/,open,_,{lock1}))>";
+                "<(/,open,_,lock) --> key>", "(/,open,_,lock)", "(|,key,(/,open,_,{lock1}))" => "<(/,open,_,lock) --> (|,key,(/,open,_,{lock1}))>";
+                "<(/,open,_,lock) --> key>", "(/,open,_,{lock1})", "key" => "<(/,open,_,{lock1}) --> key>";
+                "<(/,open,_,lock) --> key>", "key", "(/,open,_,{lock1})" => "<key --> (/,open,_,{lock1})>";
+                "<(/,reaction,acid,_) --> soda>", "(/,neutralization,acid,_)", "soda" => "<(/,neutralization,acid,_) --> soda>";
+                "<(/,reaction,acid,_) --> soda>", "(/,reaction,acid,_)", "(&,soda,(/,neutralization,acid,_))" => "<(/,reaction,acid,_) --> (&,soda,(/,neutralization,acid,_))>";
+                "<(/,reaction,acid,_) --> soda>", "(/,reaction,acid,_)", "(|,soda,(/,neutralization,acid,_))" => "<(/,reaction,acid,_) --> (|,soda,(/,neutralization,acid,_))>";
+                "<(/,reaction,acid,_) --> soda>", "soda", "(/,neutralization,acid,_)" => "<soda --> (/,neutralization,acid,_)>";
+                "<(|,acid,(/,neutralization,_,base)) --> (/,reaction,_,base)>", "(/,neutralization,_,base)", "(/,reaction,_,base)" => "<(/,neutralization,_,base) --> (/,reaction,_,base)>";
+                "<(|,acid,(/,neutralization,_,base)) --> (/,reaction,_,base)>", "acid", "(/,reaction,_,base)" => "<acid --> (/,reaction,_,base)>";
+                "<(|,bird,robin) --> animal>", "bird", "animal" => "<bird --> animal>";
+                "<(|,bird,{Tweety}) --> (|,bird,flyer)>", "bird", "bird" => None;
+                "<(|,bird,{Tweety}) --> (|,bird,flyer)>", "{Tweety}", "flyer" => "<{Tweety} --> flyer>";
+                "<(|,bird,{Tweety}) --> (|,bird,{Birdie})>", "bird", "bird" => None;
+                "<(|,bird,{Tweety}) --> (|,bird,{Birdie})>", "{Tweety}", "{Birdie}" => "<{Tweety} --> {Birdie}>";
                 "<(|,boy,girl) --> (|,girl,youth)>", "(|,boy,girl)", "(|,girl,youth)" => "<(|,boy,girl) --> (|,girl,youth)>";
-                "<bird --> swimmer>", "bird", "robin" => "<bird --> robin>";
-                "<sport --> competition>", "chess", "sport" => "<chess --> sport>";
-                "<(|,robin,swimmer) --> animal>", "robin", "animal" => "<robin --> animal>";
-                "<(&,robin,swimmer) --> animal>", "animal", "bird" => "<animal --> bird>";
-                "<{Tweety} --> [with_wings]>", "(|,flyer,{Tweety})", "(|,flyer,[with_wings])" => "<(|,flyer,{Tweety}) --> (|,flyer,[with_wings])>";
+                "<(|,boy,girl) --> (|,girl,youth)>", "boy", "girl" => "<boy --> girl>";
+                "<(|,boy,girl) --> (~,youth,girl)>", "(~,youth,girl)", "(|,boy,girl)" => "<(~,youth,girl) --> (|,boy,girl)>";
+                "<(|,boy,girl) --> youth>", "(|,boy,girl)", "(~,youth,girl)" => "<(|,boy,girl) --> (~,youth,girl)>";
+                "<(|,boy,girl) --> youth>", "(|,boy,girl)", "youth" => "<(|,boy,girl) --> youth>";
+                "<(|,boy,girl) --> youth>", "(~,(|,boy,girl),girl)", "(~,youth,girl)" => "<(~,(|,boy,girl),girl) --> (~,youth,girl)>";
+                "<(|,boy,girl) --> youth>", "youth", "(|,boy,girl)" => "<youth --> (|,boy,girl)>";
+                "<(|,chess,sport) --> (|,chess,competition)>", "chess", "chess" => None;
+                "<(|,chess,sport) --> competition>", "(|,chess,sport)", "(|,chess,competition)" => "<(|,chess,sport) --> (|,chess,competition)>";
+                "<(|,robin,swan) --> (&,bird,swimmer)>", "(|,robin,swan)", "bird" => "<(|,robin,swan) --> bird>";
+                "<(|,robin,swan) --> (|,bird,swimmer)>", "robin", "(|,bird,swimmer)" => "<robin --> (|,bird,swimmer)>";
+                "<(|,robin,swimmer) --> bird>", "(|,robin,swimmer)", "(&,animal,bird)" => "<(|,robin,swimmer) --> (&,animal,bird)>";
+                "<(|,robin,{Tweety}) --> [with_wings]>", "robin", "[with_wings]" => "<robin --> [with_wings]>";
+                "<(|,robin,{Tweety}) --> [with_wings]>", "{Tweety}", "[with_wings]" => "<{Tweety} --> [with_wings]>";
+                "<(~,boy,girl) --> (&,[strong],(~,youth,girl))>", "(~,boy,girl)", "(&,[strong],(~,youth,girl))" => "<(~,boy,girl) --> (&,[strong],(~,youth,girl))>";
+                "<(~,boy,girl) --> (~,youth,girl)>", "boy", "(~,youth,girl)" => "<boy --> (~,youth,girl)>";
+                "<(~,boy,girl) --> (~,youth,girl)>", "boy", "youth" => "<boy --> youth>";
+                "<(~,boy,girl) --> (~,youth,girl)>", "girl", "(~,youth,girl)" => None;
                 "<(~,boy,girl) --> (~,youth,girl)>", "girl", "girl" => None;
-                "<{Tweety} --> [with_wings]>", "{Tweety}", "(|,flyer,[with_wings])" => "<{Tweety} --> (|,flyer,[with_wings])>";
-                "<{Tweety} --> [with_wings]>", "(&,flyer,{Birdie})", "[with_wings]" => "<(&,flyer,{Birdie}) --> [with_wings]>";
-                "<bird --> animal>", "(&,bird,tiger)", "animal" => "<(&,bird,tiger) --> animal>";
-                "<base --> (/,reaction,acid,_)>", "base", "(/,neutralization,acid,_)" => "<base --> (/,neutralization,acid,_)>";
-                "<bird --> animal>", "robin", "bird" => "<robin --> bird>";
-                "<(~,boy,girl) --> [strong]>", "girl", "[strong]" => "<girl --> [strong]>";
-                "<robin --> animal>", "(&,robin,tiger)", "animal" => "<(&,robin,tiger) --> animal>";
-                "<{Tweety} --> {Birdie}>", "[yellow]", "{Birdie}" => "<[yellow] --> {Birdie}>";
-                "<swan --> robin>", "robin", "bird" => "<robin --> bird>";
-                "<{Tweety} --> bird>", "{Tweety}", "(&,bird,flyer)" => "<{Tweety} --> (&,bird,flyer)>";
-                "<{lock1} --> lock>", "(/,open,{key1},_)", "lock" => "<(/,open,{key1},_) --> lock>";
-                "<robin --> [with_wings]>", "robin", "(|,[with_wings],{Birdie})" => "<robin --> (|,[with_wings],{Birdie})>";
-                "<{Tweety} --> (&,flyer,{Birdie})>", "{Tweety}", "{Birdie}" => "<{Tweety} --> {Birdie}>";
-                "<robin --> (-,mammal,swimmer)>", "robin", "mammal" => "<robin --> mammal>";
+                "<(~,boy,girl) --> [strong]>", "(~,boy,girl)", "(&,[strong],(~,youth,girl))" => "<(~,boy,girl) --> (&,[strong],(~,youth,girl))>";
+                "<(~,boy,girl) --> [strong]>", "(~,boy,girl)", "(|,[strong],(~,youth,girl))" => "<(~,boy,girl) --> (|,[strong],(~,youth,girl))>";
+                "<(~,boy,girl) --> [strong]>", "(~,boy,girl)", "[strong]" => "<(~,boy,girl) --> [strong]>";
+                "<(~,boy,girl) --> [strong]>", "[strong]", "(~,youth,girl)" => "<[strong] --> (~,youth,girl)>";
+                "<(~,boy,girl) --> [strong]>", "boy", "[strong]" => "<boy --> [strong]>";
+                "<0 --> (/,num,_)>", "(*,0)", "(*,(/,num,_))" => "<(*,0) --> (*,(/,num,_))>";
+                "<0 --> (/,num,_)>", "(/,num,_)", "num" => "<(/,num,_) --> num>";
+                "<0 --> (/,num,_)>", "0", "num" => "<0 --> num>";
+                "<0 --> (/,num,_)>", "num", "(/,num,_)" => "<num --> (/,num,_)>";
+                "<0 --> num>", "(*,0)", "(*,num)" => "<(*,0) --> (*,num)>";
+                "<0 --> num>", "(/,num,_)", "num" => "<(/,num,_) --> num>";
+                "<0 --> num>", "num", "(/,num,_)" => "<num --> (/,num,_)>";
+                "<<robin --> [with_wings]> ==> <robin --> [living]>>", "<robin --> flyer>", "<robin --> [living]>" => "<<robin --> flyer> ==> <robin --> [living]>>";
+                "<<robin --> [with_wings]> ==> <robin --> bird>>", "<robin --> [with_wings]>", "(&&,<robin --> bird>,<robin --> [living]>)" => "<<robin --> [with_wings]> ==> (&&,<robin --> bird>,<robin --> [living]>)>";
+                "<<robin --> [with_wings]> ==> <robin --> bird>>", "<robin --> [with_wings]>", "(||,<robin --> bird>,<robin --> [living]>)" => "<<robin --> [with_wings]> ==> (||,<robin --> bird>,<robin --> [living]>)>";
+                "<<robin --> [with_wings]> ==> <robin --> bird>>", "<robin --> flyer>", "<robin --> bird>" => "<<robin --> flyer> ==> <robin --> bird>>";
+                "<?1 --> claimedByBob>", "(&,<bird --> fly>,<{Tweety} --> bird>)", "?1" => "<(&,<bird --> fly>,<{Tweety} --> bird>) --> ?1>";
+                "<?1 --> claimedByBob>", "?1", "(&,<bird --> fly>,<{Tweety} --> bird>)" => "<?1 --> (&,<bird --> fly>,<{Tweety} --> bird>)>";
+                "<?1 --> swimmer>", "?1", "animal" => "<?1 --> animal>";
+                "<?1 --> swimmer>", "animal", "?1" => "<animal --> ?1>";
+                "<?1 --> swimmer>", "animal", "swimmer" => "<animal --> swimmer>";
+                "<Birdie <-> Tweety>", "Birdie", "Tweety" => "<Birdie <-> Tweety>";
                 "<Birdie <-> Tweety>", "{Birdie}", "{Tweety}" => "<{Birdie} <-> {Tweety}>";
+                "<CAT --> (/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish)>", "CAT", "(|,CAT,(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish))" => None;
+                "<[bright] --> [smart]>", "[smart]", "[bright]" => "<[smart] --> [bright]>";
+                "<[bright] <-> [smart]>", "bright", "smart" => "<bright <-> smart>";
+                "<[with_wings] --> {Birdie}>", "[with_wings]", "{Tweety}" => "<[with_wings] --> {Tweety}>";
+                "<[yellow] --> {Birdie}>", "(|,flyer,[yellow])", "(|,flyer,{Birdie})" => "<(|,flyer,[yellow]) --> (|,flyer,{Birdie})>";
+                "<[yellow] <-> {Birdie}>", "(|,flyer,[yellow])", "(|,flyer,{Birdie})" => "<(|,flyer,[yellow]) <-> (|,flyer,{Birdie})>";
+                "<[yellow] <-> {Birdie}>", "[yellow]", "{Tweety}" => "<[yellow] <-> {Tweety}>";
+                "<a --> (/,like,b,_)>", "(*,a,b)", "(*,(/,like,b,_),b)" => "<(*,a,b) --> (*,(/,like,b,_),b)>";
+                "<a --> (/,like,b,_)>", "(*,b,a)", "(*,b,(/,like,b,_))" => "<(*,b,a) --> (*,b,(/,like,b,_))>";
+                "<a --> (/,like,b,_)>", "(/,like,_,(/,like,b,_))", "(/,like,_,a)" => "<(/,like,_,(/,like,b,_)) --> (/,like,_,a)>";
+                "<acid --> (/,reaction,_,base)>", "(&,acid,(/,neutralization,_,base))", "(/,reaction,_,base)" => "<(&,acid,(/,neutralization,_,base)) --> (/,reaction,_,base)>";
+                "<acid --> (/,reaction,_,base)>", "(/,neutralization,_,base)", "acid" => "<(/,neutralization,_,base) --> acid>";
+                "<acid --> (/,reaction,_,base)>", "(|,acid,(/,neutralization,_,base))", "(/,reaction,_,base)" => "<(|,acid,(/,neutralization,_,base)) --> (/,reaction,_,base)>";
+                "<acid --> (/,reaction,_,base)>", "acid", "(/,neutralization,_,base)" => "<acid --> (/,neutralization,_,base)>";
+                "<b --> (/,like,_,a)>", "(/,like,(/,like,_,a),_)", "(/,like,b,_)" => "<(/,like,(/,like,_,a),_) --> (/,like,b,_)>";
+                "<bird --> (&,animal,swimmer)>", "bird", "animal" => "<bird --> animal>";
+                "<bird --> animal>", "(&,bird,robin)", "animal" => "<(&,bird,robin) --> animal>";
+                "<bird --> animal>", "(|,bird,robin)", "animal" => "<(|,bird,robin) --> animal>";
+                "<bird --> animal>", "bird", "robin" => "<bird --> robin>";
+                "<bird --> swimmer>", "bird", "(&,animal,swimmer)" => "<bird --> (&,animal,swimmer)>";
+                "<bird --> swimmer>", "bird", "(|,animal,swimmer)" => "<bird --> (|,animal,swimmer)>";
+                "<bird --> {Birdie}>", "bird", "(|,bird,{Birdie})" => None;
+                "<boy --> [strong]>", "(~,boy,girl)", "(~,[strong],girl)" => "<(~,boy,girl) --> (~,[strong],girl)>";
+                "<boy --> youth>", "(|,boy,girl)", "(|,girl,youth)" => "<(|,boy,girl) --> (|,girl,youth)>";
+                "<boy --> youth>", "(~,boy,girl)", "(~,youth,girl)" => "<(~,boy,girl) --> (~,youth,girl)>";
+                "<bright <-> smart>", "[bright]", "[smart]" => "<[bright] <-> [smart]>";
+                "<cat --> (&,CAT,(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish))>", "cat", "(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish)" => "<cat --> (/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish)>";
+                "<cat --> (&,CAT,(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish))>", "cat", "CAT" => "<cat --> CAT>";
+                "<cat --> CAT>", "(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish)", "CAT" => "<(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish) --> CAT>";
+                "<cat --> CAT>", "CAT", "(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish)" => "<CAT --> (/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish)>";
+                "<cat --> CAT>", "cat", "(&,CAT,(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish))" => "<cat --> (&,CAT,(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish))>";
+                "<cat --> CAT>", "cat", "(|,CAT,(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish))" => "<cat --> (|,CAT,(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish))>";
+                "<chess --> competition>", "(~,sport,chess)", "competition" => "<(~,sport,chess) --> competition>";
+                "<chess --> competition>", "chess", "(|,chess,competition)" => None;
+                "<flyer <-> [with_wings]>", "(|,flyer,{Birdie})", "(|,[with_wings],{Birdie})" => "<(|,flyer,{Birdie}) <-> (|,[with_wings],{Birdie})>";
+                "<neutralization --> (*,acid,base)>", "neutralization", "reaction" => "<neutralization --> reaction>";
+                "<neutralization --> reaction>", "(/,neutralization,_,base)", "(/,reaction,_,base)" => "<(/,neutralization,_,base) --> (/,reaction,_,base)>";
+                "<neutralization <-> reaction>", "(/,neutralization,_,base)", "(/,reaction,_,base)" => "<(/,neutralization,_,base) <-> (/,reaction,_,base)>";
+                "<num <-> (/,num,_)>", "(*,num)", "(*,(/,num,_))" => "<(*,num) <-> (*,(/,num,_))>";
+                "<num <-> (/,num,_)>", "(/,num,_)", "(/,(/,num,_),_)" => "<(/,num,_) <-> (/,(/,num,_),_)>";
+                "<planetX --> {Mars,Pluto,Saturn,Venus}>", "{Mars,Pluto,Saturn,Venus}", "{Mars,Pluto,Venus}" => "<{Mars,Pluto,Saturn,Venus} --> {Mars,Pluto,Venus}>";
+                "<planetX --> {Mars,Pluto,Saturn,Venus}>", "{Mars,Pluto,Venus}", "{Mars,Pluto,Saturn,Venus}" => "<{Mars,Pluto,Venus} --> {Mars,Pluto,Saturn,Venus}>";
+                "<planetX --> {Mars,Pluto,Venus}>", "planetX", "{Mars,Pluto,Saturn,Venus}" => "<planetX --> {Mars,Pluto,Saturn,Venus}>";
+                "<planetX --> {Mars,Pluto,Venus}>", "planetX", "{Mars,Venus}" => "<planetX --> {Mars,Venus}>";
+                "<planetX --> {Mars,Pluto,Venus}>", "planetX", "{Pluto}" => "<planetX --> {Pluto}>";
+                "<planetX --> {Mars,Pluto,Venus}>", "{Mars,Pluto,Venus}", "{Pluto,Saturn}" => "<{Mars,Pluto,Venus} --> {Pluto,Saturn}>";
+                "<planetX --> {Mars,Pluto,Venus}>", "{Pluto,Saturn}", "{Mars,Pluto,Venus}" => "<{Pluto,Saturn} --> {Mars,Pluto,Venus}>";
+                "<planetX --> {Mars,Venus}>", "planetX", "{Mars,Pluto,Saturn,Venus}" => "<planetX --> {Mars,Pluto,Saturn,Venus}>";
+                "<planetX --> {Mars,Venus}>", "{Mars,Venus}", "{Pluto,Saturn}" => "<{Mars,Venus} --> {Pluto,Saturn}>";
+                "<planetX --> {Pluto,Saturn}>", "planetX", "{Mars,Venus}" => "<planetX --> {Mars,Venus}>";
+                "<planetX --> {Pluto,Saturn}>", "planetX", "{Pluto}" => "<planetX --> {Pluto}>";
+                "<planetX --> {Pluto,Saturn}>", "{Mars,Pluto,Saturn,Venus}", "{Pluto,Saturn}" => "<{Mars,Pluto,Saturn,Venus} --> {Pluto,Saturn}>";
+                "<planetX --> {Pluto,Saturn}>", "{Mars,Pluto,Venus}", "{Pluto,Saturn}" => "<{Mars,Pluto,Venus} --> {Pluto,Saturn}>";
+                "<planetX --> {Pluto,Saturn}>", "{Pluto,Saturn}", "{Mars,Pluto,Saturn,Venus}" => "<{Pluto,Saturn} --> {Mars,Pluto,Saturn,Venus}>";
+                "<planetX --> {Pluto,Saturn}>", "{Pluto,Saturn}", "{Mars,Pluto,Venus}" => "<{Pluto,Saturn} --> {Mars,Pluto,Venus}>";
+                "<robin --> (-,bird,swimmer)>", "robin", "bird" => "<robin --> bird>";
+                "<robin --> (|,bird,swimmer)>", "(&,robin,swan)", "(|,bird,swimmer)" => "<(&,robin,swan) --> (|,bird,swimmer)>";
+                "<robin --> (|,bird,swimmer)>", "(|,robin,swan)", "(|,bird,swimmer)" => "<(|,robin,swan) --> (|,bird,swimmer)>";
+                "<robin --> (|,bird,swimmer)>", "robin", "swan" => "<robin --> swan>";
+                "<robin --> [with_wings]>", "(&,flyer,robin)", "(&,flyer,[with_wings])" => "<(&,flyer,robin) --> (&,flyer,[with_wings])>";
+                "<robin --> [with_wings]>", "(&,robin,{Birdie})", "[with_wings]" => "<(&,robin,{Birdie}) --> [with_wings]>";
+                "<robin --> [with_wings]>", "(|,flyer,robin)", "(|,flyer,[with_wings])" => "<(|,flyer,robin) --> (|,flyer,[with_wings])>";
+                "<robin --> [with_wings]>", "(|,robin,{Birdie})", "(|,[with_wings],{Birdie})" => "<(|,robin,{Birdie}) --> (|,[with_wings],{Birdie})>";
+                "<robin --> [with_wings]>", "(|,robin,{Birdie})", "[with_wings]" => "<(|,robin,{Birdie}) --> [with_wings]>";
+                "<robin --> [with_wings]>", "robin", "(|,[with_wings],{Birdie})" => "<robin --> (|,[with_wings],{Birdie})>";
+                "<robin --> [with_wings]>", "robin", "(|,flyer,[with_wings])" => "<robin --> (|,flyer,[with_wings])>";
+                "<robin --> [with_wings]>", "robin", "flyer" => "<robin --> flyer>";
+                "<robin --> [with_wings]>", "robin", "{Birdie}" => "<robin --> {Birdie}>";
+                "<robin --> [with_wings]>", "{Birdie}", "robin" => "<{Birdie} --> robin>";
+                "<soda --> base>", "(/,reaction,acid,_)", "soda" => "<(/,reaction,acid,_) --> soda>";
+                "<soda --> base>", "soda", "(/,reaction,acid,_)" => "<soda --> (/,reaction,acid,_)>";
+                "<swan --> (&,bird,swimmer)>", "(&,robin,swan)", "(&,bird,swimmer)" => "<(&,robin,swan) --> (&,bird,swimmer)>";
+                "<swan --> (&,bird,swimmer)>", "(|,robin,swan)", "(&,bird,swimmer)" => "<(|,robin,swan) --> (&,bird,swimmer)>";
+                "<swan --> swimmer>", "(&,swan,swimmer)", "swimmer" => None;
+                "<swan --> swimmer>", "(~,swimmer,swan)", "swimmer" => None;
+                "<tiger --> animal>", "(&,robin,tiger)", "(&,animal,robin)" => "<(&,robin,tiger) --> (&,animal,robin)>";
+                "<tim --> (/,uncle,_,tom)>", "(/,uncle,_,tom)", "(/,uncle,tom,_)" => "<(/,uncle,_,tom) --> (/,uncle,tom,_)>";
+                "<tim --> (/,uncle,tom,_)>", "(&,tim,(/,(*,tim,tom),tom,_))", "(/,uncle,tom,_)" => "<(&,tim,(/,(*,tim,tom),tom,_)) --> (/,uncle,tom,_)>";
+                "<tim --> (/,uncle,tom,_)>", "(/,(*,tim,tom),tom,_)", "tim" => "<(/,(*,tim,tom),tom,_) --> tim>";
+                "<tim --> (/,uncle,tom,_)>", "(|,tim,(/,(*,tim,tom),tom,_))", "(/,uncle,tom,_)" => "<(|,tim,(/,(*,tim,tom),tom,_)) --> (/,uncle,tom,_)>";
+                "<tim --> (/,uncle,tom,_)>", "(~,(/,(*,tim,tom),tom,_),tim)", "(/,uncle,tom,_)" => "<(~,(/,(*,tim,tom),tom,_),tim) --> (/,uncle,tom,_)>";
+                "<tim --> (/,uncle,tom,_)>", "tim", "(/,(*,tim,tom),tom,_)" => "<tim --> (/,(*,tim,tom),tom,_)>";
+                "<{?1} --> swimmer>", "robin", "{?1}" => "<robin --> {?1}>";
+                "<{?1} --> swimmer>", "{?1}", "bird" => "<{?1} --> bird>";
+                "<{Birdie} --> [with_wings]>", "{Tweety}", "[with_wings]" => "<{Tweety} --> [with_wings]>";
+                "<{Birdie} --> [yellow]>", "(&,flyer,{Birdie})", "(&,flyer,[yellow])" => "<(&,flyer,{Birdie}) --> (&,flyer,[yellow])>";
+                "<{Birdie} --> [yellow]>", "(|,flyer,{Birdie})", "(|,flyer,[yellow])" => "<(|,flyer,{Birdie}) --> (|,flyer,[yellow])>";
+                "<{Birdie} --> [yellow]>", "{Birdie}", "(|,[yellow],{Birdie})" => None;
+                "<{Birdie} --> [yellow]>", "{Birdie}", "(|,flyer,[yellow])" => "<{Birdie} --> (|,flyer,[yellow])>";
+                "<{Birdie} --> flyer>", "(&,flyer,{Birdie})", "flyer" => None;
+                "<{Birdie} --> flyer>", "{Tweety}", "flyer" => "<{Tweety} --> flyer>";
+                "<{Birdie} <-> {Tweety}>", "Birdie", "Tweety" => "<Birdie <-> Tweety>";
+                "<{Birdie} <-> {Tweety}>", "{Birdie}", "{Tweety}" => "<{Birdie} <-> {Tweety}>";
+                "<{Birdie} <-> {Tweety}>", "{Tweety}", "bird" => "<bird <-> {Tweety}>";
+                "<{Mars,Pluto,Saturn,Venus} --> {Mars,Pluto,Venus}>", "{Pluto}", "{Mars,Pluto,Venus}" => "<{Pluto} --> {Mars,Pluto,Venus}>";
+                "<{Tweety} --> (&,[with_wings],{Birdie})>", "{Tweety}", "[with_wings]" => "<{Tweety} --> [with_wings]>";
+                "<{Tweety} --> (&,[with_wings],{Birdie})>", "{Tweety}", "{Birdie}" => "<{Tweety} --> {Birdie}>";
+                "<{Tweety} --> (&,bird,flyer)>", "{Tweety}", "bird" => "<{Tweety} --> bird>";
+                "<{Tweety} --> (&,bird,{Birdie})>", "{Tweety}", "bird" => "<{Tweety} --> bird>";
+                "<{Tweety} --> (&,bird,{Birdie})>", "{Tweety}", "{Birdie}" => "<{Tweety} --> {Birdie}>";
+                "<{Tweety} --> (&,flyer,(|,[yellow],{Birdie}))>", "{Tweety}", "(|,[yellow],{Birdie})" => "<{Tweety} --> (|,[yellow],{Birdie})>";
+                "<{Tweety} --> (&,flyer,(|,[yellow],{Birdie}))>", "{Tweety}", "flyer" => "<{Tweety} --> flyer>";
+                "<{Tweety} --> (&,flyer,[with_wings])>", "{Tweety}", "[with_wings]" => "<{Tweety} --> [with_wings]>";
+                "<{Tweety} --> (&,flyer,[with_wings])>", "{Tweety}", "flyer" => "<{Tweety} --> flyer>";
+                "<{Tweety} --> (|,[with_wings],{Birdie})>", "(&,flyer,[yellow])", "(|,[with_wings],{Birdie})" => "<(&,flyer,[yellow]) --> (|,[with_wings],{Birdie})>";
+                "<{Tweety} --> (|,[with_wings],{Birdie})>", "(|,[with_wings],{Birdie})", "(&,flyer,[yellow])" => "<(|,[with_wings],{Birdie}) --> (&,flyer,[yellow])>";
+                "<{Tweety} --> (|,[with_wings],{Birdie})>", "{Tweety}", "(&,flyer,[yellow],(|,[with_wings],{Birdie}))" => "<{Tweety} --> (&,flyer,[yellow],(|,[with_wings],{Birdie}))>";
+                "<{Tweety} --> (|,[with_wings],{Birdie})>", "{Tweety}", "(|,[with_wings],{Birdie},(&,flyer,[yellow]))" => "<{Tweety} --> (|,[with_wings],{Birdie},(&,flyer,[yellow]))>";
+                "<{Tweety} --> (|,bird,flyer)>", "(|,bird,flyer)", "(|,bird,{Birdie})" => "<(|,bird,flyer) --> (|,bird,{Birdie})>";
+                "<{Tweety} --> (|,bird,flyer)>", "(|,bird,{Birdie})", "(|,bird,flyer)" => "<(|,bird,{Birdie}) --> (|,bird,flyer)>";
+                "<{Tweety} --> (|,bird,flyer)>", "{Tweety}", "(&,(|,bird,flyer),(|,bird,{Birdie}))" => "<{Tweety} --> (&,(|,bird,flyer),(|,bird,{Birdie}))>";
+                "<{Tweety} --> (|,bird,flyer)>", "{Tweety}", "(|,bird,flyer,{Birdie})" => "<{Tweety} --> (|,bird,flyer,{Birdie})>";
+                "<{Tweety} --> (|,flyer,[yellow])>", "bird", "(|,flyer,[yellow])" => "<bird --> (|,flyer,[yellow])>";
+                "<{Tweety} --> [with_wings]>", "(&,flyer,{Birdie})", "[with_wings]" => "<(&,flyer,{Birdie}) --> [with_wings]>";
+                "<{Tweety} --> [with_wings]>", "(|,flyer,{Birdie})", "[with_wings]" => "<(|,flyer,{Birdie}) --> [with_wings]>";
+                "<{Tweety} --> [with_wings]>", "[with_wings]", "(&,flyer,{Birdie})" => "<[with_wings] --> (&,flyer,{Birdie})>";
+                "<{Tweety} --> [with_wings]>", "[with_wings]", "(|,flyer,{Birdie})" => "<[with_wings] --> (|,flyer,{Birdie})>";
+                "<{Tweety} --> [with_wings]>", "[with_wings]", "flyer" => "<[with_wings] --> flyer>";
+                "<{Tweety} --> [with_wings]>", "flyer", "[with_wings]" => "<flyer --> [with_wings]>";
+                "<{Tweety} --> [with_wings]>", "robin", "{Tweety}" => "<robin --> {Tweety}>";
+                "<{Tweety} --> [with_wings]>", "{Birdie,Tweety}", "(|,[with_wings],{Birdie})" => "<{Birdie,Tweety} --> (|,[with_wings],{Birdie})>";
+                "<{Tweety} --> [with_wings]>", "{Tweety}", "(&,[with_wings],(|,flyer,{Birdie}))" => "<{Tweety} --> (&,[with_wings],(|,flyer,{Birdie}))>";
+                "<{Tweety} --> [with_wings]>", "{Tweety}", "(&,flyer,[with_wings])" => "<{Tweety} --> (&,flyer,[with_wings])>";
+                "<{Tweety} --> [with_wings]>", "{Tweety}", "(&,flyer,[with_wings],{Birdie})" => "<{Tweety} --> (&,flyer,[with_wings],{Birdie})>";
+                "<{Tweety} --> [with_wings]>", "{Tweety}", "(|,[with_wings],(&,flyer,{Birdie}))" => "<{Tweety} --> (|,[with_wings],(&,flyer,{Birdie}))>";
+                "<{Tweety} --> [with_wings]>", "{Tweety}", "(|,[with_wings],{Birdie})" => "<{Tweety} --> (|,[with_wings],{Birdie})>";
+                "<{Tweety} --> [with_wings]>", "{Tweety}", "(|,flyer,[with_wings],{Birdie})" => "<{Tweety} --> (|,flyer,[with_wings],{Birdie})>";
+                "<{Tweety} --> [with_wings]>", "{Tweety}", "robin" => "<{Tweety} --> robin>";
+                "<{Tweety} --> bird>", "bird", "flyer" => "<bird --> flyer>";
+                "<{Tweety} --> bird>", "bird", "{Birdie}" => "<bird --> {Birdie}>";
+                "<{Tweety} --> bird>", "{Tweety}", "(&,bird,flyer)" => "<{Tweety} --> (&,bird,flyer)>";
+                "<{Tweety} --> bird>", "{Tweety}", "(&,bird,{Birdie})" => "<{Tweety} --> (&,bird,{Birdie})>";
+                "<{Tweety} --> bird>", "{Tweety}", "(|,bird,flyer)" => "<{Tweety} --> (|,bird,flyer)>";
+                "<{Tweety} --> bird>", "{Tweety}", "(|,bird,{Birdie})" => "<{Tweety} --> (|,bird,{Birdie})>";
+                "<{Tweety} --> flyer>", "(&,[with_wings],{Birdie})", "flyer" => "<(&,[with_wings],{Birdie}) --> flyer>";
+                "<{Tweety} --> flyer>", "(|,[with_wings],{Birdie})", "flyer" => "<(|,[with_wings],{Birdie}) --> flyer>";
+                "<{Tweety} --> flyer>", "[with_wings]", "flyer" => "<[with_wings] --> flyer>";
+                "<{Tweety} --> flyer>", "flyer", "(&,[with_wings],{Birdie})" => "<flyer --> (&,[with_wings],{Birdie})>";
+                "<{Tweety} --> flyer>", "flyer", "(|,[with_wings],{Birdie})" => "<flyer --> (|,[with_wings],{Birdie})>";
+                "<{Tweety} --> flyer>", "flyer", "[with_wings]" => "<flyer --> [with_wings]>";
+                "<{Tweety} --> flyer>", "{Tweety}", "(&,flyer,(|,[with_wings],{Birdie}))" => "<{Tweety} --> (&,flyer,(|,[with_wings],{Birdie}))>";
+                "<{Tweety} --> flyer>", "{Tweety}", "(&,flyer,[with_wings])" => "<{Tweety} --> (&,flyer,[with_wings])>";
+                "<{Tweety} --> flyer>", "{Tweety}", "(&,flyer,[with_wings],{Birdie})" => "<{Tweety} --> (&,flyer,[with_wings],{Birdie})>";
+                "<{Tweety} --> flyer>", "{Tweety}", "(|,flyer,(&,[with_wings],{Birdie}))" => "<{Tweety} --> (|,flyer,(&,[with_wings],{Birdie}))>";
+                "<{Tweety} --> flyer>", "{Tweety}", "(|,flyer,[with_wings])" => "<{Tweety} --> (|,flyer,[with_wings])>";
+                "<{Tweety} --> flyer>", "{Tweety}", "(|,flyer,[with_wings],{Birdie})" => "<{Tweety} --> (|,flyer,[with_wings],{Birdie})>";
+                "<{Tweety} --> {Birdie}>", "(|,bird,{Tweety})", "(|,bird,{Birdie})" => "<(|,bird,{Tweety}) --> (|,bird,{Birdie})>";
+                "<{Tweety} --> {Birdie}>", "[with_wings]", "{Birdie}" => "<[with_wings] --> {Birdie}>";
+                "<{Tweety} --> {Birdie}>", "bird", "{Birdie}" => "<bird --> {Birdie}>";
+                "<{Tweety} --> {Birdie}>", "{Birdie}", "[with_wings]" => "<{Birdie} --> [with_wings]>";
+                "<{Tweety} --> {Birdie}>", "{Birdie}", "bird" => "<{Birdie} --> bird>";
+                "<{Tweety} --> {Birdie}>", "{Tweety}", "(&,[with_wings],{Birdie})" => "<{Tweety} --> (&,[with_wings],{Birdie})>";
+                "<{Tweety} --> {Birdie}>", "{Tweety}", "(&,bird,{Birdie})" => "<{Tweety} --> (&,bird,{Birdie})>";
+                "<{Tweety} --> {Birdie}>", "{Tweety}", "(|,[with_wings],{Birdie})" => "<{Tweety} --> (|,[with_wings],{Birdie})>";
+                "<{Tweety} --> {Birdie}>", "{Tweety}", "(|,bird,{Birdie})" => "<{Tweety} --> (|,bird,{Birdie})>";
+                "<{key1} --> (&,key,(/,open,_,{lock1}))>", "{key1}", "(/,open,_,{lock1})" => "<{key1} --> (/,open,_,{lock1})>";
+                "<{key1} --> (&,key,(/,open,_,{lock1}))>", "{key1}", "key" => "<{key1} --> key>";
+                "<{key1} --> (/,open,_,{lock1})>", "(/,open,_,{lock1})", "key" => "<(/,open,_,{lock1}) --> key>";
+                "<{key1} --> (/,open,_,{lock1})>", "key", "(/,open,_,{lock1})" => "<key --> (/,open,_,{lock1})>";
+                "<{key1} --> (/,open,_,{lock1})>", "{key1}", "(&,key,(/,open,_,{lock1}))" => "<{key1} --> (&,key,(/,open,_,{lock1}))>";
+                "<{key1} --> (/,open,_,{lock1})>", "{key1}", "(|,key,(/,open,_,{lock1}))" => "<{key1} --> (|,key,(/,open,_,{lock1}))>";
+                "<{key1} --> (|,key,(/,open,_,{lock1}))>", "{key1}", "(/,open,_,{lock1})" => "<{key1} --> (/,open,_,{lock1})>";
+                "<{key1} --> (|,key,(/,open,_,{lock1}))>", "{key1}", "(|,key,(/,open,_,{lock1}))" => "<{key1} --> (|,key,(/,open,_,{lock1}))>";
+                "<{key1} --> key>", "(/,open,_,{lock1})", "key" => "<(/,open,_,{lock1}) --> key>";
+                "<{key1} --> key>", "key", "(/,open,_,{lock1})" => "<key --> (/,open,_,{lock1})>";
+                "<{key1} --> key>", "{key1}", "(&,key,(/,open,_,{lock1}))" => "<{key1} --> (&,key,(/,open,_,{lock1}))>";
+                "<{key1} --> key>", "{key1}", "(/,open,_,{lock1})" => "<{key1} --> (/,open,_,{lock1})>";
+                "<{key1} --> key>", "{key1}", "(|,key,(/,open,_,{lock1}))" => "<{key1} --> (|,key,(/,open,_,{lock1}))>";
+                "<{lock1} --> (&,lock,(/,open,{key1},_))>", "{lock1}", "lock" => "<{lock1} --> lock>";
+                "<{lock1} --> (|,lock,(/,open,{key1},_))>", "(/,open,_,(|,lock,(/,open,{key1},_)))", "(/,open,_,{lock1})" => "<(/,open,_,(|,lock,(/,open,{key1},_))) --> (/,open,_,{lock1})>";
+                "<{lock1} --> lock>", "(/,open,_,lock)", "(/,open,_,{lock1})" => "<(/,open,_,lock) --> (/,open,_,{lock1})>";
+                "<{lock1} --> lock>", "(/,open,{key1},_)", "lock" => "<(/,open,{key1},_) --> lock>";
+                "<{lock1} --> lock>", "lock", "(/,open,{key1},_)" => "<lock --> (/,open,{key1},_)>";
+                "<{lock1} --> lock>", "{lock1}", "(&,lock,(/,open,{key1},_))" => "<{lock1} --> (&,lock,(/,open,{key1},_))>";
+                "<{lock1} --> lock>", "{lock1}", "(|,lock,(/,open,{key1},_))" => "<{lock1} --> (|,lock,(/,open,{key1},_))>";
             }
             ok!()
         }
 
-        #[cfg(TODO)] // TODO: 有待复用
         #[test]
-        fn new_sym_statement() -> AResult {
-            asserts! {
-                // 继承⇒相似
-                Term::new_sym_statement(INHERITANCE_RELATION, term!("A"), term!("B"))
-                    => term!("<A <-> B>")
-                // 蕴含⇒等价
-                Term::new_sym_statement(IMPLICATION_RELATION, term!("A"), term!("B"))
-                    => term!("<A <=> B>")
+        fn make_statement_symmetric() -> AResult {
+            fn test(template: Term, subject: Term, predicate: Term, expected: Option<Term>) {
+                let out = Term::make_statement_symmetric(
+                    template.as_compound().unwrap(),
+                    subject.clone(),
+                    predicate.clone(),
+                );
+                assert_eq!(
+                    out,
+                    expected,
+                    "\"{template}\", \"{subject}\", \"{predicate}\" => {} != {}",
+                    format_option_term(&out),
+                    format_option_term(&expected),
+                );
+            }
+            macro_once! {
+                // * 🚩模式：参数列表 ⇒ 预期词项
+                macro test($($template:tt, $subject:tt, $predicate:tt => $expected:tt;)*) {
+                    $( test(term!($template), term!($subject), term!($predicate), option_term!($expected)); )*
+                }
+                "<(&&,<robin --> [flying]>,<robin --> [with_wings]>) ==> <robin --> bird>>", "<robin --> [living]>", "<robin --> bird>" => "<<robin --> bird> <=> <robin --> [living]>>";
+                "<(&,bird,[yellow]) --> (&,bird,{Birdie})>", "(&,bird,[yellow])", "{Tweety}" => "<{Tweety} <-> (&,bird,[yellow])>";
+                "<(&,robin,swan) --> (&,robin,(|,bird,swimmer))>", "bird", "(&,robin,(|,bird,swimmer))" => "<bird <-> (&,robin,(|,bird,swimmer))>";
+                "<(&,robin,swan) --> bird>", "swimmer", "bird" => "<bird <-> swimmer>";
+                "<(&,swan,swimmer) --> bird>", "(&,swimmer,(|,bird,robin))", "bird" => "<bird <-> (&,swimmer,(|,bird,robin))>";
+                "<(*,(*,(*,0))) --> num>", "(*,(*,(*,0)))", "0" => "<0 <-> (*,(*,(*,0)))>";
+                "<(*,b,a) --> like>", "(*,b,(/,like,_,b))", "like" => "<like <-> (*,b,(/,like,_,b))>";
+                "<(/,neutralization,_,(/,reaction,acid,_)) --> (/,neutralization,_,base)>", "(/,reaction,_,(/,reaction,acid,_))", "(/,neutralization,_,base)" => "<(/,neutralization,_,base) <-> (/,reaction,_,(/,reaction,acid,_))>";
+                "<(/,neutralization,_,base) --> (/,(*,acid,base),_,base)>", "(/,neutralization,_,(/,reaction,acid,_))", "(/,(*,acid,base),_,base)" => "<(/,neutralization,_,(/,reaction,acid,_)) <-> (/,(*,acid,base),_,base)>";
+                "<(/,neutralization,_,base) --> (/,reaction,_,base)>", "(/,neutralization,_,base)", "acid" => "<acid <-> (/,neutralization,_,base)>";
+                "<(/,neutralization,_,base) --> ?1>", "(/,(*,acid,base),_,base)", "?1" => "<?1 <-> (/,(*,acid,base),_,base)>";
+                "<(/,neutralization,_,base) --> ?1>", "(/,neutralization,_,(/,reaction,acid,_))", "?1" => "<?1 <-> (/,neutralization,_,(/,reaction,acid,_))>";
+                "<(/,neutralization,_,base) --> ?1>", "(/,reaction,_,base)", "?1" => "<?1 <-> (/,reaction,_,base)>";
+                "<(/,open,_,lock) --> (/,open,_,{lock1})>", "(/,open,_,lock)", "{key1}" => "<{key1} <-> (/,open,_,lock)>";
+                "<(/,reaction,(/,reaction,_,base),_) --> (/,reaction,acid,_)>", "(/,reaction,(/,reaction,_,base),_)", "base" => "<base <-> (/,reaction,(/,reaction,_,base),_)>";
+                "<(\\,neutralization,_,base) --> acid>", "(/,reaction,_,base)", "acid" => "<acid <-> (/,reaction,_,base)>";
+                "<(\\,neutralization,acid,_) --> (/,reaction,(/,reaction,_,base),_)>", "base", "(/,reaction,(/,reaction,_,base),_)" => "<base <-> (/,reaction,(/,reaction,_,base),_)>";
+                "<(\\,neutralization,acid,_) --> (\\,reaction,acid,_)>", "(\\,neutralization,acid,_)", "(\\,reaction,acid,_)" => "<(\\,neutralization,acid,_) <-> (\\,reaction,acid,_)>";
+                "<(\\,neutralization,acid,_) --> ?1>", "(/,reaction,(/,reaction,_,base),_)", "?1" => "<?1 <-> (/,reaction,(/,reaction,_,base),_)>";
+                "<(\\,neutralization,acid,_) --> ?1>", "base", "?1" => "<?1 <-> base>";
+                "<(\\,neutralization,acid,_) --> base>", "(/,reaction,(/,reaction,_,base),_)", "base" => "<base <-> (/,reaction,(/,reaction,_,base),_)>";
+                "<(|,boy,girl) --> youth>", "(|,girl,[strong])", "youth" => "<youth <-> (|,girl,[strong])>";
+                "<(|,robin,swan) --> (|,animal,robin)>", "(&,bird,swimmer)", "(|,animal,robin)" => "<(&,bird,swimmer) <-> (|,animal,robin)>";
+                "<(|,robin,swan) --> (|,animal,robin)>", "(|,bird,robin)", "(|,animal,robin)" => "<(|,animal,robin) <-> (|,bird,robin)>";
+                "<0 --> num>", "(/,num,_)", "num" => "<num <-> (/,num,_)>";
+                "<?1 --> claimedByBob>", "?1", "(&,<bird --> fly>,<{Tweety} --> bird>)" => "<?1 <-> (&,<bird --> fly>,<{Tweety} --> bird>)>";
+                "<?1 --> swimmer>", "?1", "animal" => "<?1 <-> animal>";
+                "<[bright] --> [smart]>", "[bright]", "[smart]" => "<[bright] <-> [smart]>";
+                "<bird --> (|,robin,swimmer)>", "bird", "(|,robin,swan)" => "<bird <-> (|,robin,swan)>";
+                "<bird --> animal>", "bird", "robin" => "<bird <-> robin>";
+                "<bird --> {Birdie}>", "bird", "[yellow]" => "<bird <-> [yellow]>";
+                "<bird --> {Birdie}>", "bird", "{Tweety}" => "<bird <-> {Tweety}>";
+                "<cat --> CAT>", "(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish)", "CAT" => "<CAT <-> (/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish)>";
+                "<planetX --> {Mars,Pluto,Saturn,Venus}>", "{Mars,Pluto,Venus}", "{Mars,Pluto,Saturn,Venus}" => "<{Mars,Pluto,Venus} <-> {Mars,Pluto,Saturn,Venus}>";
+                "<planetX --> {Mars,Pluto,Saturn,Venus}>", "{Pluto,Saturn}", "{Mars,Pluto,Saturn,Venus}" => "<{Pluto,Saturn} <-> {Mars,Pluto,Saturn,Venus}>";
+                "<planetX --> {Mars,Pluto,Venus}>", "{Mars,Venus}", "{Mars,Pluto,Venus}" => "<{Mars,Venus} <-> {Mars,Pluto,Venus}>";
+                "<planetX --> {Mars,Venus}>", "{Mars,Pluto,Venus}", "{Mars,Venus}" => "<{Mars,Venus} <-> {Mars,Pluto,Venus}>";
+                "<planetX --> {Mars,Venus}>", "{Pluto,Saturn}", "{Mars,Venus}" => "<{Mars,Venus} <-> {Pluto,Saturn}>";
+                "<planetX --> {Pluto,Saturn}>", "{Mars,Pluto,Saturn,Venus}", "{Pluto,Saturn}" => "<{Pluto,Saturn} <-> {Mars,Pluto,Saturn,Venus}>";
+                "<robin --> (&,bird,swimmer)>", "robin", "swan" => "<robin <-> swan>";
+                "<robin --> (|,bird,swimmer)>", "robin", "swan" => "<robin <-> swan>";
+                "<robin --> [chirping]>", "robin", "{Tweety}" => "<robin <-> {Tweety}>";
+                "<robin --> [with_wings]>", "robin", "bird" => "<bird <-> robin>";
+                "<swan --> animal>", "(|,bird,robin)", "animal" => "<animal <-> (|,bird,robin)>";
+                "<tim --> (/,uncle,_,tom)>", "(/,uncle,tom,_)", "(/,uncle,_,tom)" => "<(/,uncle,tom,_) <-> (/,uncle,_,tom)>";
+                "<tim --> (/,uncle,tom,_)>", "tim", "(/,(*,tim,tom),tom,_)" => "<tim <-> (/,(*,tim,tom),tom,_)>";
+                "<{Birdie} --> [yellow]>", "bird", "[yellow]" => "<bird <-> [yellow]>";
+                "<{Birdie} --> {Tweety}>", "{Birdie}", "{Tweety}" => "<{Birdie} <-> {Tweety}>";
+                "<{Tweety} --> (&,[yellow],{Birdie})>", "bird", "(&,[yellow],{Birdie})" => "<bird <-> (&,[yellow],{Birdie})>";
+                "<{Tweety} --> (&,bird,[yellow])>", "{Birdie}", "(&,bird,[yellow])" => "<{Birdie} <-> (&,bird,[yellow])>";
+                "<{Tweety} --> (&,bird,{Birdie})>", "(|,bird,[yellow])", "(&,bird,{Birdie})" => "<(&,bird,{Birdie}) <-> (|,bird,[yellow])>";
+                "<{Tweety} --> (|,bird,[yellow])>", "{Birdie}", "(|,bird,[yellow])" => "<{Birdie} <-> (|,bird,[yellow])>";
+                "<{Tweety} --> [chirping]>", "{Tweety}", "robin" => "<robin <-> {Tweety}>";
+                "<{Tweety} --> [yellow]>", "{Birdie}", "[yellow]" => "<[yellow] <-> {Birdie}>";
+                "<{Tweety} --> bird>", "[with_wings]", "bird" => "<bird <-> [with_wings]>";
+                "<{Tweety} --> bird>", "flyer", "bird" => "<bird <-> flyer>";
+                "<{Tweety} --> bird>", "{Tweety}", "bird" => "<bird <-> {Tweety}>";
+                "<{Tweety} --> {Birdie}>", "(&,bird,[yellow])", "{Birdie}" => "<{Birdie} <-> (&,bird,[yellow])>";
+                "<{Tweety} --> {Birdie}>", "bird", "{Birdie}" => "<bird <-> {Birdie}>";
+                "<{Tweety} --> {Birdie}>", "{Tweety}", "[yellow]" => "<[yellow] <-> {Tweety}>";
+                "<{Tweety} --> {Birdie}>", "{Tweety}", "bird" => "<bird <-> {Tweety}>";
+                "<{key1} --> key>", "(/,open,_,{lock1})", "key" => "<key <-> (/,open,_,{lock1})>";
+                "<{lock1} --> (/,open,{key1},_)>", "lock", "(/,open,{key1},_)" => "<lock <-> (/,open,{key1},_)>";
             }
             ok!()
         }
