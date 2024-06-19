@@ -2,14 +2,16 @@
 //! * 🎯替代[推理器](crate::nars::Reasoner)中的`removeXXXXXChannel`方法
 //!   * 不违反借用规则，同时也无需判等
 
-use crate::types::TypeContext;
+// use crate::types::TypeContext;
 
 /// 🆕统一「输入通道」「输出通道」的「通道」类型
 /// * 🎯替代并整合推理器中「移除通道」的方法——标记删除法
 ///   * 🚩核心逻辑：标记「待删除」然后让推理器自行决定
+///
+/// * 🚩【2024-06-19 17:39:50】现在放弃在其中记录「推理器」引用，同时也放弃有关「类型上下文」的设定
 pub trait Channel {
-    /// 参数调用中「推理上下文」所需之类型
-    type Context: TypeContext;
+    // /// 参数调用中「推理上下文」所需之类型
+    // type Context: TypeContext;
 
     // /// 参数调用中「参考推理器」所需的类型
     // /// * 📌只能限制在一个，否则整个特征就不是「对象安全」的

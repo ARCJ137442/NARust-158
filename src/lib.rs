@@ -13,20 +13,17 @@ pub mod language;
 // 输入输出
 pub mod io;
 
-// 实体
-pub mod entity;
+// // 实体
+// pub mod entity;
 
 // 存储
 pub mod storage;
 
-// 类型
-pub mod types;
+// // 推理
+// pub mod inference;
 
-// 推理
-pub mod inference;
-
-// 控制
-pub mod control;
+// // 控制
+// pub mod control;
 
 // 虚拟机
 pub mod vm;
