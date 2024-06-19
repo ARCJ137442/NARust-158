@@ -29,6 +29,8 @@
 nar_dev_utils::mods! {
     // // 分派器
     // pub use distributor;
+    // 缓冲区
+    pub use buffer;
 
     // // 袋
     // pub use bag;
