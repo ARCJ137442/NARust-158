@@ -1,22 +1,7 @@
 //! 🆕新的「缓冲区」类型
 //! * 📌复刻自OpenNARS改版
 
-/// 统一表示「可迭代对象」的接口
-pub trait Iterable<T> {
-    type Iter<'a>: Iterator<Item = &'a T> + 'a
-    where
-        Self: 'a,
-        T: 'a;
-    /// 获取不可变迭代器
-    fn iter(&self) -> Self::Iter<'_>;
-
-    type IterMut<'a>: Iterator<Item = &'a mut T>
-    where
-        Self: 'a,
-        T: 'a;
-    /// 获取可变迭代器
-    fn iter_mut(&mut self) -> Self::IterMut<'_>;
-}
+use crate::util::Iterable;
 
 /// 🆕新的 缓冲区 抽象类型
 /// * 📌本质上是一个先进先出队列

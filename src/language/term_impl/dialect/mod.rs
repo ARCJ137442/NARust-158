@@ -287,7 +287,7 @@ fn reform_term(original: Term) -> Term {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{global::tests::AResult, ToDisplayAndBrief};
+    use crate::{util::AResult, util::ToDisplayAndBrief};
     use narsese::{
         api::NarseseValue, conversion::string::impl_lexical::format_instances::FORMAT_ASCII,
     };

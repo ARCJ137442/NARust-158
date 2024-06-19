@@ -4,7 +4,7 @@
 
 use super::structs::*;
 use crate::io::symbols::*;
-use crate::ToDisplayAndBrief;
+use crate::util::ToDisplayAndBrief;
 use narsese::{
     conversion::string::impl_lexical::format_instances::FORMAT_ASCII, lexical::Term as TermLexical,
 };
@@ -262,7 +262,7 @@ impl TermComponents {
 mod tests {
     use super::*;
     use crate::test_term as term;
-    use crate::{global::tests::AResult, ok};
+    use crate::{ok, util::AResult};
     use nar_dev_utils::asserts;
 
     /// 测试 / [`Term`]

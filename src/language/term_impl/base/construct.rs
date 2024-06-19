@@ -314,7 +314,7 @@ macro_rules! term {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{global::tests::AResult, ok, test_term as t};
+    use crate::{ok, test_term as t, util::AResult};
     use nar_dev_utils::fail_tests;
     // ! ❌使用`test_term as t`避免`term`重名：即便不导入，也会ambiguous
 
