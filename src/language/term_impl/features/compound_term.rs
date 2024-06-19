@@ -526,7 +526,6 @@ impl CompoundTermRef<'_> {
     /// * 🚩【2024-04-21 16:11:59】目前只需不可变引用
     ///   * 🔎OpenNARS中大部分用法是「只读」情形
     /// * 🚩自改版：仅在复合词项「移除元素」时使用
-    ///   * TODO: 需要「复合词项组分」实现`removeAll`浅层移除方法
     ///
     /// # 📄OpenNARS
     ///
@@ -687,15 +686,7 @@ impl CompoundTermRefMut<'_> {
 
     /* ----- variable-related utilities ----- */
 
-    /// 🆕在变量处理中设置词项
-    /// * 🎯变量推理需要使用其方法
-    ///
-    /// @param &m-this
-    /// @param index   []
-    /// @param term    []
-    pub fn set_term_when_dealing_variables(&mut self, index: usize, term: Term) {
-        self.components()[index] = term;
-    }
+    // ! 📌`set_term_when_dealing_variables`现在不再使用：直接在「变量处理」中设置指针所指向的值
 
     /// 🆕对于「可交换词项」重排其中的元素
     /// * 🚩【2024-06-13 18:05:40】只在「应用替换」时用到
@@ -1469,18 +1460,19 @@ pub(crate) mod tests {
             ok!()
         }
 
+        // ! ℹ️【2024-06-19 18:16:10】现在此处直接在特定引用处设置值
         #[test]
         pub fn set_term_when_dealing_variables() -> AResult {
+            fn test(mut term: Term, i: usize, new: Term, expected: Term) {
+                term.as_compound_mut().unwrap().components()[i] = new;
+                assert_eq!(term, expected);
+            }
             macro_once! {
                 macro test($(
                     $term:literal [$i:expr] = $new:literal =>
                     $expected:literal
                 )*) {
-                    $(
-                        let mut term = term!($term);
-                        term.as_compound_mut().unwrap().set_term_when_dealing_variables($i, term!($new));
-                        assert_eq!(term, term!($expected));
-                    )*
+                    $( test( term!($term), $i, term!($new), term!($expected)); )*
                 }
                 "{A}"[0] = "B" => "{B}"
                 "(--, A)"[0] = "B" => "(--, B)"
@@ -1500,19 +1492,19 @@ pub(crate) mod tests {
 
         #[test]
         pub fn reorder_components() -> AResult {
+            fn test(mut term: Term, i: usize, new: Term, expected: Term) {
+                let mut ref_mut = term.as_compound_mut().unwrap();
+                ref_mut.components()[i] = new;
+                // * 🚩设置后排序
+                ref_mut.reorder_components();
+                assert_eq!(term, expected);
+            }
             macro_once! {
                 macro test($(
                     $term:literal [$i:expr] = $new:literal =>
                     $expected:literal
                 )*) {
-                    $(
-                        let mut term = term!($term);
-                        let mut ref_mut = term.as_compound_mut().unwrap();
-                        ref_mut.set_term_when_dealing_variables($i, term!($new));
-                        // * 🚩设置后排序
-                        ref_mut.reorder_components();
-                        assert_eq!(term, term!($expected));
-                    )*
+                    $( test( term!($term), $i, term!($new), term!($expected)); )*
                 }
                 "{A, B, C}"[1] = "X" => "{A, X, C}" // ! 集合词项在从字符串解析时会重排，但在重排后仍然相等
                 "[A, B, C]"[1] = "X" => "[A, X, C]" // ! 集合词项在从字符串解析时会重排，但在重排后仍然相等
