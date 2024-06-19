@@ -32,6 +32,7 @@ pub trait Buffer<T>: Iterable<T> {
     }
 }
 
+/// 🆕使用「变长数组」实现的「缓冲区」类型
 #[derive(Debug, Clone)]
 pub struct ArrayBuffer<T> {
     /// 内部数组
