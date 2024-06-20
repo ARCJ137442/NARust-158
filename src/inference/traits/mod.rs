@@ -7,6 +7,6 @@ nar_dev_utils::mods! {
     // 🆕预算值
     pub use budget;
 
-    // 🆕证据的（时间戳）
+    // 🆕证据（基）
     pub use evidential;
 }

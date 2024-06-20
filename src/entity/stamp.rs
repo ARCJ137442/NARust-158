@@ -131,7 +131,6 @@ impl Stamp {
     /// 模拟`new Stamp(Stamp first, Stamp second, long time)`
     /// * 🚩【2024-05-05 14:30:28】根据OpenNARS，`current_serial`参数就与[「创建时间」](Stamp::creation_time)对应
     ///   * 因此直接将「创建时间」传入
-    /// * 💫【2024-05-05 16:40:38】目前对此运作逻辑尚不清楚
     ///
     /// # 📄OpenNARS
     ///
@@ -140,7 +139,11 @@ impl Stamp {
     ///
     /// @param first  The first Stamp
     /// @param second The second Stamp
-    fn __from_merge(first: &impl Evidential, second: &impl Evidential, time: ClockTime) -> Self {
+    pub fn from_merge_unchecked(
+        first: &impl Evidential,
+        second: &impl Evidential,
+        time: ClockTime,
+    ) -> Self {
         let merged_base =
             Self::merged_evidential_base(first.evidential_base(), second.evidential_base());
         Self::new(time, merged_base)
@@ -163,26 +166,10 @@ impl Stamp {
         second: &impl Evidential,
         time: ClockTime,
     ) -> Option<Self> {
-        /* 📄OpenNARS源码：
-        for (int i = 0; i < first.length(); i++) {
-            for (int j = 0; j < second.length(); j++) {
-                if (first.get(i) == second.get(j)) {
-                    return null;
-                }
-            }
-        }
-        if (first.length() > second.length()) {
-            return new Stamp(first, second, time);
-        } else {
-            return new Stamp(second, first, time);
-        } */
-        // * 🚩本质逻辑是：包含相同证据基⇒返回空值
-        if first.evidential_overlap(second) {
-            return None;
-        }
-        match first.evidence_length() > second.evidence_length() {
-            true => Some(Self::__from_merge(first, second, time)),
-            false => Some(Self::__from_merge(second, first, time)),
+        // * 🚩有重合证据⇒返回空；无重合证据⇒合并证据
+        match first.evidential_overlap(second) {
+            true => None,
+            false => Some(Self::from_merge_unchecked(first, second, time)),
         }
     }
 

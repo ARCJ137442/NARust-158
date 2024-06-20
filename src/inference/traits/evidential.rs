@@ -66,7 +66,6 @@ pub trait Evidential: ToDisplayAndBrief {
     /// 模拟`new Stamp(Stamp first, Stamp second, long time)`
     /// * 🚩【2024-05-05 14:30:28】根据OpenNARS，`current_serial`参数就与[「创建时间」](Stamp::creation_time)对应
     ///   * 因此直接将「创建时间」传入
-    /// * 💫【2024-05-05 16:40:38】目前对此运作逻辑尚不清楚
     ///
     /// # 📄OpenNARS
     ///
@@ -76,40 +75,66 @@ pub trait Evidential: ToDisplayAndBrief {
     /// @param first  The first Stamp
     /// @param second The second Stamp
     fn merged_evidential_base(first: &[ClockTime], second: &[ClockTime]) -> Vec<ClockTime> {
-        /* 📄OpenNARS源码：int i1, i2, j;
+        /* 📄OpenNARS
+        // * 🚩计算新证据基长度：默认长度相加，一定长度后截断
+        final int baseLength = Math.min( // * 📝一定程度上允许重复推理：在证据复杂时遗漏一定数据
+                base1.length + base2.length,
+                maxEvidenceBaseLength);
+        // * 🚩计算长短证据基
+        final long[] longer, shorter;
+        if (base1.length > base2.length) {
+            longer = base1;
+            shorter = base2;
+        } else {
+            longer = base2;
+            shorter = base1;
+        }
+        // * 🚩开始构造并填充数据：拉链式填充，1-2-1-2……
+        int i1, i2, j;
         i1 = i2 = j = 0;
-        baseLength = Math.min(first.length() + second.length(), Parameters.MAXIMUM_STAMP_LENGTH);
-        evidentialBase = new long[baseLength];
-        while (i2 < second.length() && j < baseLength) {
-            evidentialBase[j] = first.get(i1);
+        final long[] evidentialBase = new long[baseLength];
+        while (i2 < shorter.length && j < baseLength) {
+            evidentialBase[j] = longer[i1];
             i1++;
             j++;
-            evidentialBase[j] = second.get(i2);
+            evidentialBase[j] = shorter[i2];
             i2++;
             j++;
         }
-        while (i1 < first.length() && j < baseLength) {
-            evidentialBase[j] = first.get(i1);
+        // * 🚩2的长度比1小，所以此后随1填充
+        while (i1 < longer.length && j < baseLength) {
+            evidentialBase[j] = longer[i1];
             i1++;
             j++;
         }
-        creationTime = time; */
+        // * 🚩返回构造好的新证据基
+        return evidentialBase; */
+        // * 🚩计算新证据基长度：默认长度相加，一定长度后截断
+        let base_length =
+            ClockTime::min(first.len() + second.len(), Self::MAX_EVIDENCE_BASE_LENGTH);
+        // * 🚩计算长短证据基
+        let [longer, shorter] = match first.len() > second.len() {
+            true => [first, second],
+            false => [second, first],
+        };
+        // * 🚩开始构造并填充数据：拉链式填充，1-2-1-2……
         let mut i1 = 0;
         let mut i2 = 0;
         let mut j = 0;
-        let base_length =
-            ClockTime::min(first.len() + second.len(), Self::MAX_EVIDENCE_BASE_LENGTH);
         let mut evidential_base = vec![0; base_length];
-        while i2 < second.len() && j < base_length {
-            evidential_base[j] = first[i1];
+        let shorter_len = shorter.len();
+        let longer_len = longer.len();
+        while i2 < shorter_len && j < base_length {
+            evidential_base[j] = longer[i1];
             i1 += 1;
             j += 1;
-            evidential_base[j] = second[i2];
+            evidential_base[j] = shorter[i2];
             i2 += 1;
             j += 1;
         }
-        while i1 < first.len() && j < base_length {
-            evidential_base[j] = first[i1];
+        // * 🚩2的长度比1小，所以此后随1填充
+        while i1 < longer_len && j < base_length {
+            evidential_base[j] = longer[i1];
             i1 += 1;
             j += 1;
         }
