@@ -30,9 +30,9 @@ pub use short_float::*;
 // mod budget_value;
 // pub use budget_value::*;
 
-// // 真值 `TruthValue`
-// mod truth_value;
-// pub use truth_value::*;
+// 真值 `TruthValue`
+mod truth_value;
+pub use truth_value::*;
 
 // // 语句 `Sentence`
 // mod sentence;
