@@ -26,9 +26,9 @@ pub use short_float::*;
 // mod stamp;
 // pub use stamp::*;
 
-// // 预算值 `BudgetValue`
-// mod budget_value;
-// pub use budget_value::*;
+// 预算值 `BudgetValue`
+mod budget_value;
+pub use budget_value::*;
 
 // 真值 `TruthValue`
 mod truth_value;

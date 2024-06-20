@@ -19,8 +19,8 @@ pub mod entity;
 // 存储
 pub mod storage;
 
-// // 推理
-// pub mod inference;
+// 推理
+pub mod inference;
 
 // // 控制
 // pub mod control;

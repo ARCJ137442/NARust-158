@@ -3,6 +3,8 @@
 //!
 //! ! ⚠️【2024-06-19 23:01:30】此处有关「变量处理」的逻辑尚未稳定：
 //!   * 🚧有待在OpenNARS改版中「函数式改造」
+// TODO: 【2024-06-20 22:24:43】🚧有待在OpenNARS改版中「函数式改造」
+#![allow(unused)]
 
 use crate::language::{CompoundTermRefMut, Term, TermComponents};
 use nar_dev_utils::matches_or;
