@@ -20,7 +20,7 @@ use std::{
 /// # 📄OpenNARS
 ///
 /// Frequency and confidence.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, Eq)]
 pub struct TruthValue {
     /// frequency
     f: ShortFloat,
@@ -146,7 +146,6 @@ impl PartialEq for TruthValue {
         self.f == other.f && self.c == other.c
     }
 }
-impl Eq for TruthValue {}
 
 /// 手动实现[`Hash`]
 /// * ⚠️因为[`Self::a`]不参与判等，因此也不能参与到「散列化」中

@@ -22,9 +22,9 @@
 mod short_float;
 pub use short_float::*;
 
-// // 时间戳 `Stamp` | 内有导出宏定义
-// mod stamp;
-// pub use stamp::*;
+// 时间戳 `Stamp` | 内有导出宏定义
+mod stamp;
+pub use stamp::*;
 
 // 预算值 `BudgetValue`
 mod budget_value;

@@ -175,3 +175,43 @@ pub trait Evidential: ToDisplayAndBrief {
         self.stamp_to_display()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use nar_dev_utils::macro_once;
+
+    /// 测试/set_vec_eq
+    /// * 🎯数组集合判等
+    #[test]
+    fn set_vec_eq() {
+        macro_once! {
+            /// * 🚩正例 模式：原数组⇒预期相等
+            macro test($($value:expr => $($equivalent:expr $(,)? )* ; )*) {
+                $(
+                    $(
+                        assert!(super::set_vec_eq::<usize>(&$value, &$equivalent));
+                    )*
+                )*
+            }
+            [] => [];
+            [1] => [1];
+            [1, 2] => [2, 1];
+            [1, 2, 3] => [2, 3, 1], [3, 2, 1], [1, 3, 2], [3, 1, 2], [2, 1, 3];
+        }
+        macro_once! {
+            /// * 🚩反例 模式：原数组⇒预期相等
+            macro test($($value:tt != $($equivalent:expr $(,)? )* ; )*) {
+                $(
+                    $(
+                        assert!(!super::set_vec_eq::<usize>(&$value, &$equivalent));
+                    )*
+                )*
+            }
+            [1] != [];
+            [1] != [0];
+            [1, 2] != [1, 1];
+            [1, 2] != [1];
+            [1, 2, 3] != [2, 0, 1], [0, 2, 1], [1, 0, 2], [0, 1, 2], [2, 1, 0];
+        }
+    }
+}
