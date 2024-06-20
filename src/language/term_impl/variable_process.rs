@@ -519,8 +519,8 @@ impl VarSubstitution {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::global::tests::AResult;
     use crate::test_term as term;
+    use crate::util::AResult;
     use nar_dev_utils::macro_once;
 
     #[cfg(TODO_20240614164500_有待迁移)] // TODO: 有待后续完成迁移后改写

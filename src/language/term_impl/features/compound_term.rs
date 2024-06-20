@@ -743,7 +743,7 @@ impl<'s> From<CompoundTermRefMut<'s>> for CompoundTermRef<'s> {
 pub(crate) mod tests {
     use super::*;
     use crate::test_term as term;
-    use crate::{global::tests::AResult, ok};
+    use crate::{ok, util::AResult};
     use nar_dev_utils::{asserts, macro_once};
 
     /// 构建测试用复合词项

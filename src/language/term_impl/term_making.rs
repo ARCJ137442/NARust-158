@@ -1070,7 +1070,7 @@ impl CompoundTermRef<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{global::tests::AResult, ok, test_term as term};
+    use crate::{ok, test_term as term, util::AResult};
     use nar_dev_utils::macro_once;
 
     /// 快捷构造[`Option<Term>`](Option)

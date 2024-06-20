@@ -437,7 +437,7 @@ impl FromStr for Term {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{global::tests::AResult, ok};
+    use crate::{ok, util::AResult};
     use narsese::{
         conversion::{
             inter_type::lexical_fold::TryFoldInto,
