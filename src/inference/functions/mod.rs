@@ -13,8 +13,8 @@ nar_dev_utils::mods! {
     // 实用函数 `UtilityFunctions`
     pub use utility_functions;
 
-    // // 真值函数 `TruthFunctions`
-    // pub use truth_functions;
+    // 真值函数 `TruthFunctions`
+    pub use truth_functions;
 
     // // 预算值函数 `BudgetFunctions`
     // pub use budget_functions;

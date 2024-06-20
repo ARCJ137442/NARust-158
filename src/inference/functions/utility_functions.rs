@@ -212,6 +212,12 @@ impl ShortFloat {
         Self::from_float(w / (w + DEFAULT_PARAMETERS.horizon))
     }
 
+    /// 在改版OpenNARS中是常量，在此处因为「常量函数难以构建」改为变量
+    #[allow(non_snake_case)]
+    pub fn W2C1() -> ShortFloat {
+        Self::w2c(1.0)
+    }
+
     /// 从真值的「c值」到「w值」
     /// * 📌此处的`c`就是`self`
     ///

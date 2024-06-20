@@ -27,6 +27,16 @@ pub trait Truth: ToDisplayAndBrief {
     fn confidence(&self) -> ShortFloat;
     fn confidence_mut(&mut self) -> &mut ShortFloat;
 
+    /// 🆕用于快捷获取「频率-信度」对
+    fn fc(&self) -> [ShortFloat; 2] {
+        [self.frequency(), self.confidence()]
+    }
+
+    /// 🆕用于快捷获取双倍的「频率-信度」对
+    fn fc_with(&self, other: &impl Truth) -> ([ShortFloat; 2], [ShortFloat; 2]) {
+        (self.fc(), other.fc())
+    }
+
     /// 模拟`TruthValue.isAnalytic`、`getAnalytic`
     /// * 📝OpenNARS将其用于「A + <A ==> B> = B」导出的真值中，然后在「下一次据此推导」中「排除结论」
     ///   * 💭【2024-05-03 15:34:29】或许正是为了「只导出一遍」或者「由此导出的结论不能直接使用」
