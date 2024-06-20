@@ -3,9 +3,8 @@
 //! * 🎯只复刻外部读写方法，不限定内部数据字段
 //!   * ❌不迁移「具体类型」特征
 
-use nar_dev_utils::join;
-
 use crate::{entity::ShortFloat, io::symbols::*, util::ToDisplayAndBrief};
+use nar_dev_utils::join;
 
 /// 模拟`nars.inference.Budget`
 /// * 🎯实现最大程度的抽象与通用

@@ -4,29 +4,14 @@
 
 use super::ShortFloat;
 use crate::{
-    global::Float,
-    io::symbols::{TRUTH_VALUE_MARK, VALUE_SEPARATOR},
-    util::ToDisplayAndBrief,
+    __impl_to_display_and_display, global::Float, inference::Truth, util::ToDisplayAndBrief,
 };
 use anyhow::Result;
-use nar_dev_utils::join;
 use narsese::lexical::Truth as LexicalTruth;
 use std::{
     fmt::Debug,
     hash::{Hash, Hasher},
 };
-
-/// * 🚩【2024-05-09 00:56:52】改：统一为字符串
-/// # 📄OpenNARS
-///
-/// The character that marks the two ends of a budget value
-const MARK: &str = TRUTH_VALUE_MARK;
-
-/// * 🚩【2024-05-09 00:56:52】改：统一为字符串
-/// # 📄OpenNARS
-///
-/// The character that separates the factors in a budget value
-const SEPARATOR: &str = VALUE_SEPARATOR;
 
 /// [`TruthValue`]初代实现
 /// * 🎯测试特征的效果
@@ -36,7 +21,7 @@ const SEPARATOR: &str = VALUE_SEPARATOR;
 ///
 /// Frequency and confidence.
 #[derive(Debug, Clone, Copy, Default)]
-pub struct TruthV1 {
+pub struct TruthValue {
     /// frequency
     f: ShortFloat,
     /// confidence
@@ -45,58 +30,40 @@ pub struct TruthV1 {
     a: bool,
 }
 
-impl TruthV1 {
-    /* impl TruthValue for TruthV1 */
-
+impl Truth for TruthValue {
     #[inline(always)]
-    pub fn frequency(&self) -> ShortFloat {
+    fn frequency(&self) -> ShortFloat {
         self.f
     }
 
     #[inline(always)]
-    pub fn frequency_mut(&mut self) -> &mut ShortFloat {
+    fn frequency_mut(&mut self) -> &mut ShortFloat {
         &mut self.f
     }
 
     #[inline(always)]
-    pub fn confidence(&self) -> ShortFloat {
+    fn confidence(&self) -> ShortFloat {
         self.c
     }
 
     #[inline(always)]
-    pub fn confidence_mut(&mut self) -> &mut ShortFloat {
+    fn confidence_mut(&mut self) -> &mut ShortFloat {
         &mut self.c
     }
 
     #[inline(always)]
-    pub fn is_analytic(&self) -> bool {
+    fn is_analytic(&self) -> bool {
         self.a
     }
 
-    pub fn set_analytic(&mut self) {
+    #[inline(always)]
+    fn set_analytic(&mut self) {
         self.a = true;
     }
+}
 
-    pub fn expectation(&self) -> Float {
-        /* 📄OpenNARS源码：
-        return (float) (confidence.getValue() * (frequency.getValue() - 0.5) + 0.5); */
-        self.confidence().value() * (self.frequency().value() - 0.5) + 0.5
-    }
-
-    pub fn expectation_abs_dif(&self, other: &TruthV1) -> Float {
-        /* 📄OpenNARS源码：
-        return Math.abs(getExpectation() - t.getExpectation()); */
-        (self.expectation() - other.expectation()).abs()
-    }
-
-    pub fn is_negative(&self) -> bool {
-        /* 📄OpenNARS源码：
-        return getFrequency() < 0.5; */
-        self.frequency() < ShortFloat::HALF
-    }
-
-    /* impl TruthValueConcrete for TruthV1 */
-
+/* impl TruthValueConcrete for TruthV1 */
+impl TruthValue {
     #[inline(always)]
     pub fn new(frequency: ShortFloat, confidence: ShortFloat, is_analytic: bool) -> Self {
         Self {
@@ -167,40 +134,23 @@ impl TruthV1 {
     }
 }
 
-impl ToDisplayAndBrief for TruthV1 {
-    fn to_display(&self) -> String {
-        join!(
-            => MARK.to_string()
-            => self.frequency().to_display()
-            => SEPARATOR
-            => self.confidence().to_display()
-            => MARK
-        )
-    }
-
-    fn to_display_brief(&self) -> String {
-        // ! 🆕�【2024-05-08 22:16:40】不对`1.00 => 0.99`做特殊映射
-        MARK.to_string()
-            + &self.frequency().to_display_brief()
-            + SEPARATOR
-            + &self.confidence().to_display_brief()
-            + MARK
-    }
+__impl_to_display_and_display! {
+    TruthValue as Truth
 }
 
 /// 模拟`equals`
 /// * ⚠️其中[`Self::a`]即`isAnalytic`不参与判等
-impl PartialEq for TruthV1 {
+impl PartialEq for TruthValue {
     #[inline(always)]
     fn eq(&self, other: &Self) -> bool {
         self.f == other.f && self.c == other.c
     }
 }
-impl Eq for TruthV1 {}
+impl Eq for TruthValue {}
 
 /// 手动实现[`Hash`]
 /// * ⚠️因为[`Self::a`]不参与判等，因此也不能参与到「散列化」中
-impl Hash for TruthV1 {
+impl Hash for TruthValue {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.f.hash(state);
         self.c.hash(state);
@@ -221,11 +171,11 @@ mod conversion {
     macro_rules! truth {
         // 二参数
         ($f:expr; $c:expr) => {
-            TruthV1::from_fc($f, $c)
+            TruthValue::from_fc($f, $c)
         };
         // 三参数
         ($f:expr; $c:expr; $a:expr) => {
-            TruthV1::from_floats($f, $c, $a)
+            TruthValue::from_floats($f, $c, $a)
         };
     }
 }
@@ -238,7 +188,7 @@ mod tests {
     use nar_dev_utils::macro_once;
 
     /// 定义要测试的「真值」类型
-    type Truth = TruthV1;
+    type TruthV = TruthValue;
     type SF = ShortFloat;
 
     // * ✅测试/new已在「快捷构造宏」中实现
@@ -366,13 +316,15 @@ mod tests {
     /// 测试/set_analytic
     #[test]
     fn set_analytic() -> AResult {
+        fn test(mut truth: TruthV) {
+            truth.set_analytic();
+            assert!(truth.is_analytic());
+        }
         macro_once! {
             /// * 🚩模式：[真值的构造方法]
             macro test($( [ $($truth:tt)* ])*) {
                 $(
-                    let mut truth = truth!($($truth)*);
-                    truth.set_analytic();
-                    assert!(truth.is_analytic());
+                    test(truth!($($truth)*));
                 )*
             }
             // 不管最开始是什么，均会变成`true`
@@ -386,14 +338,14 @@ mod tests {
     /// 测试/expectation
     #[test]
     fn expectation() -> AResult {
+        fn test(truth: TruthV, expected: Float) {
+            assert_eq!(truth.expectation(), expected);
+        }
         macro_once! {
             /// * 🚩模式：[真值的构造方法] ⇒ 预期
             macro test($( [ $($truth:tt)* ] => $expected:tt)*) {
                 $(
-                    assert_eq!(
-                        truth!($($truth)*).expectation(),
-                        $expected
-                    );
+                    test(truth!($($truth)*), $expected);
                 )*
             }
             // * 特殊值矩阵
@@ -409,14 +361,15 @@ mod tests {
     /// 测试/expectation_abs_dif
     #[test]
     fn expectation_abs_dif() -> AResult {
+        fn test(truth1: TruthV, truth2: TruthV, expected: Float) {
+            assert_eq!(truth1.expectation_abs_dif(&truth2), expected);
+        }
         macro_once! {
             /// * 🚩模式：| [真值的构造方法] - [真值的构造方法] | ⇒ 预期
             macro test($( | [ $($truth1:tt)* ] - [ $($truth2:tt)* ] | => $expected:tt)*) {
                 $(
-                    let truth1 = truth!($($truth1)*);
-                    let truth2 = truth!($($truth2)*);
-                    assert_eq!(
-                        truth1.expectation_abs_dif(&truth2),
+                    test(
+                        truth!($($truth1)*),truth!($($truth2)*),
                         $expected
                     );
                 )*
@@ -437,14 +390,14 @@ mod tests {
     /// 测试/is_negative
     #[test]
     fn is_negative() -> AResult {
+        fn test(truth: TruthV, expected: bool) {
+            assert_eq!(truth.is_negative(), expected);
+        }
         macro_once! {
             /// * 🚩模式：[真值的构造方法] ⇒ 预期
             macro test($( [ $($truth:tt)* ] => $expected:tt)*) {
                 $(
-                    assert_eq!(
-                        truth!($($truth)*).is_negative(),
-                        $expected
-                    );
+                    test(truth!($($truth)*), $expected);
                 )*
             }
             [1.0; 0.9] => false
@@ -527,6 +480,22 @@ mod tests {
     /// 测试/from_lexical
     #[test]
     fn from_lexical() -> AResult {
+        fn test(lexical: LexicalTruth, truth: TruthV, fc: [Float; 2], is_analytic: bool) {
+            // 解析
+            let [f, c] = fc;
+            let parsed = TruthV::from_lexical(
+                lexical,
+                [
+                    // 默认值（完全限定语法）
+                    ShortFloat::from_float(f),
+                    ShortFloat::from_float(c),
+                ],
+                is_analytic,
+            )
+            .unwrap();
+            // 判等
+            assert_eq!(parsed, truth);
+        }
         macro_once! {
             /// * 🚩模式：[词法真值构造方法] ⇒ 预期[真值的构造方法]
             macro test($(
@@ -534,20 +503,12 @@ mod tests {
                 => [ $($truth:tt)* ] )*
             ) {
                 $(
-                    // 构造
-                    let lexical = narsese::lexical_truth!($($lexical)*);
-                    let truth = truth!($($truth)*);
-                    // 解析
-                    let parsed = Truth::from_lexical(
-                        lexical,
-                        [ // 默认值（完全限定语法）
-                            ShortFloat::from_float($f),
-                            ShortFloat::from_float($c),
-                        ],
+                    test(
+                        narsese::lexical_truth!($($lexical)*),
+                        truth!($($truth)*),
+                        [$f, $c],
                         $is_analytic
-                    ).unwrap();
-                    // 判等
-                    assert_eq!(parsed, truth);
+                    );
                 )*
             }
             // 完全解析
