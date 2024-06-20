@@ -4,12 +4,13 @@ nar_dev_utils::mods! {
     // 可迭代对象
     pub use iterable;
 
-    // 字符串呈现
-    pub use to_display;
-
     // 共享引用
     pub use rc;
 }
+
+// 字符串呈现 | 内含导出的宏
+mod to_display;
+pub use to_display::*;
 
 // 测试用
 // * ❌【2024-06-20 02:02:25】莫尝试「模块封装+自动导出」省`test::`

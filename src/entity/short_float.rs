@@ -9,7 +9,7 @@
 //! * ✅【2024-05-02 21:41:48】（初代实现）基本复刻完毕
 //! * ♻️【2024-06-19 23:36:56】删繁就简：删去「抽象特征」以免去后续诸多泛型引入的代码复杂性
 
-use crate::{global::Float, impl_display_from_to_display, ToDisplayAndBrief};
+use crate::{global::Float, impl_display_from_to_display, util::ToDisplayAndBrief};
 use narsese::api::EvidentNumber;
 use std::ops::{BitAnd, BitOr, Not};
 use thiserror::Error;
@@ -458,7 +458,7 @@ macro_rules! short_float {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{global::tests::AResult, ok};
+    use crate::{ok, util::AResult};
     use nar_dev_utils::macro_once;
 
     /// 用于测试的类型简写

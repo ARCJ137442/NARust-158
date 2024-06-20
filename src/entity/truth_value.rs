@@ -6,7 +6,7 @@ use super::ShortFloat;
 use crate::{
     global::Float,
     io::symbols::{TRUTH_VALUE_MARK, VALUE_SEPARATOR},
-    ToDisplayAndBrief,
+    util::ToDisplayAndBrief,
 };
 use anyhow::Result;
 use nar_dev_utils::join;
@@ -234,7 +234,7 @@ mod conversion {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{global::tests::AResult, ok, truth};
+    use crate::{ok, truth, util::AResult};
     use nar_dev_utils::macro_once;
 
     /// 定义要测试的「真值」类型

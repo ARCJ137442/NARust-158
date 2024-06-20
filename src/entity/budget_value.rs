@@ -3,7 +3,7 @@
 
 use crate::__impl_to_display_and_display;
 use crate::entity::ShortFloat;
-use crate::{global::Float, inference::Budget, ToDisplayAndBrief};
+use crate::{global::Float, inference::Budget, util::ToDisplayAndBrief};
 use anyhow::Result;
 use narsese::lexical::Budget as LexicalBudget;
 
@@ -105,7 +105,7 @@ __impl_to_display_and_display! {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{global::tests::AResult, ok};
+    use crate::{ok, util::AResult};
     use nar_dev_utils::macro_once;
 
     /// 定义要测试的「预算值」类型

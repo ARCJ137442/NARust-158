@@ -5,7 +5,7 @@
 
 use nar_dev_utils::join;
 
-use crate::{entity::ShortFloat, io::symbols::*, ToDisplayAndBrief};
+use crate::{entity::ShortFloat, io::symbols::*, util::ToDisplayAndBrief};
 
 /// 模拟`nars.inference.Budget`
 /// * 🎯实现最大程度的抽象与通用

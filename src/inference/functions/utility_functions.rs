@@ -266,7 +266,7 @@ impl ShortFloat {
 mod tests {
     use super::*;
     use crate::entity::ShortFloat;
-    use crate::{global::tests::AResult, ok};
+    use crate::{ok, util::AResult};
     use nar_dev_utils::{asserts, for_in_ifs, macro_once};
 
     /// 定义要测试的「短浮点」类型
