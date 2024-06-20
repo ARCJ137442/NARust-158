@@ -81,6 +81,17 @@ pub trait Budget: ToDisplayAndBrief {
         self.__quality_mut().set(new_q)
     }
 
+    /// 🆕从其它预算值处拷贝值
+    /// * 🚩拷贝优先级、耐久度与质量
+    fn copy_budget_from(&mut self, from: &impl Budget) {
+        self.set_priority(from.priority());
+        self.set_durability(from.durability());
+        self.set_quality(from.quality());
+    }
+
+    // TODO: merge
+    // fn merge_budget(&mut self, from: &impl Budget)
+
     /// 模拟`BudgetValue.summary`
     /// * 🚩📜统一采用「几何平均值」估计（默认）
     ///
