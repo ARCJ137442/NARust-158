@@ -1,7 +1,7 @@
 //! 复刻改版OpenNARS「语句」
 //! * ❌不附带「真值」假定——仅「判断」具有「真值」属性
 
-use super::{Judgement, Question, Stamp, TruthValue};
+use super::{Judgement, Question, Stamp};
 use crate::{
     global::ClockTime, inference::Evidential, io::symbols::*, language::Term,
     util::ToDisplayAndBrief,
@@ -53,26 +53,6 @@ impl Display for Punctuation {
 /// It is used as the premises and conclusions of all inference rules.
 pub trait Sentence: ToDisplayAndBrief + Evidential {
     // 所有抽象字段
-
-    /// 模拟`Sentence.revisable`、`Sentence.getRevisable`
-    /// * 📝OpenNARS只在「解析任务」时会设置值
-    ///   * 🎯使用目的：「包含因变量的合取」不可被修正
-    ///   * 🚩【2024-05-19 13:01:57】故无需让其可变，构造后只读即可
-    /// * 🚩【2024-05-24 12:05:54】现在将「是否可修正」放进「判断」标点中
-    ///   * 📝根据OpenNARS逻辑，只有「判断」才有「是否可被修正」属性
-    ///   * ✅现在无需再依靠具体结构来实现了
-    /// * 🚩【2024-06-21 14:54:59】现在成为抽象方法
-    ///
-    /// # 📄OpenNARS
-    ///
-    /// ## `revisable`
-    ///
-    /// Whether the sentence can be revised
-    ///
-    /// ## `getRevisable`
-    ///
-    /// 🈚
-    fn revisable(&self) -> bool;
 
     /// 模拟`Sentence.content`、`Sentence.getContent`
     /// * 🚩读写：出现了两个方法
@@ -135,6 +115,11 @@ pub trait Sentence: ToDisplayAndBrief + Evidential {
         self.content().clone()
     }
 
+    // * ⚠️Rust中必须预先定义其中的「判断句」「问题句」类型
+    //   * 📌直接原因：对于带泛型的`as_XXX`，需要知道其中的类型参数，才能正常参与编译
+    type Judgement: Judgement;
+    type Question: Question;
+
     /// 模拟`Sentence.isJudgement`
     /// * ❌【2024-06-21 15:02:36】无法外置到其它「给语句自动添加功能」的特征中去
     ///   * 📌瓶颈：冲突的默认实现
@@ -144,8 +129,10 @@ pub trait Sentence: ToDisplayAndBrief + Evidential {
     /// Distinguish Judgement from Goal ("instanceof Judgement" doesn't work)
     ///
     /// @return Whether the object is a Judgement
-    fn is_judgement(&self) -> bool;
-    fn as_judgement(&self) -> Option<&impl Judgement>;
+    fn is_judgement(&self) -> bool {
+        self.as_judgement().is_some()
+    }
+    fn as_judgement(&self) -> Option<&Self::Judgement>;
 
     /// 模拟`Sentence.isQuestion`
     /// * ❌【2024-06-21 15:02:36】无法外置到其它「给语句自动添加功能」的特征中去
@@ -156,8 +143,10 @@ pub trait Sentence: ToDisplayAndBrief + Evidential {
     /// Distinguish Question from Quest ("instanceof Question" doesn't work)
     ///
     /// @return Whether the object is a Question
-    fn is_question(&self) -> bool;
-    fn as_question(&self) -> Option<&impl Question>;
+    fn is_question(&self) -> bool {
+        self.as_question().is_some()
+    }
+    fn as_question(&self) -> Option<&Self::Question>;
 
     /// 模拟`Sentence.containQueryVar`
     ///
@@ -184,8 +173,8 @@ pub trait Sentence: ToDisplayAndBrief + Evidential {
     /// Get a String representation of the sentence for key of Task and TaskLink
     ///
     /// @return The String
-    #[doc(alias = "to_key")]
-    fn to_key_string(&self) -> String;
+    #[doc(alias = "to_key_string")]
+    fn to_key(&self) -> String;
 
     /// 模拟`Sentence.toString`
     /// * 🚩【2024-05-08 23:34:34】现在借道[`ToDisplayAndBrief`]予以实现
@@ -197,6 +186,9 @@ pub trait Sentence: ToDisplayAndBrief + Evidential {
     ///
     /// @return The String
     fn sentence_to_display(&self) -> String;
+    fn __to_display(&self) -> String {
+        self.sentence_to_display()
+    }
 
     /// 模拟`Sentence.toStringBrief`
     /// * 🚩【2024-05-08 23:37:44】现在借道[`Sentence::to_key_string`]予以实现
@@ -209,7 +201,10 @@ pub trait Sentence: ToDisplayAndBrief + Evidential {
     fn sentence_to_display_brief(&self) -> String {
         /* 📄OpenNARS源码：
         return toKey() + stamp.toString(); */
-        self.to_key_string() + &self.stamp_to_display()
+        self.to_key() + &self.stamp_to_display()
+    }
+    fn __to_display_brief(&self) -> String {
+        self.sentence_to_display_brief()
     }
 
     /// 🆕原版没有，此处仅重定向
@@ -217,20 +212,10 @@ pub trait Sentence: ToDisplayAndBrief + Evidential {
         self.sentence_to_display()
     }
 
-    /// 🆕用于「新任务建立」
-    /// * 🚩使用最大并集（可设置为空）建立同标点新语句
-    /// * 📄判断⇒判断，问题⇒问题
-    fn sentence_clone_with_same_punctuation(
-        content: Term,
-        new_content: Term,
-        new_truth: TruthValue,
-        new_stamp: Stamp,
-        revisable: bool,
-    ) -> Self;
-
-    /// 🆕与OpenNARS改版不同：从「词法语句」解析
-    /// * ℹ️原有的「内部语句」可能不存在标点信息，故只能上移至此
-    fn from_lexical(lexical: LexicalSentence) -> Self;
+    // /// 🆕与OpenNARS改版不同：从「词法语句」解析
+    // /// * ℹ️原有的「内部语句」可能不存在标点信息，故只能上移至此
+    // fn from_lexical(lexical: LexicalSentence) -> Self;
+    // ! ❌【2024-06-21 19:12:02】暂不实现：留给「任务解析器」
 
     /// 🆕与OpenNARS改版不同：转换为「词法语句」
     /// * ℹ️原有的「内部语句」可能不存在标点信息，故只能上移至此

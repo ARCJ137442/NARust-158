@@ -61,7 +61,7 @@ macro_rules! __impl_to_display {
         $ty:ty as $ty_as:ty
         $( where $( $where_cond:tt )* )?
     ) => {
-        impl< $( $( $generics )* )? > ToDisplayAndBrief for $ty
+        impl< $( $( $generics )* )? > $crate::util::ToDisplayAndBrief for $ty
         $( where $( $where_cond )* )?
         {
             $(
@@ -145,7 +145,7 @@ macro_rules! impl_display_from_to_display {
         {
             #[inline(always)]
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                write!(f, "{}", self.to_display())
+                f.write_str(&$crate::util::ToDisplayAndBrief::to_display(self))
             }
         }
     };

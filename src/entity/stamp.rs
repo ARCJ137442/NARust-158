@@ -4,7 +4,7 @@
 //! * ♻️【2024-06-21 00:05:34】基本依OpenNARS改版 重复刻（去特征化）完成
 
 use crate::__impl_to_display_and_display;
-use crate::{global::ClockTime, inference::Evidential, util::ToDisplayAndBrief};
+use crate::{global::ClockTime, inference::Evidential};
 use anyhow::Result;
 use narsese::lexical::Stamp as LexicalStamp;
 use std::hash::{Hash, Hasher};
@@ -218,6 +218,7 @@ macro_rules! stamp {
 mod tests {
     use super::*;
     use crate::stamp;
+    use crate::util::ToDisplayAndBrief;
     use nar_dev_utils::macro_once;
 
     /// 测试用「时间戳」类型

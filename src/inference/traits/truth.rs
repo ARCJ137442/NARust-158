@@ -104,6 +104,14 @@ pub trait Truth: ToDisplayAndBrief {
         self.frequency() < ShortFloat::HALF
     }
 
+    /// 模拟`TruthValue.equals`
+    /// * 🎯将两个对象作为「真值」比较
+    /// * 🎯用于「判断句」中「真值方面的比较」
+    /// * ⚠️不一定等于
+    fn truth_eq(&self, other: &impl Truth) -> bool {
+        self.frequency() == other.frequency() && self.confidence() == other.frequency()
+    }
+
     /// 模拟`toString`
     /// * 🚩【2024-05-08 22:12:42】现在鉴于实际情况，仍然实现`toString`、`toStringBrief`方法
     ///   * 🚩具体方案：实现一个统一的、内部的、默认的`__to_display(_brief)`，再通过「手动嫁接」完成最小成本实现

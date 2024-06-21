@@ -73,6 +73,10 @@ impl TruthValue {
         }
     }
 
+    pub fn from(truth: &impl Truth) -> Self {
+        Self::new(truth.frequency(), truth.confidence(), truth.is_analytic())
+    }
+
     pub fn new_fc(frequency: ShortFloat, confidence: ShortFloat) -> Self {
         Self::new(frequency, confidence, false)
     }
