@@ -18,21 +18,13 @@
 //! 1. Direct processing by matching, in the concept corresponding to the content, in one step. It happens when the task is inserted into memory.
 //! 2. Indirect processing by reasoning, in related concepts and unlimited steps. It happens in each inference cycle.
 
-// 短浮点 `ShortFloat` | 内有导出宏定义
-mod short_float;
-pub use short_float::*;
+// 有关「浮点数组」的结构
+mod float_values;
+pub use float_values::*;
 
 // 时间戳 `Stamp` | 内有导出宏定义
 mod stamp;
 pub use stamp::*;
-
-// 预算值 `BudgetValue`
-mod budget_value;
-pub use budget_value::*;
-
-// 真值 `TruthValue`
-mod truth_value;
-pub use truth_value::*;
 
 // 语句 `Sentence`
 mod sentence;
