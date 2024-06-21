@@ -30,6 +30,10 @@ pub use stamp::*;
 mod sentence;
 pub use sentence::*;
 
+// 物品 `Item`
+mod item;
+pub use item::*;
+
 // // 任务 `Task`
 // mod task;
 // pub use task::*;
@@ -43,7 +47,4 @@ pub use sentence::*;
 
 //     // 概念 `Concept`
 //     pub use concept;
-
-//     // 物品
-//     pub use item;
 // }
