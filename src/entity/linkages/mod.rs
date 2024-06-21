@@ -10,6 +10,10 @@ pub use t_link::*;
 mod t_linkage;
 pub use t_linkage::*;
 
+// 词项链模板
+mod term_link_template;
+pub use term_link_template::*;
+
 // 词项链
 mod term_link;
 pub use term_link::*;
