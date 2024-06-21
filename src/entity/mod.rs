@@ -37,20 +37,6 @@ pub use truth_value::*;
 // 语句 `Sentence`
 mod sentence;
 pub use sentence::*;
-mod sentence_v1;
-pub use sentence_v1::*;
-
-// 判断句
-mod judgement;
-pub use judgement::*;
-mod judgement_v1;
-pub use judgement_v1::*;
-
-// 疑问句
-mod question;
-pub use question::*;
-mod question_v1;
-pub use question_v1::*;
 
 // // 任务 `Task`
 // mod task;

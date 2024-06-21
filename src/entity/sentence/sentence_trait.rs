@@ -1,9 +1,8 @@
-//! 复刻改版OpenNARS「语句」
-//! * ❌不附带「真值」假定——仅「判断」具有「真值」属性
+//! 作为特征的「语句」类型
 
-use super::{Judgement, Question, Stamp};
+use super::{Judgement, Question};
 use crate::{
-    global::ClockTime, inference::Evidential, io::symbols::*, language::Term,
+    entity::Stamp, global::ClockTime, inference::Evidential, io::symbols::*, language::Term,
     util::ToDisplayAndBrief,
 };
 use anyhow::Result;

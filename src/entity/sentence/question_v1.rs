@@ -1,5 +1,5 @@
-use super::{JudgementV1, Question, Sentence, SentenceInner, Stamp};
-use crate::{__impl_to_display_and_display, inference::Evidential, language::Term};
+use super::{JudgementV1, Question, Sentence, SentenceInner};
+use crate::{__impl_to_display_and_display, entity::Stamp, inference::Evidential, language::Term};
 use narsese::lexical::Sentence as LexicalSentence;
 
 /// 🆕疑问句 初代实现

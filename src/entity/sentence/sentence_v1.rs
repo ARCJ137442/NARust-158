@@ -1,6 +1,10 @@
-use super::{JudgementV1, Punctuation, QuestionV1, Sentence, SentenceInner, Stamp, TruthValue};
+use super::{JudgementV1, Punctuation, QuestionV1, Sentence, SentenceInner};
 use crate::{
-    __impl_to_display_and_display, global::ClockTime, inference::Evidential, language::Term,
+    __impl_to_display_and_display,
+    entity::{Stamp, TruthValue},
+    global::ClockTime,
+    inference::Evidential,
+    language::Term,
 };
 use anyhow::Result;
 use nar_dev_utils::{enum_union, matches_or};

@@ -1,6 +1,7 @@
-use super::{Judgement, QuestionV1, Sentence, SentenceInner, Stamp, TruthValue};
+use crate::entity::{Judgement, QuestionV1, Sentence, SentenceInner};
 use crate::{
     __impl_to_display_and_display,
+    entity::{ShortFloat, Stamp, TruthValue},
     global::ClockTime,
     inference::{Evidential, Truth},
     language::Term,
@@ -58,8 +59,8 @@ impl Sentence for JudgementV1 {
         self.inner.content_mut()
     }
 
-    fn punctuation(&self) -> super::Punctuation {
-        super::Punctuation::Judgement
+    fn punctuation(&self) -> crate::entity::Punctuation {
+        crate::entity::Punctuation::Judgement
     }
 
     fn is_judgement(&self) -> bool {
@@ -93,22 +94,22 @@ impl Sentence for JudgementV1 {
 
 impl Truth for JudgementV1 {
     #[inline(always)]
-    fn frequency(&self) -> super::ShortFloat {
+    fn frequency(&self) -> ShortFloat {
         self.truth.frequency()
     }
 
     #[inline(always)]
-    fn frequency_mut(&mut self) -> &mut super::ShortFloat {
+    fn frequency_mut(&mut self) -> &mut ShortFloat {
         self.truth.frequency_mut()
     }
 
     #[inline(always)]
-    fn confidence(&self) -> super::ShortFloat {
+    fn confidence(&self) -> ShortFloat {
         self.truth.confidence()
     }
 
     #[inline(always)]
-    fn confidence_mut(&mut self) -> &mut super::ShortFloat {
+    fn confidence_mut(&mut self) -> &mut ShortFloat {
         self.truth.confidence_mut()
     }
 
