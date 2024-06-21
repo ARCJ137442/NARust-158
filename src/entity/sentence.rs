@@ -186,9 +186,6 @@ pub trait Sentence: ToDisplayAndBrief + Evidential {
     ///
     /// @return The String
     fn sentence_to_display(&self) -> String;
-    fn __to_display(&self) -> String {
-        self.sentence_to_display()
-    }
 
     /// 模拟`Sentence.toStringBrief`
     /// * 🚩【2024-05-08 23:37:44】现在借道[`Sentence::to_key_string`]予以实现
@@ -202,9 +199,6 @@ pub trait Sentence: ToDisplayAndBrief + Evidential {
         /* 📄OpenNARS源码：
         return toKey() + stamp.toString(); */
         self.to_key() + &self.stamp_to_display()
-    }
-    fn __to_display_brief(&self) -> String {
-        self.sentence_to_display_brief()
     }
 
     /// 🆕原版没有，此处仅重定向

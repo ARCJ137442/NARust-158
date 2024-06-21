@@ -183,5 +183,6 @@ impl Judgement for JudgementV1 {
 }
 
 __impl_to_display_and_display! {
-    JudgementV1 as Sentence
+    @(judgement_to_display;;)
+    JudgementV1 as Judgement
 }

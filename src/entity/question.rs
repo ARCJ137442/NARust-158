@@ -95,5 +95,6 @@ impl Sentence for QuestionV1 {
 impl Question for QuestionV1 {}
 
 __impl_to_display_and_display! {
-    QuestionV1 as Sentence
+    @(question_to_display;;)
+    QuestionV1 as Question
 }

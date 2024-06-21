@@ -139,6 +139,7 @@ impl TruthValue {
 }
 
 __impl_to_display_and_display! {
+    @(truth_to_display; truth_to_display_brief;)
     TruthValue as Truth
 }
 

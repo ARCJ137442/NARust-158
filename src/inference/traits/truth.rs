@@ -115,6 +115,7 @@ pub trait Truth: ToDisplayAndBrief {
     /// 模拟`toString`
     /// * 🚩【2024-05-08 22:12:42】现在鉴于实际情况，仍然实现`toString`、`toStringBrief`方法
     ///   * 🚩具体方案：实现一个统一的、内部的、默认的`__to_display(_brief)`，再通过「手动嫁接」完成最小成本实现
+    /// * 🚩【2024-06-21 19:29:46】目前方案：明确是「作为不同类型的『字符串呈现』方法」，并在具体类型中手动指定映射
     ///
     /// # 📄OpenNARS
     ///
@@ -129,9 +130,6 @@ pub trait Truth: ToDisplayAndBrief {
             => self.confidence().to_display()
             => MARK
         )
-    }
-    fn __to_display(&self) -> String {
-        self.truth_to_display()
     }
 
     /// 模拟`toStringBrief`
@@ -148,9 +146,6 @@ pub trait Truth: ToDisplayAndBrief {
             + SEPARATOR
             + &self.confidence().to_display_brief()
             + MARK
-    }
-    fn __to_display_brief(&self) -> String {
-        self.truth_to_display_brief()
     }
 }
 

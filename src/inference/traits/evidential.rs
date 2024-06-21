@@ -200,9 +200,6 @@ pub trait Evidential: ToDisplayAndBrief {
             => STAMP_CLOSER
         )
     }
-    fn __to_display(&self) -> String {
-        self.stamp_to_display()
-    }
 }
 
 #[cfg(test)]

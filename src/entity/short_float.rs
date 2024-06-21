@@ -776,9 +776,9 @@ mod tests {
         ok!()
     }
 
-    /// 测试/__to_display
+    /// 测试/to_display
     #[test]
-    fn __to_display() -> AResult {
+    fn to_display() -> AResult {
         macro_once! {
             /// * 🚩模式：短浮点（浮点值） ⇒ 预期
             macro test($( $value:tt => $expected:tt)*) {
@@ -805,9 +805,9 @@ mod tests {
         ok!()
     }
 
-    /// 测试/__to_display_brief
+    /// 测试/to_display_brief
     #[test]
-    fn __to_display_brief() -> AResult {
+    fn to_display_brief() -> AResult {
         macro_once! {
             /// * 🚩模式：短浮点（浮点值） ⇒ 预期
             macro test($( $value:tt => $expected:tt)*) {

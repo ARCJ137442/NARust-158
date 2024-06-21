@@ -128,13 +128,16 @@ pub trait Budget: ToDisplayAndBrief {
     /// 模拟`toString`
     /// * 🚩【2024-05-08 22:12:42】现在鉴于实际情况，仍然实现`toString`、`toStringBrief`方法
     ///   * 🚩具体方案：实现一个统一的、内部的、默认的`__to_display(_brief)`，再通过「手动嫁接」完成最小成本实现
+    /// * 🚩【2024-06-21 19:29:46】目前方案：明确是「作为不同类型的『字符串呈现』方法」，并在具体类型中手动指定映射
+    ///   * 🎯一个是「明确具体的类型」一个是「避免使用混乱」
+    ///   * ❓【2024-06-21 19:31:12】或许后续将不再需要[`ToDisplayAndBrief`]
     ///
     /// # 📄OpenNARS
     ///
     /// Fully display the BudgetValue
     ///
     /// @return String representation of the value
-    fn __to_display(&self) -> String {
+    fn budget_to_display(&self) -> String {
         join!(
             => MARK.to_string()
             => &self.priority().to_display()
@@ -153,7 +156,7 @@ pub trait Budget: ToDisplayAndBrief {
     /// Briefly display the BudgetValue
     ///
     /// @return String representation of the value with 2-digit accuracy
-    fn __to_display_brief(&self) -> String {
+    fn budget_to_display_brief(&self) -> String {
         MARK.to_string()
             + &self.priority().to_display_brief()
             + SEPARATOR

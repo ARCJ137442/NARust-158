@@ -99,6 +99,7 @@ impl BudgetValue {
 
 // 自动派生并实现[`ToDisplayAndBrief`]与[`Display`]
 __impl_to_display_and_display! {
+    @( budget_to_display; budget_to_display_brief;)
     BudgetValue as Budget
 }
 
