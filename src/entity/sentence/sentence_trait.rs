@@ -53,7 +53,9 @@ impl Display for Punctuation {
 ///
 /// It is used as the premises and conclusions of all inference rules.
 pub trait Sentence: ToDisplayAndBrief + Evidential {
-    // 所有抽象字段
+    /// 🆕复制其中的「语句」成分
+    /// * 🎯为了不让方法实现冲突而构建（复制出一个「纯粹的」语句对象）
+    fn sentence_clone(&self) -> impl Sentence;
 
     /// 模拟`Sentence.content`、`Sentence.getContent`
     /// * 🚩读写：出现了两个方法

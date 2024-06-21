@@ -41,6 +41,8 @@ pub struct Token {
 }
 
 impl Token {
+    /// 构造函数
+    /// * 📌对所有参数均要求完全所有（排避免意外的共享引用）
     pub fn new(key: String, budget: BudgetValue) -> Self {
         Token { key, budget }
     }

@@ -1,4 +1,4 @@
-use crate::entity::{Judgement, QuestionV1, Sentence, SentenceInner};
+use crate::entity::{Judgement, Punctuation, QuestionV1, Sentence, SentenceInner};
 use crate::{
     __impl_to_display_and_display,
     entity::{ShortFloat, Stamp, TruthValue},
@@ -49,8 +49,10 @@ impl Evidential for JudgementV1 {
 }
 
 impl Sentence for JudgementV1 {
-    type Judgement = Self;
-    type Question = QuestionV1;
+    fn sentence_clone(&self) -> impl Sentence {
+        self.clone()
+    }
+
     fn content(&self) -> &Term {
         self.inner.content()
     }
@@ -59,20 +61,15 @@ impl Sentence for JudgementV1 {
         self.inner.content_mut()
     }
 
-    fn punctuation(&self) -> crate::entity::Punctuation {
-        crate::entity::Punctuation::Judgement
+    fn punctuation(&self) -> Punctuation {
+        Punctuation::Judgement
     }
 
-    fn is_judgement(&self) -> bool {
-        true
-    }
+    type Judgement = Self;
+    type Question = QuestionV1;
 
     fn as_judgement(&self) -> Option<&Self::Judgement> {
         Some(self)
-    }
-
-    fn is_question(&self) -> bool {
-        false
     }
 
     fn as_question(&self) -> Option<&Self::Question> {

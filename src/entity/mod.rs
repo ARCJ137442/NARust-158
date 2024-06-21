@@ -34,9 +34,9 @@ pub use sentence::*;
 mod item;
 pub use item::*;
 
-// // 任务 `Task`
-// mod task;
-// pub use task::*;
+// 任务 `Task`
+mod task;
+pub use task::*;
 
 // nar_dev_utils::mods! {
 //     // 词项链 `TermLink`

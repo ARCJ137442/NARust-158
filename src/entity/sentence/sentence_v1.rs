@@ -89,6 +89,10 @@ macro_rules! as_variant {
 }
 
 impl Sentence for SentenceV1 {
+    fn sentence_clone(&self) -> impl Sentence {
+        self.clone()
+    }
+
     fn content(&self) -> &Term {
         self.get_inner().content()
     }

@@ -1,4 +1,4 @@
-use super::{JudgementV1, Question, Sentence, SentenceInner};
+use super::{JudgementV1, Punctuation, Question, Sentence, SentenceInner};
 use crate::{__impl_to_display_and_display, entity::Stamp, inference::Evidential, language::Term};
 use narsese::lexical::Sentence as LexicalSentence;
 
@@ -31,8 +31,9 @@ impl Evidential for QuestionV1 {
 }
 
 impl Sentence for QuestionV1 {
-    type Judgement = JudgementV1;
-    type Question = Self;
+    fn sentence_clone(&self) -> impl Sentence {
+        self.clone()
+    }
 
     fn content(&self) -> &Term {
         self.inner.content()
@@ -42,9 +43,12 @@ impl Sentence for QuestionV1 {
         self.inner.content_mut()
     }
 
-    fn punctuation(&self) -> super::Punctuation {
-        super::Punctuation::Question
+    fn punctuation(&self) -> Punctuation {
+        Punctuation::Question
     }
+
+    type Judgement = JudgementV1;
+    type Question = Self;
 
     fn as_judgement(&self) -> Option<&Self::Judgement> {
         None
