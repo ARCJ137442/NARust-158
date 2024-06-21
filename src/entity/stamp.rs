@@ -26,6 +26,14 @@ impl Evidential for Stamp {
     fn creation_time(&self) -> ClockTime {
         self.creation_time
     }
+
+    /// 🆕自身到「词法」的转换
+    /// * 🎯标准Narsese输出需要（Narsese内容）
+    /// * 🚩【2024-05-12 14:48:31】此处跟随OpenNARS，使用空字串
+    ///   * 时态暂均为「永恒」
+    fn stamp_to_lexical(&self) -> LexicalStamp {
+        LexicalStamp::new()
+    }
 }
 
 __impl_to_display_and_display! {
@@ -190,14 +198,6 @@ impl Stamp {
         time: ClockTime,
     ) -> Result<Self> {
         Ok(Self::with_time(current_serial, time))
-    }
-
-    /// 🆕自身到「词法」的转换
-    /// * 🎯标准Narsese输出需要（Narsese内容）
-    /// * 🚩【2024-05-12 14:48:31】此处跟随OpenNARS，使用空字串
-    ///   * 时态暂均为「永恒」
-    pub fn to_lexical(&self) -> LexicalStamp {
-        LexicalStamp::new()
     }
 }
 

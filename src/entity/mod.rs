@@ -34,9 +34,17 @@ pub use budget_value::*;
 mod truth_value;
 pub use truth_value::*;
 
-// // 语句 `Sentence`
-// mod sentence;
-// pub use sentence::*;
+// 语句 `Sentence`
+mod sentence;
+pub use sentence::*;
+
+// 判断句
+mod judgement;
+pub use judgement::*;
+
+// 疑问句
+mod question;
+pub use question::*;
 
 // // 任务 `Task`
 // mod task;

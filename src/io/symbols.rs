@@ -4,8 +4,9 @@
 
 // 语句标点
 // * 🚩【2024-05-13 09:38:31】改：统一为字符串（需要判等）
-pub const JUDGMENT_MARK: &str = ".";
-pub const QUESTION_MARK: &str = "?";
+// * 🚩【2024-06-21 14:51:58】统一按OpenNARS改版，换回char
+pub const JUDGMENT_MARK: char = '.';
+pub const QUESTION_MARK: char = '?';
 
 /// 🆕词语
 /// * 🚩【2024-04-20 21:53:47】使用空字串作为「词语」的（类型）标识符
