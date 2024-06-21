@@ -16,6 +16,7 @@ pub enum Punctuation {
     Judgement,
     Question,
 }
+
 impl Punctuation {
     pub fn from_char(c: char) -> Option<Self> {
         match c {
@@ -32,6 +33,7 @@ impl Punctuation {
         }
     }
 }
+
 impl Display for Punctuation {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         use Punctuation::*;

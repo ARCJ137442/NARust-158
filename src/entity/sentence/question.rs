@@ -1,5 +1,6 @@
 use super::Sentence;
 use nar_dev_utils::join;
+use narsese::lexical::Sentence as LexicalSentence;
 
 pub trait Question: Sentence {
     // ! ❌不能在此自动实现`isQuestion` `asQuestion`
@@ -21,6 +22,18 @@ pub trait Question: Sentence {
             => self.content().to_string()
             => self.punctuation().to_string()
             => self.stamp_to_display()
+        }
+    }
+
+    /// 作为一个[`Sentence::to_lexical`]的默认【非覆盖性】实现
+    fn question_to_lexical(&self) -> LexicalSentence {
+        LexicalSentence {
+            term: self.content().into(),
+            // 标点：采用字符串形式
+            punctuation: self.punctuation().to_char().to_string(),
+            stamp: self.stamp_to_lexical(),
+            // 真值为空
+            truth: vec![],
         }
     }
 }

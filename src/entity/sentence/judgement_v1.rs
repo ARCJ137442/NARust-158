@@ -80,15 +80,15 @@ impl Sentence for JudgementV1 {
     }
 
     fn to_key(&self) -> String {
-        todo!()
+        self.judgement_to_key()
     }
 
     fn sentence_to_display(&self) -> String {
-        todo!()
+        self.judgement_to_display()
     }
 
     fn sentence_to_lexical(&self) -> LexicalSentence {
-        todo!()
+        self.judgement_to_lexical()
     }
 }
 

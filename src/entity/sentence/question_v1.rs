@@ -55,15 +55,15 @@ impl Sentence for QuestionV1 {
     }
 
     fn to_key(&self) -> String {
-        todo!()
+        self.question_to_key()
     }
 
     fn sentence_to_display(&self) -> String {
-        todo!()
+        self.question_to_display()
     }
 
     fn sentence_to_lexical(&self) -> LexicalSentence {
-        todo!()
+        self.question_to_lexical()
     }
 }
 

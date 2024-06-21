@@ -5,6 +5,7 @@
 
 use crate::{entity::ShortFloat, global::Float, io::symbols::*, util::ToDisplayAndBrief};
 use nar_dev_utils::join;
+use narsese::lexical::Truth as LexicalTruth;
 
 /// 模拟`nars.entity.TruthValue`
 ///
@@ -146,6 +147,13 @@ pub trait Truth: ToDisplayAndBrief {
             + SEPARATOR
             + &self.confidence().to_display_brief()
             + MARK
+    }
+
+    /// 🆕转换为「词法真值」
+    /// * 🎯与词法Narsese的转换
+    /// * 🚩【2024-06-21 21:08:43】目前方法：真值和信度的字符串
+    fn truth_to_lexical(&self) -> LexicalTruth {
+        vec![self.frequency().to_string(), self.confidence().to_string()]
     }
 }
 

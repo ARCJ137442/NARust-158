@@ -5,6 +5,7 @@
 
 use crate::{entity::ShortFloat, io::symbols::*, util::ToDisplayAndBrief};
 use nar_dev_utils::join;
+use narsese::lexical::Budget as LexicalBudget;
 
 /// 模拟`nars.inference.Budget`
 /// * 🎯实现最大程度的抽象与通用
@@ -164,6 +165,17 @@ pub trait Budget: ToDisplayAndBrief {
             + SEPARATOR
             + &self.quality().to_display_brief()
             + MARK
+    }
+
+    /// 🆕转换为「词法真值」
+    /// * 🎯与词法Narsese的转换
+    /// * 🚩【2024-06-21 21:08:43】目前方法：真值和信度的字符串
+    fn budget_to_lexical(&self) -> LexicalBudget {
+        vec![
+            self.priority().to_string(),
+            self.durability().to_string(),
+            self.quality().to_string(),
+        ]
     }
 }
 

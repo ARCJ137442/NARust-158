@@ -1,6 +1,7 @@
 use super::Sentence;
 use crate::inference::Truth;
 use nar_dev_utils::join;
+use narsese::lexical::Sentence as LexicalSentence;
 
 pub trait Judgement: Sentence + Truth {
     /// 📄改版OpenNARS `static revisable`
@@ -55,6 +56,18 @@ pub trait Judgement: Sentence + Truth {
             => self.punctuation().to_string() + " "
             => self.truth_to_display()
             => self.stamp_to_display()
+        }
+    }
+
+    /// 作为一个[`Sentence::to_lexical`]的默认【非覆盖性】实现
+    fn judgement_to_lexical(&self) -> LexicalSentence {
+        LexicalSentence {
+            term: self.content().into(),
+            // 标点：采用字符串形式
+            punctuation: self.punctuation().to_char().to_string(),
+            stamp: self.stamp_to_lexical(),
+            // 判断句有真值
+            truth: self.truth_to_lexical(),
         }
     }
 }
