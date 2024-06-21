@@ -1,6 +1,7 @@
 use super::{TLink, TLinkType};
 
 /// T链接的一个默认实现
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct TLinkage<Target> {
     /// The linked Target
     /// * 📝【2024-05-30 19:39:14】final化：一切均在构造时确定，构造后不再改变

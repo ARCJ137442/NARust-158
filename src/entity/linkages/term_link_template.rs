@@ -32,7 +32,7 @@ impl TermLinkTemplate {
     /// # Panics
     ///
     /// ! 需要在传入前检查「链接类型」是否为「到复合词项」或者「转换」
-    pub fn new(target: Term, link_type: TLinkType, index: &[usize]) -> Self {
+    pub fn new_template(target: Term, link_type: TLinkType, index: &[usize]) -> Self {
         Self::new_direct(
             target,
             link_type,
@@ -44,7 +44,7 @@ impl TermLinkTemplate {
         // * 🚩假定此处是「COMPOUND」系列或「TRANSFORM」类型——链接到复合词项
         debug_assert!(
             link_type.is_to_compound() || link_type == TLinkType::Transform,
-            "链接类型{link_type:?} 并非链接到复合词项"
+            "链接类型 {link_type:?} 并非链接到复合词项"
         );
         let mut index = indexes.to_vec();
         // * 🚩原数组为「复合条件」⇒头部添加`0`
