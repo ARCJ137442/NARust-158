@@ -94,9 +94,9 @@ checksum = "1bc436754166820e0cdf0dfd147ec5f8faefc6459e65e8b91c4bf5da684e8f85"
 
 [[package]]
 name = "nar_dev_utils"
-version = "0.33.0"
+version = "0.33.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "09dcd51c765a472a61b2eecb600729f872c5552f50305222273d1c3d34e2f013"
+checksum = "90b8a2f44372666d54d9ee658436e8ee85f5349600612d46072141763a004d72"
 
 [[package]]
 name = "narsese"
@@ -113,7 +113,7 @@ name = "narust-158"
 version = "0.0.5"
 dependencies = [
  "anyhow",
- "nar_dev_utils 0.33.0",
+ "nar_dev_utils 0.33.1",
  "narsese",
  "navm",
  "pest",
