@@ -1,5 +1,4 @@
 use super::{TLink, TLinkType};
-use crate::language::Term;
 
 /// T链接的一个默认实现
 pub struct TLinkage<Target> {
