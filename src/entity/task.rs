@@ -16,6 +16,8 @@ use narsese::lexical::Sentence as LexicalSentence;
 type Orc<T> = Option<RC<T>>;
 type OrcRef<'a, T> = Option<&'a RC<T>>;
 
+/// A task to be processed, consists of a Sentence and a BudgetValue
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Task {
     /// The sentence of the Task
     /// * 📝任务的「内容」

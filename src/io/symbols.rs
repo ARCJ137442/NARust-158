@@ -82,7 +82,6 @@ pub const STAMP_SEPARATOR: &str = ";";
 pub const STAMP_STARTER: &str = ":";
 
 // 词项链类型 | 展示用
-pub const TO_COMPONENT_1: &str = " @(";
-pub const TO_COMPONENT_2: &str = ")_ ";
-pub const TO_COMPOUND_1: &str = " _@(";
-pub const TO_COMPOUND_2: &str = ") ";
+// * 🚩成对不单用的括弧，改写成数组形式
+pub const TO_COMPONENT: [&str; 2] = [" @(", ")_ "];
+pub const TO_COMPOUND: [&str; 2] = [" _@(", ") "];
