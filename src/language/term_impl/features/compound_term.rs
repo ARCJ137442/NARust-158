@@ -121,6 +121,7 @@ impl Term {
     /// * 📌包括陈述
     /// * 🚩模式匹配后返回一个[`Option`]，只在其为「符合指定类型的词项」时为[`Some`]
     /// * 🚩返回不可变引用
+    #[must_use]
     pub fn as_compound_type(&self, compound_class: impl AsRef<str>) -> Option<CompoundTermRef> {
         matches_or! {
             ?self.as_compound(),
@@ -136,6 +137,7 @@ impl Term {
     /// * 📌包括陈述
     /// * 🚩模式匹配后返回一个[`Option`]，只在其为「符合指定类型的词项」时为[`Some`]
     /// * 🚩返回内部所有元素的所有权
+    #[must_use]
     pub fn unwrap_compound_components(self) -> Option<Box<[Term]>> {
         matches_or! {
             ?self,
@@ -154,6 +156,7 @@ impl Term {
     /// * 📌包括陈述
     /// * 🚩模式匹配后返回一个[`Option`]，只在其为「符合指定类型的词项」时为[`Some`]
     /// * 🚩返回内部所有元素的所有权
+    #[must_use]
     pub fn unwrap_compound_type_components(
         self,
         compound_class: impl AsRef<str>,

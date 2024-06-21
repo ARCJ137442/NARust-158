@@ -96,6 +96,7 @@ impl Term {
 
     /// 🆕将一个复合词项转换为「陈述词项」（不可变引用）
     /// * 🚩转换为Option
+    #[must_use]
     pub fn as_statement(&self) -> Option<StatementRef> {
         matches_or!(
             ?self.components,
@@ -112,6 +113,7 @@ impl Term {
     /// * 📌包括陈述
     /// * 🚩模式匹配后返回一个[`Option`]，只在其为「符合指定类型的词项」时为[`Some`]
     /// * 🚩返回不可变引用
+    #[must_use]
     pub fn as_statement_type(&self, statement_class: impl AsRef<str>) -> Option<StatementRef> {
         matches_or! {
             ?self.as_statement(),
@@ -125,6 +127,7 @@ impl Term {
 
     /// 🆕将一个复合词项转换为「陈述词项」（可变引用）
     /// * 🚩转换为Option
+    #[must_use]
     pub fn as_statement_mut(&mut self) -> Option<StatementRefMut> {
         matches_or!(
             ?self.components,
@@ -141,6 +144,7 @@ impl Term {
     /// 🆕用于判断词项是否为「陈述」并解包其中的主项和谓项
     /// * 🚩模式匹配后返回一个[`Option`]，只在其为「符合指定类型的词项」时为[`Some`]
     /// * 🚩返回内部所有元素的所有权
+    #[must_use]
     pub fn unwrap_statement_components(self) -> Option<[Term; 2]> {
         matches_or! {
             ?self.unwrap_compound_components(),
@@ -160,6 +164,7 @@ impl Term {
     /// 🆕用于判断词项是否为「指定类型的陈述」，并解包其中的主项和谓项
     /// * 🚩模式匹配后返回一个[`Option`]，只在其为「符合指定类型的词项」时为[`Some`]
     /// * 🚩返回内部所有元素的所有权
+    #[must_use]
     pub fn unwrap_statement_type_components(
         self,
         statement_class: impl AsRef<str>,
