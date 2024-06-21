@@ -38,7 +38,7 @@ impl Evidential for Stamp {
 
 __impl_to_display_and_display! {
     // * 🚩【2024-05-09 00:37:24】只实现一个方法（其它默认）
-    @(to_display;;)
+    @(__to_display;;)
     Stamp as Evidential
 }
 

@@ -66,22 +66,22 @@ macro_rules! __impl_to_display {
         {
             $(
                 #[inline(always)]
-                fn $to_display_name(&self) -> String {
-                    <Self as $ty_as>::__to_display(self)
+                fn to_display(&self) -> String {
+                    <Self as $ty_as>::$to_display_name(self)
                 }
             )?
 
             $(
                 #[inline(always)]
-                fn $to_display_brief_name(&self) -> String {
-                    <Self as $ty_as>::__to_display_brief(self)
+                fn to_display_brief(&self) -> String {
+                    <Self as $ty_as>::$to_display_brief_name(self)
                 }
             )?
 
             $(
                 #[inline(always)]
-                fn $to_display_long_name(&self) -> String {
-                    <Self as $ty_as>::__to_display_long(self)
+                fn to_display_long(&self) -> String {
+                    <Self as $ty_as>::$to_display_long_name(self)
                 }
             )?
         }
@@ -91,8 +91,8 @@ macro_rules! __impl_to_display {
     ( $($inner:tt)* ) => {
         $crate::__impl_to_display! {
             @( // * 📌【2024-05-09 00:42:33】↓目前最常见就两种
-                to_display;
-                to_display_brief;
+                __to_display;
+                __to_display_brief;
                 // to_display_long
             )
             $($inner)*
