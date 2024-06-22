@@ -18,25 +18,28 @@ use std::ops::{Deref, DerefMut};
 pub struct TaskLink {
     /// 内部链接到的任务（共享引用）
     inner: TLinkage<RC<Task>>,
+
     /// 🆕Item令牌
     token: Token,
-    /// Remember the TermLinks that has been used recently with this TaskLink
-    /// * 📌记忆【曾经匹配过的词项链】的key
-    /// * 🎯用于推理中判断{@link TaskLink#novel}「是否新近」
+
+    /// * 📌记忆【曾经匹配过的词项链】的索引键和时间（序列号）
+    /// * 🎯用于推理中判断[「是否新近」](TaskLink::novel)
     /// * 🚩【2024-06-22 12:31:20】仍然可用定长数组存储
     ///   * ℹ️虽然定长，但可能包含未初始化空间
     ///   * 📌对这些「未初始化空间」采用「默认值填充」的方式
-    recorded_links: Box<[String]>,
-    /// Remember the time when each TermLink is used with this TaskLink
-    /// * 📌记忆【曾经匹配过的词项链】的时间（序列号）
-    /// * 🎯用于推理中判断{@link TaskLink#novel}「是否新近」
-    /// * 🚩【2024-06-22 12:31:20】仍然可用定长数组存储
-    ///   * ℹ️虽然定长，但可能包含未初始化空间
-    ///   * 📌对这些「未初始化空间」采用「默认值填充」的方式
-    recorded_time: Box<[ClockTime]>,
+    /// * 📌【2024-06-22 12:53:25】完全可以使用元组合二为一、统一长度
+    ///   * 🚩【2024-06-22 12:53:41】目前采用该方式
+    ///   * 📍结构：`(索引键, 时间)`
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// - Remember the TermLinks that has been used recently with this TaskLink
+    /// - Remember the time when each TermLink is used with this TaskLink
+    recorded_links: Box<[(String, ClockTime)]>,
+
     /// The number of TermLinks remembered
     /// * 📌记忆【曾经匹配过的词项链】的个数
-    /// * 🎯用于推理中判断{@link TaskLink#novel}「是否新近」
+    /// * 🎯用于推理中判断[「是否新近」](TaskLink::novel)
     n_recorded_term_links: usize,
 }
 
@@ -118,13 +121,11 @@ impl TaskLink {
         // * 🚩再传入生成内部链接
         let inner = TLinkage::new_direct(target_rc, link_type, indexes);
         // * 🚩使用定长数组存储：统一默认值
-        let recorded_links = vec![String::new(); record_length].into_boxed_slice();
-        let recorded_time = vec![0; record_length].into_boxed_slice();
+        let recorded_links = vec![(String::default(), 0); record_length].into_boxed_slice();
         Self {
             inner,
             token,
             recorded_links,
-            recorded_time,
             n_recorded_term_links: 0,
         }
     }
@@ -199,8 +200,7 @@ impl TaskLink {
         let link_key = term_link.key();
         for i in 0..self.n_recorded_term_links {
             let existed_i = i % self.recorded_links.len();
-            let existed_key = &self.recorded_links[existed_i];
-            let existed_time = &self.recorded_time[existed_i];
+            let (existed_key, existed_time) = &self.recorded_links[existed_i];
             // * 🚩重复key⇒检查时间
             if link_key == existed_key {
                 // * 🚩并未足够「滞后」⇒非新近 | 💭或许是一种「短期记忆」的表示
@@ -209,15 +209,14 @@ impl TaskLink {
                 }
                 // * 🚩足够「滞后」⇒更新时间，判定为「新近」
                 else {
-                    self.recorded_time[existed_i] = current_time;
+                    self.recorded_links[existed_i].1 = current_time;
                     return true;
                 }
             }
         }
         // * 🚩没检查到已有的：记录新匹配的词项链 | ️📝有可能覆盖
         let next = self.n_recorded_term_links % self.recorded_links.len();
-        self.recorded_links[next] = link_key.clone();
-        self.recorded_time[next] = current_time;
+        self.recorded_links[next] = (link_key.clone(), current_time);
         if self.n_recorded_term_links < self.recorded_links.len() {
             self.n_recorded_term_links += 1;
             // ? 💭只增不减？似乎会导致「信念固化」（or 始终覆盖最新的，旧的得不到修改）
