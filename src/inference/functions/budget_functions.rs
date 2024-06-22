@@ -12,8 +12,7 @@ use crate::{
 ///   * 📌「直接创建新值」会更方便后续调用
 ///     * 📄减少无谓的`.clone()`
 ///
-/// TODO: 【2024-05-17 15:36:31】🚧后续仍然需要考虑以「推理器」而非
-/// * ❗太多与「推理上下文」「推理上下文」耦合的函数了
+/// * ⚠️【2024-06-20 19:56:05】此处仅存储「纯函数」：不在其中修改传入量的函数
 pub trait BudgetFunctions: Budget {
     /* ----------------------- Belief evaluation ----------------------- */
 
@@ -28,9 +27,10 @@ pub trait BudgetFunctions: Budget {
     /// @param t The truth value of a judgement
     /// @return The quality of the judgement, according to truth value only
     fn truth_to_quality(t: &impl Truth) -> ShortFloat {
-        /* 📄OpenNARS源码：
-        float exp = t.getExpectation();
-        return (float) Math.max(exp, (1 - exp) * 0.75); */
+        // * 🚩真值⇒质量：期望与「0.75(1-期望)」的最大值
+        // * 📝函数：max(c * (f - 0.5) + 0.5, 0.375 - 0.75 * c * (f - 0.5))
+        // * 📍最小值：当exp=3/7时，全局最小值为3/7（max的两端相等）
+        // * 🔑max(x,y) = (x+y+|x-y|)/2
         let exp = t.expectation();
         ShortFloat::from_float(exp.max((1.0 - exp) * 0.75))
     }
@@ -48,189 +48,79 @@ pub trait BudgetFunctions: Budget {
     ///
     /// @param judgement The judgement to be ranked
     /// @return The rank of the judgement, according to truth value only
-    fn rank_belief(truth: &impl Truth, stamp_len: usize) -> ShortFloat {
-        /* 📄OpenNARS源码：
-        float confidence = judgement.getTruth().getConfidence();
-        float originality = 1.0f / (judgement.getStamp().length() + 1);
-        return or(confidence, originality); */
+    fn rank_belief(truth: &impl Truth, judgement: &impl Judgement) -> ShortFloat {
+        // * 🚩两个指标：信度 + 原创性（时间戳长度）
+        // * 📝与信度正相关，与「时间戳长度」负相关；二者有一个好，那就整体好
         let confidence = truth.confidence();
-        let originality = ShortFloat::from_float(1.0 / (stamp_len as Float + 1.0));
+        let originality =
+            ShortFloat::from_float(1.0 / (judgement.evidence_length() as Float + 1.0));
         confidence | originality
     }
 
     /* ----- Functions used both in direct and indirect processing of tasks ----- */
 
-    // TODO: 【2024-06-22 15:03:15】有待从改版重写
-    // /// 模拟`BudgetFunctions.solutionEval`
-    // /// * 🚩🆕【2024-05-04 00:21:53】仍然是脱离有关「记忆区」「词项链」「任务」等「附加点」的
-    // ///   * ❓后续是不是又要做一次「参数预装填」
-    // /// * ❓这个似乎涉及到「本地规则」的源码
-    // ///   * 💫TODO: 到底实际上该不该放这儿（不应该放本地规则去吗？）
-    // /// * 📝似乎的确只出现在「本地规则」的`trySolution`方法中
-    // ///   * 💫并且那个方法还要修改记忆区「做出回答」，错综复杂
-    // /// * 🚩【2024-05-04 00:25:17】暂时搁置
-    // ///
-    // /// # 📄OpenNARS
-    // ///
-    // /// Evaluate the quality of a belief as a solution to a problem, then reward
-    // /// the belief and de-prioritize the problem
-    // ///
-    // /// @param problem  The problem (question or goal) to be solved
-    // /// @param solution The belief as solution
-    // /// @param task     The task to be immediately processed, or null for continued
-    // ///                 process
-    // /// @return The budget for the new task which is the belief activated, if
-    // ///         necessary
-    // fn solution_eval(
-    //     problem_solution_quality: ShortFloat, // * 🚩对标`LocalRules.solutionQuality(problem, solution);`
-    //     solution_truth: &impl Truth,          // * 🚩对标`solution.getTruth()`
-    //     task_feedback_to_links: bool,         // * 🚩对标`feedbackToLinks`
-    //     task_sentence_is_judgement: bool,     // * 🚩对标`task.getSentence().isJudgement()`
-    //     task_budget: &mut Self,               // * 🚩对标`task`（在判断完「是否为判断」之后）
-    //     memory_current_task_link_budget: &mut Self, // * 🚩对标`memory.currentTaskLink`
-    //     memory_current_belief_link_budget: &mut Self, // * 🚩对标`memory.currentBeliefLink`
-    // ) -> Option<impl Budget + Sized> {
-    //     /* 📄OpenNARS源码：
-    //     BudgetValue budget = null;
-    //     boolean feedbackToLinks = false;
-    //     if (task == null) { // called in continued processing
-    //         task = memory.currentTask;
-    //         feedbackToLinks = true;
-    //     }
-    //     boolean judgementTask = task.getSentence().isJudgement();
-    //     float quality = LocalRules.solutionQuality(problem, solution);
-    //     if (judgementTask) {
-    //         task.incPriority(quality);
-    //     } else {
-    //         float taskPriority = task.getPriority();
-    //         budget = new BudgetValue(or(taskPriority, quality), task.getDurability(),
-    //                 truthToQuality(solution.getTruth()));
-    //         task.setPriority(Math.min(1 - quality, taskPriority));
-    //     }
-    //     if (feedbackToLinks) {
-    //         TaskLink tLink = memory.currentTaskLink;
-    //         tLink.setPriority(Math.min(1 - quality, tLink.getPriority()));
-    //         TermLink bLink = memory.currentBeliefLink;
-    //         bLink.incPriority(quality);
-    //     }
-    //     return budget; */
-    //     let mut budget = None;
-    //     let feedback_to_links = task_feedback_to_links;
-    //     // ! 【2024-05-04 00:40:21】跳过对task的「空值判定」和「判断句判定」
-    //     // * 💭相当于将一些「需要使用高级功能」的「判定逻辑」交给调用方了
-    //     let quality = problem_solution_quality;
-    //     if task_sentence_is_judgement {
-    //         task_budget.inc_priority(problem_solution_quality);
-    //     } else {
-    //         let task_priority = task_budget.priority();
-    //         budget = Some(BudgetValue::new(
-    //             task_priority | quality,
-    //             task_budget.durability(),
-    //             Self::truth_to_quality(solution_truth),
-    //         ));
-    //     }
-    //     if feedback_to_links {
-    //         let t_link = memory_current_task_link_budget;
-    //         t_link.set_priority(t_link.priority().min(!quality));
-    //         let b_link = memory_current_belief_link_budget;
-    //         b_link.inc_priority(quality);
-    //     }
-    //     budget
-    // }
+    // TODO: 有待「概念」完工
+    // /// 概念的「总体优先级」
+    // /// * 📝用于概念的「激活」函数上
+    // /// Recalculate the quality of the concept [to be refined to show extension/intension balance]
+    // fn concept_total_quality()
 
-    // TODO: 【2024-06-22 14:49:17】后续根据OpenNARS改版修改
-    // /// 模拟`BudgetFunctions.revise`
-    // /// * 🚩现在从「推理上下文」中解放出来
-    // /// * 📌重新将「回馈到 词项链/任务链」合并成一个参数（以便后续判断）
-    // /// * 📝OpenNARS的调用情况：
-    // ///   * 从「直接推理」`match`调用的没feedback
-    // ///   * 从「概念推理」`match`调用的有feedback
-    // /// * 🚩【2024-05-18 02:20:39】参考上文笔记，故只需
-    // ///   * 在「直接推理」调用时，传入`None`
-    // ///   * 在「概念推理」调用时，传入`Some(两个可变引用)`
-    // /// * ❌【2024-05-18 10:07:33】↑否决上述方案：会在调用者处发生借用问题（多个可变引用）
-    // ///   * 🚩【2024-05-18 10:08:53】目前解决方案：拆分成「直接推理」「概念推理」两个版本
-    // ///   * 「概念推理」版本参见[`BudgetFunctions::revise_reason`]
-    // ///
-    // /// # 📄OpenNARS
-    // ///
-    // /// Evaluate the quality of a revision, then de-prioritize the premises
-    // ///
-    // /// @param tTruth The truth value of the judgement in the task
-    // /// @param bTruth The truth value of the belief
-    // /// @param truth  The truth value of the conclusion of revision
-    // /// @return The budget for the new task
-    // #[doc(alias = "revise")]
-    // fn revise_direct(
-    //     t_truth: &impl Truth,
-    //     b_truth: &impl Truth,
-    //     truth: &impl Truth,
-    //     current_task_budget: &mut Self,
-    // ) -> impl Budget + Sized {
-    //     /* 📄OpenNARS源码：
-    //     float difT = truth.getExpDifAbs(tTruth);
-    //     Task task = memory.currentTask;
-    //     task.decPriority(1 - difT);
-    //     task.decDurability(1 - difT);
-    //     if (feedbackToLinks) {
-    //         TaskLink tLink = memory.currentTaskLink;
-    //         tLink.decPriority(1 - difT);
-    //         tLink.decDurability(1 - difT);
-    //         TermLink bLink = memory.currentBeliefLink;
-    //         float difB = truth.getExpDifAbs(bTruth);
-    //         bLink.decPriority(1 - difB);
-    //         bLink.decDurability(1 - difB);
-    //     }
-    //     float dif = truth.getConfidence() - Math.max(tTruth.getConfidence(), bTruth.getConfidence());
-    //     float priority = or(dif, task.getPriority());
-    //     float durability = aveAri(dif, task.getDurability());
-    //     float quality = truthToQuality(truth);
-    //     return new BudgetValue(priority, durability, quality); */
-    //     let dif_t = ShortFloat::from_float(truth.expectation_abs_dif(t_truth));
-    //     let task = current_task_budget;
-    //     task.dec_priority(!dif_t);
-    //     task.dec_durability(!dif_t);
-    //     // * 🚩在「直接推理」中无需「反馈到链接」
-    //     let dif = truth.confidence() - t_truth.confidence().max(b_truth.confidence());
-    //     let priority = dif | task.priority();
-    //     let durability = ShortFloat::arithmetical_average([dif, task.durability()]);
-    //     let quality = Self::truth_to_quality(truth);
-    //     BudgetValue::new(priority, durability, quality)
-    // }
+    fn solution_quality(query: &impl Sentence, solution: &impl Judgement) -> ShortFloat {
+        // * 🚩根据「一般疑问 | 特殊疑问/目标」拆解
+        // * 📝一般疑问 ⇒ 解の信度
+        // * 📝特殊疑问 ⇒ 解の期望 / 解の复杂度
+        let has_query_var = query.content().contain_var_q();
+        match has_query_var {
+            // * 🚩【特殊疑问/目标】 "what" question or goal
+            true => ShortFloat::from_float(
+                solution.expectation() / solution.content().complexity() as Float,
+            ),
+            // * 🚩【一般疑问】 "yes/no" question
+            false => solution.confidence(),
+        }
+    }
 
-    // /// 模拟`BudgetFunctions.revise`(feedback == true)
-    // /// * 🎯[「修正规则」](BudgetFunctions::revise_direct)的「概念推理」版本
-    // /// * 📄文档&笔记 参见[`BudgetFunctions::revise_direct`]
-    // fn revise_reason<C>(
-    //     t_truth: &impl Truth,
-    //     b_truth: &impl Truth,
-    //     truth: &impl Truth,
-    //     context: &mut impl DerivationContextReason<C>,
-    // ) -> impl Budget + Sized
-    // where
-    //     C: TypeContext<ShortFloat = ShortFloat, Budget = Self>,
-    // {
-    //     let dif_t = ShortFloat::from_float(truth.expectation_abs_dif(t_truth));
-    //     let task = context.current_task_mut();
-    //     task.dec_priority(!dif_t);
-    //     task.dec_durability(!dif_t);
-    //     {
-    //         // * 🚩在「概念推理」中必须「向任务链、信念链（词项链）反馈」
-    //         let t_link = context.current_task_link_mut();
-    //         t_link.dec_priority(!dif_t);
-    //         t_link.dec_durability(!dif_t);
-    //         let b_link = context.current_belief_link_mut();
-    //         let dif_b = ShortFloat::from_float(truth.expectation_abs_dif(b_truth));
-    //         b_link.dec_priority(!dif_b);
-    //         b_link.dec_durability(!dif_b);
-    //     }
-    //     let task = context.current_task(); // * 🚩再次借用：避免借用问题
-    //     let dif = truth.confidence() - t_truth.confidence().max(b_truth.confidence());
-    //     let priority = dif | task.priority();
-    //     let durability = ShortFloat::arithmetical_average([dif, task.durability()]);
-    //     let quality = Self::truth_to_quality(truth);
-    //     BudgetValue::new(priority, durability, quality)
-    // }
+    /// 模拟`BudgetFunctions.solutionEval`
+    /// * 🚩🆕【2024-05-04 00:21:53】仍然是脱离有关「记忆区」「词项链」「任务」等「附加点」的
+    ///   * ❓后续是不是又要做一次「参数预装填」
+    /// * ❓这个似乎涉及到「本地规则」的源码
+    ///   * 💫TODO: 到底实际上该不该放这儿（不应该放本地规则去吗？）
+    /// * 📝似乎的确只出现在「本地规则」的`trySolution`方法中
+    ///   * 💫并且那个方法还要修改记忆区「做出回答」，错综复杂
+    /// * 🚩【2024-05-04 00:25:17】暂时搁置
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// Evaluate the quality of a belief as a solution to a problem, then reward
+    /// the belief and de-prioritize the problem
+    ///
+    /// @param problem  The problem (question or goal) to be solved
+    /// @param solution The belief as solution
+    /// @param task     The task to be immediately processed, or null for continued
+    ///                 process
+    /// @return The budget for the new task which is the belief activated, if
+    ///         necessary
+    fn solution_eval(
+        problem: &impl Question,
+        solution: &impl Judgement,
+        question_task_budget: &impl Budget,
+    ) -> impl Budget + Sized {
+        /* 📄OpenNARS改版：
+        final float newP = or(questionTaskBudget.getPriority(), solutionQuality(problem, solution));
+        final float newD = questionTaskBudget.getDurability();
+        final float newQ = truthToQuality(solution);
+        return new BudgetValue(newP, newD, newQ); */
+        // * ️📝新优先级 = 任务优先级 | 解决方案质量
+        let p = question_task_budget.priority() | Self::solution_quality(problem, solution);
+        // * 📝新耐久度 = 任务耐久度
+        let d = question_task_budget.durability();
+        // * ️📝新质量 = 解决方案の真值→质量
+        let q = Self::truth_to_quality(solution);
+        // 返回
+        BudgetValue::new(p, d, q)
+    }
+
+    // TODO: 修正规则（更新旧预算值，但发送到「新预算值」中）
 
     /// 模拟`BudgetFunctions.update`
     ///
