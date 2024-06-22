@@ -1,6 +1,6 @@
 //! 词项链
 
-use nar_dev_utils::join;
+use std::ops::{Deref, DerefMut};
 
 use super::{TLink, TLinkType, TLinkage, TermLinkTemplate};
 use crate::{
@@ -9,6 +9,7 @@ use crate::{
     language::Term,
     util::ToDisplayAndBrief,
 };
+use nar_dev_utils::join;
 
 /// 词项链
 ///
@@ -36,11 +37,11 @@ impl TermLink {
         target: Term,
         budget: BudgetValue,
         link_type: TLinkType,
-        indices: impl Into<Box<[usize]>>,
+        indexes: impl Into<Box<[usize]>>,
     ) -> Self {
-        let indices = indices.into();
-        let key = Self::generate_key_for_term_link(&target, link_type, &indices);
-        let inner = TLinkage::new_direct(target, link_type, indices);
+        let indexes = indexes.into();
+        let key = Self::generate_key_for_term_link(&target, link_type, &indexes);
+        let inner = TLinkage::new_direct(target, link_type, indexes);
         Self {
             token: Token::new(key, budget),
             inner,
@@ -50,9 +51,9 @@ impl TermLink {
     pub fn from_template(target: Term, template: &TermLinkTemplate, budget: BudgetValue) -> Self {
         // * 🚩生成类型与索引
         let link_type = Self::generate_type_from_template(&target, template);
-        let indices = template.indexes().to_vec().into_boxed_slice();
+        let indexes = template.indexes().to_vec().into_boxed_slice();
         // * 🚩构造
-        Self::new(target, budget, link_type, indices)
+        Self::new(target, budget, link_type, indexes)
     }
 
     /// 不同于默认方法，但要调用默认方法
@@ -60,10 +61,10 @@ impl TermLink {
     fn generate_key_for_term_link(
         target: &Term,
         link_type: TLinkType,
-        indices: &[usize],
+        indexes: &[usize],
     ) -> String {
         // * 🚩标准T链接子串 + 词项的字符串形式
-        Self::generate_key(link_type, indices) + &target.to_string()
+        Self::generate_key_base(link_type, indexes) + &target.to_string()
     }
 
     fn generate_type_from_template(target: &Term, template: &TermLinkTemplate) -> TLinkType {
@@ -125,11 +126,11 @@ impl Item for TermLink {
 
 // 委托[`TLinkage`]实现
 impl TLink<Term> for TermLink {
-    fn target(&self) -> &Term {
+    fn target<'r, 's: 'r>(&'s self) -> impl Deref<Target = Term> + 'r {
         self.inner.target()
     }
 
-    fn target_mut(&mut self) -> &mut Term {
+    fn target_mut<'r, 's: 'r>(&'s mut self) -> impl DerefMut<Target = Term> + 'r {
         self.inner.target_mut()
     }
 

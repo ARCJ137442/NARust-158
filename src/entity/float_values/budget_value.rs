@@ -95,6 +95,11 @@ impl BudgetValue {
             self.quality().to_display_brief(),
         ]
     }
+
+    /// 从其它支持「预算」特征的对象引用转换
+    pub fn from_other(other: &impl Budget) -> Self {
+        Self::new(other.priority(), other.durability(), other.quality())
+    }
 }
 
 // 自动派生并实现[`ToDisplayAndBrief`]与[`Display`]

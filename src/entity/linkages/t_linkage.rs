@@ -1,20 +1,24 @@
+use std::ops::{Deref, DerefMut};
+
 use super::{TLink, TLinkType};
 
 /// T链接的一个默认实现
+/// * ℹ️目前开放给「词项链」「任务链」访问内部字段
+///   * 🎯「任务链」需要借此访问「共享引用代理」
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct TLinkage<Target> {
     /// The linked Target
     /// * 📝【2024-05-30 19:39:14】final化：一切均在构造时确定，构造后不再改变
-    target: Target,
+    pub(super) target: Target,
 
     /// The type of link, one of the above
-    link_type: TLinkType,
+    pub(super) link_type: TLinkType,
 
     /// The index of the component in the component list of the compound,
     /// may have up to 4 levels
     /// * 📝「概念推理」中经常用到
     /// * 🚩构造后即不可变
-    index: Box<[usize]>,
+    pub(super) index: Box<[usize]>,
 }
 
 impl<Target> TLinkage<Target> {
@@ -41,11 +45,11 @@ impl<Target> TLinkage<Target> {
 }
 
 impl<Target> TLink<Target> for TLinkage<Target> {
-    fn target(&self) -> &Target {
+    fn target<'r, 's: 'r>(&'s self) -> impl Deref<Target = Target> + 'r {
         &self.target
     }
 
-    fn target_mut(&mut self) -> &mut Target {
+    fn target_mut<'r, 's: 'r>(&'s mut self) -> impl DerefMut<Target = Target> + 'r {
         &mut self.target
     }
 
