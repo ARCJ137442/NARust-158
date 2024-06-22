@@ -1,12 +1,12 @@
 //! 🎯复刻OpenNARS `nars.entity.Bag`
 
 use super::{
-    distributor::{Distribute, Distributor},
-    BagItemLevel, BagItemTable, BagItemTableV1, BagNameTable, BagNameTableV1,
+    BagItemLevel, BagItemTable, BagItemTableV1, BagNameTable, BagNameTableV1, Distribute,
+    Distributor,
 };
 use crate::{
-    __impl_to_display_and_display, entity::Item, global::Float, inference::BudgetFunctions,
-    nars::DEFAULT_PARAMETERS,
+    entity::Item, global::Float, inference::BudgetFunctions, nars::DEFAULT_PARAMETERS,
+    util::ToDisplayAndBrief,
 };
 
 // ! 删除「具体类型」特征：能直接`struct`就直接`struct`
@@ -151,15 +151,10 @@ pub struct Bag<E: Item> {
     ///
     /// maximum number of items to be taken out at current level
     current_counter: usize,
-    // ! ❌不作`memory: Memory`循环引用：所有涉及memory的方法，均移动到Memory中解决（另外，OpenNARS中也没多少地方用到这个引用）
-    // memory: Memory,
-
-    // ! ❌不作`bagObserver: BagObserver<Item>`观察者：不引入Java的「观察者模式」
-    // ! ❌不作`showLevel: usize`显示用变量：不用于显示
 }
 
 impl<E: Item> Default for Bag<E> {
-    /// * �【2024-05-04 16:26:53】默认当「概念袋」使
+    /// * 🚩【2024-05-04 16:26:53】默认当「概念袋」使
     fn default() -> Self {
         Self::new(
             DEFAULT_PARAMETERS.concept_bag_size,
@@ -175,7 +170,7 @@ impl<E: Item> Bag<E> {
         Self: Sized,
     {
         /* 📄OpenNARS源码：
-        this.memory = memory;
+        self.memory = memory;
         capacity = capacity();
         init(); */
         let mut this = Self {
@@ -241,70 +236,6 @@ impl<E: Item> Bag<E> {
     /// hash table load factor
     const __LOAD_FACTOR: Float = DEFAULT_PARAMETERS.load_factor;
 
-    /// 模拟`Bag.DISTRIBUTOR`
-    /// * 📌【只读常量】分派器
-    /// * ❌【2024-05-04 01:46:06】这个「静态常量」因为`Self::Distributor`没有「常量构造函数」而暂且还是以「特征方法」的形式存在
-    /// * 🚩【2024-05-04 12:01:42】实际上并不需要强行把「分派器」绑定在「袋」上作为关联类型
-    ///
-    /// # 📄OpenNARS
-    ///
-    /// shared DISTRIBUTOR that produce the probability distribution
-    fn __distributor(&self) -> &impl Distribute {
-        &self.distributor
-    }
-
-    /// 模拟`Bag.nameTable`
-    /// * 🚩【2024-04-28 08:43:25】目前不与任何「映射」类型绑定
-    ///   * ❌不打算直接返回[`HashMap`]
-    ///
-    /// # 📄OpenNARS
-    ///
-    /// mapping from key to item
-    fn __name_table(&self) -> &impl BagNameTable<E> {
-        // * ⚠️【2024-05-04 11:54:07】目前只有「字符串key」的「散列映射」实现了「名称表」
-        &self.item_map
-    }
-
-    fn __name_table_mut(&mut self) -> &mut impl BagNameTable<E> {
-        &mut self.item_map
-    }
-
-    /// 模拟`Bag.nameTable`的「构造赋值」
-    /// * 🎯预期是「构造一个映射，并赋值给内部字段」
-    /// * 📄出现在`init`方法中
-    fn __name_table_mut_new_(&mut self) {
-        self.item_map = BagNameTableV1::new();
-    }
-    // end `nameTable`
-
-    /// 模拟`Bag.itemTable`
-    /// * 📝OpenNARS中基于「优先级」的元素获取
-    /// * 🚩【2024-04-28 10:47:35】目前只获取「元素id」而非「元素」
-    ///   * ⚠️后续直接`unwrap`：通过`name_table`保证元素存在
-    /// * 📝Rust中需要「本体」和「本体_mut」两种函数，以便分别实现属性的「读写」
-    ///   * ✅「本体」作为不可变者，允许在「不可变变量」中使用
-    ///   * ⚠️若全部将「可变成员」作为可变引用`&mut 成员类型`返回，则这样的成员无法在「不可变变量」中使用
-    ///     * 💭【2024-05-01 21:48:56】因此替换不等效
-    ///
-    /// # 📄OpenNARS
-    ///
-    /// array of lists of items, for items on different level
-    fn __item_table(&self) -> &impl BagItemTable {
-        &self.level_map
-    }
-    fn __item_table_mut(&mut self) -> &mut impl BagItemTable {
-        &mut self.level_map
-    }
-
-    /// 模拟`Bag.itemTable`的「构造赋值」
-    /// * 🎯预期是「构造一个双层数组，并赋值给内部字段」
-    /// * 📄出现在`init`方法中
-    fn __item_table_mut_new_(&mut self) {
-        // * 🚩只在这里初始化
-        self.level_map = BagItemTableV1::new(Self::__TOTAL_LEVEL);
-    }
-    // end `itemTable`
-
     /// 模拟`Bag.capacity`
     /// * 📌一个「袋」的「容量」
     /// * 🚩只读
@@ -318,7 +249,7 @@ impl<E: Item> Bag<E> {
     /// * 【作为属性】defined in different bags
     /// * 【作为方法】To get the capacity of the concrete subclass
     ///   * @return Bag capacity, in number of Items allowed
-    fn __capacity(&self) -> usize {
+    pub fn capacity(&self) -> usize {
         self.capacity
     }
 
@@ -331,82 +262,9 @@ impl<E: Item> Bag<E> {
     /// # 📄OpenNARS
     ///
     /// current sum of occupied level
-    fn __mass(&self) -> usize {
+    pub fn mass(&self) -> usize {
         self.mass
     }
-    fn __mass_mut(&mut self) -> &mut usize {
-        &mut self.mass
-    }
-
-    /// 一个「袋」中用于指示「用于获取下一层级的索引」的状态量
-    /// * 🎯用于在「分派器」中调用「下一层级」
-    /// * 📄`levelIndex = capacity % TOTAL_LEVEL; // so that different bags start at different point`
-    ///
-    /// # 📄OpenNARS
-    ///
-    /// index to get next level, kept in individual objects
-    fn __level_index(&self) -> usize {
-        self.level_index
-    }
-    fn __level_index_mut(&mut self) -> &mut usize {
-        &mut self.level_index
-    }
-
-    /// 模拟`Bag.currentLevel`
-    /// * 📌一个「袋」中用于指示「当前层级」的状态量
-    /// * ❓和`levelIndex`区别何在
-    ///
-    /// # 📄OpenNARS
-    ///
-    /// current take out level
-    fn __current_level(&self) -> usize {
-        self.current_level
-    }
-    fn __current_level_mut(&mut self) -> &mut usize {
-        &mut self.current_level
-    }
-
-    /// 模拟`Bag.currentCounter`
-    /// 一个「袋」中用于指示「当前计数器」的状态量
-    /// * 📝【2024-05-01 21:50:09】在OpenNARS中与「层级」有关
-    ///
-    /// # 📄OpenNARS
-    ///
-    /// maximum number of items to be taken out at current level
-    fn __current_counter(&self) -> usize {
-        self.current_counter
-    }
-    fn __current_counter_mut(&mut self) -> &mut usize {
-        &mut self.current_counter
-    }
-
-    // ! ❌不对「记忆区」进行递归引用
-    // * 🚩【2024-05-01 21:51:05】相反，将这些函数移除「实例方法」中，作为独立的函数处理
-    //   * 🚧有待「记忆区」抽象接口实现
-    // 📄在OpenNARS中用于`forgetRate`属性的实现，如`ConceptBag`中：
-    // ```java
-    // protected int forgetRate() {
-    //     return memory.getConceptForgettingRate().get();
-    // }
-    // ```
-    // /// 📄OpenNARS `Bag.memory`
-    // ///
-    // /// reference to memory
-    // fn __memory(&self) -> impl Memory;
-
-    // ! ❌不迁移「袋观察者」模式
-    // * 📌【2024-05-01 21:52:26】不能完全照搬Java的设计模式
-    // * 💭【2024-05-01 21:54:29】这个变量甚至没有注释……
-    // fn __bag_observer(&self) -> impl BagObserver<Item>;
-
-    // ! ❌不迁移「显示用变量」
-    // /// 📄OpenNARS `Bag.showLevel`
-    // ///
-    // /// The display level; initialized at lowest
-    // fn __show_level(&self) -> usize;
-    // fn __show_level_mut(&mut self) -> &mut usize;
-
-    // ** 属性迁移完毕 ** //
 
     /// 模拟`Bag.init`
     /// * 🚩初始化「元素映射」「层级映射」
@@ -425,33 +283,18 @@ impl<E: Item> Bag<E> {
         levelIndex = capacity % TOTAL_LEVEL; // so that different bags start at different point
         mass = 0;
         currentCounter = 0; */
-        self.__item_table_mut_new_(); // 🚩「添加新层级的代码」亦在其中，以实现功能解耦
+        self.level_map = BagItemTableV1::new(Self::__TOTAL_LEVEL);
         for level in 0..Self::__TOTAL_LEVEL {
-            self.__item_table_mut().add_new(level);
+            self.level_map.add_new(level);
         }
-        self.__name_table_mut_new_();
-        *self.__current_level_mut() = Self::__TOTAL_LEVEL - 1;
-        *self.__level_index_mut() = self.__capacity() % Self::__TOTAL_LEVEL; // 不同的「袋」在分派器中有不同的起点
-        *self.__mass_mut() = 0;
-        *self.__current_counter_mut() = 0;
+        self.item_map = BagNameTableV1::new();
+        self.current_level = Self::__TOTAL_LEVEL - 1;
+        self.level_index = self.capacity() % Self::__TOTAL_LEVEL; // 不同的「袋」在分派器中有不同的起点
+        self.mass = 0;
+        self.current_counter = 0;
     }
 
     // ! 🚩`Bag.capacity`已在`self.__capacity`中实现
-
-    /// 模拟`Bag.forgetRate`
-    /// * 📝用于并体现AIKR所衍生的「资源竞争」思想
-    /// * 🚩【2024-05-04 12:00:04】OpenNARS中该值不可变，且多为常量（任务链袋中还与「记忆区」相关）
-    ///
-    /// # 📄OpenNARS
-    ///
-    /// Get the item decay rate,
-    /// which differs in difference subclass,
-    /// and **can be changed in run time by the user**, so not a constant.
-    ///
-    /// @return The number of times for a decay factor to be fully applied
-    fn _forget_rate(&self) -> usize {
-        self.forget_rate
-    }
 
     /// 模拟`Bag.size`
     /// * 🎯从模拟`Bag.nameTable`派生
@@ -461,8 +304,8 @@ impl<E: Item> Bag<E> {
     ///
     /// The number of items in the bag
     #[inline(always)]
-    fn size(&self) -> usize {
-        self.__name_table().size()
+    pub fn size(&self) -> usize {
+        self.item_map.size()
     }
 
     /// 模拟`Bag.averagePriority`
@@ -472,7 +315,7 @@ impl<E: Item> Bag<E> {
     /// Get the average priority of Items
     ///
     /// @return The average priority of Items in the bag
-    fn average_priority(&self) -> Float {
+    pub fn average_priority(&self) -> Float {
         /* 📄OpenNARS源码：
         if (size() == 0) {
             return 0.01f;
@@ -487,7 +330,7 @@ impl<E: Item> Bag<E> {
         }
         Float::min(
             // 复刻最后一个条件判断
-            (self.__mass() as Float) / (self.size() * Self::__TOTAL_LEVEL) as Float,
+            (self.mass() as Float) / (self.size() * Self::__TOTAL_LEVEL) as Float,
             1.0,
         )
     }
@@ -503,7 +346,7 @@ impl<E: Item> Bag<E> {
     /// @param item The item to be checked
     /// @return Whether the bag contains the item
     #[inline(always)]
-    fn contains(&self, item: &E) -> bool {
+    pub fn contains(&self, item: &E) -> bool {
         self.get(item.key()).is_some()
     }
 
@@ -517,21 +360,21 @@ impl<E: Item> Bag<E> {
     /// @param key The key of the Item
     /// @return The Item with the given key
     #[inline(always)]
-    fn get(&self, key: &str) -> Option<&E> {
-        self.__name_table().get(key)
+    pub fn get(&self, key: &str) -> Option<&E> {
+        self.item_map.get(key)
     }
     /// [`Self::get`]的可变版本
     /// * 🎯【2024-04-28 09:08:14】备用
     /// * 🚩转发内部`name_table`成员
     #[inline(always)]
-    fn get_mut(&mut self, key: &str) -> Option<&mut E> {
-        self.__name_table_mut().get_mut(key)
+    pub fn get_mut(&mut self, key: &str) -> Option<&mut E> {
+        self.item_map.get_mut(key)
     }
 
     /// 🆕提供「元素id是否对应值」的功能
     /// * 🎯【2024-05-07 22:19:07】在「记忆区」查找时，为规避「直接带Concept [`Option`]」带来的借用问题，采用「只查询是否有」的方式
-    fn has(&self, key: &str) -> bool {
-        self.__name_table().has(key)
+    pub fn has(&self, key: &str) -> bool {
+        self.item_map.has(key)
     }
 
     /// 模拟`Bag.putIn`
@@ -549,7 +392,7 @@ impl<E: Item> Bag<E> {
     ///
     /// @param newItem The new Item
     /// @return Whether the new Item is added into the Bag
-    fn put_in(&mut self, new_item: E) -> Option<E> {
+    pub fn put_in(&mut self, new_item: E) -> Option<E> {
         /* String newKey = newItem.getKey();
         E oldItem = nameTable.put(newKey, newItem);
         if (oldItem != null) { // merge duplications
@@ -566,16 +409,8 @@ impl<E: Item> Bag<E> {
         } */
 
         // 置入「元素映射」
-        // ! ❓【2024-05-01 22:44:45】此处内联`key_cloned`会出现莫名其妙的借用问题：`clone`了还说「已被借用」
-        /* 📝亦有一个使用`unsafe`的解决方案：
-        let new_key = unsafe {
-            let this: *const Item = &new_item;
-            this.as_ref().unwrap().key()
-        };
-        let old_item = self.__name_table_mut().put(new_key, new_item);
-        */
         let new_key = new_item.key().clone();
-        let old_item = self.__name_table_mut().put(&new_key, new_item);
+        let old_item = self.item_map.put(&new_key, new_item);
         let new_item = self.get_mut(&new_key).unwrap(); // * 🚩🆕重新获取「置入后的新项」（⚠️一定有）
 
         // 若在「元素映射」中重复了：有旧项⇒合并「重复了的新旧项」
@@ -583,20 +418,20 @@ impl<E: Item> Bag<E> {
             // 将旧项（的预算值）并入新项 | 🆕⚠️必须在前：`new_item`可变借用了`self`，而下一句中不能出现`new_item`
             new_item.merge(&old_item);
             // 在「层级映射」移除旧项 | 🚩【2024-05-04 11:45:02】现在仍需使用「元素」，因为下层调用需要访问元素本身（预算值），并需避免过多的「按键取值」过程
-            self._out_of_base(&old_item);
+            self.item_out_of_base(&old_item);
         }
 
         // 置入「层级映射」
         // 若在「层级映射」中溢出了：若有「溢出」则在「元素映射」中移除
         // ! 📌【2024-05-04 11:35:45】↓此处`__into_base`仅传入「元素id」是为了规避借用问题（此时`new_item`已失效）
-        if let Some(overflow_key) = self.__into_base(&new_key) {
+        if let Some(overflow_key) = self.item_into_base(&new_key) {
             // 直接返回「根据『溢出的元素之id』在『元素映射』中移除」的结果
             // * 🚩若与自身相同⇒返回`Some`，添加失败
             // * 🚩若与自身不同⇒返回`None`，添加仍然成功
-            let overflow_item = self.__name_table_mut().remove(&overflow_key);
+            let overflow_item = self.item_map.remove(&overflow_key);
             match overflow_key == new_key {
                 true => overflow_item,
-                false => None, // ! 此时将
+                false => None, // ! 此时将抛掉溢出的元素
             }
         } else {
             None
@@ -615,11 +450,11 @@ impl<E: Item> Bag<E> {
     ///
     /// @param oldItem The Item to put back
     /// @return Whether the new Item is added into the Bag
-    fn put_back(&mut self, mut old_item: E) -> Option<E> {
+    pub fn put_back(&mut self, mut old_item: E) -> Option<E> {
         /* 📄OpenNARS源码：
         BudgetFunctions.forget(oldItem.getBudget(), forgetRate(), RELATIVE_THRESHOLD);
         return putIn(oldItem); */
-        old_item.forget(self._forget_rate() as Float, Self::__RELATIVE_THRESHOLD);
+        old_item.forget(self.forget_rate as Float, Self::__RELATIVE_THRESHOLD);
         self.put_in(old_item)
     }
 
@@ -636,7 +471,7 @@ impl<E: Item> Bag<E> {
     /// Bag
     ///
     /// @return The selected Item
-    fn take_out(&mut self) -> Option<E> {
+    pub fn take_out(&mut self) -> Option<E> {
         /* 📄OpenNARS源码：
         if (nameTable.isEmpty()) { // empty bag
             return null;
@@ -659,35 +494,29 @@ impl<E: Item> Bag<E> {
         nameTable.remove(selected.getKey());
         refresh();
         return selected; */
-        if self.__name_table().is_empty() {
+        if self.item_map.is_empty() {
             return None;
         }
-        if self._empty_level(self.__current_level()) || self.__current_counter() == 0 {
-            *self.__current_level_mut() = self.__distributor().pick(self.__level_index());
-            *self.__level_index_mut() = self.__distributor().next(self.__level_index());
-            while self._empty_level(self.__current_level()) {
+        if self.empty_level(self.current_level) || (self.current_counter) == 0 {
+            self.current_level = self.distributor.pick(self.level_index);
+            self.level_index = self.distributor.next(self.level_index);
+            while self.empty_level(self.current_level) {
                 // * 📝这里实际上就是一个do-while
-                *self.__current_level_mut() = self.__distributor().pick(self.__level_index());
-                *self.__level_index_mut() = self.__distributor().next(self.__level_index());
+                self.current_level = self.distributor.pick(self.level_index);
+                self.level_index = self.distributor.next(self.level_index);
             }
-            if self.__current_level() < Self::__THRESHOLD {
-                *self.__current_counter_mut() = 1;
-            } else {
-                *self.__current_counter_mut() =
-                    self.__item_table().get(self.__current_level()).size();
-            }
+            self.current_counter = match self.current_level < Self::__THRESHOLD {
+                true => 1,
+                false => self.level_map.get(self.current_level).size(),
+            };
         }
-        let selected_key = self.__take_out_first(self.__current_level());
-        *self.__current_counter_mut() -= 1;
+        let selected_key = self.take_out_first(self.current_level);
+        self.current_counter -= 1;
         // * 此处需要对内部可能有的「元素id」进行转换
-        let selected;
-        if let Some(key) = selected_key {
-            selected = self.__name_table_mut().remove(&key)
-        } else {
-            selected = None
+        match selected_key {
+            Some(key) => self.item_map.remove(&key),
+            None => None,
         }
-        // self.refresh(); // ! ❌【2024-05-04 11:16:55】不复刻这个有关「观察者」的方法
-        selected
     }
 
     /// 模拟`Bag.pickOut`
@@ -699,7 +528,7 @@ impl<E: Item> Bag<E> {
     ///
     /// @param key The given key
     /// @return The Item with the key
-    fn pick_out(&mut self, key: &str) -> Option<E> {
+    pub fn pick_out(&mut self, key: &str) -> Option<E> {
         /* 📄OpenNARS源码：
         E picked = nameTable.get(key);
         if (picked != null) {
@@ -707,10 +536,9 @@ impl<E: Item> Bag<E> {
             nameTable.remove(key);
         }
         return picked; */
-        let picked = self.__name_table().get(key);
-        if picked.is_some() {
-            let item = self.__name_table_mut().remove(key).unwrap(); // 此时一定有
-            self._out_of_base(&item);
+        if self.item_map.has(key) {
+            let item = self.item_map.remove(key).unwrap(); // 此时一定有
+            self.item_out_of_base(&item);
             Some(item)
         } else {
             None
@@ -725,10 +553,10 @@ impl<E: Item> Bag<E> {
     ///
     /// @param n The level index
     /// @return Whether that level is empty
-    fn _empty_level(&self, level: usize) -> bool {
+    pub fn empty_level(&self, level: usize) -> bool {
         /* 📄OpenNARS源码：
         return (itemTable.get(n).isEmpty()); */
-        self.__item_table().get(level).is_empty()
+        self.level_map.get(level).is_empty()
     }
 
     /// 模拟`Bag.getLevel`
@@ -741,7 +569,7 @@ impl<E: Item> Bag<E> {
     ///
     /// @param item The Item to put in
     /// @return The put-in level
-    fn __get_level(&self, item: &E) -> usize {
+    fn get_level(&self, item: &E) -> usize {
         /* 📄OpenNARS源码：
         float fl = item.getPriority() * TOTAL_LEVEL;
         int level = (int) Math.ceil(fl) - 1;
@@ -764,6 +592,8 @@ impl<E: Item> Bag<E> {
     ///   * ✅【2024-05-04 11:09:39】现在因为「前缀下划线」不再会被警告
     /// * 🚩【2024-05-04 11:13:04】现在仍然使用「元素引用」，因为[`Bag::__get_level`]需要元素的预算值
     /// * 📝【2024-05-04 11:34:43】OpenNARS中只会被[`Bag::put_in`]调用
+    /// * 🚩【2024-06-22 16:36:10】改名避嫌
+    ///   * ℹ️ clippy: methods called `into_*` usually take `self` by value; consider choosing a less ambiguous name
     ///
     /// # 📄OpenNARS
     ///
@@ -771,7 +601,7 @@ impl<E: Item> Bag<E> {
     ///
     /// @param newItem The Item to put in
     /// @return The overflow Item
-    fn __into_base(&mut self, new_key: &str) -> Option<String> {
+    fn item_into_base(&mut self, new_key: &str) -> Option<String> {
         /* 📄OpenNARS源码：
         E oldItem = null;
         int inLevel = getLevel(newItem);
@@ -792,29 +622,26 @@ impl<E: Item> Bag<E> {
         return oldItem; // TODO return null is a bad smell */
         let new_item = self.get(new_key).expect("不能没有所要获取的值"); // * 🚩🆕（在调用方处）重新获取「置入后的新项」（⚠️一定有）
         let mut old_item = None;
-        let in_level = self.__get_level(new_item);
+        let in_level = self.get_level(new_item);
 
         // 🆕先假设「新元素已被置入」，「先加后减」防止usize溢出
-        *self.__mass_mut() += in_level + 1;
-        if self.size() > self.__capacity() {
+        self.mass += in_level + 1;
+        if self.size() > self.capacity() {
             // * 📝逻辑：低优先级溢出——从低到高找到「第一个空的层」然后弹出其中第一个（最先的）元素
             // * 🚩【2024-05-04 13:14:02】实际上与Java代码等同；但若直接按源码来做就会越界
             let out_level = (0..Self::__TOTAL_LEVEL)
-                .find(|level| self._empty_level(*level))
+                .find(|level| self.empty_level(*level))
                 .unwrap_or(Self::__TOTAL_LEVEL);
             if out_level > in_level {
                 // 若到了自身所在层⇒弹出自身（相当于「添加失败」）
-                *self.__mass_mut() -= in_level + 1; // 🆕失败，减去原先相加的数
+                self.mass -= in_level + 1; // 🆕失败，减去原先相加的数
                 return Some(new_key.to_string()); // 提早返回
             } else {
-                old_item = self.__take_out_first(out_level);
+                old_item = self.take_out_first(out_level);
             }
         }
         // 继续增加元素
-
-        self.__item_table_mut()
-            .get_mut(in_level)
-            .add(new_key.to_string());
+        self.level_map.get_mut(in_level).add(new_key.to_string());
         // self.refresh(); // ! ❌【2024-05-04 11:16:55】不复刻这个有关「观察者」的方法
         old_item
     }
@@ -827,49 +654,40 @@ impl<E: Item> Bag<E> {
     ///
     /// @param level The current level
     /// @return The first Item
-    fn __take_out_first(&mut self, level: usize) -> Option<String> {
+    fn take_out_first(&mut self, level: usize) -> Option<String> {
         /* 📄OpenNARS源码：
         E selected = itemTable.get(level).getFirst();
         itemTable.get(level).removeFirst();
         mass -= (level + 1);
         refresh();
         return selected; */
-        let selected = self.__item_table().get(level).get_first().cloned();
+        let selected = self.level_map.get(level).get_first().cloned();
         if selected.is_some() {
             // * 🚩仅在「有选择到」时移除 | ✅【2024-05-04 14:31:30】此举修复了「mass溢出」的bug！
-            self.__item_table_mut().get_mut(level).remove_first();
-            *self.__mass_mut() -= level + 1;
+            self.level_map.get_mut(level).remove_first();
+            self.mass -= level + 1;
         }
         selected
     }
 
     /// 模拟`Bag.outOfBase`
+    /// * 🚩【2024-06-22 16:37:07】跟从[`Self::item_into_base`]一同改名
     ///
     /// # 📄OpenNARS
     ///
     /// Remove an item from itemTable, then adjust mass
     ///
     /// @param oldItem The Item to be removed
-    fn _out_of_base(&mut self, old_item: &E) {
+    fn item_out_of_base(&mut self, old_item: &E) {
         /* 📄OpenNARS源码：
         int level = getLevel(oldItem);
         itemTable.get(level).remove(oldItem);
         mass -= (level + 1);
         refresh(); */
-        let level = self.__get_level(old_item);
-        self.__item_table_mut()
-            .get_mut(level)
-            .remove(old_item.key());
-        *self.__mass_mut() -= level + 1;
-        // self.refresh() // ! ❌【2024-05-04 11:46:09】不复刻这个有关「观察者」的方法
+        let level = self.get_level(old_item);
+        self.level_map.get_mut(level).remove_element(old_item.key());
+        self.mass -= level + 1;
     }
-
-    // ! ❌【2024-05-04 01:57:00】有关「观察者」的方法，此处暂且不进行复刻
-
-    // ! ❌addBagObserver
-    // ! ❌play
-    // ! ❌stop
-    // ! ❌refresh
 
     /// 模拟`Bag.toString`
     /// * 🚩🆕一次显示所有层，避开`showLevel`
@@ -879,7 +697,7 @@ impl<E: Item> Bag<E> {
     /// Collect Bag content into a String for display
     ///
     /// @return A String representation of the content
-    fn bag_to_display(&self) -> String {
+    pub fn bag_to_display(&self) -> String {
         /* 📄OpenNARS源码：
         StringBuffer buf = new StringBuffer(" ");
         for (int i = TOTAL_LEVEL; i >= showLevel; i--) {
@@ -893,13 +711,13 @@ impl<E: Item> Bag<E> {
         return buf.toString(); */
         let mut buf = String::new();
         for level in (0..Self::__TOTAL_LEVEL).rev() {
-            if self._empty_level(level) {
+            if self.empty_level(level) {
                 buf += "\n --- Level ";
                 buf += &level.to_string();
                 buf += ":\n ";
-                let level_size = self.__item_table().get(level).size();
+                let level_size = self.level_map.get(level).size();
                 for i in 0..level_size {
-                    let key = self.__item_table().get(level).get(i);
+                    let key = self.level_map.get(level).get(i);
                     if let Some(key) = key {
                         let item = self.get(key).unwrap(); // ! 📌【2024-05-09 01:27:59】不可能没有
                         buf += &item.to_display_brief();
@@ -912,11 +730,11 @@ impl<E: Item> Bag<E> {
     }
 }
 
-// 显示呈现方法：自动分派
-__impl_to_display_and_display! {
-    @(bag_to_display;;)
-    {E: Item}
-    Bag<E> as Bag<E>
+// 显示呈现方法
+impl<E: Item> ToDisplayAndBrief for Bag<E> {
+    fn to_display(&self) -> String {
+        self.bag_to_display()
+    }
 }
 
 #[cfg(test)]
@@ -965,8 +783,8 @@ mod tests {
         dbg!(&bag);
         asserts! {
             bag.size() == 0, // 空的
-            bag.__mass() == 0, // 空的
-            bag._empty_level(0) => true, // 第0层也是空的
+            bag.mass() == 0, // 空的
+            bag.empty_level(0) => true, // 第0层也是空的
         }
 
         // 放入元素
@@ -977,9 +795,9 @@ mod tests {
             overflowed.is_none(), // 没有溢出
             bag.get(key1) == Some(&item1), // 放进「对应id位置」的就是原来的元素
             bag.size() == 1, // 放进了一个
-            bag.__get_level(&item1) => 0, // 放进的是第0层（优先级为0.0）
-            bag._empty_level(0) => false, // 放进的是第0层
-            bag.__mass() == 1, // 放进第0层，获得(0+1)的重量
+            bag.get_level(&item1) => 0, // 放进的是第0层（优先级为0.0）
+            bag.empty_level(0) => false, // 放进的是第0层
+            bag.mass() == 1, // 放进第0层，获得(0+1)的重量
         }
         dbg!(&bag);
 
@@ -988,16 +806,16 @@ mod tests {
         asserts! {
             picked == item1, // 挑出的就是所置入的
             bag.size() == 0, // 取走了
-            bag.__mass() == 0, // 取走了
-            bag._empty_level(0) => true, // 取走的是第0层
+            bag.mass() == 0, // 取走了
+            bag.empty_level(0) => true, // 取走的是第0层
         }
 
         // 放回元素
         bag.put_back(picked);
         asserts! {
             bag.size() == 1, // 放回了
-            bag._empty_level(0) => false, // 放入的是第0层
-            bag.__mass() == 1, // 放进第0层，获得(0+1)的重量
+            bag.empty_level(0) => false, // 放入的是第0层
+            bag.mass() == 1, // 放进第0层，获得(0+1)的重量
         }
 
         // 取出元素
@@ -1005,8 +823,8 @@ mod tests {
         asserts! {
             taken == item1, // 取出的就是放回了的
             bag.size() == 0, // 取走了
-            bag.__mass() == 0, // 取走了
-            bag._empty_level(0) => true, // 取走的是第0层
+            bag.mass() == 0, // 取走了
+            bag.empty_level(0) => true, // 取走的是第0层
         }
 
         // 修改预算值：优先级"0 => 1"，耐久度"0 => 1"
@@ -1023,9 +841,9 @@ mod tests {
         bag.put_back(taken);
         asserts! {
             bag.size() == 1, // 放回了
-            bag._empty_level(0) => true, // 放入的不再是第0层
-            bag._empty_level(Bag1::__TOTAL_LEVEL-1) => false, // 放入的是最高层
-            bag.__mass() == Bag1::__TOTAL_LEVEL, // 放进第最高层，获得 层数 的重量
+            bag.empty_level(0) => true, // 放入的不再是第0层
+            bag.empty_level(Bag1::__TOTAL_LEVEL-1) => false, // 放入的是最高层
+            bag.mass() == Bag1::__TOTAL_LEVEL, // 放进第最高层，获得 层数 的重量
         }
 
         // 最后完成
@@ -1050,7 +868,7 @@ mod tests {
         dbg!(&bag);
         asserts! {
             bag.size() == 0, // 空的
-            bag._empty_level(0) => true, // 第0层也是空的
+            bag.empty_level(0) => true, // 第0层也是空的
         }
 
         /// 测试规模（放入0~10 共**(N+1)**个元素）
@@ -1090,8 +908,8 @@ mod tests {
                 overflowed.is_none(), // 没有溢出
                 bag.get(key) == Some(item), // 放进「对应id位置」的就是原来的元素
                 bag.size() == i + 1, // 放进了(i+1)个
-                bag.__get_level(item) => expected_level(i), // 放进了指定层
-                bag._empty_level(expected_level(i)) => false, // 放进的是指定层
+                bag.get_level(item) => expected_level(i), // 放进了指定层
+                bag.empty_level(expected_level(i)) => false, // 放进的是指定层
             }
         }
         println!("初次放入后：{bag:#?}");
@@ -1105,7 +923,7 @@ mod tests {
             asserts! {
                 picked == *item, // 挑出的就是所置入的
                 bag.size() == N - i, // 取走了
-                bag._empty_level(expected_level(i)) => true, // 取走的是指定层
+                bag.empty_level(expected_level(i)) => true, // 取走的是指定层
             }
             picked_items.push(picked);
         }
@@ -1160,7 +978,7 @@ mod tests {
         dbg!(&bag);
         asserts! {
             bag.size() == 0, // 空的
-            bag.__mass() == 0, // 空的
+            bag.mass() == 0, // 空的
         }
 
         // 生成元素
@@ -1175,7 +993,7 @@ mod tests {
             overflowed.is_none(), // 没有溢出
             bag.get(key) == Some(&item), // 放进「对应id位置」的就是原来的元素
             bag.size() == 1, // 放进了一个
-            bag.__mass() >= 1, // 放进了，获得重量
+            bag.mass() >= 1, // 放进了，获得重量
         }
         dbg!(&bag);
 
@@ -1187,7 +1005,7 @@ mod tests {
             // 检查、展示
             asserts! {
                 bag.size() == 0, // 取出了
-                bag.__mass() == 0, // 失去所有重量
+                bag.mass() == 0, // 失去所有重量
             };
             println!("\t{}", taken.budget());
 

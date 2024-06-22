@@ -144,5 +144,6 @@ pub trait BagItemLevel {
     fn remove_first(&mut self);
 
     /// 模拟`LinkedList.remove`
-    fn remove(&mut self, key: &str);
+    /// * 🚩【2024-06-22 16:16:37】避免和实现者的[`VecDeque::remove`]冲突
+    fn remove_element(&mut self, key: &str);
 }

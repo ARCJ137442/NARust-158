@@ -2,7 +2,7 @@
 
 // 特征
 mod traits;
-pub use traits::*;
+use traits::*;
 
 // 【内部】分派器
 mod distributor;
@@ -12,6 +12,6 @@ use distributor::*;
 mod impl_tables;
 use impl_tables::*;
 
-// 初代实现
+// 初代实现 | 📝仅有此处会对外导出
 mod impl_v1;
 pub use impl_v1::*;

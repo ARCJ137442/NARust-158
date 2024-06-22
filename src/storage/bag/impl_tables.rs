@@ -135,7 +135,7 @@ impl BagItemLevel for VecDeque<String> // * 需要在「具体值匹配删除」
     }
 
     #[inline(always)]
-    fn remove(&mut self, key: &str) {
+    fn remove_element(&mut self, key: &str) {
         if let Some(index) = self.iter().position(|k| k == key) {
             self.remove(index);
         }
