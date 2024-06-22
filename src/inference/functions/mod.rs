@@ -16,6 +16,6 @@ nar_dev_utils::mods! {
     // 真值函数 `TruthFunctions`
     pub use truth_functions;
 
-    // // 预算值函数 `BudgetFunctions`
-    // pub use budget_functions;
+    // 预算值函数 `BudgetFunctions`
+    pub use budget_functions;
 }

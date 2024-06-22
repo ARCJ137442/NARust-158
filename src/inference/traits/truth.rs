@@ -86,7 +86,7 @@ pub trait Truth: ToDisplayAndBrief {
     /// @return The absolute difference
     #[doc(alias = "get_exp_dif_abs")]
     #[doc(alias = "expectation_absolute_difference")]
-    fn expectation_abs_dif(&self, other: &Self) -> Float {
+    fn expectation_abs_dif(&self, other: &impl Truth) -> Float {
         /* 📄OpenNARS源码：
         return Math.abs(getExpectation() - t.getExpectation()); */
         (self.expectation() - other.expectation()).abs()

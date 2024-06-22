@@ -44,22 +44,20 @@ pub struct Token {
 impl Token {
     /// 构造函数
     /// * 📌对所有参数均要求完全所有（排避免意外的共享引用）
-    pub fn new(key: String, budget: BudgetValue) -> Self {
-        Token { key, budget }
-    }
-
-    /// 键（只读）
-    pub fn key(&self) -> &String {
-        &self.key
+    pub fn new(key: impl Into<String>, budget: BudgetValue) -> Self {
+        Token {
+            key: key.into(),
+            budget,
+        }
     }
 
     /// 预算值（读写）
-    pub fn budget(&self) -> &impl Budget {
+    pub fn budget(&self) -> &BudgetValue {
         &self.budget
     }
 
     /// 预算值（读写）
-    pub fn budget_mut(&mut self) -> &mut impl Budget {
+    pub fn budget_mut(&mut self) -> &mut BudgetValue {
         &mut self.budget
     }
 }
@@ -98,5 +96,12 @@ impl Budget for Token {
 
     fn __quality_mut(&mut self) -> &mut super::ShortFloat {
         self.budget.__quality_mut()
+    }
+}
+
+impl Item for Token {
+    /// 键（只读）
+    fn key(&self) -> &String {
+        &self.key
     }
 }
