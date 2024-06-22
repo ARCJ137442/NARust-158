@@ -6,6 +6,13 @@ use crate::{
     inference::{Budget, Truth},
 };
 
+pub struct ReviseResult {
+    pub new_budget: BudgetValue,
+    pub new_task_budget: BudgetValue,
+    pub new_task_link_budget: Option<BudgetValue>,
+    pub new_belief_link_budget: Option<BudgetValue>,
+}
+
 /// 预算函数
 /// * 🚩【2024-05-03 14:48:13】现在仍依照OpenNARS原意「直接创建新值」
 ///   * 📝本身复制值也没多大性能损耗
@@ -63,7 +70,9 @@ pub trait BudgetFunctions: Budget {
     // /// 概念的「总体优先级」
     // /// * 📝用于概念的「激活」函数上
     // /// Recalculate the quality of the concept [to be refined to show extension/intension balance]
-    // fn concept_total_quality()
+    fn concept_total_quality(_concept: &()) -> ShortFloat {
+        todo!()
+    }
 
     fn solution_quality(query: &impl Sentence, solution: &impl Judgement) -> ShortFloat {
         // * 🚩根据「一般疑问 | 特殊疑问/目标」拆解
@@ -120,7 +129,78 @@ pub trait BudgetFunctions: Budget {
         BudgetValue::new(p, d, q)
     }
 
-    // TODO: 修正规则（更新旧预算值，但发送到「新预算值」中）
+    /// 统一的「修正规则」预算函数
+    /// * 🚩依照改版OpenNARS，从旧稿中重整
+    /// * ✅完全脱离「推理上下文」仅有纯粹的「真值/预算值」计算
+    fn revise(
+        new_belief_truth: &impl Truth, // from task
+        old_belief_truth: &impl Truth, // from belief
+        revised_truth: &impl Truth,
+        current_task_budget: &impl Budget,
+        current_task_link_budget: Option<&impl Budget>,
+        current_belief_link_budget: Option<&impl Budget>,
+    ) -> ReviseResult {
+        // * 🚩计算落差 | t = task, b = belief
+        let dif_to_new_task =
+            ShortFloat::from_float(revised_truth.expectation_abs_dif(new_belief_truth));
+        let dif_to_old_belief =
+            ShortFloat::from_float(revised_truth.expectation_abs_dif(old_belief_truth));
+        // * 🚩若有：反馈到任务链、信念链
+        let new_task_link_budget = current_task_link_budget.map(|budget| {
+            // * 📝当前任务链 降低预算：
+            // * * p = link & !difT
+            // * * d = link & !difT
+            // * * q = link
+            BudgetValue::new(
+                budget.priority() & !dif_to_new_task,
+                budget.durability() & !dif_to_new_task,
+                budget.quality(),
+            )
+        });
+        let new_belief_link_budget = current_belief_link_budget.map(|budget| {
+            // * 📝当前信念链 降低预算：
+            // * * p = link & !difB
+            // * * d = link & !difB
+            // * * q = link
+            BudgetValue::new(
+                budget.priority() & !dif_to_old_belief,
+                budget.durability() & !dif_to_old_belief,
+                budget.quality(),
+            )
+        });
+        // * 🚩用落差降低优先级、耐久度
+        // * 📝当前任务 降低预算：
+        // * * p = task & !difT
+        // * * d = task & !difT
+        // * * q = task
+        let new_task_budget = BudgetValue::new(
+            current_task_budget.priority() & !dif_to_new_task,
+            current_task_budget.durability() | !dif_to_new_task,
+            current_task_budget.quality(),
+        );
+        // * 🚩用更新后的值计算新差 | ❓此时是否可能向下溢出？
+        // * 📝新差 = 修正后信念.信度 - max(新信念.信度, 旧信念.信度)
+        let dif = revised_truth.confidence()
+            - old_belief_truth
+                .confidence()
+                .max(old_belief_truth.confidence());
+        // * 🚩计算新预算值
+        // * 📝优先级 = 差 | 当前任务
+        // * 📝耐久度 = (差 + 当前任务) / 2
+        // * 📝质量 = 新真值→质量
+        let new_budget = BudgetValue::new(
+            dif | current_task_budget.priority(),
+            ShortFloat::arithmetical_average([dif, current_task_budget.durability()]),
+            Self::truth_to_quality(revised_truth),
+        );
+        // 返回
+        ReviseResult {
+            new_budget,
+            new_task_budget,
+            new_task_link_budget,
+            new_belief_link_budget,
+        }
+    }
 
     /// 模拟`BudgetFunctions.update`
     ///
@@ -175,6 +255,7 @@ pub trait BudgetFunctions: Budget {
 
     /* ----------------------- Concept ----------------------- */
 
+    // TODO: 有待更新：要计算「概念」的「总体质量」
     /// 模拟`BudgetFunctions.activate`
     /// * 🚩【2024-05-02 20:55:40】虽然涉及「概念」，但实际上只用到了「概念作为预算值的部分」
     /// * 📌【2024-05-02 20:56:11】目前要求「概念」一方使用同样的「短浮点」
