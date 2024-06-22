@@ -725,50 +725,7 @@ pub trait Bag<E: Item> {
     }
 }
 
-/// [`Bag`]的具体类型
-/// * ✅构造方法
-/// * 🎯【2024-05-07 20:58:48】目前是因为`Memory`的构造函数初始化需要
-pub trait BagConcrete<E: Item>: Bag<E> + Sized {
-    /// 🆕实际上的「构造方法」
-    /// * 🎯用于创造一个「白板」对象
-    /// * 🎯结合[`Bag::new`]实现「有预设方法的构造」逻辑
-    fn __new(capacity: usize, forget_rate: usize) -> Self;
-
-    /// 模拟 `new Bag(Memory memory)`
-    /// * 📝OpenNARS中一直都是传承一个参数
-    /// * 🚩创建一个空袋（不论是何种实现者）
-    /// * 🚩🆕【2024-05-07 20:46:25】目前不创建、传入对「记忆区」的引用
-    ///   * 🚩取而代之的是：直接传入所需参数作为属性
-    ///   * 🎯减少循环引用
-    ///   * 💭虽然即便可以使用[`Rc`]/[`Arc`]
-    /// * 🎯创建一个已经[「初始化」](Bag::init)的新袋
-    ///   * 📝OpenNARS中，后续实现者（词项链袋 等）均只会通过一个`super`调用它
-    /// * 🚩虽然在OpenNARS中`Bag`是`protected`的，但鉴于各子类实现如`ConceptBag`中是公开的，此处默认作「公开」处理
-    ///
-    /// # 📄OpenNARS
-    ///
-    /// constructor, called from subclasses
-    ///
-    /// @param memory The reference to memory
-    fn new(capacity: usize, forget_rate: usize) -> Self
-    where
-        Self: Sized,
-    {
-        /* 📄OpenNARS源码：
-        this.memory = memory;
-        capacity = capacity();
-        init(); */
-        let mut this = Self::__new(capacity, forget_rate);
-        this.init();
-        this
-    }
-}
-
-/// 用于袋的「索引」
-/// * 🎯方便后续安插方法
-/// * 🚩【2024-05-09 00:09:00】现在通过要求[`ToDisplayAndBrief`]完成对「可呈现」的约束
-///   * 以便[`crate::entity::Item`]、[`crate::entity::Task`]等用到
-pub trait BagKey: ToDisplayAndBrief + Clone + Eq {}
+// ! 删除「具体类型」特征：能直接`struct`就直接`struct`
 
 /// 袋的「名称映射」
 /// * 📄OpenNARS`Bag.nameTable`
@@ -931,38 +888,53 @@ mod impl_v1 {
         }
     }
 
-    /// 📜为[`BagKeyV1`]实现「元素id」
-    impl BagKey for String {}
+    /// 初代「元素映射」实现
+    #[derive(Debug, Clone, PartialEq)]
+    struct BagNameTableV1<E>(HashMap<String, E>);
+
+    impl<E> BagNameTableV1<E> {
+        pub fn new() -> Self {
+            Self(HashMap::new())
+        }
+    }
+
+    /// 默认构造空映射
+    impl<E> Default for BagNameTableV1<E> {
+        #[inline(always)]
+        fn default() -> Self {
+            Self::new()
+        }
+    }
 
     /// 📜为「散列映射」[`HashMap`]实现「元素映射」
     /// * 📝同名方法冲突时，避免「循环调用」的方法：完全限定语法
     ///   * 🔗<https://rustc-dev-guide.rust-lang.org/method-lookup.html>
     ///   * ⚠️[`HashMap`]使用[`len`](HashMap::len)而非[`size`](BagNameTable::size)
-    impl<E: Item> BagNameTable<E> for HashMap<String, E> {
+    impl<E: Item> BagNameTable<E> for BagNameTableV1<E> {
         #[inline(always)]
         fn size(&self) -> usize {
-            self.len()
+            self.0.len()
         }
 
         #[inline(always)]
         fn get(&self, key: &str) -> Option<&E> {
-            Self::get(self, key)
+            self.0.get(key)
         }
 
         #[inline(always)]
         fn get_mut(&mut self, key: &str) -> Option<&mut E> {
-            Self::get_mut(self, key)
+            self.0.get_mut(key)
         }
 
         #[inline(always)]
         fn put(&mut self, key: &str, item: E) -> Option<E> {
             // * 🚩【2024-05-04 13:06:22】始终尝试插入（在「从无到有」的时候需要）
-            self.insert(key.to_string(), item)
+            self.0.insert(key.to_string(), item)
         }
 
         #[inline(always)]
         fn remove(&mut self, key: &str) -> Option<E> {
-            Self::remove(self, key)
+            self.0.remove(key)
         }
     }
 
@@ -1084,7 +1056,7 @@ mod impl_v1 {
         /// # 📄OpenNARS
         ///
         /// `mapping from key to item`
-        item_map: HashMap<String, E>,
+        item_map: BagNameTableV1<E>,
 
         /// 层级映射
         /// * 📝OpenNARS中主要用到的操作
@@ -1198,7 +1170,7 @@ mod impl_v1 {
 
         #[inline(always)]
         fn __name_table_mut_new_(&mut self) {
-            self.item_map = HashMap::new();
+            self.item_map = BagNameTableV1::new();
         }
 
         #[inline(always)]
@@ -1268,11 +1240,17 @@ mod impl_v1 {
         }
     }
 
-    impl<E: Item> BagConcrete<E> for BagV1<E> {
-        // 实现构造函数
-        #[inline(always)]
-        fn __new(capacity: usize, forget_rate: usize) -> Self {
-            Self {
+    // impl<E: Item> BagConcrete<E> for BagV1<E> {
+    impl<E: Item> BagV1<E> {
+        pub fn new(capacity: usize, forget_rate: usize) -> Self
+        where
+            Self: Sized,
+        {
+            /* 📄OpenNARS源码：
+            this.memory = memory;
+            capacity = capacity();
+            init(); */
+            let mut this = Self {
                 // 这两个是「超参数」要因使用者而异
                 capacity,
                 forget_rate,
@@ -1281,13 +1259,15 @@ mod impl_v1 {
                 // ? ❓【2024-05-04 12:32:58】因为上边这个不支持[`Default`]，所以就要写这些模板代码吗？
                 // * 💭以及，这个`new`究竟要不要照抄OpenNARS的「先创建全空属性⇒再全部init初始化」特性
                 //   * 毕竟Rust没有`null`要担心
-                item_map: HashMap::default(),
+                item_map: BagNameTableV1::default(),
                 level_map: BagItemTableV1::default(),
                 mass: usize::default(),
                 level_index: usize::default(),
                 current_level: usize::default(),
                 current_counter: usize::default(),
-            }
+            };
+            this.init();
+            this
         }
     }
 }
