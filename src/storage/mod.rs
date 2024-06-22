@@ -27,8 +27,6 @@
 //! The main memory also contains buffers for new tasks. One buffer contains tasks to be processed immediately (to be finished in constant time), and the other, a bag, for the tasks to be processed later.
 
 nar_dev_utils::mods! {
-    // 分派器
-    pub use distributor;
 
     // 缓冲区
     pub use buffer;

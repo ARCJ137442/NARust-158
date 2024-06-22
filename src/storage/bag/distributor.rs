@@ -176,12 +176,6 @@ impl Distributor {
         (capacity, order)
     }
 
-    /// 获取其随机的范围
-    /// * 📌会随机出的量之区间
-    pub fn range(&self) -> std::ops::Range<usize> {
-        0..self.range
-    }
-
     /// 获取其内部「容量」
     pub fn capacity(&self) -> usize {
         self.order.len()
