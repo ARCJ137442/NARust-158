@@ -1,6 +1,6 @@
 //! 🎯复刻OpenNARS `nars.entity.Bag`
 
-use super::distributor::Distributor;
+use super::distributor::Distribute;
 use crate::{
     entity::Item, global::Float, inference::BudgetFunctions, nars::DEFAULT_PARAMETERS,
     util::ToDisplayAndBrief,
@@ -90,7 +90,7 @@ pub trait Bag<E: Item> {
     /// # 📄OpenNARS
     ///
     /// shared DISTRIBUTOR that produce the probability distribution
-    fn __distributor(&self) -> &impl Distributor;
+    fn __distributor(&self) -> &impl Distribute;
 
     /// 模拟`Bag.nameTable`
     /// * 🚩【2024-04-28 08:43:25】目前不与任何「映射」类型绑定
@@ -915,7 +915,7 @@ pub trait BagItemLevel {
 /// 初代实现
 mod impl_v1 {
     use super::*;
-    use crate::storage::DistributorV1;
+    use crate::storage::Distributor;
 
     // 默认实现 //
     use std::{
@@ -1069,7 +1069,7 @@ mod impl_v1 {
         /// # OpenNARS `Bag.DISTRIBUTOR`
         ///
         /// shared DISTRIBUTOR that produce the probability distribution
-        distributor: DistributorV1,
+        distributor: Distributor,
 
         /// 元素映射
         /// * 📝OpenNARS中主要用到的操作
@@ -1181,7 +1181,7 @@ mod impl_v1 {
     /// * 🚩【2024-05-04 12:01:15】下面这些就是给出自己的属性，即「属性映射」
     impl<E: Item> Bag<E> for BagV1<E> {
         #[inline(always)]
-        fn __distributor(&self) -> &impl Distributor {
+        fn __distributor(&self) -> &impl Distribute {
             &self.distributor
         }
 
@@ -1277,7 +1277,7 @@ mod impl_v1 {
                 capacity,
                 forget_rate,
                 // 后续都是「内部状态变量」
-                distributor: DistributorV1::new(Self::__TOTAL_LEVEL),
+                distributor: Distributor::new(Self::__TOTAL_LEVEL),
                 // ? ❓【2024-05-04 12:32:58】因为上边这个不支持[`Default`]，所以就要写这些模板代码吗？
                 // * 💭以及，这个`new`究竟要不要照抄OpenNARS的「先创建全空属性⇒再全部init初始化」特性
                 //   * 毕竟Rust没有`null`要担心

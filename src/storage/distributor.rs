@@ -10,13 +10,13 @@
 use nar_dev_utils::manipulate;
 use std::fmt::Debug;
 
-/// 伪随机数分派器
+/// 伪随机数分派
 /// * 🎯用于`Bag`结构的伪随机加权分派
-/// * 🎯抽象出「分发」的基本特征
+/// * 🎯抽象出「分派」的基本特征
 /// * ⚙️其中
-///   * `T`作为「分发出的对象」，默认为无符号整数
-///   * `I`作为「分发之索引」，默认为无符号整数
-pub trait Distributor<T = usize, I = usize> {
+///   * `T`作为「分派出的对象」，默认为无符号整数
+///   * `I`作为「分派之索引」，默认为无符号整数
+pub trait Distribute<T = usize, I = usize> {
     /// 基于当前索引，获取下一个随机数
     /// * 🚩返回一个随机数值
     fn pick(&self, index: I) -> T;
@@ -63,7 +63,7 @@ pub trait Distributor<T = usize, I = usize> {
 /// 迭代「分派者」的迭代器
 pub struct Iter<'a, T, I, D>
 where
-    D: Distributor<T, I>,
+    D: Distribute<T, I>,
 {
     distributor: &'a D,
     index: I,
@@ -75,7 +75,7 @@ impl<T, I, D> Iterator for Iter<'_, T, I, D>
 where
     T: Copy,
     I: Copy,
-    D: Distributor<T, I>,
+    D: Distribute<T, I>,
 {
     type Item = T;
 
@@ -86,13 +86,13 @@ where
     }
 }
 
-/// 伪随机数生成器 第一代
+/// 伪随机数生成器 初代实现
 /// * 🎯实现一个[`Distribute<usize, usize>`](Distribute)
 /// * 🎯以更Rusty的方式复刻OpenNARS之Distributor
 ///   * ⚡性能
 ///   * ✨通用性
 #[derive(Clone, PartialEq, Eq, Hash)]
-pub struct DistributorV1 {
+pub struct Distributor {
     /// 🆕缓存的「随机范围」量
     /// * 🚩表示随机数的样本空间大小
     /// * 🎯用于迭代器
@@ -120,7 +120,7 @@ pub struct DistributorV1 {
     next: Box<[usize]>,
 }
 
-impl DistributorV1 {
+impl Distributor {
     /// 构造函数
     pub fn new(range: usize) -> Self {
         // 推导容量与排序
@@ -193,7 +193,7 @@ impl DistributorV1 {
     // fn fmt_full(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     //     let b = String::new();
     //     let f = std::fmt::Formatter::new(&b);
-    //     f.debug_struct("DistributorV1")
+    //     f.debug_struct("Distributor")
     //         .field("range", &self.range)
     //         .field("order", &self.order)
     //         .field("next", &self.next)
@@ -211,9 +211,9 @@ impl Debug for RawDebug {
     }
 }
 
-impl Debug for DistributorV1 {
+impl Debug for Distributor {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("DistributorV1")
+        f.debug_struct("Distributor")
             .field("range", &self.range)
             .field("order", &RawDebug(debug_truncated_arr(&self.order, 50)))
             .field(
@@ -240,7 +240,7 @@ fn debug_truncated_arr<T: Debug>(arr: &[T], max_len: usize) -> String {
 }
 
 /// 实现「分派」特征
-impl Distributor for DistributorV1 {
+impl Distribute for Distributor {
     /// # Panics
     ///
     /// ⚠️数组越界可能会`panic`
@@ -286,7 +286,7 @@ mod tests {
 
     /// 含参（大小）
     fn _test_distributor(n: usize) {
-        let d = DistributorV1::new(n);
+        let d = Distributor::new(n);
         println!("d = {d:?}");
         // 系列测试 //
         // next
@@ -297,7 +297,7 @@ mod tests {
     }
 
     /// next测试
-    fn _test_next(d: &DistributorV1) {
+    fn _test_next(d: &Distributor) {
         let c = d.capacity();
         // 没有「取模约束」时
         for i in 0..(c - 1) {
@@ -311,7 +311,7 @@ mod tests {
     /// * 🎯分派器在各个索引之间，需要「整体权重与局部权重相似」
     ///   * 权重不能随「分派次数」的变更而变更
     /// * 🚩固定「扫描区间」的大小为整个capacity，在n×capacity的结果中扫描
-    fn _test_local_weights(d: &DistributorV1, n: usize) {
+    fn _test_local_weights(d: &Distributor, n: usize) {
         let c = d.capacity();
         let l = c * n;
         let results = d.iter_default().take(l).collect::<Vec<_>>();
