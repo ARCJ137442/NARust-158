@@ -151,6 +151,34 @@ pub struct Bag<E: Item> {
     ///
     /// maximum number of items to be taken out at current level
     current_counter: usize,
+
+    /// 🆕决定「预算合并顺序」的函数指针
+    /// * 🎯根据元素决定「预算合并」的顺序：新→旧 or 旧→新
+    /// * 🚩目前采用函数指针
+    merge_order_f: MergeOrderF<E>,
+}
+
+/// 🆕决定「预算合并顺序」的函数指针类型
+pub type MergeOrderF<E> = fn(&E, &E) -> MergeOrder;
+
+/// 预算合并顺序（枚举）
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum MergeOrder {
+    /// 从「将移出的Item」合并到「新进入的Item」
+    /// * 📌修改「新进入的Item」
+    /// * 📜亦为默认值
+    #[default]
+    OldToNew,
+    /// 从「新进入的Item」合并到「将移出的Item」
+    /// * 📌修改「将移出的Item」
+    NewToOld,
+}
+
+impl MergeOrder {
+    /// 默认的「合并顺序」：旧→新
+    pub fn default_order<E>(_: &E, _: &E) -> Self {
+        Self::default()
+    }
 }
 
 impl<E: Item> Default for Bag<E> {
@@ -165,10 +193,11 @@ impl<E: Item> Default for Bag<E> {
 
 // impl<E: Item> BagConcrete<E> for Bag<E> {
 impl<E: Item> Bag<E> {
-    pub fn new(capacity: usize, forget_rate: usize) -> Self
-    where
-        Self: Sized,
-    {
+    pub fn with_merge_order(
+        capacity: usize,
+        forget_rate: usize,
+        merge_order_f: MergeOrderF<E>,
+    ) -> Self {
         /* 📄OpenNARS源码：
         self.memory = memory;
         capacity = capacity();
@@ -188,9 +217,17 @@ impl<E: Item> Bag<E> {
             level_index: usize::default(),
             current_level: usize::default(),
             current_counter: usize::default(),
+            merge_order_f,
         };
         this.init();
         this
+    }
+
+    pub fn new(capacity: usize, forget_rate: usize) -> Self
+    where
+        Self: Sized,
+    {
+        Self::with_merge_order(capacity, forget_rate, MergeOrder::default_order::<E>)
     }
 }
 
@@ -411,12 +448,21 @@ impl<E: Item> Bag<E> {
         // 置入「元素映射」
         let new_key = new_item.key().clone();
         let old_item = self.item_map.put(&new_key, new_item);
-        let new_item = self.get_mut(&new_key).unwrap(); // * 🚩🆕重新获取「置入后的新项」（⚠️一定有）
 
         // 若在「元素映射」中重复了：有旧项⇒合并「重复了的新旧项」
-        if let Some(old_item) = old_item {
+        if let Some(mut old_item) = old_item {
             // 将旧项（的预算值）并入新项 | 🆕⚠️必须在前：`new_item`可变借用了`self`，而下一句中不能出现`new_item`
-            new_item.merge(&old_item);
+            // new_item.merge(&old_item);
+            // * 🚩计算「合并顺序」
+            let new_item = self.get(&new_key).unwrap(); // * 🚩🆕重新获取「置入后的新项」（⚠️一定有）
+            let merge_order = (self.merge_order_f)(&old_item, new_item); // 此处调用函数指针，一定是不可变引用
+            let new_item = self.get_mut(&new_key).unwrap(); // * 🚩🆕重新获取「置入后的新项」（⚠️一定有）
+            // * 🚩按照计算出的「合并顺序」合并预算值
+            use MergeOrder::*;
+            match merge_order {
+                OldToNew => new_item.merge(&old_item),
+                NewToOld => old_item.merge(new_item),
+            }
             // 在「层级映射」移除旧项 | 🚩【2024-05-04 11:45:02】现在仍需使用「元素」，因为下层调用需要访问元素本身（预算值），并需避免过多的「按键取值」过程
             self.item_out_of_base(&old_item);
         }
