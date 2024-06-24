@@ -42,13 +42,14 @@ pub use task::*;
 mod linkages;
 pub use linkages::*;
 
+// 概念 `Concept`
+mod concept;
+pub use concept::*;
+
 // nar_dev_utils::mods! {
 //     // 词项链 `TermLink`
 //     pub use term_link;
 
 //     // 任务链 `TaskLink`
 //     pub use task_link;
-
-//     // 概念 `Concept`
-//     pub use concept;
 // }

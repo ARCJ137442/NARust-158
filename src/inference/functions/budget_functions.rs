@@ -57,13 +57,13 @@ pub trait BudgetFunctions: Budget {
     ///
     /// @param judgement The judgement to be ranked
     /// @return The rank of the judgement, according to truth value only
-    fn rank_belief(truth: &impl Truth, judgement: &impl Judgement) -> ShortFloat {
+    fn rank_belief(judgement: &impl Judgement) -> Float {
         // * 🚩两个指标：信度 + 原创性（时间戳长度）
         // * 📝与信度正相关，与「时间戳长度」负相关；二者有一个好，那就整体好
-        let confidence = truth.confidence();
+        let confidence = judgement.confidence();
         let originality =
             ShortFloat::from_float(1.0 / (judgement.evidence_length() as Float + 1.0));
-        confidence | originality
+        (confidence | originality).to_float()
     }
 
     /* ----- Functions used both in direct and indirect processing of tasks ----- */

@@ -186,6 +186,21 @@ macro_once! {
         /// Size of TaskBuffer
         pub task_buffer_size: usize = 10,
 
+        /// # 📄OpenNARS改版
+        ///
+        /// 🆕Initial priority of a new Concept
+        pub concept_initial_priority: Float = 0.01,
+
+        /// # 📄OpenNARS改版
+        ///
+        /// 🆕Initial durability of a new Concept
+        pub concept_initial_durability: Float = 0.01,
+
+        /// # 📄OpenNARS改版
+        ///
+        /// 🆕Initial quality of a new Concept
+        pub concept_initial_quality: Float = 0.01,
+
         /// # 📄OpenNARS
         ///
         /// Maximum length of Stamp, a power of 2
