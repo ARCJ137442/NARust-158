@@ -3,7 +3,7 @@
 //! * 🎯只复刻外部读写方法，不限定内部数据字段
 //!   * ❌不迁移「具体类型」特征
 
-use crate::{entity::ShortFloat, io::symbols::*, util::ToDisplayAndBrief};
+use crate::{entity::ShortFloat, global::Float, io::symbols::*, util::ToDisplayAndBrief};
 use nar_dev_utils::join;
 use narsese::lexical::Budget as LexicalBudget;
 
@@ -80,6 +80,22 @@ pub trait Budget: ToDisplayAndBrief {
     #[inline(always)]
     fn set_quality(&mut self, new_q: ShortFloat) {
         self.__quality_mut().set(new_q)
+    }
+
+    /// 🆕获取「优先级，耐久度，质量」三元组
+    /// * 🎯方便获取符号
+    fn pdq(&self) -> [ShortFloat; 3] {
+        [self.priority(), self.durability(), self.quality()]
+    }
+
+    /// 🆕获取「优先级，耐久度，质量」三元组
+    /// * 🎯方便获取符号
+    fn pdq_float(&self) -> [Float; 3] {
+        [
+            self.priority().to_float(),
+            self.durability().to_float(),
+            self.quality().to_float(),
+        ]
     }
 
     /// 🆕从其它预算值处拷贝值

@@ -5,7 +5,10 @@ use super::{
     Distributor,
 };
 use crate::{
-    entity::Item, global::Float, inference::BudgetFunctions, nars::DEFAULT_PARAMETERS,
+    entity::{Item, ShortFloat},
+    global::Float,
+    inference::{BudgetFunctions, BudgetInference},
+    nars::DEFAULT_PARAMETERS,
     util::ToDisplayAndBrief,
 };
 
@@ -457,11 +460,11 @@ impl<E: Item> Bag<E> {
             let new_item = self.get(&new_key).unwrap(); // * 🚩🆕重新获取「置入后的新项」（⚠️一定有）
             let merge_order = (self.merge_order_f)(&old_item, new_item); // 此处调用函数指针，一定是不可变引用
             let new_item = self.get_mut(&new_key).unwrap(); // * 🚩🆕重新获取「置入后的新项」（⚠️一定有）
-            // * 🚩按照计算出的「合并顺序」合并预算值
+                                                            // * 🚩按照计算出的「合并顺序」合并预算值
             use MergeOrder::*;
             match merge_order {
-                OldToNew => new_item.merge(&old_item),
-                NewToOld => old_item.merge(new_item),
+                OldToNew => new_item.merge_from(&old_item),
+                NewToOld => old_item.merge_from(new_item),
             }
             // 在「层级映射」移除旧项 | 🚩【2024-05-04 11:45:02】现在仍需使用「元素」，因为下层调用需要访问元素本身（预算值），并需避免过多的「按键取值」过程
             self.item_out_of_base(&old_item);
@@ -497,11 +500,14 @@ impl<E: Item> Bag<E> {
     /// @param oldItem The Item to put back
     /// @return Whether the new Item is added into the Bag
     pub fn put_back(&mut self, mut old_item: E) -> Option<E> {
-        /* 📄OpenNARS源码：
-        BudgetFunctions.forget(oldItem.getBudget(), forgetRate(), RELATIVE_THRESHOLD);
-        return putIn(oldItem); */
-        old_item.forget(self.forget_rate as Float, Self::__RELATIVE_THRESHOLD);
+        self.forget(&mut old_item);
         self.put_in(old_item)
+    }
+
+    /// 🆕以一定函数修改某个Item的优先级
+    fn forget(&self, item: &mut E) {
+        let new_priority = item.forget(self.forget_rate as Float, Self::__RELATIVE_THRESHOLD);
+        item.set_priority(ShortFloat::from_float(new_priority));
     }
 
     /// 模拟`Bag.takeOut`

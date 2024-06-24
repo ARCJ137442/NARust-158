@@ -18,6 +18,9 @@ pub struct ReviseResult {
 ///   * 📝本身复制值也没多大性能损耗
 ///   * 📌「直接创建新值」会更方便后续调用
 ///     * 📄减少无谓的`.clone()`
+/// * ❌【2024-06-24 16:30:56】不能使用`impl Budget + Sized`
+///   * 📝这会碰上生命周期问题：不能保证返回的值一定不包含对传入参数的借用
+///   * 📄首次错误出现位置：[`crate::inference::BudgetInference::merge_from`]
 ///
 /// * ⚠️【2024-06-20 19:56:05】此处仅存储「纯函数」：不在其中修改传入量的函数
 pub trait BudgetFunctions: Budget {
@@ -97,6 +100,7 @@ pub trait BudgetFunctions: Budget {
     /// * 📝似乎的确只出现在「本地规则」的`trySolution`方法中
     ///   * 💫并且那个方法还要修改记忆区「做出回答」，错综复杂
     /// * 🚩【2024-05-04 00:25:17】暂时搁置
+    /// * ✅【2024-06-23 01:37:36】目前已按照改版OpenNARS设置
     ///
     /// # 📄OpenNARS
     ///
@@ -113,7 +117,7 @@ pub trait BudgetFunctions: Budget {
         problem: &impl Question,
         solution: &impl Judgement,
         question_task_budget: &impl Budget,
-    ) -> impl Budget + Sized {
+    ) -> BudgetValue {
         /* 📄OpenNARS改版：
         final float newP = or(questionTaskBudget.getPriority(), solutionQuality(problem, solution));
         final float newD = questionTaskBudget.getDurability();
@@ -215,7 +219,7 @@ pub trait BudgetFunctions: Budget {
         task_truth: &impl Truth,
         task_budget: &mut Self,
         b_truth: &impl Truth,
-    ) -> impl Budget + Sized {
+    ) -> BudgetValue {
         /* 📄OpenNARS源码：
         Truth tTruth = task.getSentence().getTruth();
         float dif = tTruth.getExpDifAbs(bTruth);
@@ -223,11 +227,15 @@ pub trait BudgetFunctions: Budget {
         float durability = aveAri(dif, task.getDurability());
         float quality = truthToQuality(bTruth);
         return new BudgetValue(priority, durability, quality); */
-        let t_truth = task_truth;
-        let dif = ShortFloat::from_float(t_truth.expectation_abs_dif(b_truth));
+        // * 🚩计算落差
+        let dif = ShortFloat::from_float(task_truth.expectation_abs_dif(b_truth));
+        // * 🚩根据落差计算预算值
+        // * 📝优先级 = 落差 | 任务
+        // * 📝耐久度 = (落差 + 任务) / 2
+        // * 📝质量 = 信念真值→质量
         let priority = dif | task_budget.priority();
         let durability = ShortFloat::arithmetical_average([dif, task_budget.durability()]);
-        let quality = Self::truth_to_quality(t_truth);
+        let quality = Self::truth_to_quality(task_truth);
         BudgetValue::new(priority, durability, quality)
     }
 
@@ -241,10 +249,13 @@ pub trait BudgetFunctions: Budget {
     /// @param b The original budget
     /// @param n Number of links
     /// @return Budget value for each link
-    fn distribute_among_links(&self, n: usize) -> impl Budget + Sized {
+    fn distribute_among_links(&self, n: usize) -> BudgetValue {
         /* 📄OpenNARS源码：
         float priority = (float) (b.getPriority() / Math.sqrt(n));
         return new BudgetValue(priority, b.getDurability(), b.getQuality()); */
+        // * 📝优先级 = 原 / √链接数
+        // * 📝耐久度 = 原
+        // * 📝质量 = 原
         let priority = self.priority().to_float() / (n as Float).sqrt();
         BudgetValue::new(
             ShortFloat::from_float(priority),
@@ -290,21 +301,23 @@ pub trait BudgetFunctions: Budget {
 
     /// 模拟`BudgetFunctions.forget`
     /// * 🚩【2024-05-03 14:57:06】此处是「修改」语义，而非「创建新值」语义
+    /// * 🚩【2024-06-24 16:13:41】现在跟从改版OpenNARS，转为「创建新值」语义
     ///
     /// # 📄OpenNARS
     ///
     /// Decrease Priority after an item is used, called in Bag
     ///
-    /// After a constant time, p should become d*p. Since in this period, the
-    /// item is accessed c*p times, each time p-q should multiple d^(1/(c*p)).
-    /// The intuitive meaning of the parameter "forgetRate" is: after this number
-    /// of times of access, priority 1 will become d, it is a system parameter
-    /// adjustable in run time.
+    /// After a constant time, p should become d*p.
     ///
-    /// @param budget            The previous budget value
-    /// @param forgetRate        The budget for the new item
-    /// @param relativeThreshold The relative threshold of the bag
-    fn forget(&mut self, forget_rate: Float, relative_threshold: Float) {
+    /// Since in this period, the item is accessed c*p times, each time p-q should multiple d^(1/(c*p)).
+    ///
+    /// The intuitive meaning of the parameter "forgetRate" is:
+    /// after this number of times of access, priority 1 will become d, it is a system parameter adjustable in run time.
+    ///
+    /// - @param budget            The previous budget value
+    /// - @param forgetRate        The budget for the new item
+    /// - @param relativeThreshold The relative threshold of the bag
+    fn forget(&self, forget_rate: Float, relative_threshold: Float) -> Float {
         /* 📄OpenNARS源码：
         double quality = budget.getQuality() * relativeThreshold; // re-scaled quality
         double p = budget.getPriority() - quality; // priority above quality
@@ -312,17 +325,24 @@ pub trait BudgetFunctions: Budget {
             quality += p * Math.pow(budget.getDurability(), 1.0 / (forgetRate * p));
         } // priority Durability
         budget.setPriority((float) quality); */
-        let mut quality = self.quality().to_float() * relative_threshold; // 重新缩放「质量」
-        let p = self.priority().to_float() - quality; // 「质量」之上的「优先级」
-        if p > 0.0 {
-            quality += p * self.durability().to_float().powf(1.0 / (forget_rate * p));
-        } // 优先级耐久 | q' = q * relativeThreshold + p * d^(1 / forgetRate*p)
-        self.set_priority(ShortFloat::from_float(quality));
+        let [p, d, q] = self.pdq_float();
+        // * 🚩先放缩「质量」
+        let scaled_q = q * relative_threshold;
+        // * 🚩计算优先级和「放缩后质量」的差
+        let dif_p_q = p - scaled_q;
+        // * 🚩计算新的优先级
+        match dif_p_q > 0.0 {
+            // * 🚩差值 > 0 | 衰减
+            true => scaled_q + dif_p_q * d.powf(1.0 / (forget_rate * dif_p_q)),
+            // * 🚩差值 < 0 | 恒定
+            false => scaled_q,
+        }
     }
 
     /// 模拟`BudgetValue.merge`，亦与`BudgetFunctions.merge`相同
     /// * 📝【2024-05-03 14:55:29】虽然现在「预算函数」以「直接创建新值」为主范式，
     ///   * 但在用到该函数的`merge`方法上，仍然是「修改」语义——需要可变引用
+    /// * 🚩【2024-06-24 16:15:22】现在跟从改版OpenNARS，直接创建新值
     ///
     /// # 📄OpenNARS
     ///
@@ -337,230 +357,12 @@ pub trait BudgetFunctions: Budget {
     ///
     /// @param baseValue   The budget value to be modified
     /// @param adjustValue The budget doing the adjusting
-    fn merge(&mut self, other: &impl Budget) {
-        // * 🚩【2024-05-02 00:16:50】仅作参考，后续要移动到「预算函数」中
-        /* OpenNARS源码 @ BudgetFunctions.java：
-        baseValue.setPriority(Math.max(baseValue.getPriority(), adjustValue.getPriority()));
-        baseValue.setDurability(Math.max(baseValue.getDurability(), adjustValue.getDurability()));
-        baseValue.setQuality(Math.max(baseValue.getQuality(), adjustValue.getQuality())); */
-        // 🆕此处就是三者的最大值，并且从右边合并到左边
-        // ! ❓是否要就此调用可变引用
-        self.__priority_mut().max_from(other.priority());
-        self.__durability_mut().max_from(other.durability());
-        self.__quality_mut().max_from(other.quality());
+    fn merge(&self, other: &impl Budget) -> BudgetValue {
+        let p = self.priority().max(other.priority());
+        let d = self.durability().max(other.durability());
+        let q = self.quality().max(other.quality());
+        BudgetValue::new(p, d, q)
     }
-
-    // TODO: 【2024-06-22 14:50:02】后续拆分到「预算推理」中去
-    // /* ----- Task derivation in LocalRules and SyllogisticRules ----- */
-    // /// 模拟`BudgetFunctions.forward`
-    // ///
-    // /// # 📄OpenNARS
-    // ///
-    // /// Forward inference result and adjustment
-    // ///
-    // /// @param truth The truth value of the conclusion
-    // /// @return The budget value of the conclusion
-    // fn forward<C>(
-    //     truth: &impl Truth,
-    //     // * 🚩【2024-05-12 15:48:37】↓对标`memory`
-    //     context: &mut impl DerivationContextReason<C>,
-    //     memory: &impl Memory<ShortFloat = ShortFloat>,
-    // ) -> impl Budget + Sized
-    // where
-    //     C: TypeContext<ShortFloat = ShortFloat, Budget = Self>,
-    // {
-    //     /* 📄OpenNARS源码：
-    //     return budgetInference(truthToQuality(truth), 1, memory); */
-    //     Self::__budget_inference(Self::truth_to_quality(truth), 1, context, memory)
-    // }
-
-    // /// 模拟`BudgetFunctions.backward`
-    // /// * 💭似乎跟「前向推理」[`BudgetFunctions::forward`]一样
-    // ///
-    // /// # 📄OpenNARS
-    // ///
-    // /// Backward inference result and adjustment, stronger case
-    // ///
-    // /// @param truth  The truth value of the belief deriving the conclusion
-    // /// @param memory Reference to the memory
-    // /// @return The budget value of the conclusion
-    // fn backward<C>(
-    //     truth: &impl Truth,
-    //     // * 🚩【2024-05-12 15:48:37】↓对标`memory`
-    //     context: &mut impl DerivationContextReason<C>,
-    //     memory: &impl Memory<ShortFloat = ShortFloat>,
-    // ) -> impl Budget + Sized
-    // where
-    //     C: TypeContext<ShortFloat = ShortFloat, Budget = Self>,
-    // {
-    //     /* 📄OpenNARS源码：
-    //     return budgetInference(truthToQuality(truth), 1, memory); */
-    //     Self::__budget_inference(Self::truth_to_quality(truth), 1, context, memory)
-    // }
-
-    // /// 模拟`BudgetFunctions.backwardWeak`
-    // /// ? ❓【2024-05-04 01:18:42】究竟是哪儿「弱」了
-    // ///   * 📝答：在「质量」前乘了个恒定系数（表示「弱推理」？）
-    // ///
-    // /// # 📄OpenNARS
-    // ///
-    // /// Backward inference result and adjustment, weaker case
-    // ///
-    // /// @param truth  The truth value of the belief deriving the conclusion
-    // /// @param memory Reference to the memory
-    // /// @return The budget value of the conclusion
-    // fn backward_weak<C>(
-    //     truth: &impl Truth,
-    //     // * 🚩【2024-05-12 15:48:37】↓对标`memory`
-    //     context: &mut impl DerivationContextReason<C>,
-    //     memory: &impl Memory<ShortFloat = ShortFloat>,
-    // ) -> impl Budget + Sized
-    // where
-    //     C: TypeContext<ShortFloat = ShortFloat, Budget = Self>,
-    // {
-    //     /* 📄OpenNARS源码：
-    //     return budgetInference(w2c(1) * truthToQuality(truth), 1, memory); */
-    //     Self::__budget_inference(
-    //         ShortFloat::w2c(1.0) & Self::truth_to_quality(truth),
-    //         1,
-    //         context,
-    //         memory,
-    //     )
-    // }
-
-    // /* ----- Task derivation in CompositionalRules and StructuralRules ----- */
-    // /// 模拟`BudgetFunctions.compoundForward`
-    // ///
-    // /// # 📄OpenNARS
-    // ///
-    // /// Forward inference with CompoundTerm conclusion
-    // ///
-    // /// @param truth   The truth value of the conclusion
-    // /// @param content The content of the conclusion
-    // /// @param memory  Reference to the memory
-    // /// @return The budget of the conclusion
-    // fn compound_forward<C>(
-    //     truth: &impl Truth,
-    //     content: &Term,
-    //     // * 🚩【2024-05-12 15:48:37】↓对标`memory`
-    //     context: &mut impl DerivationContextReason<C>,
-    //     memory: &impl Memory<ShortFloat = ShortFloat>,
-    // ) -> impl Budget + Sized
-    // where
-    //     C: TypeContext<ShortFloat = ShortFloat, Budget = Self>,
-    // {
-    //     /* 📄OpenNARS源码：
-    //     return budgetInference(truthToQuality(truth), content.getComplexity(), memory); */
-    //     Self::__budget_inference(
-    //         Self::truth_to_quality(truth),
-    //         content.complexity(),
-    //         context,
-    //         memory,
-    //     )
-    // }
-
-    // /// 模拟`BudgetFunctions.compoundBackward`
-    // ///
-    // /// # 📄OpenNARS
-    // ///
-    // /// Backward inference with CompoundTerm conclusion, stronger case
-    // ///
-    // /// @param content The content of the conclusion
-    // /// @param memory  Reference to the memory
-    // /// @return The budget of the conclusion
-    // fn compound_backward<C>(
-    //     content: &Term,
-    //     // * 🚩【2024-05-12 15:48:37】↓对标`memory`
-    //     context: &mut impl DerivationContextReason<C>,
-    //     memory: &impl Memory<ShortFloat = ShortFloat>,
-    // ) -> impl Budget + Sized
-    // where
-    //     C: TypeContext<ShortFloat = ShortFloat, Budget = Self>,
-    // {
-    //     /* 📄OpenNARS源码：
-    //     return budgetInference(1, content.getComplexity(), memory); */
-    //     Self::__budget_inference(ShortFloat::ONE, content.complexity(), context, memory)
-    // }
-
-    // /// 模拟`BudgetFunctions.compoundBackwardWeak`
-    // ///
-    // /// # 📄OpenNARS
-    // fn compound_backward_weak<C>(
-    //     content: &Term,
-    //     // * 🚩【2024-05-12 15:48:37】↓对标`memory`
-    //     context: &mut impl DerivationContextReason<C>,
-    //     memory: &impl Memory<ShortFloat = ShortFloat>,
-    // ) -> impl Budget + Sized
-    // where
-    //     C: TypeContext<ShortFloat = ShortFloat, Budget = Self>,
-    // {
-    //     /* 📄OpenNARS源码：
-    //     return budgetInference(w2c(1), content.getComplexity(), memory); */
-    //     Self::__budget_inference(ShortFloat::w2c(1.0), content.complexity(), context, memory)
-    // }
-
-    // /// 模拟`BudgetFunctions.budgetInference`
-    // /// * 🚩通用的「预算推理」
-    // /// * 🚩【2024-05-02 21:22:22】此处脱离与「词项链」「任务链」的关系，仅看其「预算」部分
-    // ///   * 📝OpenNARS源码本质上还是在强调「预算」而非（继承其上的）「词项」「记忆区」
-    // ///   * 📝之所以OpenNARS要传入「记忆区」「真值」是因为需要「获取其中某个词项/任务」
-    // /// * 🚩【2024-05-12 15:55:37】目前在实现「记忆区」「推理上下文」的API之下，可以按逻辑无损复刻
-    // ///   * ❓后续是否要将「记忆区」的引用代入「推理上下文」
-    // /// * 📝【2024-05-17 15:41:10】经OpenNARS基本论证：`t`不可能为`null`
-    // ///   * 📌「直接推理（任务+概念）」从来不会调用此函数
-    // ///     * 📄证据：`processJudgement`与`processQuestion`均除了本地规则「修正/问答」外没调用别的
-    // ///   * 🚩【2024-05-18 01:58:44】故因此只会从「概念推理」被调用，
-    // ///   * ✅使用[`DerivationContextReason`]解决
-    // ///
-    // ///
-    // /// # 📄OpenNARS
-    // ///
-    // /// Common processing for all inference step
-    // ///
-    // /// @param qual       Quality of the inference
-    // /// @param complexity Syntactic complexity of the conclusion
-    // /// @param memory     Reference to the memory
-    // /// @return Budget of the conclusion task
-    // fn __budget_inference<C>(
-    //     qual: ShortFloat,
-    //     complexity: usize,
-    //     context: &mut impl DerivationContextReason<C>,
-    //     memory: &impl Memory<ShortFloat = ShortFloat>,
-    // ) -> impl Budget + Sized
-    // where
-    //     C: TypeContext<ShortFloat = ShortFloat, Budget = Self>,
-    // {
-    //     /* 📄OpenNARS源码：
-    //     Item t = memory.currentTaskLink;
-    //     if (t == null) {
-    //         t = memory.currentTask;
-    //     }
-    //     float priority = t.getPriority();
-    //     float durability = t.getDurability() / complexity;
-    //     float quality = qual / complexity;
-    //     TermLink bLink = memory.currentBeliefLink;
-    //     if (bLink != null) {
-    //         priority = or(priority, bLink.getPriority());
-    //         durability = and(durability, bLink.getDurability());
-    //         float targetActivation = memory.getConceptActivation(bLink.getTarget());
-    //         bLink.incPriority(or(quality, targetActivation));
-    //         bLink.incDurability(quality);
-    //     }
-    //     return new BudgetValue(priority, durability, quality); */
-    //     let t_budget = context.current_task_link().budget();
-    //     let mut priority = t_budget.priority();
-    //     let mut durability =
-    //         ShortFloat::from_float(t_budget.durability().to_float() / complexity as Float);
-    //     let quality = ShortFloat::from_float(qual.to_float() / complexity as Float);
-    //     let b_link = context.current_belief_link_mut();
-    //     let activation = memory.get_concept_activation(&b_link.target());
-    //     priority = priority | b_link.priority();
-    //     durability = durability & b_link.durability();
-    //     let target_activation = activation;
-    //     b_link.inc_priority(quality | target_activation);
-    //     b_link.inc_durability(quality);
-    //     BudgetValue::new(priority, durability, quality)
-    // }
 }
 
 /// 自动实现「预算函数」

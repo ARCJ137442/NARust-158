@@ -33,6 +33,9 @@ nar_dev_utils::mods! {
     // ♻️数值函数
     pub use functions;
 
+    // 🛠️预算推理
+    pub use budget_inference;
+
     // 🆕特征
     pub use traits;
 
