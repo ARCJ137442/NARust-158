@@ -1,9 +1,209 @@
+//! 🎯复刻OpenNARS `nars.entity.Memory`
+//! * 📌「记忆区」
+//! * 🚧【2024-05-07 18:52:42】目前复现方法：先函数API（提供函数签名），再翻译填充函数体代码
+//!
+//! * ✅【2024-05-08 15:46:28】目前已初步实现方法API，并完成部分方法模拟
+//! * ✅【2024-05-08 17:17:41】目前已初步完成所有方法的模拟
+//! * ♻️【2024-06-24 20:40:08】开始基于改版OpenNARS重写
+
+use super::Bag;
+use crate::{
+    control::prepare_term_link_templates,
+    entity::{BudgetValue, Concept, Item},
+    inference::{Budget, BudgetFunctions},
+    language::Term,
+    nars::{Parameters, DEFAULT_PARAMETERS},
+};
+
+pub struct Memory {
+    /// 概念袋
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// Concept bag. Containing all Concepts of the system
+    concepts: Bag<Concept>,
+
+    /// 🆕统一所有「超参数」的存储
+    parameters: Parameters,
+}
+
 impl Memory {
-    fn initial_budget() -> BudgetValue {
+    /// 获取概念遗忘速率
+    /// * 🎯概念构造
+    pub fn concept_forgetting_rate(&self) -> usize {
+        self.parameters.concept_forgetting_cycle
+    }
+
+    /// 获取信念遗忘速率
+    /// * 🎯概念构造
+    #[doc(alias = "belief_forgetting_rate")]
+    pub fn term_link_forgetting_rate(&self) -> usize {
+        self.parameters.term_link_forgetting_cycle
+    }
+
+    /// 获取任务遗忘速率
+    /// * 🎯概念构造
+    #[doc(alias = "task_forgetting_rate")]
+    pub fn task_link_forgetting_rate(&self) -> usize {
+        self.parameters.task_link_forgetting_cycle
+    }
+
+    /// 构造函数
+    pub fn new(parameters: Parameters) -> Self {
+        Self {
+            // * 🚩概念袋
+            concepts: Bag::new(
+                parameters.concept_forgetting_cycle,
+                parameters.concept_forgetting_cycle,
+            ),
+            // * 🚩超参数
+            parameters,
+        }
+    }
+
+    /// 初始化记忆区
+    /// * 🚩初始化「概念袋」
+    pub fn init(&mut self) {
+        self.concepts.init();
+    }
+
+    /// # 📄OpenNARS
+    ///
+    /// Get an existing Concept for a given name
+    ///
+    /// called from Term and ConceptWindow.
+    #[doc(alias = "name_to_concept")]
+    pub fn key_to_concept(&self, key: &str) -> Option<&Concept> {
+        self.concepts.get(key)
+    }
+    #[doc(alias = "name_to_concept_mut")]
+    pub fn key_to_concept_mut(&mut self, key: &str) -> Option<&mut Concept> {
+        self.concepts.get_mut(key)
+    }
+
+    /// 统一集中「词项→袋索引」的逻辑
+    fn term_to_key(term: &Term) -> String {
+        term.name()
+    }
+
+    /// # 📄OpenNARS
+    ///
+    /// Get an existing Concept for a given Term.
+    pub fn term_to_concept(&self, term: &Term) -> Option<&Concept> {
+        self.key_to_concept(&Self::term_to_key(term))
+    }
+    pub fn term_to_concept_mut(&mut self, term: &Term) -> Option<&mut Concept> {
+        self.key_to_concept_mut(&Self::term_to_key(term))
+    }
+
+    pub fn has_concept(&self, term: &Term) -> bool {
+        self.concepts.has(&Self::term_to_key(term))
+    }
+
+    /// # 📄OpenNARS
+    ///
+    /// Get the Concept associated to a Term, or create it.
+    pub fn get_concept_or_create(&mut self, term: &Term) -> Option<&mut Concept> {
+        // * 🚩不给「非常量词项」新建概念 | 「非常量词项」也不可能作为一个「概念」被放进「记忆区」中
+        if !term.is_constant() {
+            return None;
+        }
+        // * 🚩尝试从概念袋中获取「已有概念」，否则尝试创建概念
+        let has_concept = self.has_concept(term);
+        match has_concept {
+            // * ⚠️【2024-06-25 01:15:35】不能通过匹配`term_to_concept_mut`判断：可能会有「重复可变借用」嫌疑
+            true => self.term_to_concept_mut(term),
+            false => self.make_new_concept(term),
+        }
+    }
+
+    fn make_new_concept(&mut self, term: &Term) -> Option<&mut Concept> {
+        // the only place to make a new Concept
+        // * 🚩创建新概念
+        let concept = Concept::new(
+            term.clone(),
+            self.task_link_forgetting_rate(),
+            self.term_link_forgetting_rate(),
+            self.concept_initial_budget(),
+            prepare_term_link_templates(term),
+        );
+        let new_key = concept.key().clone();
+        // * 🚩将新概念放入「记忆区」
+        let old_concept = self.concepts.put_in(concept);
+        let make_success = match old_concept {
+            None => true,
+            Some(old) => old.key() != &new_key,
+        };
+        // * 🚩根据「是否放入成功」返回「创建后的概念」
+        match make_success {
+            true => self.key_to_concept_mut(&new_key),
+            false => None,
+        }
+    }
+
+    /// 获取概念的「初始预算」
+    /// * 🚩从自身所存储的「超参数」中构建
+    fn concept_initial_budget(&self) -> BudgetValue {
         BudgetValue::from_floats(
-            DEFAULT_PARAMETERS.concept_initial_priority,
-            DEFAULT_PARAMETERS.concept_initial_durability,
-            DEFAULT_PARAMETERS.concept_initial_quality,
+            self.parameters.concept_initial_priority,
+            self.parameters.concept_initial_durability,
+            self.parameters.concept_initial_quality,
         )
+    }
+
+    /// Adjust the activation level of a Concept
+    ///
+    /// called in Concept.insertTaskLink only
+    /// * 🚩实际上也被「直接推理」调用
+    /// * 🚩【2024-06-25 01:46:20】此处为了避免「借用冲突」选择靠「词项」而非「概念」查询
+    /// * 🚩【2024-06-25 02:03:57】目前因为「激活时需要使用不可变引用，修改时又需要可变引用」改为「返回新预算值」机制
+    pub fn activate_concept_calculate(
+        &self,
+        concept: &Concept,
+        incoming_budget: &impl Budget,
+    ) -> BudgetValue {
+        // * 📝先「激活」
+        let mut activated = incoming_budget.activate_to_concept(concept);
+        // * 🚩分「是否已有」判断
+        match self.has_concept(concept.term()) {
+            // * 🚩已有：只需「激活」 | 后续「放回」将由「袋」自己的机制做
+            true => activated,
+            // * 🚩没有：需要附加「遗忘」 | 在「袋」外边的「概念」需要手动「遗忘」才能让两个分支效果一致
+            false => {
+                self.concepts.forget(&mut activated);
+                activated
+            }
+        }
+    }
+
+    /// * 🚩【2024-06-25 02:22:31】WIP：为避免「记忆区和概念同时可变借用」拆分成两块
+    ///   * 📍计算：仅负责计算概念词项
+    ///   * 📍应用：将计算出的「新预算值」用在实际对「概念」的修改中
+    /// * 🎯避免「同时可变借用记忆区和其内的概念」冲突
+    pub fn activate_concept_apply(concept: &mut impl Budget, new_budget: BudgetValue) {
+        concept.copy_budget_from(&new_budget);
+    }
+
+    /// 🆕对外接口：从「概念袋」中拿出一个概念
+    pub fn take_out_concept(&mut self) -> Option<Concept> {
+        self.concepts.take_out()
+    }
+
+    /// 🆕对外接口：从「概念袋」中挑出一个概念
+    /// * 🚩用于「直接推理」中的「拿出概念」
+    pub fn pick_out_concept(&mut self, key: &str) -> Option<Concept> {
+        self.concepts.pick_out(key)
+    }
+
+    /// 🆕对外接口：往「概念袋」放回一个概念
+    pub fn put_back_concept(&mut self, concept: Concept) -> Option<Concept> {
+        self.concepts.put_back(concept)
+    }
+}
+
+impl Default for Memory {
+    fn default() -> Self {
+        // * 🚩超参数实现了[`Copy`]
+        Self::new(DEFAULT_PARAMETERS)
     }
 }

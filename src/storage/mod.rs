@@ -37,6 +37,6 @@ nar_dev_utils::mods! {
     // 袋
     pub use bag;
 
-    // // 记忆区
-    // pub use memory;
+    // 记忆区
+    pub use memory;
 }

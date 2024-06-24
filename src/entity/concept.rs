@@ -61,11 +61,11 @@ impl Concept {
         term: Term,
         task_link_forgetting_rate: usize,
         term_link_forgetting_rate: usize,
-        initial_budget: &impl Budget,
+        initial_budget: BudgetValue,
         link_templates_to_self: Vec<TermLinkTemplate>,
     ) -> Self {
         const PARAMETERS: Parameters = DEFAULT_PARAMETERS;
-        let token = Token::new(term.name(), BudgetValue::from_other(initial_budget));
+        let token = Token::new(term.name(), initial_budget);
         let questions = ArrayBuffer::new(PARAMETERS.maximum_questions_length);
         let beliefs = ArrayRankTable::new(
             PARAMETERS.maximum_belief_length,
@@ -209,8 +209,8 @@ impl Concept {
             if task_link.novel(&term_link, time) {
                 return Some(term_link);
             }
-            // * 🚩当即放回
-            self.term_links.put_back(term_link);
+            // * 🚩当即放回（可能会销毁旧的词项链）
+            let _ = self.term_links.put_back(term_link);
         }
         None
     }

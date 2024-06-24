@@ -7,7 +7,7 @@ use super::{
 use crate::{
     entity::{Item, ShortFloat},
     global::Float,
-    inference::{BudgetFunctions, BudgetInference},
+    inference::{Budget, BudgetFunctions, BudgetInference},
     nars::DEFAULT_PARAMETERS,
     util::ToDisplayAndBrief,
 };
@@ -313,7 +313,7 @@ impl<E: Item> Bag<E> {
     /// # 📄OpenNARS
     ///
     /// 🈚
-    fn init(&mut self) {
+    pub fn init(&mut self) {
         /* itemTable = new ArrayList<>(TOTAL_LEVEL);
         for (int i = 0; i < TOTAL_LEVEL; i++) {
             itemTable.add(new LinkedList<E>());
@@ -400,6 +400,7 @@ impl<E: Item> Bag<E> {
     /// @param key The key of the Item
     /// @return The Item with the given key
     #[inline(always)]
+    #[must_use]
     pub fn get(&self, key: &str) -> Option<&E> {
         self.item_map.get(key)
     }
@@ -407,6 +408,7 @@ impl<E: Item> Bag<E> {
     /// * 🎯【2024-04-28 09:08:14】备用
     /// * 🚩转发内部`name_table`成员
     #[inline(always)]
+    #[must_use]
     pub fn get_mut(&mut self, key: &str) -> Option<&mut E> {
         self.item_map.get_mut(key)
     }
@@ -432,6 +434,7 @@ impl<E: Item> Bag<E> {
     ///
     /// @param newItem The new Item
     /// @return Whether the new Item is added into the Bag
+    #[must_use]
     pub fn put_in(&mut self, new_item: E) -> Option<E> {
         /* String newKey = newItem.getKey();
         E oldItem = nameTable.put(newKey, newItem);
@@ -499,13 +502,15 @@ impl<E: Item> Bag<E> {
     ///
     /// @param oldItem The Item to put back
     /// @return Whether the new Item is added into the Bag
+    #[must_use]
     pub fn put_back(&mut self, mut old_item: E) -> Option<E> {
         self.forget(&mut old_item);
         self.put_in(old_item)
     }
 
     /// 🆕以一定函数修改某个Item的优先级
-    fn forget(&self, item: &mut E) {
+    /// * 🚩改成泛型函数，以便适用在所有地方
+    pub fn forget(&self, item: &mut impl Budget) {
         let new_priority = item.forget(self.forget_rate as Float, Self::__RELATIVE_THRESHOLD);
         item.set_priority(ShortFloat::from_float(new_priority));
     }
@@ -523,6 +528,7 @@ impl<E: Item> Bag<E> {
     /// Bag
     ///
     /// @return The selected Item
+    #[must_use]
     pub fn take_out(&mut self) -> Option<E> {
         /* 📄OpenNARS源码：
         if (nameTable.isEmpty()) { // empty bag
@@ -580,6 +586,7 @@ impl<E: Item> Bag<E> {
     ///
     /// @param key The given key
     /// @return The Item with the key
+    #[must_use]
     pub fn pick_out(&mut self, key: &str) -> Option<E> {
         /* 📄OpenNARS源码：
         E picked = nameTable.get(key);
@@ -863,8 +870,9 @@ mod tests {
         }
 
         // 放回元素
-        bag.put_back(picked);
+        let overflowed = bag.put_back(picked);
         asserts! {
+            overflowed => None, // 没有溢出
             bag.size() == 1, // 放回了
             bag.empty_level(0) => false, // 放入的是第0层
             bag.mass() == 1, // 放进第0层，获得(0+1)的重量
@@ -890,8 +898,9 @@ mod tests {
         }
 
         // 放回元素，其中会有「遗忘」的操作
-        bag.put_back(taken);
+        let overflowed = bag.put_back(taken);
         asserts! {
+            overflowed => None, // 没有溢出
             bag.size() == 1, // 放回了
             bag.empty_level(0) => true, // 放入的不再是第0层
             bag.empty_level(Bag1::__TOTAL_LEVEL-1) => false, // 放入的是最高层
@@ -982,8 +991,9 @@ mod tests {
 
         // 放回元素
         for (i, picked) in picked_items.into_iter().enumerate() {
-            bag.put_back(picked); // 此时预算值也改变了：会衰减
+            let overflowed = bag.put_back(picked); // 此时预算值也改变了：会衰减
             asserts! {
+                overflowed => None, // 没有溢出
                 bag.size() == i + 1, // 放回了
                 // bag._empty_level(0) => false, // 放入的是第0层
             }
@@ -1004,7 +1014,7 @@ mod tests {
 
         // 放回元素
         for (i, taken) in taken_items.into_iter().enumerate() {
-            bag.put_back(taken);
+            let _ = bag.put_back(taken);
             asserts! {
                 bag.size() == i + 1, // 放回了
                 // bag._empty_level(0) => true, // 放入的不再是第0层
@@ -1062,7 +1072,11 @@ mod tests {
             println!("\t{}", taken.budget());
 
             //放回元素
-            bag.put_back(taken);
+            let overflowed = bag.put_back(taken);
+            assert_eq!(
+                overflowed,
+                None // 没有溢出
+            )
         }
         println!("{}", bag.to_display_long());
 

@@ -21,8 +21,8 @@ pub mod storage;
 // 推理
 pub mod inference;
 
-// // 控制
-// pub mod control;
+// 控制
+pub mod control;
 
 // 虚拟机
 pub mod vm;
