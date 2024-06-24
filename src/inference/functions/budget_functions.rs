@@ -83,6 +83,10 @@ pub trait BudgetFunctions: Budget {
         link_priority | term_complexity_factor
     }
 
+    /// # 📄OpenNARS
+    ///
+    /// Evaluate the quality of the judgment as a solution to a problem
+    /// * ⚠️这个返回值必须在0~1之间
     fn solution_quality(query: &impl Sentence, solution: &impl Judgement) -> ShortFloat {
         // * 🚩根据「一般疑问 | 特殊疑问/目标」拆解
         // * 📝一般疑问 ⇒ 解の信度
