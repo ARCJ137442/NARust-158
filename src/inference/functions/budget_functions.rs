@@ -1,17 +1,12 @@
 //! 🎯复刻OpenNARS `nars.inference.BudgetFunctions`
 
 use crate::{
+    debug_assert_matches,
     entity::*,
     global::*,
     inference::{Budget, Truth},
+    language::Term,
 };
-
-pub struct ReviseResult {
-    pub new_budget: BudgetValue,
-    pub new_task_budget: BudgetValue,
-    pub new_task_link_budget: Option<BudgetValue>,
-    pub new_belief_link_budget: Option<BudgetValue>,
-}
 
 /// 预算函数
 /// * 🚩【2024-05-03 14:48:13】现在仍依照OpenNARS原意「直接创建新值」
@@ -36,13 +31,17 @@ pub trait BudgetFunctions: Budget {
     ///
     /// @param t The truth value of a judgement
     /// @return The quality of the judgement, according to truth value only
-    fn truth_to_quality(t: &impl Truth) -> ShortFloat {
+    fn truth_to_quality(truth: &impl Truth) -> ShortFloat {
+        // * 🚩现在从更原始（无需反复转换）的`_float`函数中来
+        ShortFloat::from_float(Self::truth_to_quality_float(truth))
+    }
+    fn truth_to_quality_float(truth: &impl Truth) -> Float {
         // * 🚩真值⇒质量：期望与「0.75(1-期望)」的最大值
         // * 📝函数：max(c * (f - 0.5) + 0.5, 0.375 - 0.75 * c * (f - 0.5))
         // * 📍最小值：当exp=3/7时，全局最小值为3/7（max的两端相等）
         // * 🔑max(x,y) = (x+y+|x-y|)/2
-        let exp = t.expectation();
-        ShortFloat::from_float(exp.max((1.0 - exp) * 0.75))
+        let exp = truth.expectation();
+        exp.max((1.0 - exp) * 0.75)
     }
 
     /// 模拟`BudgetFunctions.rankBelief`
@@ -136,41 +135,41 @@ pub trait BudgetFunctions: Budget {
     /// 统一的「修正规则」预算函数
     /// * 🚩依照改版OpenNARS，从旧稿中重整
     /// * ✅完全脱离「推理上下文」仅有纯粹的「真值/预算值」计算
+    /// * ✅其中对「任务链可空性=信念链可空性」做断言：`feedBackToLinks == current_links_budget.is_some()`
     fn revise(
         new_belief_truth: &impl Truth, // from task
         old_belief_truth: &impl Truth, // from belief
         revised_truth: &impl Truth,
         current_task_budget: &impl Budget,
-        current_task_link_budget: Option<&impl Budget>,
-        current_belief_link_budget: Option<&impl Budget>,
+        current_links_budget: Option<[&impl Budget; 2]>,
     ) -> ReviseResult {
         // * 🚩计算落差 | t = task, b = belief
         let dif_to_new_task =
             ShortFloat::from_float(revised_truth.expectation_abs_dif(new_belief_truth));
         let dif_to_old_belief =
             ShortFloat::from_float(revised_truth.expectation_abs_dif(old_belief_truth));
-        // * 🚩若有：反馈到任务链、信念链
-        let new_task_link_budget = current_task_link_budget.map(|budget| {
-            // * 📝当前任务链 降低预算：
-            // * * p = link & !difT
-            // * * d = link & !difT
-            // * * q = link
-            BudgetValue::new(
-                budget.priority() & !dif_to_new_task,
-                budget.durability() & !dif_to_new_task,
-                budget.quality(),
-            )
-        });
-        let new_belief_link_budget = current_belief_link_budget.map(|budget| {
-            // * 📝当前信念链 降低预算：
-            // * * p = link & !difB
-            // * * d = link & !difB
-            // * * q = link
-            BudgetValue::new(
-                budget.priority() & !dif_to_old_belief,
-                budget.durability() & !dif_to_old_belief,
-                budget.quality(),
-            )
+        // * 🚩若有：反馈到 [任务链, 信念链]
+        let new_links_budget = current_links_budget.map(|[t_budget, b_budget]| {
+            [
+                // * 📝当前任务链 降低预算：
+                // * * p = link & !difT
+                // * * d = link & !difT
+                // * * q = link
+                BudgetValue::new(
+                    t_budget.priority() & !dif_to_new_task,
+                    t_budget.durability() & !dif_to_new_task,
+                    t_budget.quality(),
+                ),
+                // * 📝当前信念链 降低预算：
+                // * * p = link & !difB
+                // * * d = link & !difB
+                // * * q = link
+                BudgetValue::new(
+                    b_budget.priority() & !dif_to_old_belief,
+                    b_budget.durability() & !dif_to_old_belief,
+                    b_budget.quality(),
+                ),
+            ]
         });
         // * 🚩用落差降低优先级、耐久度
         // * 📝当前任务 降低预算：
@@ -201,8 +200,7 @@ pub trait BudgetFunctions: Budget {
         ReviseResult {
             new_budget,
             new_task_budget,
-            new_task_link_budget,
-            new_belief_link_budget,
+            new_links_budget,
         }
     }
 
@@ -363,11 +361,216 @@ pub trait BudgetFunctions: Budget {
         let q = self.quality().max(other.quality());
         BudgetValue::new(p, d, q)
     }
+
+    /// Forward inference result and adjustment
+    fn forward(truth: Option<&impl Truth>, content: Option<&Term>) -> BudgetInferenceParameters {
+        // * 📝真值转质量，用不到词项
+        debug_assert_matches!((truth, content), (Some(..), None));
+        let inference_quality = truth.map_or(ShortFloat::ONE, Self::truth_to_quality);
+        let complexity = 1;
+        BudgetInferenceParameters {
+            inference_quality, // 默认值：1
+            complexity,
+        }
+    }
+
+    /// Backward inference result and adjustment, stronger case
+    fn backward(truth: Option<&impl Truth>, content: Option<&Term>) -> BudgetInferenceParameters {
+        // * 📝真值转质量，用不到词项
+        debug_assert_matches!((truth, content), (Some(..), None));
+        let inference_quality = truth.map_or(ShortFloat::ONE, Self::truth_to_quality);
+        let complexity = 1;
+        BudgetInferenceParameters {
+            inference_quality, // 默认值：1
+            complexity,
+        }
+    }
+
+    /// Backward inference result and adjustment, weaker case
+    fn backward_weak(
+        truth: Option<&impl Truth>,
+        content: Option<&Term>,
+    ) -> BudgetInferenceParameters {
+        // * 📝真值转质量，用不到词项
+        debug_assert_matches!((truth, content), (Some(..), None));
+        let inference_quality =
+            ShortFloat::W2C1() * truth.map_or(ShortFloat::ONE, Self::truth_to_quality);
+        let complexity = 1;
+        BudgetInferenceParameters {
+            inference_quality, // 默认值：1
+            complexity,
+        }
+    }
+
+    /// Forward inference with CompoundTerm conclusion
+    fn compound_forward(
+        truth: Option<&impl Truth>,
+        content: Option<&Term>,
+    ) -> BudgetInferenceParameters {
+        // * 📝真值转质量，用到词项的复杂度
+        debug_assert_matches!((truth, content), (Some(..), Some(..)));
+        let inference_quality = truth.map_or(ShortFloat::ONE, Self::truth_to_quality);
+        let complexity = content.map_or(1, Term::complexity);
+        BudgetInferenceParameters {
+            inference_quality, // 默认值：1
+            complexity,        // 默认值：1
+        }
+    }
+
+    /// Backward inference with CompoundTerm conclusion, stronger case
+    fn compound_backward(
+        truth: Option<&impl Truth>,
+        content: Option<&Term>,
+    ) -> BudgetInferenceParameters {
+        // * 📝用到词项的复杂度，用不到真值
+        debug_assert_matches!((truth, content), (None, Some(..)));
+        let inference_quality = ShortFloat::ONE;
+        let complexity = content.map_or(1, Term::complexity);
+        BudgetInferenceParameters {
+            inference_quality,
+            complexity, // 默认值：1
+        }
+    }
+
+    /// Backward inference with CompoundTerm conclusion, weaker case
+    fn compound_backward_weak(
+        truth: Option<&impl Truth>,
+        content: Option<&Term>,
+    ) -> BudgetInferenceParameters {
+        // * 📝用到词项的复杂度，用不到真值
+        debug_assert_matches!((truth, content), (None, Some(..)));
+        let inference_quality = ShortFloat::W2C1();
+        let complexity = content.map_or(1, Term::complexity);
+        BudgetInferenceParameters {
+            inference_quality,
+            complexity, // 默认值：1
+        }
+    }
+
+    /// 从「预算推理函数 枚举」到「预算推理函数指针」
+    fn budget_inference_function_from<T: Truth>(
+        function_enum: BudgetInferenceFunction,
+    ) -> BudgetInferenceF<T> {
+        use BudgetInferenceFunction::*;
+        match function_enum {
+            Forward => Self::forward,
+            Backward => Self::backward,
+            BackwardWeak => Self::backward_weak,
+            CompoundForward => Self::compound_forward,
+            CompoundBackward => Self::compound_backward,
+            CompoundBackwardWeak => Self::compound_backward_weak,
+        }
+    }
+    /// Common processing for all inference step
+    ///
+    /// @param inferenceQuality [] Quality of the inference
+    /// @param complexity       [] Syntactic complexity of the conclusion
+    /// @return [] Budget of the conclusion task
+    fn budget_inference<T: Truth>(
+        function: BudgetInferenceFunction,
+        truth: Option<&T>,
+        content: Option<&Term>,
+        task_link_budget: &impl Budget,
+        belief_link_budget: Option<&impl Budget>,
+        target_activation: ShortFloat,
+    ) -> BudgetInferenceResult {
+        // * 🚩应用函数，提取其中的「推理优先级」和「复杂度」
+        let budget_inference_function = Self::budget_inference_function_from::<T>(function);
+        let BudgetInferenceParameters {
+            inference_quality,
+            complexity,
+        } = budget_inference_function(truth, content);
+        // * 🚩获取「任务链」和「信念链」的优先级（默认0）与耐久度（默认1）
+        // * 📝p = self ?? 0
+        // * 📝d = self ?? 1
+        let [t_link_p, t_link_d] = [task_link_budget.priority(), task_link_budget.durability()];
+        let [b_link_p, b_link_d] = match belief_link_budget {
+            // * 🚩有信念链⇒取其值
+            Some(budget) => [budget.priority(), budget.durability()],
+            // * 🚩无信念链⇒默认为[0, 1]
+            None => [ShortFloat::ZERO, ShortFloat::ONE],
+        };
+        // * 🚩更新预算
+        // * 📝p = task | belief
+        // * 📝d = (task / complexity) & belief
+        // * 📝q = inferenceQuality / complexity
+        let [p, d, q] = [
+            t_link_p | b_link_p,
+            (t_link_d / complexity) & b_link_d,
+            inference_quality / complexity,
+        ];
+        // * 🚩有信念链⇒更新信念链预算值
+        // * 🚩【2024-06-20 17:11:30】现在返回一个新的预算值
+        let new_belief_link_budget = belief_link_budget.map(|b_link_budget| {
+            // * 📌此处仅在「概念推理」中出现：能使用可空值处理
+            // * 📝p = belief | quality | targetActivation
+            // * 📝d = belief | quality
+            // * 📝q = belief
+            // * 🚩提升优先级
+            let [b_link_p, b_link_d, b_link_q] = b_link_budget.pdq();
+            BudgetValue::new(b_link_p | q | target_activation, b_link_d | q, b_link_q)
+        });
+        // * 🚩返回预算值
+        BudgetInferenceResult {
+            new_budget: BudgetValue::new(p, d, q),
+            new_belief_link_budget,
+        }
+    }
 }
+
+/// 修正规则的预算推理结果
+/// * 🎯用于[`BudgetFunctions::revise`]
+pub struct ReviseResult {
+    /// 新预算
+    pub new_budget: BudgetValue,
+    /// 新任务预算
+    pub new_task_budget: BudgetValue,
+    /// [新任务链预算, 新信念链预算]（可空）
+    /// * 📌左边任务链，右边信念链
+    /// * 🎯统一二者的可空性 from `feedbackToLinks`
+    pub new_links_budget: Option<[BudgetValue; 2]>,
+}
+
+mod budget_inference_functions {
+    use super::*;
+
+    pub struct BudgetInferenceParameters {
+        /// * 🚩目前只用于「预算推理」的被除数（除以复杂度）上
+        pub inference_quality: ShortFloat,
+        pub complexity: usize,
+    }
+
+    /// 统一的「预算值参数计算函数」指针类型（带泛型）
+    pub type BudgetInferenceF<T> = fn(Option<&T>, Option<&Term>) -> BudgetInferenceParameters;
+
+    /// 所有可用的预算值函数
+    /// * 🎯统一呈现「在推理过程中计算预算值」的「预算超参数」
+    pub enum BudgetInferenceFunction {
+        /// 正向推理
+        Forward,
+        /// 反向强推理
+        Backward,
+        /// 反向弱推理
+        BackwardWeak,
+        /// 复合正向推理
+        CompoundForward,
+        /// 复合反向强推理
+        CompoundBackward,
+        /// 复合反向弱推理
+        CompoundBackwardWeak,
+    }
+
+    pub struct BudgetInferenceResult {
+        /// 预算推理算出的新预算
+        pub new_budget: BudgetValue,
+        /// 预算推理算出的「新信念链预算」
+        pub new_belief_link_budget: Option<BudgetValue>,
+    }
+}
+pub use budget_inference_functions::*;
 
 /// 自动实现「预算函数」
 /// * 🎯直接在「预算值」上加功能
-/// * 🚩现在只为「具体的值」（带有「构造/转换」函数的类型）实现
 impl<B: Budget> BudgetFunctions for B {}
 
 /// TODO: 单元测试

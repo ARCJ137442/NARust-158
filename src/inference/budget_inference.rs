@@ -233,9 +233,8 @@ pub trait BudgetInference: Budget {
     // }
 }
 
-/// 自动实现「预算函数」
+/// 自动实现「预算推理」
 /// * 🎯直接在「预算值」上加功能
-/// * 🚩现在只为「具体的值」（带有「构造/转换」函数的类型）实现
 impl<B: Budget> BudgetInference for B {}
 
 /// TODO: 单元测试

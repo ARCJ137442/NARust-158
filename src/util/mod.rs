@@ -31,3 +31,11 @@ macro_rules! ok {
         Ok($($code)*)
     };
 }
+
+/// 测试用宏，用于简化调试模式断言
+#[macro_export]
+macro_rules! debug_assert_matches {
+    ($value:expr, $pattern:pat $(, $($tail:tt)*)?) => {
+        debug_assert!(matches!($value, $pattern) $(, $($tail)*)?)
+    };
+}

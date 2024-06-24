@@ -11,7 +11,7 @@
 
 use crate::{global::Float, impl_display_from_to_display, util::ToDisplayAndBrief};
 use narsese::api::EvidentNumber;
-use std::ops::{BitAnd, BitOr, Not};
+use std::ops::{Add, BitAnd, BitOr, Div, Mul, Not, Sub};
 use thiserror::Error;
 
 /// 用作「短浮点」的整数类型
@@ -295,7 +295,7 @@ impl TryFrom<Float> for ShortFloat {
 }
 
 // 数学方法 //
-impl std::ops::Add for ShortFloat {
+impl Add for ShortFloat {
     type Output = Self;
 
     /// 内部值相加，但会检查越界
@@ -309,7 +309,7 @@ impl std::ops::Add for ShortFloat {
     }
 }
 
-impl std::ops::Sub for ShortFloat {
+impl Sub for ShortFloat {
     type Output = Self;
 
     /// 内部值相减，无需检查越界
@@ -323,7 +323,7 @@ impl std::ops::Sub for ShortFloat {
     }
 }
 
-impl std::ops::Mul for ShortFloat {
+impl Mul for ShortFloat {
     type Output = Self;
 
     /// 内部值相乘，无需检查越界
@@ -345,7 +345,7 @@ fn mul_div(x: UShort, y: UShort) -> UShort {
     (x * y) / SHORT_MAX
 }
 
-impl std::ops::Div for ShortFloat {
+impl Div for ShortFloat {
     type Output = Self;
 
     /// 内部值相除，会检查越界
@@ -360,6 +360,26 @@ impl std::ops::Div for ShortFloat {
         // * 📝↑采用「先乘后除」的方法，最大保留精度
         // 相除、构造、返回
         Self::new((self.value * SHORT_MAX) / rhs.value).unwrap()
+    }
+}
+
+/// 整数乘法
+impl Mul<usize> for ShortFloat {
+    type Output = Self;
+
+    /// * 🚩暂且调用两次转换，在保证「使用方便」的同时保证「效果等同」
+    fn mul(self, rhs: usize) -> Self::Output {
+        Self::from_float(self.to_float().mul(rhs as Float))
+    }
+}
+
+/// 整数除法
+impl Div<usize> for ShortFloat {
+    type Output = Self;
+
+    /// * 🚩暂且调用两次转换，在保证「使用方便」的同时保证「效果等同」
+    fn div(self, rhs: usize) -> Self::Output {
+        Self::from_float(self.to_float().div(rhs as Float))
     }
 }
 

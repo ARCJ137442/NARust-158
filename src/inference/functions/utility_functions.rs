@@ -207,15 +207,26 @@ impl ShortFloat {
     /// @param w Weight of evidence, a non-negative real number
     /// @return The corresponding confidence, in [0, 1)
     pub fn w2c(w: Float) -> Self {
+        Self::from_float(Self::w2c_float(w))
+    }
+
+    /// 🎯能利用尽量直接用，避免重复转换
+    pub fn w2c_float(w: Float) -> Float {
         /* 📄OpenNARS源码：
         return w / (w + Parameters.HORIZON); */
-        Self::from_float(w / (w + DEFAULT_PARAMETERS.horizon))
+        w / (w + DEFAULT_PARAMETERS.horizon)
     }
 
     /// 在改版OpenNARS中是常量，在此处因为「常量函数难以构建」改为变量
     #[allow(non_snake_case)]
     pub fn W2C1() -> ShortFloat {
         Self::w2c(1.0)
+    }
+
+    /// 在改版OpenNARS中是常量，在此处因为「常量函数难以构建」改为变量
+    #[allow(non_snake_case)]
+    pub fn W2C1_float() -> Float {
+        Self::w2c_float(1.0)
     }
 
     /// 从真值的「c值」到「w值」
