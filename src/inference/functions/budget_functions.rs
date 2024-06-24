@@ -68,12 +68,19 @@ pub trait BudgetFunctions: Budget {
 
     /* ----- Functions used both in direct and indirect processing of tasks ----- */
 
-    // TODO: 有待「概念」完工
-    // /// 概念的「总体优先级」
-    // /// * 📝用于概念的「激活」函数上
-    // /// Recalculate the quality of the concept [to be refined to show extension/intension balance]
-    fn concept_total_quality(_concept: &()) -> ShortFloat {
-        todo!()
+    /// 概念的「总体优先级」
+    /// * 📝用于概念的「激活」函数上
+    /// Recalculate the quality of the concept [to be refined to show extension/intension balance]
+    fn concept_total_quality(concept: &Concept) -> ShortFloat {
+        // * 🚩计算所有词项链的「平均优先级」
+        let link_priority = concept.term_links_average_priority();
+        let link_priority = ShortFloat::from_float(link_priority);
+        // * 🚩词项复杂性指标：自身复杂性倒数
+        let term_complexity_factor = 1.0 / concept.term().complexity() as Float;
+        let term_complexity_factor = ShortFloat::from_float(term_complexity_factor);
+        // * 🚩总体：任意更大就行；结构简单的基本总是最好的；词项越复杂，质量下限越低
+        // * 📝计算方法：扩展逻辑或
+        link_priority | term_complexity_factor
     }
 
     fn solution_quality(query: &impl Sentence, solution: &impl Judgement) -> ShortFloat {
@@ -92,13 +99,6 @@ pub trait BudgetFunctions: Budget {
     }
 
     /// 模拟`BudgetFunctions.solutionEval`
-    /// * 🚩🆕【2024-05-04 00:21:53】仍然是脱离有关「记忆区」「词项链」「任务」等「附加点」的
-    ///   * ❓后续是不是又要做一次「参数预装填」
-    /// * ❓这个似乎涉及到「本地规则」的源码
-    ///   * 💫TODO: 到底实际上该不该放这儿（不应该放本地规则去吗？）
-    /// * 📝似乎的确只出现在「本地规则」的`trySolution`方法中
-    ///   * 💫并且那个方法还要修改记忆区「做出回答」，错综复杂
-    /// * 🚩【2024-05-04 00:25:17】暂时搁置
     /// * ✅【2024-06-23 01:37:36】目前已按照改版OpenNARS设置
     ///
     /// # 📄OpenNARS
@@ -264,7 +264,6 @@ pub trait BudgetFunctions: Budget {
 
     /* ----------------------- Concept ----------------------- */
 
-    // TODO: 有待更新：要计算「概念」的「总体质量」
     /// 模拟`BudgetFunctions.activate`
     /// * 🚩【2024-05-02 20:55:40】虽然涉及「概念」，但实际上只用到了「概念作为预算值的部分」
     /// * 📌【2024-05-02 20:56:11】目前要求「概念」一方使用同样的「短浮点」
@@ -277,22 +276,19 @@ pub trait BudgetFunctions: Budget {
     ///
     /// @param concept The concept
     /// @param budget  The budget for the new item
-    fn activate(&mut self, budget: &impl Budget) {
-        /* 📄OpenNARS源码：
-        float oldPri = concept.getPriority();
-        float priority = or(oldPri, budget.getPriority());
-        float durability = aveAri(concept.getDurability(), budget.getDurability());
-        float quality = concept.getQuality();
-        concept.setPriority(priority);
-        concept.setDurability(durability);
-        concept.setQuality(quality); */
-        let old_pri = self.priority();
-        let priority = old_pri | budget.priority();
-        let durability = ShortFloat::arithmetical_average([self.durability(), budget.durability()]);
-        // let quality = self.quality(); // ! 这俩不变，可以抵消
-        self.set_priority(priority);
-        self.set_durability(durability);
-        // self.set_quality(quality) // ! 这俩不变，可以抵消
+    #[doc(alias = "activate")]
+    fn activate_to_concept(&self, concept: &Concept) -> BudgetValue {
+        // * 🚩直接计算
+        let [cp, cd] = [concept.priority(), concept.durability()];
+        let [bp, bd] = [self.priority(), self.durability()];
+        // * 📝优先级 = 概念 | 参考
+        // * 📝耐久度 = (概念 + 参考) / 2
+        // * 📝质量 = 综合所有词项链后的新「质量」
+        BudgetValue::new(
+            cp | bp,
+            ShortFloat::arithmetical_average([cd, bd]),
+            Self::concept_total_quality(concept),
+        )
     }
 
     /* ---------------- Bag functions, on all Items ------------------- */
