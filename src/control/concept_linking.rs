@@ -112,24 +112,23 @@ fn prepare_component_links(
                 }
                 /* 第三层元素 */
                 // * 🚩直接处理 @ 第三层
-                let transform_t2 = t2.instanceof_product() || t2.instanceof_image();
-                if transform_t2 {
-                    if let Some(t2) = t2.as_compound() {
-                        // * 🚩NAL-4「转换」相关 | 构建「复合→复合」的「转换」类型（仍然到复合词项）
-                        for (k, t3) in t2.components.iter().enumerate() {
-                            if t3.is_constant() {
-                                let indexes = match term_link_type {
-                                    // * 📝此处若是「复合条件」即为最深第四层
-                                    TLinkType::CompoundCondition => vec![0, i, j, k],
-                                    // * 📝否则仅第三层
-                                    _ => vec![i, j, k],
-                                };
-                                links.push(TermLinkTemplate::new_template(
-                                    t3.clone(),
-                                    TLinkType::Transform,
-                                    indexes,
-                                ));
-                            }
+                if let Some(t2) =
+                    t2.as_compound_and(|t2| t2.instanceof_product() || t2.instanceof_image())
+                {
+                    // * 🚩NAL-4「转换」相关 | 构建「复合→复合」的「转换」类型（仍然到复合词项）
+                    for (k, t3) in t2.components.iter().enumerate() {
+                        if t3.is_constant() {
+                            let indexes = match term_link_type {
+                                // * 📝此处若是「复合条件」即为最深第四层
+                                TLinkType::CompoundCondition => vec![0, i, j, k],
+                                // * 📝否则仅第三层
+                                _ => vec![i, j, k],
+                            };
+                            links.push(TermLinkTemplate::new_template(
+                                t3.clone(),
+                                TLinkType::Transform,
+                                indexes,
+                            ));
                         }
                     }
                 }

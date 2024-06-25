@@ -369,6 +369,7 @@ impl Term {
     /// 🆕尝试将词项作为「复合词项」
     /// * 📌通过判断「内部元素枚举」的类型实现
     /// * 🚩在其内部元素不是「复合词项」时，会返回`None`
+    #[must_use]
     pub fn as_compound(&self) -> Option<CompoundTermRef> {
         matches_or!(
             ?self.components,
@@ -379,6 +380,20 @@ impl Term {
         )
     }
 
+    /// 🆕尝试将词项作为「复合词项」
+    /// * 📌通过判断「内部元素枚举」的类型实现
+    /// * 🚩在其内部元素不是「复合词项」时，会返回`None`
+    #[must_use]
+    pub fn as_compound_and(
+        &self,
+        predicate: impl FnOnce(&CompoundTermRef) -> bool,
+    ) -> Option<CompoundTermRef> {
+        match self.as_compound() {
+            Some(compound) if predicate(&compound) => Some(compound),
+            _ => None,
+        }
+    }
+
     /// 🆕尝试将词项作为「复合词项」（未检查）
     /// * 🚩通过判断「内部元素枚举」的类型实现
     ///
@@ -386,6 +401,7 @@ impl Term {
     ///
     /// * ⚠️代码是不安全的：必须在解包前已经假定是「复合词项」
     /// * 📄逻辑参考自[`Option::unwrap_unchecked`]
+    #[must_use]
     pub unsafe fn as_compound_unchecked(&self) -> CompoundTermRef {
         // * 🚩在debug模式下检查
         debug_assert!(self.is_compound(), "转换前必须假定其为复合词项");
@@ -402,6 +418,7 @@ impl Term {
 
     /// 🆕尝试将词项作为「复合词项」
     /// * ℹ️[`Self::as_compound`]的可变版本
+    #[must_use]
     pub fn as_compound_mut(&mut self) -> Option<CompoundTermRefMut> {
         matches_or! {
             // * 📌此处需要可变借用，才能在下头正常把Box变成可变引用（而无需Deref）
@@ -423,6 +440,7 @@ impl Term {
     ///
     /// * ⚠️代码是不安全的：必须在解包前已经假定是「复合词项」
     /// * 📄逻辑参考自[`Option::unwrap_unchecked`]
+    #[must_use]
     pub unsafe fn as_compound_mut_unchecked(&mut self) -> CompoundTermRefMut {
         // * 🚩在debug模式下检查
         debug_assert!(self.is_compound(), "转换前必须假定其为复合词项");
