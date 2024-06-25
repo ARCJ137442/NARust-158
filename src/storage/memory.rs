@@ -9,10 +9,10 @@
 use super::Bag;
 use crate::{
     control::prepare_term_link_templates,
+    control::{Parameters, DEFAULT_PARAMETERS},
     entity::{BudgetValue, Concept, Item},
     inference::{Budget, BudgetFunctions},
     language::Term,
-    nars::{Parameters, DEFAULT_PARAMETERS},
 };
 
 pub struct Memory {

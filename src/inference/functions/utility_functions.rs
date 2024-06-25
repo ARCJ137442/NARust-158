@@ -10,9 +10,9 @@
 //!   * `c2w`
 //! * ✅【2024-05-03 19:28:13】基本完成所有单元测试
 
+use crate::control::DEFAULT_PARAMETERS;
 use crate::entity::ShortFloat;
 use crate::global::Float;
-use crate::nars::DEFAULT_PARAMETERS;
 use nar_dev_utils::pipe;
 use std::ops::Not;
 
@@ -198,7 +198,7 @@ impl ShortFloat {
     }
 
     /// 从真值的「w值」到「c值」
-    /// * 📄超参数`Parameters.HORIZON`参见[`crate::nars::Parameters`]
+    /// * 📄超参数`Parameters.HORIZON`参见[`crate::control::Parameters`]
     ///
     /// # 📄OpenNARS
     ///

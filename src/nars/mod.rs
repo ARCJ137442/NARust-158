@@ -23,8 +23,4 @@
 //! `ReasonerBatch`: controls the interaction between the memory and the communication channels.
 
 nar_dev_utils::mods! {
-    // 超参数
-    pub use parameters;
-    // 推理器
-    pub use reasoner;
 }

@@ -3,8 +3,8 @@
 //! * ✅【2024-05-15 16:57:37】初代全功能实现
 
 use crate::{
+    control::{Parameters, Reasoner, ReasonerConcrete},
     global::{RefCount, RC},
-    nars::{Parameters, Reasoner, ReasonerConcrete},
     types::TypeContext,
 };
 use anyhow::Result;

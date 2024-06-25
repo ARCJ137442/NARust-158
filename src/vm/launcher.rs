@@ -5,7 +5,7 @@
 
 use super::Runtime;
 use crate::{
-    nars::{Parameters, ReasonerConcrete},
+    control::{Parameters, ReasonerConcrete},
     types::TypeContext,
 };
 use anyhow::Result;

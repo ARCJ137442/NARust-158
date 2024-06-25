@@ -1,5 +1,5 @@
 //! 🆕抽象出「输入通道」与「输出通道」的共同特征
-//! * 🎯替代[推理器](crate::nars::Reasoner)中的`removeXXXXXChannel`方法
+//! * 🎯替代[推理器](crate::control::Reasoner)中的`removeXXXXXChannel`方法
 //!   * 不违反借用规则，同时也无需判等
 
 // use crate::types::TypeContext;

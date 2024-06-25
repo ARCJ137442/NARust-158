@@ -8,6 +8,12 @@
 //! TODO: 【2024-05-22 02:11:59】🚧按照改版重写此模块
 
 nar_dev_utils::mods! {
+    // 超参数
+    pub use parameters;
+
+    // 推理器
+    pub use reasoner;
+
     // // 上下文
     // pub use context;
 

@@ -5,10 +5,10 @@ use super::{
     Distributor,
 };
 use crate::{
+    control::DEFAULT_PARAMETERS,
     entity::{Item, ShortFloat},
     global::Float,
     inference::{Budget, BudgetFunctions, BudgetInference},
-    nars::DEFAULT_PARAMETERS,
     util::ToDisplayAndBrief,
 };
 

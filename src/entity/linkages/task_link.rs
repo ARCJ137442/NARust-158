@@ -3,10 +3,10 @@
 
 use super::{TLink, TLinkType, TLinkage, TermLink, TermLinkTemplate};
 use crate::{
+    control::DEFAULT_PARAMETERS,
     entity::{BudgetValue, Item, Sentence, ShortFloat, Task, Token},
     global::{ClockTime, RC},
     inference::{Budget, Evidential},
-    nars::DEFAULT_PARAMETERS,
     util::{RefCount, ToDisplayAndBrief},
 };
 use nar_dev_utils::join;
