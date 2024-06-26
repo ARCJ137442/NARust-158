@@ -14,12 +14,12 @@ nar_dev_utils::mods! {
     // 推理器
     pub use reasoner;
 
-    // // 上下文
-    // pub use context;
+    // 上下文
+    pub use context;
 
     // 概念链接
     pub use concept_linking;
 
-    // // 全局（工作周期）
-    // pub use global;
+    // 工作过程
+    pub use process;
 }
