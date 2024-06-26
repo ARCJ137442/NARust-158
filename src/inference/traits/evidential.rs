@@ -1,9 +1,7 @@
 //! 复刻抽象的「证据基」特征
 //! * 🎯以「时间戳」为基本结构，使「语句」「任务」直接支持其中的功能
 
-use crate::{
-    control::DEFAULT_PARAMETERS, global::ClockTime, io::symbols::*, util::ToDisplayAndBrief,
-};
+use crate::{global::ClockTime, io::symbols::*, util::ToDisplayAndBrief};
 use nar_dev_utils::{join, JoinTo};
 use narsese::lexical::Stamp as LexicalStamp;
 
@@ -21,9 +19,6 @@ fn set_vec_eq<T: Clone + Ord>(v1: &[T], v2: &[T]) -> bool {
 /// * 🎯抽象描述「时间戳」的特征
 /// * 📝核心：记载一系列「证据时间」，提供「证据是否重复」方法，以避免「重复推理」
 pub trait Evidential: ToDisplayAndBrief {
-    /// 🆕提取出的「最大长度」常量
-    const MAX_EVIDENCE_BASE_LENGTH: usize = DEFAULT_PARAMETERS.maximum_stamp_length;
-
     /// 模拟`Stamp.evidentialBase`、`Stamp.getBase`
     /// * 📝译名为「证据基」
     /// * 🚩【2024-05-05 14:09:16】目前仅使用数组切片，所有权应该在`self`内部存储
@@ -77,7 +72,11 @@ pub trait Evidential: ToDisplayAndBrief {
     ///
     /// @param first  The first Stamp
     /// @param second The second Stamp
-    fn merged_evidential_base(first: &[ClockTime], second: &[ClockTime]) -> Vec<ClockTime> {
+    fn merged_evidential_base(
+        first: &[ClockTime],
+        second: &[ClockTime],
+        max_evidence_base_length: usize,
+    ) -> Vec<ClockTime> {
         /* 📄OpenNARS
         // * 🚩计算新证据基长度：默认长度相加，一定长度后截断
         final int baseLength = Math.min( // * 📝一定程度上允许重复推理：在证据复杂时遗漏一定数据
@@ -113,34 +112,32 @@ pub trait Evidential: ToDisplayAndBrief {
         // * 🚩返回构造好的新证据基
         return evidentialBase; */
         // * 🚩计算新证据基长度：默认长度相加，一定长度后截断
-        let base_length =
-            ClockTime::min(first.len() + second.len(), Self::MAX_EVIDENCE_BASE_LENGTH);
+        let base_length = ClockTime::min(first.len() + second.len(), max_evidence_base_length);
         // * 🚩计算长短证据基
         let [longer, shorter] = match first.len() > second.len() {
             true => [first, second],
             false => [second, first],
         };
-        // * 🚩开始构造并填充数据：拉链式填充，1-2-1-2……
-        let mut i1 = 0;
-        let mut i2 = 0;
+        // * 🚩构造返回值
         let mut j = 0;
         let mut evidential_base = vec![0; base_length];
-        let shorter_len = shorter.len();
-        let longer_len = longer.len();
-        while i2 < shorter_len && j < base_length {
-            evidential_base[j] = longer[i1];
-            i1 += 1;
-            j += 1;
-            evidential_base[j] = shorter[i2];
-            i2 += 1;
-            j += 1;
+        let mut put_in_base = |evidence| {
+            // * 🚩【2024-06-27 00:45:30】使用一个闭包来简化「放置前判断」
+            if j < base_length {
+                evidential_base[j] = evidence;
+                j += 1;
+            }
+        };
+        // * 🚩填充数据：拉链式填充，1-2-1-2……
+        for (&evidence_l, &evidence_s) in longer.iter().zip(shorter.iter()) {
+            put_in_base(evidence_l);
+            put_in_base(evidence_s);
         }
         // * 🚩2的长度比1小，所以此后随1填充
-        while i1 < longer_len && j < base_length {
-            evidential_base[j] = longer[i1];
-            i1 += 1;
-            j += 1;
+        for &evidence_l_residual in longer.iter().skip(shorter.len()) {
+            put_in_base(evidence_l_residual);
         }
+        // 返回
         evidential_base
     }
 

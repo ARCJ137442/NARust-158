@@ -8,4 +8,13 @@
 nar_dev_utils::mods! {
     // 推理上下文/导出上下文
     pub use reason_context;
+
+    // 直接推理上下文
+    pub use context_direct;
+
+    // 转换推理上下文
+    pub use context_transform;
+
+    // 概念推理上下文
+    pub use context_concept;
 }

@@ -151,9 +151,13 @@ impl Stamp {
         first: &impl Evidential,
         second: &impl Evidential,
         time: ClockTime,
+        max_evidence_base_length: usize,
     ) -> Self {
-        let merged_base =
-            Self::merged_evidential_base(first.evidential_base(), second.evidential_base());
+        let merged_base = Self::merged_evidential_base(
+            first.evidential_base(),
+            second.evidential_base(),
+            max_evidence_base_length,
+        );
         Self::new(time, merged_base)
     }
 
@@ -173,11 +177,17 @@ impl Stamp {
         first: &impl Evidential,
         second: &impl Evidential,
         time: ClockTime,
+        max_evidence_base_length: usize,
     ) -> Option<Self> {
         // * 🚩有重合证据⇒返回空；无重合证据⇒合并证据
         match first.evidential_overlap(second) {
             true => None,
-            false => Some(Self::from_merge_unchecked(first, second, time)),
+            false => Some(Self::from_merge_unchecked(
+                first,
+                second,
+                time,
+                max_evidence_base_length,
+            )),
         }
     }
 
@@ -286,25 +296,31 @@ mod tests {
             /// * 🚩模式：(【时间戳1`stamp!`】, 【时间戳2`stamp!`】, 创建时间) => 预期【时间戳`stamp!`/None】
             macro test {
                 // 没结果
-                (@SINGLE ( $s1:tt, $s2:tt, $time:expr ) => None ) => {
-                    assert_s_eq!(Option S::from_merge(&stamp!($s1), &stamp!($s2), $time), None::<S>);
+                (@SINGLE ( $s1:tt, $s2:tt, $time:expr, $max_base_l:expr ) => None ) => {
+                    assert_s_eq!(Option S::from_merge(&stamp!($s1), &stamp!($s2), $time, $max_base_l), None::<S>);
                 }
                 // 有结果
-                (@SINGLE ( $s1:tt, $s2:tt, $time:expr ) => $stamp:tt ) => {
-                    assert_s_eq!(Option S::from_merge(&stamp!($s1), &stamp!($s2), $time), Some(stamp!($stamp)));
+                (@SINGLE ( $s1:tt, $s2:tt, $time:expr, $max_base_l:expr ) => $stamp:tt ) => {
+                    assert_s_eq!(Option S::from_merge(&stamp!($s1), &stamp!($s2), $time, $max_base_l), Some(stamp!($stamp)));
                 }
                 // 总模式
                 ( $( $parameters:tt => $expected:tt )* ) => {
                     $( test!( @SINGLE $parameters => $expected ); )*
                 }
             }
-            ({0: 1}, {0: 1}, 1) => None
-            ({0: 1}, {0: 2}, 10) => {10: 2; 1}
-            ({0: 2}, {0: 1}, 10) => {10: 1; 2}
-            ({0: 2; 4; 6}, {0: 1; 3; 5}, 10) => {10: 1; 2; 3; 4; 5; 6}
-            ({1 : 2}, {0 : 1}, 2) => {2 : 1;2} // ! 📄来自OpenNARS实际运行过程 | ⚠️注意：需要是传入`Stamp.make`处的参数（可能中途调换位置）
-            ({13 : 3}, {13 : 1;2}, 13) => {13 : 1;3;2} // ! 📄来自OpenNARS实际运行过程
-            ({34 : 4}, {14 : 1;3;2}, 35) => {35 : 1;4;3;2} // ! 📄来自OpenNARS实际运行过程
+            ({0: 1}, {0: 1}, 1, 8) => None
+            ({0: 1}, {0: 2}, 10, 8) => {10: 2; 1}
+            ({0: 2}, {0: 1}, 10, 8) => {10: 1; 2}
+            ({0: 2; 4; 6}, {0: 1; 3; 5}, 10, 8) => {10: 1; 2; 3; 4; 5; 6}
+            // ! 📄来自OpenNARS实际运行过程
+            ({1 : 2}, {0 : 1}, 2, 8) => {2 : 1;2} // ! ⚠️注意：需要是传入`Stamp.make`处的参数（可能中途调换位置）
+            ({13 : 3}, {13 : 1;2}, 13, 8) => {13 : 1;3;2}
+            ({34 : 4}, {14 : 1;3;2}, 35, 8) => {35 : 1;4;3;2}
+            ({34 : 4}, {14 : 1;3;2}, 35, 4) => {35 : 1;4;3;2}
+            ({34 : 4}, {14 : 1;3;2}, 35, 3) => {35 : 1;4;3}
+            ({34 : 4}, {14 : 1;3;2}, 35, 2) => {35 : 1;4}
+            ({34 : 4}, {14 : 1;3;2}, 35, 1) => {35 : 1}
+            ({34 : 4}, {14 : 1;3;2}, 35, 0) => {35 :}
         }
     }
 

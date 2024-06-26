@@ -11,7 +11,8 @@
 use crate::{
     control::{Parameters, Reasoner},
     entity::{
-        BudgetValue, Concept, JudgementV1, RCTask, Sentence, SentenceV1, Stamp, Task, TruthValue,
+        BudgetValue, Concept, JudgementV1, RCTask, Sentence, SentenceV1, Stamp, Task, TaskLink,
+        TermLink, TruthValue,
     },
     global::{ClockTime, Float, RC},
     inference::Budget,
@@ -102,13 +103,6 @@ pub trait ReasonContext {
     /// * 📌共享引用
     fn current_task_mut(&mut self) -> &mut RCTask;
 
-    /// 重置全局状态
-    /// * 🚩重置「全局随机数生成器」
-    ///
-    /// TODO: 功能实装
-    #[doc(alias = "init")]
-    fn init_global();
-
     /// 让「推理器」吸收「推理上下文」
     /// * 🚩【2024-05-19 18:39:44】现在会在每次「准备上下文⇒推理」的过程中执行
     /// * 🎯变量隔离，防止「上下文串线」与「重复使用」
@@ -116,7 +110,7 @@ pub trait ReasonContext {
     /// * 🚩【2024-05-21 23:17:57】现在迁移到「推理上下文」处，以便进行方法分派
     fn absorbed_by_reasoner(self, reasoner: &mut Reasoner);
 
-    // TODO: 通用功能の默认实现、Core对象
+    // TODO: 将以下逻辑迁移到单独的「自动实现之特征」中
     /// 共用终端逻辑：「激活任务」
     /// # 📄OpenNARS
     ///
@@ -210,16 +204,152 @@ pub trait ReasonContext {
     }
 }
 
+/// 「概念推理（中层）上下文」
+/// * 🎯用于统一「转换推理」与「概念推理」的逻辑
+/// * * 🚩统一的「当前信念」（一致可空）、「用于预算推理的当前信念链」等附加要求
+/// * * ✨更多的「单前提结论」「多前提结论」导出方法
+pub trait ReasonContextConcept: ReasonContext {
+    /// 获取「当前信念」
+    /// * 📌仅在「概念推理」中用到
+    /// * 🚩对于用不到的实现者，只需实现为空
+    fn current_belief(&self) -> Option<&JudgementV1>;
+
+    /// 🆕实用方法：用于简化「推理规则分派」的代码
+    fn has_current_belief(&self) -> bool {
+        self.current_belief().is_some()
+    }
+
+    /// 获取用于「预算推理」的「当前信念链」
+    /// * 📌仅在「概念推理」中非空
+    /// * 🚩对于用不到的实现者，只需实现为空
+    /// * 🎯【2024-06-09 11:25:14】规避对`instanceof DerivationContextReason`的滥用
+    fn belief_link_for_budget_inference(&mut self) -> Option<&mut TermLink>;
+
+    // TODO: 统一迁移到别的模块
+    /// 🆕产生新时间戳 from 单前提
+    fn generate_new_stamp_single(&self) -> Stamp {
+        let current_task = self.current_task().get_();
+        match (current_task.is_judgement(), self.current_belief()) {
+            // * 🚩「当前任务」是判断句 | 没有「当前信念」
+            (true, _) | (_, None) => Stamp::with_old(&*current_task, self.time()),
+            // * 🚩其它 ⇒ 时间戳来自信念
+            // to answer a question with negation in NAL-5 --- move to activated task?
+            (false, Some(belief)) => Stamp::with_old(belief, self.time()),
+        }
+    }
+
+    /// 🆕产生新时间戳 from 双前提
+    fn generate_new_stamp_double(&self) -> Option<Stamp> {
+        let current_task = &*self.current_task().get_();
+        // * 🚩在具有「当前信念」时返回「与『当前任务』合并的时间戳」
+        self.current_belief().map(|belief|
+                // * 📌此处的「时间戳」一定是「当前信念」的时间戳
+                // * 📄理由：最后返回的信念与「成功时比对的信念」一致（只隔着`clone`）
+                 Stamp::from_merge_unchecked(current_task, belief, self.time(), self.max_evidence_base_length()))
+    }
+
+    // * 📄「转换推理上下文」「概念推理上下文」仅作为「当前任务链之目标」
+    // ! 【2024-06-27 00:48:01】但Rust不支持「转换为默认实现」
+
+    /// 获取当前任务链
+    fn current_task_link(&self) -> &TaskLink;
+
+    /// 获取当前任务链（可变）
+    fn current_task_link_mut(&mut self) -> &mut TaskLink;
+
+    /// Shared final operations by all double-premise rules, called from the
+    /// rules except StructuralRules
+    /// * 🚩【2024-05-19 12:44:55】构造函数简化：导出的结论【始终可修正】
+    fn double_premise_task(
+        &mut self,
+        new_content: Term,
+        new_truth: Option<TruthValue>,
+        new_budget: BudgetValue,
+    ) {
+        // * 🚩尝试创建「新时间戳」然后使用之
+        if let Some(new_stamp) = self.generate_new_stamp_double() {
+            let new_truth_revisable = new_truth.map(|truth| (truth, true));
+            self.double_premise_task_full(
+                None,
+                new_content,
+                new_truth_revisable,
+                new_budget,
+                new_stamp,
+            )
+        }
+    }
+
+    /// 🆕其直接调用来自组合规则、匹配规则（修正）
+    /// * 🎯避免对`currentTask`的赋值，解耦调用（并让`currentTask`不可变）
+    /// * 🎯避免对`newStamp`的复制，解耦调用（让「新时间戳」的赋值止步在「推理开始」之前）
+    /// * 🚩【2024-06-27 00:52:39】为避免借用冲突，此处使用[`Option`]区分「传入其它地方引用/使用自身引用」
+    ///   * 有值 ⇒ 使用内部的值
+    ///   * 空值 ⇒ 从`self`中拿取
+    fn double_premise_task_full(
+        &mut self,
+        current_task: Option<&Task>,
+        new_content: Term,
+        new_truth_revisable: Option<(TruthValue, bool)>,
+        new_budget: BudgetValue,
+        new_stamp: Stamp,
+    ) {
+        // * 🚩参考「传入任务/自身默认任务」构造标点
+        let new_punctuation = current_task
+            .unwrap_or(&*self.current_task().get_()) // 立即使用的不可变引用
+            .punctuation();
+        let new_sentence = SentenceV1::new_sentence_from_punctuation(
+            new_content,
+            new_punctuation,
+            new_stamp,
+            new_truth_revisable,
+        );
+        if let Ok(sentence) = new_sentence {
+            let new_task = Task::from_derived(
+                sentence,
+                new_budget,
+                Some(self.current_task().clone()),
+                self.current_belief().cloned(),
+            );
+            // * 🚩正式导出结论（在这之前注销代理）
+            self.derived_task(new_task);
+        }
+    }
+
+    /// 🆕重定向
+    fn double_premise_task_not_revisable(
+        &mut self,
+        new_content: Term,
+        new_truth: Option<TruthValue>,
+        new_budget: BudgetValue,
+    ) {
+        todo!("【2024-06-27 01:10:54】后续再弄")
+    }
+
+    //     /// Shared final operations by all double-premise rules,
+    // /// called from the rules except StructuralRules
+    // double_premise_task_
+}
+
+/// 重置全局状态
+/// * 🚩重置「全局随机数生成器」
+/// * 📌【2024-06-26 23:36:06】目前计划做一个全局的「伪随机数生成器初始化」
+///
+/// TODO: 功能实装
+#[doc(alias = "init")]
+pub fn init_global() {
+    todo!()
+}
+
 /// 🆕内置公开结构体，用于公共读取
 #[derive(Debug)]
-pub struct DerivationContextCore {
+pub struct ReasonContextCore<'this> {
     /// 缓存的「当前时间」
     /// * 🎯与「记忆区」解耦
-    pub time: ClockTime,
+    time: ClockTime,
 
     /// 缓存的「静默值」
     /// * 🚩【2024-05-30 09:02:10】现仅在构造时赋值，其余情况不变
-    pub silence_value: usize,
+    silence_value: usize,
 
     /// 新增加的「任务列表」
     /// * 📍【2024-06-26 20:54:20】因其本身新创建，故可不用「共享引用」
@@ -229,31 +359,86 @@ pub struct DerivationContextCore {
     ///
     /// # 📄OpenNARS
     /// List of new tasks accumulated in one cycle, to be processed in the next cycle
-    pub new_tasks: Vec<Task>,
+    new_tasks: Vec<Task>,
 
     /// 🆕新的NAVM输出
     /// * 🚩用以复刻`exportStrings`与`stringsToRecord`二者
-    pub outputs: Vec<Output>,
+    outputs: Vec<Output>,
 
     /// 当前概念
     ///
     /// # 📄OpenNARS
     ///
     /// The selected Concept
-    pub current_concept: Concept,
-    // TODO: 伪随机生成器
+    current_concept: Concept,
+
+    /// 🆕引用的「超参数」对象
+    parameters: &'this Parameters,
 }
 
-impl DerivationContextCore {
+impl<'this> ReasonContextCore<'this> {
     /// 构造函数 from 推理器
-    pub fn new(reasoner: &Reasoner, current_concept: Concept) -> Self {
+    /// * 📝需要保证「推理器」的生命周期覆盖上下文
+    pub fn new<'p: 'this>(
+        current_concept: Concept,
+        parameters: &'p Parameters,
+        time: ClockTime,
+        silence_value: usize,
+    ) -> Self {
         Self {
-            time: reasoner.time(),
-            silence_value: reasoner.silence_value(),
+            time,
+            silence_value,
             current_concept,
             new_tasks: vec![],
             outputs: vec![],
+            parameters,
         }
+    }
+
+    /// 与[`Self::new`]不同的是：要借用整个推理器
+    pub fn from_reasoner<'r: 'this>(current_concept: Concept, reasoner: &'r Reasoner) -> Self {
+        Self::new(
+            current_concept,
+            reasoner.parameters(),
+            reasoner.time(),
+            reasoner.silence_value(),
+        )
+    }
+}
+
+/// ! ⚠️仅用于「统一委托的方法实现」
+/// * ❗某些方法将不实现
+impl ReasonContextCore<'_> {
+    pub fn time(&self) -> ClockTime {
+        self.time
+    }
+
+    pub fn parameters(&self) -> &Parameters {
+        self.parameters
+    }
+
+    pub fn silence_percent(&self) -> Float {
+        self.silence_value as Float / 100.0
+    }
+
+    pub fn num_new_tasks(&self) -> usize {
+        self.new_tasks.len()
+    }
+
+    pub fn add_new_task(&mut self, task: Task) {
+        self.new_tasks.push(task);
+    }
+
+    pub fn add_output(&mut self, output: Output) {
+        self.outputs.push(output);
+    }
+
+    pub fn current_concept(&self) -> &Concept {
+        &self.current_concept
+    }
+
+    pub fn current_concept_mut(&mut self) -> &mut Concept {
+        &mut self.current_concept
     }
 
     /// 共用的方法：被推理器吸收
