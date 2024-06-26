@@ -50,6 +50,9 @@ pub struct Task {
     best_solution: Option<JudgementV1>,
 }
 
+/// 用于实际传递的「任务」共享引用
+pub type RCTask = RC<Task>;
+
 /// 构造函数
 impl Task {
     /// * 🚩【2024-06-21 23:35:53】对传入的参数「零信任」

@@ -4,8 +4,8 @@
 use super::{TLink, TLinkType, TLinkage, TermLink, TermLinkTemplate};
 use crate::{
     control::DEFAULT_PARAMETERS,
-    entity::{BudgetValue, Item, Sentence, ShortFloat, Task, Token},
-    global::{ClockTime, RC},
+    entity::{BudgetValue, Item, RCTask, Sentence, ShortFloat, Task, Token},
+    global::ClockTime,
     inference::{Budget, Evidential},
     util::{RefCount, ToDisplayAndBrief},
 };
@@ -17,7 +17,7 @@ use std::ops::{Deref, DerefMut};
 /// The reason to separate a Task and a TaskLink is that the same Task can be linked from multiple Concepts, with different BudgetValue.
 pub struct TaskLink {
     /// 内部链接到的任务（共享引用）
-    inner: TLinkage<RC<Task>>,
+    inner: TLinkage<RCTask>,
 
     /// 🆕Item令牌
     token: Token,
@@ -108,7 +108,7 @@ impl TaskLink {
     /// 完全构造函数
     /// * 📌其中的「链接目标」是共享引用
     fn new(
-        target_rc: RC<Task>,
+        target_rc: RCTask,
         budget: BudgetValue,
         link_type: TLinkType,
         indexes: impl Into<Box<[usize]>>,
@@ -145,7 +145,7 @@ impl TaskLink {
 
     /// 🆕传递「链接记录长度」的默认值
     fn with_default_record_len(
-        target_rc: RC<Task>,
+        target_rc: RCTask,
         budget: BudgetValue,
         link_type: TLinkType,
         indexes: impl Into<Box<[usize]>>,
@@ -158,7 +158,7 @@ impl TaskLink {
     /// * 📝【2024-05-30 00:46:38】只在「链接概念到任务」中使用
     /// * 🚩【2024-06-22 12:37:45】此处使用默认长度构建
     pub fn from_template(
-        target_rc: RC<Task>,
+        target_rc: RCTask,
         template: &TermLinkTemplate,
         budget: BudgetValue,
     ) -> Self {
@@ -170,7 +170,7 @@ impl TaskLink {
     /// * 📝仅在「链接到任务」时被构造一次
     /// * 🎯用于推理中识别并分派
     /// * 🚩使用「SELF」类型，并使用空数组
-    pub fn new_self(target_rc: RC<Task>) -> Self {
+    pub fn new_self(target_rc: RCTask) -> Self {
         // * 🚩预算值就是任务的预算值
         let target_ref = target_rc.get_();
         let budget = BudgetValue::from_other(&*target_ref);
