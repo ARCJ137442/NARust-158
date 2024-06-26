@@ -15,6 +15,7 @@ use std::ops::{Deref, DerefMut};
 /// Reference to a Task.
 ///
 /// The reason to separate a Task and a TaskLink is that the same Task can be linked from multiple Concepts, with different BudgetValue.
+#[derive(Debug)]
 pub struct TaskLink {
     /// 内部链接到的任务（共享引用）
     inner: TLinkage<RCTask>,

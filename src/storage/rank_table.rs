@@ -98,6 +98,7 @@ pub trait RankTable<T>: Iterable<T> {
 
 /// 🆕使用「变长数组」实现的「排行表」类型
 /// * 📌直接使用函数指针类型
+#[derive(Debug)]
 pub struct ArrayRankTable<T> {
     /// 内部数组
     inner: Vec<T>,

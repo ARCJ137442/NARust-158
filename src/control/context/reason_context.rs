@@ -8,9 +8,6 @@
 //!   * 🚩【2024-06-26 11:47:30】仍然可能与旧版不同
 #![doc(alias = "derivation_context")]
 
-use narsese::api::NarseseValue;
-use navm::output::Output;
-
 use crate::{
     control::{Parameters, Reasoner},
     entity::{
@@ -22,6 +19,8 @@ use crate::{
     storage::Memory,
     util::{RefCount, ToDisplayAndBrief},
 };
+use narsese::api::NarseseValue;
+use navm::output::Output;
 
 /// 🆕新的「推理上下文」对象
 /// * 📄仿自OpenNARS 3.1.0
@@ -56,8 +55,9 @@ pub trait ReasonContext {
 
     /// 添加「新任务」
     /// * 🎯添加推理导出的任务
-    /// * 🚩需要是「共享引用」
-    fn add_new_task(&mut self, task_rc: RCTask);
+    /// * 🚩【2024-06-26 20:51:20】目前固定为「实际值」
+    ///   * 📌后续在「被推理器吸收」时，才变为「共享引用」
+    fn add_new_task(&mut self, task: Task);
 
     /// 🆕添加「导出的NAVM输出」
     /// * ⚠️不同于OpenNARS，此处集成NAVM中的 [NARS输出](navm::out::Output) 类型
@@ -141,7 +141,7 @@ pub trait ReasonContext {
             content: format!("!!! Activated: {}", task.to_display_long()),
         });
         // // * 🚩若为「问题」⇒输出显著的「导出结论」
-        self.add_new_task(RC::new_(task));
+        self.add_new_task(task);
     }
 
     /// 共用终端逻辑：「导出任务」
@@ -171,7 +171,7 @@ pub trait ReasonContext {
             });
         }
         // * 🚩将「导出的新任务」添加到「新任务表」中
-        self.add_new_task(RC::new_(new_task));
+        self.add_new_task(new_task);
     }
 
     /// 🆕仅源自「修正规则」调用，没有「父信念」
@@ -207,5 +207,69 @@ pub trait ReasonContext {
                 description: error.to_string(),
             }),
         }
+    }
+}
+
+/// 🆕内置公开结构体，用于公共读取
+#[derive(Debug)]
+pub struct DerivationContextCore {
+    /// 缓存的「当前时间」
+    /// * 🎯与「记忆区」解耦
+    pub time: ClockTime,
+
+    /// 缓存的「静默值」
+    /// * 🚩【2024-05-30 09:02:10】现仅在构造时赋值，其余情况不变
+    pub silence_value: usize,
+
+    /// 新增加的「任务列表」
+    /// * 📍【2024-06-26 20:54:20】因其本身新创建，故可不用「共享引用」
+    ///   * 💭在「被推理器吸收」时，才需要共享引用
+    /// * 🚩【2024-05-18 17:29:40】在「记忆区」与「推理上下文」中各有一个，但语义不同
+    /// * 📌「记忆区」的跨越周期，而「推理上下文」仅用于存储
+    ///
+    /// # 📄OpenNARS
+    /// List of new tasks accumulated in one cycle, to be processed in the next cycle
+    pub new_tasks: Vec<Task>,
+
+    /// 🆕新的NAVM输出
+    /// * 🚩用以复刻`exportStrings`与`stringsToRecord`二者
+    pub outputs: Vec<Output>,
+
+    /// 当前概念
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// The selected Concept
+    pub current_concept: Concept,
+    // TODO: 伪随机生成器
+}
+
+impl DerivationContextCore {
+    /// 构造函数 from 推理器
+    pub fn new(reasoner: &Reasoner, current_concept: Concept) -> Self {
+        Self {
+            time: reasoner.time(),
+            silence_value: reasoner.silence_value(),
+            current_concept,
+            new_tasks: vec![],
+            outputs: vec![],
+        }
+    }
+
+    /// 共用的方法：被推理器吸收
+    pub fn absorbed_by_reasoner(self, reasoner: &mut Reasoner) {
+        let memory = reasoner.memory_mut();
+        // * 🚩将「当前概念」归还到「推理器」中
+        memory.put_back_concept(self.current_concept);
+        // * 🚩将推理导出的「新任务」添加到自身新任务中（先进先出）
+        for new_task in self.new_tasks {
+            let task_rc = RC::new_(new_task);
+            reasoner.add_new_task(task_rc);
+        }
+        // * 🚩将推理导出的「NAVM输出」添加进自身「NAVM输出」中（先进先出）
+        for output in self.outputs {
+            reasoner.report(output);
+        }
+        // * ✅Rust已在此处自动销毁剩余字段
     }
 }
