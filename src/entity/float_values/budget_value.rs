@@ -415,12 +415,15 @@ mod tests {
     /// 测试/summary
     #[test]
     fn summary() -> AResult {
+        fn test(budget: BudgetValue, expected: SF) {
+            assert_eq!(budget.budget_summary(), expected);
+        }
         macro_once! {
             /// * 🚩模式：[预算值的构造方法] ⇒ 预期「短浮点」浮点值
             macro test($( [ $($budget:tt)* ] => $expected:tt)*) {
                 $(
-                    assert_eq!(
-                        budget!($($budget)*).summary(),
+                    test(
+                        budget!($($budget)*),
                         SF::from_float($expected)
                     );
                 )*
@@ -439,12 +442,16 @@ mod tests {
     /// 测试/above_threshold
     #[test]
     fn above_threshold() -> AResult {
+        fn test(budget: BudgetValue, threshold: Float, expected: bool) {
+            assert_eq!(budget.budget_above_threshold(threshold), expected);
+        }
         macro_once! {
             /// * 🚩模式：[预算值的构造方法] @ 阈值 ⇒ 预期
             macro test($( [ $($budget:tt)* ] @ $threshold:expr => $expected:tt)*) {
                 $(
-                    assert_eq!(
-                        budget!($($budget)*).above_threshold(SF::from_float($threshold)),
+                    test(
+                        budget!($($budget)*),
+                        $threshold,
                         $expected
                     );
                 )*

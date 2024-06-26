@@ -9,7 +9,7 @@ use crate::{
     util::{RefCount, ToDisplayAndBrief},
 };
 use nar_dev_utils::join;
-use narsese::lexical::Sentence as LexicalSentence;
+use narsese::lexical::{Sentence as LexicalSentence, Task as LexicalTask};
 
 /// 可选的共享指针
 /// * 📌类似Java中默认的对象类型
@@ -109,6 +109,15 @@ impl Task {
             "只有「疑问句」才可能有「最优解」"
         );
         self.best_solution.insert(new_solution)
+    }
+}
+
+/// 转换到词法Narsese
+impl Task {
+    pub fn to_lexical(&self) -> LexicalTask {
+        let sentence = self.sentence_to_lexical();
+        let budget = self.budget_to_lexical();
+        LexicalTask { sentence, budget }
     }
 }
 

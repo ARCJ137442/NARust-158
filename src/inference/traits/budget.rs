@@ -116,7 +116,8 @@ pub trait Budget: ToDisplayAndBrief {
     ///
     /// To summarize a BudgetValue into a single number in [0, 1]
     #[inline(always)]
-    fn summary(&self) -> ShortFloat {
+    #[doc(alias = "summary")]
+    fn budget_summary(&self) -> ShortFloat {
         // 🚩三者几何平均值
         ShortFloat::geometrical_average([self.priority(), self.durability(), self.quality()])
     }
@@ -134,8 +135,8 @@ pub trait Budget: ToDisplayAndBrief {
     ///
     /// @return The decision on whether to process the Item
     #[inline(always)]
-    fn above_threshold(&self, budget_threshold: ShortFloat) -> bool {
-        self.summary() >= budget_threshold
+    fn budget_above_threshold(&self, budget_threshold: Float) -> bool {
+        self.budget_summary().to_float() >= budget_threshold
     }
 
     // ! ❌【2024-05-08 21:53:30】不进行「自动实现」而是「提供所需的默认实现」
