@@ -46,6 +46,12 @@ pub trait ReasonContext {
     /// * 📝可变性：只读
     fn silence_percent(&self) -> Float;
 
+    /// 复刻自改版`DerivationContext.noNewTask`
+    /// * 🚩语义改为「是否有新任务」
+    fn has_result(&self) -> bool {
+        self.num_new_tasks() > 0
+    }
+
     /// 获取「新任务」的数量
     fn num_new_tasks(&self) -> usize;
 
@@ -157,7 +163,7 @@ pub struct ReasonContextCore<'this> {
     ///   * 📌需要是可变引用
     /// * 🚩【2024-06-28 00:00:37】目前需要从「推理上下文」视角 锁定整个「推理器」对象
     ///   * 🎯避免「引用推理器的一部分后，还借用着整个推理器」的借用问题
-    reasoner: &'this mut Reasoner,
+    pub(in crate::control) reasoner: &'this mut Reasoner,
 
     /// 缓存的「当前时间」
     /// * 🎯与「记忆区」解耦
@@ -175,18 +181,18 @@ pub struct ReasonContextCore<'this> {
     ///
     /// # 📄OpenNARS
     /// List of new tasks accumulated in one cycle, to be processed in the next cycle
-    new_tasks: Vec<Task>,
+    pub(in crate::control) new_tasks: Vec<Task>,
 
     /// 🆕新的NAVM输出
     /// * 🚩用以复刻`exportStrings`与`stringsToRecord`二者
-    outputs: Vec<Output>,
+    pub(in crate::control) outputs: Vec<Output>,
 
     /// 当前概念
     ///
     /// # 📄OpenNARS
     ///
     /// The selected Concept
-    current_concept: Concept,
+    pub(in crate::control) current_concept: Concept,
 }
 
 impl<'this> ReasonContextCore<'this> {

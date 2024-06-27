@@ -463,7 +463,8 @@ impl<E: Item> Bag<E> {
             let new_item = self.get(&new_key).unwrap(); // * 🚩🆕重新获取「置入后的新项」（⚠️一定有）
             let merge_order = (self.merge_order_f)(&old_item, new_item); // 此处调用函数指针，一定是不可变引用
             let new_item = self.get_mut(&new_key).unwrap(); // * 🚩🆕重新获取「置入后的新项」（⚠️一定有）
-                                                            // * 🚩按照计算出的「合并顺序」合并预算值
+
+            // * 🚩按照计算出的「合并顺序」合并预算值
             use MergeOrder::*;
             match merge_order {
                 OldToNew => new_item.merge_from(&old_item),

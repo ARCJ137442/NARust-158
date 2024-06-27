@@ -19,9 +19,6 @@ pub use reasoner::*;
 mod context;
 pub use context::*;
 
-// 概念链接
-mod concept_linking;
-pub use concept_linking::*;
-
 // 工作过程
 mod process;
+pub use process::*;

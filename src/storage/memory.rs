@@ -8,8 +8,7 @@
 
 use super::Bag;
 use crate::{
-    control::prepare_term_link_templates,
-    control::{Parameters, DEFAULT_PARAMETERS},
+    control::{prepare_term_link_templates, Parameters, DEFAULT_PARAMETERS},
     entity::{BudgetValue, Concept, Item},
     inference::{Budget, BudgetFunctions},
     language::Term,
@@ -179,7 +178,7 @@ impl Memory {
         }
     }
 
-    /// * 🚩【2024-06-25 02:22:31】WIP：为避免「记忆区和概念同时可变借用」拆分成两块
+    /// * 🚩【2024-06-25 02:22:31】为避免「记忆区和概念同时可变借用」拆分成两块
     ///   * 📍计算：仅负责计算概念词项
     ///   * 📍应用：将计算出的「新预算值」用在实际对「概念」的修改中
     /// * 🎯避免「同时可变借用记忆区和其内的概念」冲突

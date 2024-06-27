@@ -31,6 +31,10 @@ impl<'this> ReasonContextDirect<'this> {
         let core = ReasonContextCore::new(reasoner, current_concept);
         Self { core, current_task }
     }
+
+    pub fn memory_mut(&mut self) -> &mut Memory {
+        self.core.memory_mut()
+    }
 }
 
 impl ReasonContext for ReasonContextDirect<'_> {

@@ -2,9 +2,17 @@
 //! * 📍复合词项的「词项链模板」搭建
 //! * 📍复合词项「链接到任务」的功能
 
+use nar_dev_utils::unwrap_or_return;
+
 use crate::{
-    entity::{TLinkType, TermLinkTemplate},
+    control::{ReasonContext, ReasonContextDirect},
+    entity::{
+        BudgetValue, Concept, Item, RCTask, TLink, TLinkType, Task, TaskLink, TermLinkTemplate,
+    },
+    inference::{Budget, BudgetFunctions},
     language::{CompoundTermRef, Term},
+    storage::Memory,
+    util::RefCount,
 };
 
 /// Build TermLink templates to constant components and sub-components
@@ -134,6 +142,114 @@ fn prepare_component_links(
                 }
             }
         }
+    }
+}
+
+/// 为「直接推理上下文」添加功能
+impl ReasonContextDirect<'_> {
+    /// 将概念链接到任务
+    /// * 📝即所谓「概念化」
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// Link to a new task from all relevant concepts for continued processing
+    /// in the near future for unspecified time.
+    ///
+    /// The only method that calls the TaskLink constructor.
+    pub(super) fn link_concept_to_task(&mut self) {
+        // * 🚩构建任务链
+        self.build_task_links();
+        // * 🚩构建词项链
+        self.build_term_links(); // recursively insert TermLink
+    }
+
+    fn build_task_links(&mut self) {
+        // * 🚩载入自身字段 | 无法预加载，避免借用问题
+        let concept = &mut self.core.current_concept;
+        let memory = &mut self.core.reasoner.memory;
+        let task = &self.current_task;
+        // 对自身 //
+        // * 🚩对当前任务构造任务链，链接到传入的任务 | 构造「自身」
+        let self_link = TaskLink::new_self(task.clone()); // link type: SELF
+        concept.insert_task_link_outer(memory, self_link);
+
+        // 对子项 //
+        // * 🚩仅在「自身为复合词项」且「词项链模板非空」时准备
+        if concept.link_templates_to_self().is_empty() {
+            return;
+        }
+        // * 📝只有复合词项会有「对子项的词项链」，子项不会持有「对所属词项的词项链」
+        // * 🚩分发并指数递减预算值
+        let sub_budget = BudgetFunctions::distribute_among_links(
+            &*task.get_(),
+            // ! ⚠️↓预算函数要求这里不能为零：要作为除数
+            concept.link_templates_to_self().len(),
+        );
+        if !sub_budget.budget_above_threshold(self.core.reasoner.parameters.budget_threshold) {
+            return;
+        }
+        // * 🚩仅在「预算达到阈值」时：遍历预先构建好的所有「子项词项链模板」，递归链接到任务
+        for template in concept.link_templates_to_self() {
+            memory.link_task_link_from_template(template, task, &sub_budget);
+        }
+    }
+
+    fn build_term_links(&mut self) {
+        // * 🚩载入自身字段 | 无法预加载，避免借用问题
+        let concept = self.current_concept_mut();
+        let memory = self.memory_mut();
+        let task = &self.current_task;
+        todo!()
+    }
+}
+
+impl Concept {
+    /// 向「概念」插入任务链
+    /// * ⚠️该方法仅针对【不在记忆区中】的概念
+    ///   * 📝此时不用担心借用问题
+    fn insert_task_link_outer(&mut self, memory: &mut Memory, task_link: TaskLink) {
+        // * 📝注意：任务链の预算 ≠ 任务の预算；「任务链」与「所链接的任务」是不同的Item对象
+        let new_budget = memory.activate_concept_calculate(self, &task_link);
+        self.put_task_link_back(task_link);
+        // * 🚩插入「任务链」的同时，以「任务链」激活概念 | 直接传入【可预算】的任务链
+        Memory::activate_concept_apply(self, new_budget);
+        // * ✅已经在「计算预算」时纳入了「遗忘」的效果
+    }
+}
+
+impl Memory {
+    fn link_task_link_from_template(
+        &mut self,
+        template: &TermLinkTemplate,
+        task: &RCTask,
+        sub_budget: &impl Budget,
+    ) {
+        let component_term = template.target();
+        // ! 📝数据竞争：不能在「其它概念被拿出去后」并行推理，会导致重复创建概念
+        let component_concept =
+            unwrap_or_return!(?self.get_concept_or_create(&component_term) => ());
+        let link =
+            TaskLink::from_template(task.clone(), template, BudgetValue::from_other(sub_budget));
+        let key = component_concept.key().clone();
+        self.insert_task_link_inner(&key, link);
+    }
+
+    /// 向「概念」插入任务链
+    /// * 📌该方法针对【在记忆区中】的概念
+    ///   * 📝此时需要考虑借用问题
+    fn insert_task_link_inner(&mut self, key: &str, link: TaskLink) {
+        // * 🚩计算预算值
+        let component_concept = unwrap_or_return!(?self.key_to_concept(key) => ());
+        let new_budget = self.activate_concept_calculate(component_concept, &link);
+
+        // * 🚩放入任务链 & 更新预算值
+        let component_concept = unwrap_or_return!(?self.key_to_concept_mut(key) => ());
+        component_concept.put_in_task_link(link);
+        component_concept.copy_budget_from(&new_budget);
+
+        // * 🚩拿出再放回 | 用「遗忘函数」更新预算值
+        let component_concept = unwrap_or_return!(?self.pick_out_concept(key) => ());
+        self.put_back_concept(component_concept);
     }
 }
 

@@ -22,7 +22,7 @@
 
 use crate::{
     control::{ReasonContext, ReasonContextDirect, Reasoner},
-    entity::{Item, Sentence, Task},
+    entity::{Item, Punctuation, Sentence, Task},
     global::RC,
     inference::{Budget, Truth},
     util::{RefCount, ToDisplayAndBrief},
@@ -145,7 +145,8 @@ impl Reasoner {
             .copy_budget_from(&new_concept_budget);
 
         // * 🔥开始「直接推理」
-        let has_result = context.direct_process();
+        context.direct_process();
+        let has_result = context.has_result();
 
         // * 🚩吸收并清空上下文
         context.absorbed_by_reasoner();
@@ -173,7 +174,31 @@ impl Reasoner {
 impl ReasonContextDirect<'_> {
     /// 对于「直接推理上下文」的入口
     /// * 🚩返回「是否有结果」
-    fn direct_process(&mut self) -> bool {
+    fn direct_process(&mut self) {
+        // * 🚩原先传入的「任务」就是「推理上下文」的「当前任务」
+        // * * 📝在其被唯一使用的地方，传入的`task`只有可能是`context.currentTask`
+        // * 🚩所基于的「当前概念」就是「推理上下文」的「当前概念」
+        // * * 📝在其被唯一使用的地方，传入的`task`只有可能是`context.currentConcept`
+        // * * 📝相比于「概念推理」仅少了「当前词项链」与「当前任务链」，其它基本通用
+
+        // * 🚩先根据类型分派推理
+        let task_punctuation = self.current_task.get_().punctuation();
+
+        use Punctuation::*;
+        match task_punctuation {
+            Judgement => self.process_judgement(),
+            Question => self.process_question(),
+        }
+
+        // * 🚩在推理后做链接 | 若预算值够就链接，若预算值不够就丢掉
+        self.link_concept_to_task()
+    }
+
+    fn process_judgement(&mut self) {
+        todo!()
+    }
+
+    fn process_question(&mut self) {
         todo!()
     }
 }

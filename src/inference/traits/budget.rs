@@ -106,7 +106,7 @@ pub trait Budget: ToDisplayAndBrief {
         self.set_quality(from.quality());
     }
 
-    // TODO: merge
+    // * ✅【2024-06-28 00:58:16】目前无需使用：直接用「预算推理」中的方法`merge_from`
     // fn merge_budget(&mut self, from: &impl Budget)
 
     /// 模拟`BudgetValue.summary`

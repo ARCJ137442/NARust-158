@@ -9,6 +9,9 @@
 //! * ♻️【2024-06-26 11:50:22】目前开始着手按改版OpenNARS重写
 
 nar_dev_utils::mods! {
+    // 概念链接 | ℹ️含全局方法
+    pub use concept_linking;
+
     // 工作周期
     pub use work_cycle;
 
