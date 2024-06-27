@@ -7,19 +7,22 @@
 //!
 //! TODO: 【2024-05-22 02:11:59】🚧按照改版重写此模块
 
-nar_dev_utils::mods! {
-    // 超参数
-    pub use parameters;
+// 超参数
+mod parameters;
+pub use parameters::*;
 
-    // 推理器
-    pub use reasoner;
+// 推理器
+mod reasoner;
+pub use reasoner::*;
 
-    // 上下文
-    pub use context;
+// 上下文
+mod context;
+pub use context::*;
 
-    // 概念链接
-    pub use concept_linking;
+// 概念链接
+mod concept_linking;
+pub use concept_linking::*;
 
-    // 工作过程
-    pub use process;
-}
+// 工作过程
+mod process;
+pub use process::*;

@@ -44,6 +44,20 @@ pub struct TaskLink {
     n_recorded_term_links: usize,
 }
 
+impl TaskLink {
+    pub fn target_rc<'r, 's: 'r>(&'s self) -> impl Deref<Target = RCTask> + 'r {
+        // ! 🚩【2024-06-22 12:21:12】要直接引用target字段，不能套两层`impl Deref`
+        // * * ️📝会导致「临时变量引用」问题
+        &self.inner.target
+    }
+
+    pub fn target_rc_mut<'r, 's: 'r>(&'s mut self) -> impl DerefMut<Target = RCTask> + 'r {
+        // ! 🚩【2024-06-22 12:21:12】要直接引用target字段，不能套两层`impl Deref`
+        // * * ️📝会导致「临时变量引用」问题
+        &mut self.inner.target
+    }
+}
+
 /// 委托token
 impl Budget for TaskLink {
     fn priority(&self) -> ShortFloat {

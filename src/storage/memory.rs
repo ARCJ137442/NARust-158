@@ -15,6 +15,8 @@ use crate::{
     language::Term,
 };
 
+/// 记忆区
+#[derive(Debug)]
 pub struct Memory {
     /// 概念袋
     ///

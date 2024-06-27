@@ -8,19 +8,16 @@
 //!   * 🚩【2024-06-26 11:47:30】仍然可能与旧版不同
 #![doc(alias = "derivation_context")]
 
+use std::ops::{Deref, DerefMut};
+
 use crate::{
     control::{Parameters, Reasoner},
-    entity::{
-        BudgetValue, Concept, JudgementV1, RCTask, Sentence, SentenceV1, Stamp, Task, TaskLink,
-        TermLink, TruthValue,
-    },
+    entity::{Concept, JudgementV1, RCTask, Task, TaskLink, TermLink},
     global::{ClockTime, Float, RC},
-    inference::Budget,
     language::Term,
     storage::Memory,
-    util::{RefCount, ToDisplayAndBrief},
+    util::RefCount,
 };
-use narsese::api::NarseseValue;
 use navm::output::Output;
 
 /// 🆕新的「推理上下文」对象
@@ -93,15 +90,15 @@ pub trait ReasonContext {
     }
 
     /// 获取「当前任务」（不变）
-    /// * 📌共享引用
+    /// * 📌共享引用（需要是[`Deref`]）
     ///
     /// # 📄OpenNARS
     ///
     /// The selected task
-    fn current_task(&self) -> &RCTask;
+    fn current_task<'r, 's: 'r>(&'s self) -> impl Deref<Target = RCTask> + 'r;
     /// 获取「当前任务」（可变）
     /// * 📌共享引用
-    fn current_task_mut(&mut self) -> &mut RCTask;
+    fn current_task_mut<'r, 's: 'r>(&'s mut self) -> impl DerefMut<Target = RCTask> + 'r;
 
     /// 让「推理器」吸收「推理上下文」
     /// * 🚩【2024-05-19 18:39:44】现在会在每次「准备上下文⇒推理」的过程中执行
@@ -111,11 +108,12 @@ pub trait ReasonContext {
     fn absorbed_by_reasoner(self, reasoner: &mut Reasoner);
 }
 
-/// 「概念推理（中层）上下文」
+/// 「概念推理上下文+链接」
 /// * 🎯用于统一「转换推理」与「概念推理」的逻辑
-/// * * 🚩统一的「当前信念」（一致可空）、「用于预算推理的当前信念链」等附加要求
-/// * * ✨更多的「单前提结论」「多前提结论」导出方法
-pub trait ReasonContextConcept: ReasonContext {
+///   * 🚩统一的「当前信念」（一致可空）、「用于预算推理的当前信念链」等附加要求
+///   * ✨更多的「单前提结论」「多前提结论」导出方法
+/// * 📝其中「当前信念链」放在「概念推理上下文」独有
+pub trait ReasonContextWithLinks: ReasonContext {
     /// 获取「当前信念」
     /// * 📌仅在「概念推理」中用到
     /// * 🚩对于用不到的实现者，只需实现为空
@@ -269,4 +267,41 @@ impl ReasonContextCore<'_> {
         }
         // * ✅Rust已在此处自动销毁剩余字段
     }
+}
+
+#[macro_export]
+macro_rules! __delegate_from_core {
+    () => {
+        fn time(&self) -> ClockTime {
+            self.core.time()
+        }
+
+        fn parameters(&self) -> &Parameters {
+            self.core.parameters()
+        }
+
+        fn silence_percent(&self) -> Float {
+            self.core.silence_percent()
+        }
+
+        fn num_new_tasks(&self) -> usize {
+            self.core.num_new_tasks()
+        }
+
+        fn add_new_task(&mut self, task: Task) {
+            self.core.add_new_task(task)
+        }
+
+        fn add_output(&mut self, output: Output) {
+            self.core.add_output(output)
+        }
+
+        fn current_concept(&self) -> &Concept {
+            self.core.current_concept()
+        }
+
+        fn current_concept_mut(&mut self) -> &mut Concept {
+            self.core.current_concept_mut()
+        }
+    };
 }

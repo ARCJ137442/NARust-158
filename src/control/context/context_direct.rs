@@ -2,6 +2,7 @@
 
 use super::{ReasonContext, ReasonContextCore};
 use crate::{
+    __delegate_from_core,
     control::{Parameters, Reasoner},
     entity::{Concept, RCTask, Task},
     global::{ClockTime, Float},
@@ -11,6 +12,7 @@ use navm::output::Output;
 
 /// 🆕新的「直接推理上下文」对象
 /// * 📄从「推理上下文」中派生，用于「概念-任务」的「直接推理」
+#[derive(Debug)]
 pub struct ReasonContextDirect<'this> {
     /// 内部存储的「上下文核心」
     core: ReasonContextCore<'this>,
@@ -51,47 +53,17 @@ impl<'this> ReasonContextDirect<'this> {
 }
 
 impl ReasonContext for ReasonContextDirect<'_> {
+    __delegate_from_core! {}
+
     fn memory(&self) -> &Memory {
         self.memory
     }
 
-    fn time(&self) -> ClockTime {
-        self.core.time()
-    }
-
-    fn parameters(&self) -> &Parameters {
-        self.core.parameters()
-    }
-
-    fn silence_percent(&self) -> Float {
-        self.core.silence_percent()
-    }
-
-    fn num_new_tasks(&self) -> usize {
-        self.core.num_new_tasks()
-    }
-
-    fn add_new_task(&mut self, task: Task) {
-        self.core.add_new_task(task)
-    }
-
-    fn add_output(&mut self, output: Output) {
-        self.core.add_output(output)
-    }
-
-    fn current_concept(&self) -> &Concept {
-        self.core.current_concept()
-    }
-
-    fn current_concept_mut(&mut self) -> &mut Concept {
-        self.core.current_concept_mut()
-    }
-
-    fn current_task(&self) -> &RCTask {
+    fn current_task<'r, 's: 'r>(&'s self) -> impl std::ops::Deref<Target = RCTask> + 'r {
         &self.current_task
     }
 
-    fn current_task_mut(&mut self) -> &mut RCTask {
+    fn current_task_mut<'r, 's: 'r>(&'s mut self) -> impl std::ops::DerefMut<Target = RCTask> + 'r {
         &mut self.current_task
     }
 

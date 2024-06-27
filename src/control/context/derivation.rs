@@ -1,7 +1,7 @@
 //! 有关「推理上下文」中「导出结论」的功能
 //! * 🎯分离并锁定「导出结论」的方法
 
-use super::{ReasonContext, ReasonContextConcept};
+use super::{ReasonContext, ReasonContextWithLinks};
 use crate::{
     entity::{
         BudgetValue, Judgement, JudgementV1, Punctuation, Sentence, SentenceV1, Stamp, Task,
@@ -28,10 +28,11 @@ pub trait ContextDerivation: ReasonContext {
         new_task: &JudgementV1,
         candidate_belief: &JudgementV1,
     ) {
+        let parent_task = self.current_task().clone();
         let task = Task::new(
             SentenceV1::JudgementV1(new_task.clone()),
             new_budget,
-            Some(self.current_task().clone()),
+            Some(parent_task),
             Some(new_task.clone()),
             Some(candidate_belief.clone()),
         );
@@ -82,8 +83,8 @@ pub trait ContextDerivation: ReasonContext {
         new_stamp: Stamp,
     ) {
         // * 🚩仅在「任务内容」可用时构造
-        let current_task = self.current_task().get_(); // 不能当场变为引用：后续可能要再借用自身
-        let new_punctuation = current_task.punctuation();
+        let current_task = self.current_task(); // 不能当场变为引用：后续可能要再借用自身
+        let new_punctuation = current_task.get_().punctuation();
         let new_sentence = SentenceV1::new_sentence_from_punctuation(
             new_content,
             new_punctuation,
@@ -114,10 +115,11 @@ pub trait ContextDerivation: ReasonContext {
 ///   * ⚠️不然默认仅对[`Sized`]实现
 impl<T: ?Sized + ReasonContext> ContextDerivation for T {}
 
-pub trait ContextDerivationConcept: ReasonContextConcept {
+pub trait ContextDerivationConcept: ReasonContextWithLinks {
     /// 🆕产生新时间戳 from 单前提
     fn generate_new_stamp_single(&self) -> Stamp {
-        let current_task = self.current_task().get_();
+        let current_task_ref = self.current_task();
+        let current_task = current_task_ref.get_();
         match (current_task.is_judgement(), self.current_belief()) {
             // * 🚩「当前任务」是判断句 | 没有「当前信念」
             (true, _) | (_, None) => Stamp::with_old(&*current_task, self.time()),
@@ -131,12 +133,13 @@ pub trait ContextDerivationConcept: ReasonContextConcept {
     ///
     /// ? 是否需要通过「假定有『当前信念』」实现「直接返回[`Stamp`]而非[`Option<Stamp>`](Option)」？
     fn generate_new_stamp_double(&self) -> Option<Stamp> {
-        let current_task = &*self.current_task().get_();
+        let current_task_ref = self.current_task();
+        let current_task = current_task_ref.get_();
         // * 🚩在具有「当前信念」时返回「与『当前任务』合并的时间戳」
         self.current_belief().map(|belief|
                 // * 📌此处的「时间戳」一定是「当前信念」的时间戳
                 // * 📄理由：最后返回的信念与「成功时比对的信念」一致（只隔着`clone`）
-                 Stamp::from_merge_unchecked(current_task, belief, self.time(), self.max_evidence_base_length()))
+                 Stamp::from_merge_unchecked(&*current_task, belief, self.time(), self.max_evidence_base_length()))
     }
 
     /* --------------- new task building --------------- */
@@ -251,7 +254,8 @@ pub trait ContextDerivationConcept: ReasonContextConcept {
         new_truth: Option<TruthValue>,
         new_budget: BudgetValue,
     ) {
-        let current_task = self.current_task().get_();
+        let current_task_ref = self.current_task();
+        let current_task = current_task_ref.get_();
         let parent_task = current_task.parent_task();
         // * 🚩对于「结构转换」的单前提推理，若已有父任务且该任务与父任务相同⇒中止，避免重复推理
         if let Some(parent_task) = parent_task {
@@ -291,10 +295,11 @@ pub trait ContextDerivationConcept: ReasonContextConcept {
         );
         // * 🚩导出
         drop(current_task); // ! 先释放「借用代理」
+        drop(current_task_ref);
         self.derived_task(new_task);
     }
 }
 
 /// * 📝需要采用`?Sized`以包括【运行时尺寸未定】的对象
 ///   * ⚠️不然默认仅对[`Sized`]实现
-impl<T: ?Sized + ReasonContextConcept> ContextDerivationConcept for T {}
+impl<T: ?Sized + ReasonContextWithLinks> ContextDerivationConcept for T {}

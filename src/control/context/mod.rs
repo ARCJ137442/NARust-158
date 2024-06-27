@@ -5,19 +5,22 @@
 //!
 //! * ♻️【2024-06-26 11:45:46】开始根据改版OpenNARS重写
 
-nar_dev_utils::mods! {
-    // 推理上下文/导出上下文
-    pub use reason_context;
+// 推理上下文/导出上下文
+mod reason_context;
+pub use reason_context::*;
 
-    // 直接推理上下文
-    pub use context_direct;
+// 直接推理上下文
+mod context_direct;
+pub use context_direct::*;
 
-    // 转换推理上下文
-    pub use context_transform;
+// 转换推理上下文
+mod context_transform;
+pub use context_transform::*;
 
-    // 概念推理上下文
-    pub use context_concept;
+// 概念推理上下文
+mod context_concept;
+pub use context_concept::*;
 
-    // 推理导出
-    pub use derivation;
-}
+// 推理导出
+mod derivation;
+pub use derivation::*;
