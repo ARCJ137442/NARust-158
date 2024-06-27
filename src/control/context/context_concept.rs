@@ -24,9 +24,6 @@ pub struct ReasonContextConcept<'this> {
     /// 内部存储的「上下文核心」
     core: ReasonContextCore<'this>,
 
-    /// 对「记忆区」的反向引用
-    memory: &'this Memory,
-
     /// 选中的任务链
     /// * 📌【2024-05-21 20:26:30】不可空！
     /// * 📌构造后不重新赋值，但内部可变（预算推理/反馈预算值）
@@ -50,18 +47,13 @@ pub struct ReasonContextConcept<'this> {
 impl<'this> ReasonContextConcept<'this> {
     /// 构造函数
     pub fn new<'r: 'this>(
-        reasoner: &'r Reasoner,
+        reasoner: &'r mut Reasoner,
         current_concept: Concept,
         current_task_link: TaskLink,
         mut belief_links_to_reason: Vec<TermLink>,
     ) -> Self {
         // * 🚩构造核心结构
-        let core = ReasonContextCore::new(
-            current_concept,
-            &reasoner.parameters, // !【2024-06-26 23:55:17】此处需要直接使用字段，以证明借用不冲突
-            reasoner.time(),
-            reasoner.silence_value(),
-        );
+        let core = ReasonContextCore::new(reasoner, current_concept);
 
         // * 🚩先将首个元素作为「当前信念链」
         debug_assert!(!belief_links_to_reason.is_empty());
@@ -71,7 +63,6 @@ impl<'this> ReasonContextConcept<'this> {
         // * 🚩构造自身
         let mut this = Self {
             core,
-            memory: &reasoner.memory,
             current_task_link,
             current_belief: None,
             current_belief_link,
@@ -151,10 +142,6 @@ impl ReasonContextConcept<'_> {
 impl ReasonContext for ReasonContextConcept<'_> {
     __delegate_from_core! {}
 
-    fn memory(&self) -> &Memory {
-        self.memory
-    }
-
     fn current_task<'r, 's: 'r>(&'s self) -> impl Deref<Target = RCTask> + 'r {
         self.current_task_link.target_rc()
     }
@@ -163,7 +150,7 @@ impl ReasonContext for ReasonContextConcept<'_> {
         self.current_task_link.target_rc_mut()
     }
 
-    fn absorbed_by_reasoner(mut self, reasoner: &mut Reasoner) {
+    fn absorbed_by_reasoner(mut self) {
         // * 🚩将最后一个「当前信念链」归还给「当前信念」（所有权转移）
         self.core
             .current_concept_mut()
@@ -178,6 +165,6 @@ impl ReasonContext for ReasonContextConcept<'_> {
         drop(self.current_belief);
 
         // * 🚩吸收核心
-        self.core.absorbed_by_reasoner(reasoner);
+        self.core.absorbed_by_reasoner();
     }
 }

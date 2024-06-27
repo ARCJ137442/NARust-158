@@ -103,7 +103,9 @@ pub trait ReasonContext {
     /// * 🎯变量隔离，防止「上下文串线」与「重复使用」
     /// * 📌传入所有权而非引用
     /// * 🚩【2024-05-21 23:17:57】现在迁移到「推理上下文」处，以便进行方法分派
-    fn absorbed_by_reasoner(self, reasoner: &mut Reasoner);
+    /// * 🚩【2024-06-28 00:06:45】现在「内置推理器可变引用」后，不再需要第二个参数
+    ///   * ✅「推理器引用」可以从自身中取出来
+    fn absorbed_by_reasoner(self);
 }
 
 /// 「概念推理上下文+链接」
@@ -150,6 +152,13 @@ pub fn init_global_reason_parameters() {
 /// 🆕内置公开结构体，用于公共读取
 #[derive(Debug)]
 pub struct ReasonContextCore<'this> {
+    /// 对「推理器」的反向引用
+    /// * 🚩【2024-05-18 17:00:12】目前需要访问其「输出」「概念」等功能
+    ///   * 📌需要是可变引用
+    /// * 🚩【2024-06-28 00:00:37】目前需要从「推理上下文」视角 锁定整个「推理器」对象
+    ///   * 🎯避免「引用推理器的一部分后，还借用着整个推理器」的借用问题
+    reasoner: &'this mut Reasoner,
+
     /// 缓存的「当前时间」
     /// * 🎯与「记忆区」解耦
     time: ClockTime,
@@ -178,50 +187,47 @@ pub struct ReasonContextCore<'this> {
     ///
     /// The selected Concept
     current_concept: Concept,
-
-    /// 🆕引用的「超参数」对象
-    parameters: &'this Parameters,
 }
 
 impl<'this> ReasonContextCore<'this> {
     /// 构造函数 from 推理器
     /// * 📝需要保证「推理器」的生命周期覆盖上下文
-    pub fn new<'p: 'this>(
-        current_concept: Concept,
-        parameters: &'p Parameters,
-        time: ClockTime,
-        silence_value: usize,
-    ) -> Self {
+    pub fn new<'p: 'this>(reasoner: &'p mut Reasoner, current_concept: Concept) -> Self {
         Self {
-            time,
-            silence_value,
+            time: reasoner.time(),
+            silence_value: reasoner.silence_value(),
             current_concept,
+            reasoner,
             new_tasks: vec![],
             outputs: vec![],
-            parameters,
         }
-    }
-
-    /// 与[`Self::new`]不同的是：要借用整个推理器
-    pub fn from_reasoner<'r: 'this>(current_concept: Concept, reasoner: &'r Reasoner) -> Self {
-        Self::new(
-            current_concept,
-            reasoner.parameters(),
-            reasoner.time(),
-            reasoner.silence_value(),
-        )
     }
 }
 
 /// ! ⚠️仅用于「统一委托的方法实现」
 /// * ❗某些方法将不实现
 impl ReasonContextCore<'_> {
+    /// 🆕对「推理器」的可变引用
+    /// * 🚩用于「被推理器吸收」
+    pub fn reasoner_mut(&mut self) -> &mut Reasoner {
+        self.reasoner
+    }
+    /// 对「记忆区」的不可变引用
+    pub fn memory(&self) -> &Memory {
+        &self.reasoner.memory
+    }
+
+    /// 📝对「记忆区」的可变引用，只在「直接推理」中用到
+    pub fn memory_mut(&mut self) -> &mut Memory {
+        &mut self.reasoner.memory
+    }
+
     pub fn time(&self) -> ClockTime {
         self.time
     }
 
     pub fn parameters(&self) -> &Parameters {
-        self.parameters
+        &self.reasoner.parameters
     }
 
     pub fn silence_percent(&self) -> Float {
@@ -249,13 +255,14 @@ impl ReasonContextCore<'_> {
     }
 
     /// 共用的方法：被推理器吸收
-    pub fn absorbed_by_reasoner(self, reasoner: &mut Reasoner) {
+    pub fn absorbed_by_reasoner(self) {
+        let reasoner = self.reasoner;
         let memory = reasoner.memory_mut();
         // * 🚩将「当前概念」归还到「推理器」中
         memory.put_back_concept(self.current_concept);
         // * 🚩将推理导出的「新任务」添加到自身新任务中（先进先出）
         for new_task in self.new_tasks {
-            reasoner.add_new_task(new_task);
+            reasoner.derivation_datas.add_new_task(new_task);
         }
         // * 🚩将推理导出的「NAVM输出」添加进自身「NAVM输出」中（先进先出）
         for output in self.outputs {
@@ -268,6 +275,10 @@ impl ReasonContextCore<'_> {
 #[macro_export]
 macro_rules! __delegate_from_core {
     () => {
+        fn memory(&self) -> &Memory {
+            self.core.memory()
+        }
+
         fn time(&self) -> ClockTime {
             self.core.time()
         }

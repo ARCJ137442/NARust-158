@@ -4,10 +4,6 @@
 //!
 //! * ♻️【2024-06-27 12:54:19】开始根据改版OpenNARS重写
 
-use std::ops::{Deref, DerefMut};
-
-use navm::output::Output;
-
 use super::{ReasonContext, ReasonContextCore, ReasonContextWithLinks};
 use crate::{
     __delegate_from_core,
@@ -16,15 +12,14 @@ use crate::{
     global::{ClockTime, Float},
     storage::Memory,
 };
+use navm::output::Output;
+use std::ops::{Deref, DerefMut};
 
 /// 转换推理上下文
 #[derive(Debug)]
 pub struct ReasonContextTransform<'this> {
     /// 内部存储的「上下文核心」
     core: ReasonContextCore<'this>,
-
-    /// 对「记忆区」的反向引用
-    memory: &'this Memory,
 
     /// 选中的任务链
     /// * 📌【2024-05-21 20:26:30】不可空！
@@ -39,16 +34,10 @@ impl<'this> ReasonContextTransform<'this> {
         current_task_link: TaskLink,
     ) -> Self {
         // * 🚩构造核心
-        let core = ReasonContextCore::new(
-            current_concept,
-            &reasoner.parameters, // !【2024-06-26 23:55:17】此处需要直接使用字段，以证明借用不冲突
-            reasoner.time(),
-            reasoner.silence_value(),
-        );
+        let core = ReasonContextCore::new(reasoner, current_concept);
         Self {
             core,
             // * 🚩特有字段
-            memory: &reasoner.memory,
             current_task_link,
         }
     }
@@ -56,10 +45,6 @@ impl<'this> ReasonContextTransform<'this> {
 
 impl ReasonContext for ReasonContextTransform<'_> {
     __delegate_from_core! {}
-
-    fn memory(&self) -> &Memory {
-        self.memory
-    }
 
     fn current_task<'r, 's: 'r>(&'s self) -> impl Deref<Target = RCTask> + 'r {
         self.current_task_link.target_rc()
@@ -69,13 +54,13 @@ impl ReasonContext for ReasonContextTransform<'_> {
         self.current_task_link.target_rc_mut()
     }
 
-    fn absorbed_by_reasoner(mut self, reasoner: &mut Reasoner) {
+    fn absorbed_by_reasoner(mut self) {
         // * 🚩将「当前任务链」归还给「当前概念」（所有权转移）
         self.core // ! 📌必须分到不同字段
             .current_concept_mut()
             .put_task_link_back(self.current_task_link);
         // * 🚩从基类方法继续
-        self.core.absorbed_by_reasoner(reasoner);
+        self.core.absorbed_by_reasoner();
     }
 }
 

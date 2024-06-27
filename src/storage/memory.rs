@@ -84,7 +84,7 @@ impl Memory {
     }
 
     /// 统一集中「词项→袋索引」的逻辑
-    fn term_to_key(term: &Term) -> String {
+    pub fn term_to_key(term: &Term) -> String {
         term.name()
     }
 
@@ -159,6 +159,7 @@ impl Memory {
     /// * 🚩实际上也被「直接推理」调用
     /// * 🚩【2024-06-25 01:46:20】此处为了避免「借用冲突」选择靠「词项」而非「概念」查询
     /// * 🚩【2024-06-25 02:03:57】目前因为「激活时需要使用不可变引用，修改时又需要可变引用」改为「返回新预算值」机制
+    #[must_use]
     pub fn activate_concept_calculate(
         &self,
         concept: &Concept,

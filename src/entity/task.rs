@@ -112,6 +112,12 @@ impl Task {
         );
         self.best_solution.insert(new_solution)
     }
+
+    /// 判断「是否来自输入」
+    /// * 🚩其「父任务」是否为空
+    pub fn is_input(&self) -> bool {
+        self.parent_task.is_none()
+    }
 }
 
 /// 转换到词法Narsese

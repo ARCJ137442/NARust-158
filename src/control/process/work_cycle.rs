@@ -19,11 +19,7 @@ use narsese::api::NarseseValue;
 use navm::{cmd::Cmd, output::Output};
 
 use crate::{
-    control::{ReasonContext, Reasoner},
-    entity::Task,
-    global::ClockTime,
-    inference::Budget,
-    util::ToDisplayAndBrief,
+    control::Reasoner, entity::Task, global::ClockTime, inference::Budget, util::ToDisplayAndBrief,
 };
 
 impl Reasoner {
@@ -149,11 +145,11 @@ impl Reasoner {
         });
 
         // * 🚩本地任务直接处理 阶段 * //
-        let no_result = self.process_direct();
+        let has_result = self.process_direct();
 
         // * 🚩内部概念高级推理 阶段 * //
         // * 📝OpenNARS的逻辑：一次工作周期，只能在「直接推理」与「概念推理」中选择一个
-        if no_result {
+        if !has_result {
             self.process_reason();
         }
 
@@ -274,7 +270,7 @@ impl Reasoner {
                 narsese: Some(narsese),
             });
             // * 📝只追加到「新任务」里边，并不进行推理
-            self.add_new_task(task);
+            self.derivation_datas.add_new_task(task);
         } else {
             // 此时还是输出一个「被忽略」好
             self.report(Output::COMMENT {
@@ -283,10 +279,6 @@ impl Reasoner {
         }
     }
 
-    /// 吸收「推理上下文」
-    /// * 🚩【2024-05-21 23:18:55】现在直接调用「推理上下文」的对应方法，以便享受多分派
-    pub fn absorb_context(&mut self, context: impl ReasonContext) {
-        // * 🚩直接调用
-        context.absorbed_by_reasoner(self);
-    }
+    // ! 🚩【2024-06-28 00:09:12】方法「吸收推理上下文」不再需要被「推理器」实现
+    // * 📌原因：现在「推理上下文」内置「推理器」的引用
 }

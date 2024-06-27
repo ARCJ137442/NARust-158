@@ -15,16 +15,11 @@ use navm::output::Output;
 #[derive(Debug)]
 pub struct ReasonContextDirect<'this> {
     /// 内部存储的「上下文核心」
-    core: ReasonContextCore<'this>,
-
-    /// 对「记忆区」的反向引用
-    /// * 🚩【2024-05-18 17:00:12】目前需要访问其「输出」「概念」等功能
-    ///   * 📌需要是可变引用
-    memory: &'this mut Memory,
+    pub(crate) core: ReasonContextCore<'this>,
 
     /// 选中的「任务」
     /// * 📌需要共享引用：从推理器的「共享引用池」中来
-    current_task: RCTask,
+    pub(crate) current_task: RCTask,
 }
 
 impl<'this> ReasonContextDirect<'this> {
@@ -33,31 +28,13 @@ impl<'this> ReasonContextDirect<'this> {
         current_concept: Concept,
         current_task: RCTask,
     ) -> Self {
-        let core = ReasonContextCore::new(
-            current_concept,
-            &reasoner.parameters, // !【2024-06-26 23:55:17】此处需要直接使用字段，以证明借用不冲突
-            reasoner.time(),
-            reasoner.silence_value(),
-        );
-        Self {
-            core,
-            memory: &mut reasoner.memory,
-            current_task,
-        }
-    }
-
-    /// 📝对「记忆区」的可变引用，只在「直接推理」中可变
-    pub fn memory_mut(&mut self) -> &mut Memory {
-        self.memory
+        let core = ReasonContextCore::new(reasoner, current_concept);
+        Self { core, current_task }
     }
 }
 
 impl ReasonContext for ReasonContextDirect<'_> {
     __delegate_from_core! {}
-
-    fn memory(&self) -> &Memory {
-        self.memory
-    }
 
     fn current_task<'r, 's: 'r>(&'s self) -> impl std::ops::Deref<Target = RCTask> + 'r {
         &self.current_task
@@ -67,9 +44,9 @@ impl ReasonContext for ReasonContextDirect<'_> {
         &mut self.current_task
     }
 
-    fn absorbed_by_reasoner(self, reasoner: &mut Reasoner) {
+    fn absorbed_by_reasoner(self) {
         // * 🚩销毁核心
-        self.core.absorbed_by_reasoner(reasoner);
+        self.core.absorbed_by_reasoner();
         // * ✅Rust已在此处自动销毁剩余字段
     }
 }
