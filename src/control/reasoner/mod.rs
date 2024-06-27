@@ -8,6 +8,9 @@ nar_dev_utils::mods! {
     // 定义
     pub use definition;
 
+    // 功能：输入输出通道
+    pub use channels;
+
     // 功能：解析Narsese任务
     pub use parse_task;
 
