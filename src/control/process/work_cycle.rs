@@ -196,8 +196,8 @@ impl Reasoner {
     /// * 🚩🆕【2024-05-13 02:27:07】从「字符串输入」变为「NAVM指令输入」
     pub fn input_cmd(&mut self, cmd: Cmd) {
         match cmd {
-            // Cmd::SAV { target, path } => todo!(),
-            // Cmd::LOA { target, path } => todo!(),
+            // Cmd::SAV { target, path } => (),
+            // Cmd::LOA { target, path } => (),
             // * 🚩重置：推理器复位
             Cmd::RES { .. } => self.reset(),
             // * 🚩Narsese：输入任务（但不进行推理）
@@ -218,15 +218,15 @@ impl Reasoner {
                     }
                 }
             }
-            // Cmd::NEW { target } => todo!(),
-            // Cmd::DEL { target } => todo!(),
+            // Cmd::NEW { target } => (),
+            // Cmd::DEL { target } => (),
             // * 🚩工作周期：添加「预备循环计数」
             Cmd::CYC(cycles) => self.walk(cycles),
             // * 🚩音量：设置音量
             Cmd::VOL(volume) => self.silence_value = volume,
-            // Cmd::REG { name } => todo!(),
-            // Cmd::INF { source } => todo!(),
-            // Cmd::HLP { name } => todo!(),
+            // Cmd::REG { name } => (),
+            // Cmd::INF { source } => (),
+            // Cmd::HLP { name } => (),
             // * 🚩【2024-05-13 12:21:37】注释：不做任何事情
             Cmd::REM { .. } => (),
             // * 🚩退出⇒处理完所有输出后直接退出
@@ -240,7 +240,7 @@ impl Reasoner {
                 // * 🚩最终退出程序
                 std::process::exit(0);
             }
-            // Cmd::Custom { head, tail } => todo!(),
+            // Cmd::Custom { head, tail } => (),
             // * 🚩未知指令⇒输出提示
             _ => {
                 // * 🚩解析失败⇒新增输出
