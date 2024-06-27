@@ -17,4 +17,7 @@ nar_dev_utils::mods! {
 
     // 概念推理上下文
     pub use context_concept;
+
+    // 推理导出
+    pub use derivation;
 }
