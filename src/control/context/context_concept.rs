@@ -8,8 +8,7 @@ use super::{ReasonContext, ReasonContextCore};
 use crate::{
     __delegate_from_core,
     control::{Parameters, Reasoner},
-    entity::{Concept, RCTask, Task},
-    entity::{JudgementV1, TLink, TaskLink, TermLink},
+    entity::{Concept, JudgementV1, RCTask, TLink, Task, TaskLink, TermLink},
     global::{ClockTime, Float},
     storage::Memory,
     util::RefCount,
@@ -152,12 +151,16 @@ impl ReasonContext for ReasonContextConcept<'_> {
 
     fn absorbed_by_reasoner(mut self) {
         // * 🚩将最后一个「当前信念链」归还给「当前信念」（所有权转移）
-        self.core
+        // * ❌此处只能销毁，不能报告：部分借用⇒借用冲突
+        let _ = self
+            .core
             .current_concept_mut()
             .put_term_link_back(self.current_belief_link);
 
         // * 🚩将「当前任务链」归还给「当前概念」（所有权转移）
-        self.core
+        // * ❌此处只能销毁，不能报告：部分借用⇒借用冲突
+        let _ = self
+            .core
             .current_concept_mut()
             .put_task_link_back(self.current_task_link);
 

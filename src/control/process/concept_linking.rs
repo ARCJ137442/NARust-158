@@ -2,16 +2,18 @@
 //! * 📍复合词项的「词项链模板」搭建
 //! * 📍复合词项「链接到任务」的功能
 
-use nar_dev_utils::unwrap_or_return;
-
 use crate::{
     control::{ReasonContext, ReasonContextDirect},
-    entity::{BudgetValue, Concept, Item, RCTask, TLink, TLinkType, TaskLink, TermLinkTemplate},
+    entity::{
+        BudgetValue, Concept, Item, RCTask, TLink, TLinkType, TaskLink, TermLink, TermLinkTemplate,
+    },
     inference::{Budget, BudgetFunctions},
     language::{CompoundTermRef, Term},
     storage::Memory,
-    util::RefCount,
+    util::{RefCount, ToDisplayAndBrief},
 };
+use nar_dev_utils::unwrap_or_return;
+use navm::output::Output;
 
 /// Build TermLink templates to constant components and sub-components
 ///
@@ -161,15 +163,31 @@ impl ReasonContextDirect<'_> {
         self.build_term_links(); // recursively insert TermLink
     }
 
+    /// 搭建任务链
     fn build_task_links(&mut self) {
         // * 🚩载入自身字段 | 无法预加载，避免借用问题
         let concept = &mut self.core.current_concept;
         let memory = &mut self.core.reasoner.memory;
         let task = &self.current_task;
+
+        // * 🚩缓存的「输出值」
+        let mut outputs = vec![]; // 使用缓存延迟输出，避免借用问题
+        let mut add_overflowed_task_link = |overflowed_task_link: &TaskLink| {
+            // 使用闭包封装逻辑
+            outputs.push(Output::COMMENT {
+                content: format!(
+                    "!!! Overflowed TaskLink: {}",
+                    overflowed_task_link.to_display_long()
+                ),
+            })
+        };
+
         // 对自身 //
         // * 🚩对当前任务构造任务链，链接到传入的任务 | 构造「自身」
         let self_link = TaskLink::new_self(task.clone()); // link type: SELF
-        concept.insert_task_link_outer(memory, self_link);
+        if let Some(overflowed_task_link) = concept.insert_task_link_outer(memory, self_link) {
+            add_overflowed_task_link(&overflowed_task_link);
+        }
 
         // 对子项 //
         // * 🚩仅在「自身为复合词项」且「词项链模板非空」时准备
@@ -188,16 +206,87 @@ impl ReasonContextDirect<'_> {
         }
         // * 🚩仅在「预算达到阈值」时：遍历预先构建好的所有「子项词项链模板」，递归链接到任务
         for template in concept.link_templates_to_self() {
-            memory.link_task_link_from_template(template, task, &sub_budget);
+            // * 🚩对「溢出的任务链」作报告
+            if let Some(overflowed_task_link) =
+                memory.link_task_link_from_template(template, task, &sub_budget)
+            {
+                add_overflowed_task_link(&overflowed_task_link);
+            }
+        }
+
+        // * 🚩🆕汇报「溢出的任务链」
+        for output in outputs {
+            self.add_output(output);
         }
     }
 
+    /// 搭建词项链
     fn build_term_links(&mut self) {
         // * 🚩载入自身字段 | 无法预加载，避免借用问题
-        let concept = self.current_concept_mut();
-        let memory = self.memory_mut();
+        let concept_key = self.current_concept().key().clone();
+
+        // * 🚩现在统一使用「可递归逻辑」
+        self.build_term_links_sub(&concept_key);
+    }
+
+    fn build_term_links_sub(&mut self, concept_key: &str) {
+        // * 🚩获取「当前概念」（对「推理上下文的当前概念」也有效）
+        let concept = unwrap_or_return! {
+            ?self.key_to_concept(concept_key)
+            => ()
+        };
+        // * 🚩仅在有「词项链模板」时
+        if concept.link_templates_to_self().is_empty() {
+            return;
+        }
+
+        // * 🚩分派链接，更新预算值，继续
+        // * 📝太大的词项、太远的链接 根据AIKR有所取舍
         let task = &self.current_task;
-        todo!()
+        let sub_budget = BudgetFunctions::distribute_among_links(
+            &*task.get_(),
+            // ! ⚠️↓预算函数要求这里不能为零：要作为除数
+            concept.link_templates_to_self().len(),
+        );
+        if !sub_budget.budget_above_threshold(self.core.reasoner.parameters.budget_threshold) {
+            return;
+        }
+
+        // * 🚩仅在超过阈值时：遍历所有「词项链模板」
+        let self_term = concept.term().clone();
+        let templates = concept.link_templates_to_self().to_vec();
+        for template in &templates {
+            // * 🚩载入引用
+            let memory = &mut self.core.reasoner.memory;
+            // * 🚩仅在链接类型不是「转换」时
+            if template.link_type() == TLinkType::Transform {
+                continue;
+            }
+            // * 🚩仅在「元素词项所对应概念」存在时
+            let component = template.target();
+            // * 🚩建立双向链接：整体⇒元素
+            let self_concept = match memory.key_to_concept_mut(concept_key) {
+                Some(c) => c,
+                None => continue,
+            };
+            let link = TermLink::from_template(component.clone(), template, sub_budget);
+            self_concept.put_in_term_link(link); // this termLink to that
+
+            // * 🚩建立双向链接：元素⇒整体
+            // that termLink to this
+            let component_concept = match memory.get_concept_or_create(&component) {
+                Some(c) => c,
+                None => continue,
+            };
+            let link = TermLink::from_template(self_term.clone(), template, sub_budget);
+            component_concept.put_in_term_link(link);
+
+            // * 🚩对复合子项 继续深入递归
+            if let Some(component) = component.as_compound() {
+                let concept_key = &Memory::term_to_key(&component);
+                self.build_term_links_sub(concept_key);
+            }
+        }
     }
 }
 
@@ -205,49 +294,64 @@ impl Concept {
     /// 向「概念」插入任务链
     /// * ⚠️该方法仅针对【不在记忆区中】的概念
     ///   * 📝此时不用担心借用问题
-    fn insert_task_link_outer(&mut self, memory: &mut Memory, task_link: TaskLink) {
+    #[must_use]
+    fn insert_task_link_outer(
+        &mut self,
+        memory: &mut Memory,
+        task_link: TaskLink,
+    ) -> Option<TaskLink> {
         // * 📝注意：任务链の预算 ≠ 任务の预算；「任务链」与「所链接的任务」是不同的Item对象
         let new_budget = memory.activate_concept_calculate(self, &task_link);
-        self.put_task_link_back(task_link);
+        let overflowed_task_link = self.put_task_link_back(task_link);
         // * 🚩插入「任务链」的同时，以「任务链」激活概念 | 直接传入【可预算】的任务链
         Memory::activate_concept_apply(self, new_budget);
         // * ✅已经在「计算预算」时纳入了「遗忘」的效果
+        overflowed_task_link
     }
+
+    // ! 没有「插入词项链」的选项：均藏在「link_templates_to_self_and_put_in_term_link」的实现中
 }
 
 impl Memory {
+    /// 插入任务链
+    #[must_use]
     fn link_task_link_from_template(
         &mut self,
         template: &TermLinkTemplate,
         task: &RCTask,
         sub_budget: &impl Budget,
-    ) {
+    ) -> Option<TaskLink> {
         let component_term = template.target();
         // ! 📝数据竞争：不能在「其它概念被拿出去后」并行推理，会导致重复创建概念
-        let component_concept =
-            unwrap_or_return!(?self.get_concept_or_create(&component_term) => ());
+        let component_concept = unwrap_or_return!(?self.get_concept_or_create(&component_term) );
         let link =
             TaskLink::from_template(task.clone(), template, BudgetValue::from_other(sub_budget));
         let key = component_concept.key().clone();
-        self.insert_task_link_inner(&key, link);
+
+        // * 🚩插入任务链，并返回「溢出的任务链」
+        self.insert_task_link_inner(&key, link)
     }
 
     /// 向「概念」插入任务链
     /// * 📌该方法针对【在记忆区中】的概念
     ///   * 📝此时需要考虑借用问题
-    fn insert_task_link_inner(&mut self, key: &str, link: TaskLink) {
+    #[must_use]
+    fn insert_task_link_inner(&mut self, key: &str, link: TaskLink) -> Option<TaskLink> {
         // * 🚩计算预算值
-        let component_concept = unwrap_or_return!(?self.key_to_concept(key) => ());
+        let component_concept = unwrap_or_return!(?self.key_to_concept(key));
         let new_budget = self.activate_concept_calculate(component_concept, &link);
 
         // * 🚩放入任务链 & 更新预算值
-        let component_concept = unwrap_or_return!(?self.key_to_concept_mut(key) => ());
-        component_concept.put_in_task_link(link);
+        let component_concept = unwrap_or_return!(?self.key_to_concept_mut(key));
+        let overflowed_task_link = component_concept.put_in_task_link(link);
         component_concept.copy_budget_from(&new_budget);
 
         // * 🚩拿出再放回 | 用「遗忘函数」更新预算值
-        let component_concept = unwrap_or_return!(?self.pick_out_concept(key) => ());
+        let component_concept = unwrap_or_return!(?self.pick_out_concept(key));
         self.put_back_concept(component_concept);
+
+        // * 🚩返回溢出的任务链
+        overflowed_task_link
     }
 }
 
