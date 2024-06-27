@@ -4,14 +4,10 @@
 //!
 //! * ♻️【2024-06-26 12:02:36】开始根据改版OpenNARS重写
 
-use std::fmt::{Debug, Formatter};
-
-use super::{ReasonRecorder, ReasonerChannels};
-use crate::{
-    control::Parameters, entity::RCTask, global::ClockTime, inference::InferenceEngine,
-    storage::Memory,
-};
+use super::{ReasonRecorder, ReasonerChannels, ReasonerDerivationData};
+use crate::{control::Parameters, global::ClockTime, inference::InferenceEngine, storage::Memory};
 use navm::output::Output;
+use std::fmt::{Debug, Formatter};
 
 // ! ❌【2024-06-27 18:01:23】不复刻静态常量`Reasoner.DEBUG`
 
@@ -23,47 +19,48 @@ pub struct Reasoner {
 
     /// 超参数
     /// * 📌【2024-06-26 23:55:40】需要部分公开，以便在其它地方解决「借用冲突」问题
-    pub(in crate::control) parameters: Parameters,
+    pub(in super::super) parameters: Parameters,
 
     /// 记忆区
-    pub(in crate::control) memory: Memory,
+    pub(in super::super) memory: Memory,
 
     /// 记录器
-    recorder: ReasonRecorder,
+    pub(in super::super) recorder: ReasonRecorder,
 
     /// IO通道
-    io_channels: ReasonerChannels,
+    pub(in super::super) io_channels: ReasonerChannels,
+
+    /// 使用的推理引擎
+    pub(in super::super) inference_engine: Box<dyn InferenceEngine>,
+
+    /// 推理过程的「中间数据」
+    pub(in super::super) derivation_datas: ReasonerDerivationData,
 
     /// 系统时钟
-    clock: ClockTime,
+    pub(in super::super) clock: ClockTime,
 
     /// 状态「运行中」
-    running: bool,
+    pub(in super::super) running: bool,
 
     /// 剩下的用于「步进」的步数
     /// * 💭最初用于多线程，但目前的NARust中拟采用单线程
     ///
     /// TODO: ❓明确「是否需要」
-    walking_steps: usize,
+    pub(in super::super) walking_steps: usize,
 
-    /// 决定是否「完成了输入」
-    finished_inputs: bool,
-
+    // ! ❌不复刻`finishedInputs`：仅DEBUG变量
     /// 最后一个输出之前的步数
-    timer: usize,
+    pub(in super::super) timer: usize,
 
     /// 静默等级（0~100）
     /// * 🚩【2024-06-27 19:06:32】不同于OpenNARS，此处仅使用普通整数
-    silence_value: usize,
+    pub(in super::super) silence_value: usize,
 
     /// 时间戳序列号（递增序列号）
-    stamp_current_serial: ClockTime,
-
-    /// 使用的推理引擎
-    inference_engine: Box<dyn InferenceEngine>,
+    pub(in super::super) stamp_current_serial: ClockTime,
 }
 
-/// 为动态的
+/// 为动态的「推理引擎」实现[`Debug`]
 impl Debug for dyn InferenceEngine {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("InferenceEngine")
@@ -72,32 +69,83 @@ impl Debug for dyn InferenceEngine {
     }
 }
 
+/// 构造函数
 impl Reasoner {
-    pub fn parameters(&self) -> &Parameters {
-        todo!()
+    /// 完全参数构造函数
+    pub fn new(
+        name: impl Into<String>,
+        parameters: impl Into<Parameters>,
+        inference_engine: impl Into<Box<dyn InferenceEngine>>,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            // * 🚩默认为空
+            parameters: parameters.into(),
+            memory: Memory::default(),
+            recorder: ReasonRecorder::default(),
+            io_channels: ReasonerChannels::default(),
+            inference_engine: inference_engine.into(),
+            derivation_datas: ReasonerDerivationData::default(),
+            // * 🚩默认为0/false
+            clock: 0,
+            running: false,
+            walking_steps: 0,
+            timer: 0,
+            silence_value: 0,
+            stamp_current_serial: 0,
+        }
+    }
+}
+
+/// 功能性函数
+impl Reasoner {
+    /// 重置推理器
+    pub fn reset(&mut self) {
+        // * 🚩重置容器
+        self.memory.init();
+        self.derivation_datas.reset();
+        self.recorder.reset();
+
+        // * 🚩重置状态变量
+        self.init_timer();
+        self.running = false;
+        self.walking_steps = 0;
+        self.clock = 0;
+        self.stamp_current_serial = 0;
+
+        // * 🚩重置全局变量
+        crate::control::init_global_reason_parameters(); // 推理过程的全局参数（随机种子等）
+
+        // * 🚩最后发送消息
+        self.recorder.put(Output::INFO {
+            message: "-----RESET-----".into(),
+        });
     }
 
-    pub fn silence_value(&self) -> usize {
-        todo!()
+    /* 直接访问属性 */
+
+    /// 获取推理器名称
+    pub fn name(&self) -> &str {
+        &self.name
     }
 
-    pub fn time(&self) -> ClockTime {
-        todo!()
-    }
-
+    /// 获取记忆区（不可变引用）
     pub fn memory(&self) -> &Memory {
-        todo!()
+        &self.memory
     }
 
+    /// 获取记忆区（可变引用）
     pub fn memory_mut(&mut self) -> &mut Memory {
-        todo!()
+        &mut self.memory
     }
 
-    pub fn add_new_task(&mut self, task_rc: RCTask) {
-        todo!()
+    /// 获取超参数（不可变引用）
+    pub fn parameters(&self) -> &Parameters {
+        &self.parameters
     }
 
-    pub fn report(&mut self, output: Output) {
-        todo!()
+    /// 获取静默等级
+    pub fn silence_value(&self) -> usize {
+        self.silence_value
     }
 }

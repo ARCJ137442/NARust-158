@@ -11,8 +11,8 @@ nar_dev_utils::mods! {
     // 功能：输入输出通道
     pub use channels;
 
-    // 功能：解析Narsese任务
-    pub use parse_task;
+    // 功能：推理数据
+    pub use derivation_datas;
 
     // 功能：输出报告
     pub use report;

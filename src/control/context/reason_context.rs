@@ -144,10 +144,9 @@ pub trait ReasonContextWithLinks: ReasonContext {
 /// * 🚩重置「全局随机数生成器」
 /// * 📌【2024-06-26 23:36:06】目前计划做一个全局的「伪随机数生成器初始化」
 ///
-/// TODO: 功能实装
 #[doc(alias = "init")]
-pub fn init_global() {
-    todo!()
+pub fn init_global_reason_parameters() {
+    eprintln!("// TODO: 功能实装")
 }
 
 /// 🆕内置公开结构体，用于公共读取
@@ -258,8 +257,7 @@ impl ReasonContextCore<'_> {
         memory.put_back_concept(self.current_concept);
         // * 🚩将推理导出的「新任务」添加到自身新任务中（先进先出）
         for new_task in self.new_tasks {
-            let task_rc = RC::new_(new_task);
-            reasoner.add_new_task(task_rc);
+            reasoner.add_new_task(new_task);
         }
         // * 🚩将推理导出的「NAVM输出」添加进自身「NAVM输出」中（先进先出）
         for output in self.outputs {

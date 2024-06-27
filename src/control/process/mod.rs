@@ -12,6 +12,9 @@ nar_dev_utils::mods! {
     // 工作周期
     pub use work_cycle;
 
+    // 解析Narsese任务
+    pub use parsing_task;
+
     // 直接推理 | 以原OpenNARS 1.5.8`Concept.directProcess`命名
     pub use process_direct;
 
