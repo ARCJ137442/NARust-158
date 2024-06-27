@@ -37,8 +37,11 @@ nar_dev_utils::mods! {
     pub use budget_inference;
 
     // 🆕特征
-    pub use traits;
+    pub use traits; // TODO: 一个更好的模块名
 
-    // // ♻️具体规则
-    // pub use rules;
+    // 🏗️推理引擎
+    pub use engine;
+
+    // ♻️具体规则
+    pub use rules;
 }
