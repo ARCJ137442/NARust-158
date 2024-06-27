@@ -128,21 +128,6 @@ impl Concept {
         &self.link_templates_to_self
     }
 
-    /// 在「概念链接」中解决借用问题
-    /// * 🎯遍历「词项链模板」的同时插入词项链
-    /// * 💭【2024-06-28 02:03:55】不公开字段的无奈之举
-    /// * 💫【2024-06-28 02:08:21】非常复杂，达到目的就行
-    #[allow(clippy::complexity)]
-    pub fn link_templates_to_self_and_put_in_term_link<'this>(
-        &'this mut self,
-    ) -> (
-        &'this [TermLinkTemplate],
-        Box<dyn FnMut(TermLink) -> Option<TermLink> + 'this>,
-    ) {
-        let put_in = Box::new(|link| self.term_links.put_in(link));
-        (&self.link_templates_to_self, put_in)
-    }
-
     /// 🆕API方法 @ 链接建立
     pub fn put_in_term_link(&mut self, link: TermLink) -> Option<TermLink> {
         self.term_links.put_in(link)
