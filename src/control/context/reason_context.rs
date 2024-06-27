@@ -8,17 +8,15 @@
 //!   * 🚩【2024-06-26 11:47:30】仍然可能与旧版不同
 #![doc(alias = "derivation_context")]
 
-use std::ops::{Deref, DerefMut};
-
 use crate::{
     control::{Parameters, Reasoner},
     entity::{Concept, JudgementV1, RCTask, Task, TaskLink, TermLink},
-    global::{ClockTime, Float, RC},
+    global::{ClockTime, Float},
     language::Term,
     storage::Memory,
-    util::RefCount,
 };
 use navm::output::Output;
+use std::ops::{Deref, DerefMut};
 
 /// 🆕新的「推理上下文」对象
 /// * 📄仿自OpenNARS 3.1.0
