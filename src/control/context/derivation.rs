@@ -1,20 +1,21 @@
 //! 有关「推理上下文」中「导出结论」的功能
 //! * 🎯分离并锁定「导出结论」的方法
 
-use narsese::api::NarseseValue;
-use navm::output::Output;
-
-use super::{ReasonContext, ReasonContextConcept, ReasonContextDirect};
+use super::{ReasonContext, ReasonContextConcept};
 use crate::{
-    entity::{BudgetValue, JudgementV1, Sentence, SentenceV1, Stamp, Task, TaskLink, TruthValue},
+    entity::{
+        BudgetValue, Judgement, JudgementV1, Punctuation, Sentence, SentenceV1, Stamp, Task,
+        TruthValue,
+    },
     inference::Budget,
     language::Term,
     util::{RefCount, ToDisplayAndBrief},
 };
+use narsese::api::NarseseValue;
+use navm::output::Output;
 
 /// 自动实现 for 「推理上下文」
 pub trait ContextDerivation: ReasonContext {
-    // TODO: 将以下逻辑迁移到单独的「自动实现之特征」中
     /// 共用终端逻辑：「激活任务」
     /// # 📄OpenNARS
     ///
@@ -114,7 +115,6 @@ pub trait ContextDerivation: ReasonContext {
 impl<T: ?Sized + ReasonContext> ContextDerivation for T {}
 
 pub trait ContextDerivationConcept: ReasonContextConcept {
-    // TODO: 统一迁移到别的模块
     /// 🆕产生新时间戳 from 单前提
     fn generate_new_stamp_single(&self) -> Stamp {
         let current_task = self.current_task().get_();
@@ -128,6 +128,8 @@ pub trait ContextDerivationConcept: ReasonContextConcept {
     }
 
     /// 🆕产生新时间戳 from 双前提
+    ///
+    /// ? 是否需要通过「假定有『当前信念』」实现「直接返回[`Stamp`]而非[`Option<Stamp>`](Option)」？
     fn generate_new_stamp_double(&self) -> Option<Stamp> {
         let current_task = &*self.current_task().get_();
         // * 🚩在具有「当前信念」时返回「与『当前任务』合并的时间戳」
@@ -136,6 +138,8 @@ pub trait ContextDerivationConcept: ReasonContextConcept {
                 // * 📄理由：最后返回的信念与「成功时比对的信念」一致（只隔着`clone`）
                  Stamp::from_merge_unchecked(current_task, belief, self.time(), self.max_evidence_base_length()))
     }
+
+    /* --------------- new task building --------------- */
 
     /// Shared final operations by all double-premise rules, called from the
     /// rules except StructuralRules
@@ -150,7 +154,7 @@ pub trait ContextDerivationConcept: ReasonContextConcept {
         if let Some(new_stamp) = self.generate_new_stamp_double() {
             let new_truth_revisable = new_truth.map(|truth| (truth, true));
             self.double_premise_task_full(
-                None,
+                None, // * 🚩默认「当前任务」
                 new_content,
                 new_truth_revisable,
                 new_budget,
@@ -162,9 +166,52 @@ pub trait ContextDerivationConcept: ReasonContextConcept {
     /// 🆕其直接调用来自组合规则、匹配规则（修正）
     /// * 🎯避免对`currentTask`的赋值，解耦调用（并让`currentTask`不可变）
     /// * 🎯避免对`newStamp`的复制，解耦调用（让「新时间戳」的赋值止步在「推理开始」之前）
+    fn double_premise_task_compositional(
+        &mut self,
+        current_task: Option<&Task>,
+        new_content: Term,
+        new_truth: Option<TruthValue>,
+        new_budget: BudgetValue,
+        new_stamp: Stamp,
+    ) {
+        self.double_premise_task_full(
+            current_task,
+            new_content,
+            // * 🚩默认「可修正」
+            new_truth.map(|truth| (truth, true)),
+            new_budget,
+            new_stamp,
+        )
+    }
+
+    /// 🆕重定向
+    fn double_premise_task_not_revisable(
+        &mut self,
+        new_content: Term,
+        new_truth: Option<TruthValue>,
+        new_budget: BudgetValue,
+    ) {
+        if let Some(new_stamp) = self.generate_new_stamp_double() {
+            self.double_premise_task_full(
+                None, // * 🚩默认「当前任务」
+                new_content,
+                // * 🚩默认「不可修正」，其它相同
+                new_truth.map(|truth| (truth, false)),
+                new_budget,
+                new_stamp,
+            )
+        }
+    }
+
+    /// 「双前提导出结论」的完整方法实现
     /// * 🚩【2024-06-27 00:52:39】为避免借用冲突，此处使用[`Option`]区分「传入其它地方引用/使用自身引用」
     ///   * 有值 ⇒ 使用内部的值
     ///   * 空值 ⇒ 从`self`中拿取
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// Shared final operations by all double-premise rules,
+    /// called from the rules except StructuralRules
     fn double_premise_task_full(
         &mut self,
         current_task: Option<&Task>,
@@ -195,19 +242,57 @@ pub trait ContextDerivationConcept: ReasonContextConcept {
         }
     }
 
-    /// 🆕重定向
-    fn double_premise_task_not_revisable(
+    /// Shared final operations by all single-premise rules,
+    /// called in StructuralRules
+    fn single_premise_task_full(
         &mut self,
         new_content: Term,
+        punctuation: Punctuation,
         new_truth: Option<TruthValue>,
         new_budget: BudgetValue,
     ) {
-        todo!("【2024-06-27 01:10:54】后续再弄")
+        let current_task = self.current_task().get_();
+        let parent_task = current_task.parent_task();
+        // * 🚩对于「结构转换」的单前提推理，若已有父任务且该任务与父任务相同⇒中止，避免重复推理
+        if let Some(parent_task) = parent_task {
+            if new_content == *parent_task.get_().content() {
+                return; // to avoid circular structural inference
+            }
+        }
+        let task_sentence = &*current_task;
+        // * 🚩构造新时间戳
+        let new_stamp = self.generate_new_stamp_single();
+        // * 🚩使用新内容构造新语句
+        let revisable = task_sentence
+            .as_judgement()
+            // * 🚩判断句⇒返回实际的「可修订」
+            // * 🚩疑问句⇒返回一个用不到的空值
+            .map_or(false, Judgement::revisable);
+        // * 🚩判断句⇒返回实际的「可修订」
+        // * 🚩疑问句⇒返回一个用不到的空值
+        let new_sentence = SentenceV1::new_sentence_from_punctuation(
+            new_content,
+            punctuation,
+            new_stamp,
+            new_truth.map(|truth| (truth, revisable)),
+        );
+        let new_sentence = match new_sentence {
+            // * 🚩伪·问号解包
+            Ok(sentence) => sentence,
+            Err(..) => return,
+        };
+        // * 🚩构造新任务
+        let new_task = Task::from_derived(
+            new_sentence,
+            new_budget,
+            // * 🚩拷贝共享引用
+            Some(self.current_task().clone()),
+            None,
+        );
+        // * 🚩导出
+        drop(current_task); // ! 先释放「借用代理」
+        self.derived_task(new_task);
     }
-
-    //     /// Shared final operations by all double-premise rules,
-    // /// called from the rules except StructuralRules
-    // double_premise_task_
 }
 
 /// * 📝需要采用`?Sized`以包括【运行时尺寸未定】的对象

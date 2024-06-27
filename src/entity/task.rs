@@ -78,6 +78,8 @@ impl Task {
         Self::new(sentence, budget, None, None, None)
     }
 
+    /// 从「导出结论」构造
+    /// * 🚩默认没有「最优解」
     pub fn from_derived(
         sentence: SentenceV1,
         budget: BudgetValue,
