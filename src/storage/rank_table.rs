@@ -1,6 +1,8 @@
 //! 🆕新的「排行表」类型
 //! * 📌复刻自OpenNARS改版
 
+use nar_dev_utils::unwrap_or_return;
+
 use crate::{global::Float, util::Iterable};
 
 /// 🆕排行表 抽象类型
@@ -61,11 +63,11 @@ pub trait RankTable<T>: Iterable<T> {
     /// 加入元素
     /// * 🚩成功加入⇒返回null/旧元素；加入失败⇒返回待加入的元素
     fn add(&mut self, new_item: T) -> Option<T> {
-        let i_to_add = match self.rank_index_to_add(&new_item) {
+        let i_to_add = unwrap_or_return! {
             // * 🚩将新元素插入到「排行表」的索引i位置（可以是末尾）
-            Some(i) => i,
-            // * 🚩添加失败
-            None => return Some(new_item),
+            ?self.rank_index_to_add(&new_item)
+            // * 🚩添加失败 ⇒ 原路返回元素
+            => Some(new_item)
         };
         let table_size = self.size();
         // * 🚩根据「是否在末尾」「是否超出容量」判断

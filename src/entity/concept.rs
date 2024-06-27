@@ -177,14 +177,14 @@ impl Concept {
     /// * 📝⚠️实际上并不`only called in RuleTables.reason`
     /// * 📄在「组合规则」的「回答带变量合取」时用到
     /// * 🚩改：去除其中「设置当前时间戳」的副作用，将其迁移到调用者处
-    pub fn get_belief(&self, task_sentence: &impl Sentence) -> Option<JudgementV1> {
+    pub fn get_belief(&self, task_sentence: &impl Sentence) -> Option<&JudgementV1> {
         // * 🚩此处按「信念排名」从大到小遍历；第一个满足「证据基不重复」的信念将被抽取
         for belief in self.beliefs.iter() {
             // * 📝在OpenNARS 3.0.4中会被覆盖：
             // * 📄`nal.setTheNewStamp(taskStamp, belief.stamp, currentTime);`
             // * ✅【2024-06-08 10:13:46】现在彻底删除newStamp字段，不再需要覆盖了
             if !task_sentence.evidential_overlap(belief) {
-                let selected = belief.clone();
+                let selected = belief;
                 return Some(selected);
             }
         }
