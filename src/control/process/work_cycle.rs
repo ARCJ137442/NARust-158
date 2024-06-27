@@ -202,7 +202,8 @@ impl Reasoner {
             Cmd::RES { .. } => self.reset(),
             // * 🚩Narsese：输入任务（但不进行推理）
             Cmd::NSE(narsese) => {
-                match self.parse_task(narsese) {
+                let stamp_current_serial = self.updated_stamp_current_serial();
+                match self.parse_task(narsese, stamp_current_serial) {
                     Ok(task) => {
                         // * 🚩解析成功⇒输入任务
                         // * 🚩【2024-05-17 16:28:53】现在无需输入任务

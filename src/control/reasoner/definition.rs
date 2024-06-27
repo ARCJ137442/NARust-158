@@ -148,4 +148,11 @@ impl Reasoner {
     pub fn silence_value(&self) -> usize {
         self.silence_value
     }
+
+    /// 更新「当前时间戳序列号」
+    /// * 📝OpenNARS中「先自增，再使用」
+    pub fn updated_stamp_current_serial(&mut self) -> ClockTime {
+        self.stamp_current_serial += 1;
+        self.stamp_current_serial
+    }
 }

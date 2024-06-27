@@ -1,48 +1,12 @@
 //! 作为特征的「语句」类型
 
-use super::{Judgement, Question};
+use super::{Judgement, Punctuation, Question};
 use crate::{
-    entity::Stamp, global::ClockTime, inference::Evidential, io::symbols::*, language::Term,
+    entity::Stamp, global::ClockTime, inference::Evidential, language::Term,
     util::ToDisplayAndBrief,
 };
 use anyhow::Result;
 use narsese::lexical::Sentence as LexicalSentence;
-use std::fmt::{Display, Formatter, Result as FmtResult};
-
-/// NARust特制的「标点」类型
-/// * 📌相比旧版的`SentenceType`，此处仅提供简单枚举，不附带字段
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Punctuation {
-    Judgement,
-    Question,
-}
-
-impl Punctuation {
-    pub fn from_char(c: char) -> Option<Self> {
-        match c {
-            JUDGMENT_MARK => Some(Self::Judgement),
-            QUESTION_MARK => Some(Self::Question),
-            _ => None,
-        }
-    }
-    pub fn to_char(&self) -> char {
-        use Punctuation::*;
-        match self {
-            Judgement => JUDGMENT_MARK,
-            Question => QUESTION_MARK,
-        }
-    }
-}
-
-impl Display for Punctuation {
-    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        use Punctuation::*;
-        match self {
-            Judgement => write!(f, "{JUDGMENT_MARK}"),
-            Question => write!(f, "{QUESTION_MARK}"),
-        }
-    }
-}
 
 /// 模拟`nars.entity.Sentence`
 /// * 📌【2024-05-10 20:17:04】此处不加入对[`PartialEq`]的要求：会将要求传播到上层的「词项链」「任务链」
