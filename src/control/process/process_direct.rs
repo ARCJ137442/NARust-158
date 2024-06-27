@@ -22,7 +22,7 @@
 
 use crate::{
     control::{ReasonContext, ReasonContextDirect, Reasoner},
-    entity::{Item, Punctuation, Sentence, Task},
+    entity::{Item, Sentence, Task},
     global::RC,
     inference::{Budget, Truth},
     util::{RefCount, ToDisplayAndBrief},
@@ -181,24 +181,11 @@ impl ReasonContextDirect<'_> {
         // * * 📝在其被唯一使用的地方，传入的`task`只有可能是`context.currentConcept`
         // * * 📝相比于「概念推理」仅少了「当前词项链」与「当前任务链」，其它基本通用
 
-        // * 🚩先根据类型分派推理
-        let task_punctuation = self.current_task.get_().punctuation();
-
-        use Punctuation::*;
-        match task_punctuation {
-            Judgement => self.process_judgement(),
-            Question => self.process_question(),
-        }
+        // * 🚩委派「推理引擎」分派推理
+        // * ✅【2024-06-28 01:25:58】使用了函数指针，所以不存在借用问题
+        (self.core.reasoner.inference_engine.direct_f())(self);
 
         // * 🚩在推理后做链接 | 若预算值够就链接，若预算值不够就丢掉
         self.link_concept_to_task()
-    }
-
-    fn process_judgement(&mut self) {
-        todo!()
-    }
-
-    fn process_question(&mut self) {
-        todo!()
     }
 }

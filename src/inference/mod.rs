@@ -36,6 +36,9 @@ nar_dev_utils::mods! {
     // 🛠️预算推理
     pub use budget_inference;
 
+    // 📥本地推理
+    pub use local_inference;
+
     // 🆕特征
     pub use traits; // TODO: 一个更好的模块名
 

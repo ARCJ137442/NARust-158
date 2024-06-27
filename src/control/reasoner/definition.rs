@@ -7,7 +7,7 @@
 use super::{ReasonRecorder, ReasonerChannels, ReasonerDerivationData};
 use crate::{control::Parameters, global::ClockTime, inference::InferenceEngine, storage::Memory};
 use navm::output::Output;
-use std::fmt::{Debug, Formatter};
+use std::fmt::Debug;
 
 // ! ❌【2024-06-27 18:01:23】不复刻静态常量`Reasoner.DEBUG`
 
@@ -31,7 +31,7 @@ pub struct Reasoner {
     pub(in super::super) io_channels: ReasonerChannels,
 
     /// 使用的推理引擎
-    pub(in super::super) inference_engine: Box<dyn InferenceEngine>,
+    pub(in super::super) inference_engine: InferenceEngine,
 
     /// 推理过程的「中间数据」
     pub(in super::super) derivation_datas: ReasonerDerivationData,
@@ -60,22 +60,13 @@ pub struct Reasoner {
     pub(in super::super) stamp_current_serial: ClockTime,
 }
 
-/// 为动态的「推理引擎」实现[`Debug`]
-impl Debug for dyn InferenceEngine {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("InferenceEngine")
-            .field("..", &"..")
-            .finish()
-    }
-}
-
 /// 构造函数
 impl Reasoner {
     /// 完全参数构造函数
     pub fn new(
         name: impl Into<String>,
         parameters: impl Into<Parameters>,
-        inference_engine: impl Into<Box<dyn InferenceEngine>>,
+        inference_engine: impl Into<InferenceEngine>,
     ) -> Self {
         Self {
             name: name.into(),

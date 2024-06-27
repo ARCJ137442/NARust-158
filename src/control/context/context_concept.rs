@@ -22,7 +22,7 @@ use std::ops::{Deref, DerefMut};
 #[derive(Debug)]
 pub struct ReasonContextConcept<'this> {
     /// 内部存储的「上下文核心」
-    core: ReasonContextCore<'this>,
+    pub(crate) core: ReasonContextCore<'this>,
 
     /// 选中的任务链
     /// * 📌【2024-05-21 20:26:30】不可空！

@@ -6,8 +6,4 @@
 
 // use crate::inference::InferenceEngine;
 
-pub struct InferenceEngineV1;
-
-// impl InferenceEngine for InferenceEngineV1 {
-//     // TODO: 等待「推理上下文」完成
-// }
+// TODO: 有待再调整

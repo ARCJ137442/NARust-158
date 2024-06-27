@@ -6,9 +6,7 @@ use nar_dev_utils::unwrap_or_return;
 
 use crate::{
     control::{ReasonContext, ReasonContextDirect},
-    entity::{
-        BudgetValue, Concept, Item, RCTask, TLink, TLinkType, Task, TaskLink, TermLinkTemplate,
-    },
+    entity::{BudgetValue, Concept, Item, RCTask, TLink, TLinkType, TaskLink, TermLinkTemplate},
     inference::{Budget, BudgetFunctions},
     language::{CompoundTermRef, Term},
     storage::Memory,
