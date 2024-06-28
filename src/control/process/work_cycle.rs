@@ -14,13 +14,11 @@
 //! * ✅【2024-05-12 16:10:24】基本从「记忆区」迁移完所有功能
 //! * ♻️【2024-06-26 11:59:58】开始根据改版OpenNARS重写
 
-use nar_dev_utils::list;
-use narsese::api::NarseseValue;
-use navm::{cmd::Cmd, output::Output};
-
 use crate::{
     control::Reasoner, entity::Task, global::ClockTime, inference::Budget, util::ToDisplayAndBrief,
 };
+use nar_dev_utils::list;
+use navm::cmd::Cmd;
 
 impl Reasoner {
     /* 时钟相关 */
@@ -140,9 +138,7 @@ impl Reasoner {
 /// 工作周期
 impl Reasoner {
     pub fn work_cycle(&mut self) {
-        self.report(Output::COMMENT {
-            content: format!("--- {} ---", self.time()),
-        });
+        self.report_comment(format!("--- {} ---", self.time()));
 
         // * 🚩本地任务直接处理 阶段 * //
         let has_result = self.process_direct();
@@ -207,10 +203,7 @@ impl Reasoner {
                     }
                     Err(e) => {
                         // * 🚩解析失败⇒新增输出
-                        let output = Output::ERROR {
-                            description: format!("Narsese任务解析错误：{e}",),
-                        };
-                        self.report(output);
+                        self.report_error(format!("Narsese任务解析错误：{e}",));
                     }
                 }
             }
@@ -228,9 +221,7 @@ impl Reasoner {
             // * 🚩退出⇒处理完所有输出后直接退出
             Cmd::EXI { reason } => {
                 // * 🚩最后的提示性输出
-                self.report(Output::INFO {
-                    message: format!("NARust exited with reason {reason:?}"),
-                });
+                self.report_info(format!("Program exited with reason {reason:?}"));
                 // * 🚩处理所有输出
                 self.handle_output();
                 // * 🚩最终退出程序
@@ -240,10 +231,7 @@ impl Reasoner {
             // * 🚩未知指令⇒输出提示
             _ => {
                 // * 🚩解析失败⇒新增输出
-                let output = Output::ERROR {
-                    description: format!("未知的NAVM指令：{}", cmd),
-                };
-                self.report(output);
+                self.report_error(format!("Unknown cmd: {cmd}"));
             }
         }
     }
@@ -264,18 +252,12 @@ impl Reasoner {
         if task.budget_above_threshold(budget_threshold) {
             // ? 💭【2024-05-07 22:57:48】实际上只需要输出`IN`即可：日志系统不必照着OpenNARS的来
             // * 🚩此处两个输出合而为一
-            let narsese = NarseseValue::from_task(task.to_lexical());
-            self.report(Output::IN {
-                content: format!("!!! Perceived: {}", task.to_display_long()),
-                narsese: Some(narsese),
-            });
+            self.report_in(&task);
             // * 📝只追加到「新任务」里边，并不进行推理
             self.derivation_datas.add_new_task(task);
         } else {
             // 此时还是输出一个「被忽略」好
-            self.report(Output::COMMENT {
-                content: format!("!!! Neglected: {}", task.to_display_long()),
-            });
+            self.report_comment(format!("!!! Neglected: {}", task.to_display_long()));
         }
     }
 

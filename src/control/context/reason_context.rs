@@ -70,7 +70,7 @@ pub trait ReasonContext {
     fn report(&mut self, output: Output);
 
     /// 派生易用性方法
-    fn report_comment(&mut self, message: impl Into<String>) {
+    fn report_comment(&mut self, message: impl ToString) {
         self.report(ReasonRecorder::output_comment(message));
     }
 

@@ -6,7 +6,6 @@
 
 use super::{ReasonRecorder, ReasonerChannels, ReasonerDerivationData};
 use crate::{control::Parameters, global::ClockTime, inference::InferenceEngine, storage::Memory};
-use navm::output::Output;
 use std::fmt::Debug;
 
 // ! ❌【2024-06-27 18:01:23】不复刻静态常量`Reasoner.DEBUG`
@@ -108,9 +107,7 @@ impl Reasoner {
         crate::control::init_global_reason_parameters(); // 推理过程的全局参数（随机种子等）
 
         // * 🚩最后发送消息
-        self.recorder.put(Output::INFO {
-            message: "-----RESET-----".into(),
-        });
+        self.report_info("-----RESET-----");
     }
 
     /* 直接访问属性 */
