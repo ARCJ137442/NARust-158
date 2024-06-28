@@ -1,17 +1,21 @@
 use anyhow::Result;
-use narust_158::{
-    control::DEFAULT_PARAMETERS,
-    inference::InferenceEngine,
-    vm::{Launcher, Runtime},
-};
+use narust_158::{control::DEFAULT_PARAMETERS, inference::InferenceEngine, vm::Launcher};
 use navm::vm::{VmLauncher, VmRuntime};
 
-fn create_runtime() -> Result<Runtime> {
-    let vm = Launcher::new("nar_158", DEFAULT_PARAMETERS, InferenceEngine::VOID);
+pub fn launcher_void() -> impl VmLauncher {
+    Launcher::new("nar_158", DEFAULT_PARAMETERS, InferenceEngine::VOID)
+}
+
+pub fn launcher_echo() -> impl VmLauncher {
+    Launcher::new("nar_158", DEFAULT_PARAMETERS, InferenceEngine::ECHO)
+}
+
+fn create_runtime() -> Result<impl VmRuntime> {
+    let vm = launcher_echo();
     vm.launch()
 }
 
-fn shell(mut runtime: Runtime) -> Result<()> {
+fn shell(mut runtime: impl VmRuntime) -> Result<()> {
     let mut input = String::new();
     let stdin = &std::io::stdin();
     loop {

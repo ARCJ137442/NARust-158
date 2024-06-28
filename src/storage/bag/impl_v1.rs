@@ -770,19 +770,21 @@ impl<E: Item> Bag<E> {
         }
         return buf.toString(); */
         let mut buf = String::new();
-        for level in (0..Self::__TOTAL_LEVEL).rev() {
-            if self.empty_level(level) {
-                buf += "\n --- Level ";
-                buf += &level.to_string();
-                buf += ":\n ";
-                let level_size = self.level_map.get(level).size();
-                for i in 0..level_size {
-                    let key = self.level_map.get(level).get(i);
-                    if let Some(key) = key {
-                        let item = self.get(key).unwrap(); // ! 📌【2024-05-09 01:27:59】不可能没有
-                        buf += &item.to_display_brief();
-                        buf += "\n "
-                    }
+        // * 🚩倒序遍历所有非空层
+        for level in (0..Self::__TOTAL_LEVEL)
+            .rev()
+            .filter(|&level| !self.empty_level(level))
+        {
+            buf += "\n --- Level ";
+            buf += &level.to_string();
+            buf += ":\n ";
+            let level_size = self.level_map.get(level).size();
+            for i in 0..level_size {
+                let key = self.level_map.get(level).get(i);
+                if let Some(key) = key {
+                    let item = self.get(key).unwrap(); // ! 📌【2024-05-09 01:27:59】不可能没有
+                    buf += &item.to_display_brief();
+                    buf += "\n "
                 }
             }
         }

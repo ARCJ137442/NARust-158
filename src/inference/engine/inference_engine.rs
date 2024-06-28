@@ -67,6 +67,60 @@ impl InferenceEngine {
         Self::new(direct, transform, matching, reason)
     };
 
+    /// 打印回显的推理引擎
+    /// * ✨可用于调试控制机制
+    pub const ECHO: Self = {
+        use crate::{
+            control::{ReasonContext, ReasonContextWithLinks},
+            util::{RefCount, ToDisplayAndBrief},
+        };
+        use nar_dev_utils::OptionBoost;
+
+        /// 直接推理
+        fn direct(context: &mut ReasonContextDirect) {
+            context.report_comment(format!(
+                "#Inference - Direct:\nconcept: {}\ntask: {}",
+                context.current_concept().to_display_long(),
+                context.current_task().get_().to_display_long(),
+            ))
+        }
+
+        /// 转换推理
+        fn transform(context: &mut ReasonContextTransform) {
+            context.report_comment(format!(
+                "#Inference - Transform:\nconcept: {}\ntask-link: {}",
+                context.current_concept().to_display_long(),
+                context.current_task_link().to_display_long(),
+            ))
+        }
+
+        /// 匹配推理
+        fn matching(context: &mut ReasonContextConcept) {
+            context.report_comment(format!(
+                "#Inference - Matching:\nconcept: {}\ntask-link: {}\nbelief-link: {}",
+                context.current_concept().to_display_long(),
+                context.current_task_link().to_display_long(),
+                context.current_belief_link().to_display_long(),
+            ))
+        }
+
+        /// 概念推理
+        fn reason(context: &mut ReasonContextConcept) {
+            context.report_comment(format!(
+                "#Inference - Reason:\nconcept: {}\ntask-link: {}\nbelief-link: {}\nbelief: {}",
+                context.current_concept().to_display_long(),
+                context.current_task_link().to_display_long(),
+                context.current_belief_link().to_display_long(),
+                context
+                    .current_belief()
+                    .map_unwrap_or(ToDisplayAndBrief::to_display_long, "None".into()),
+            ))
+        }
+
+        // 返回
+        Self::new(direct, transform, matching, reason)
+    };
+
     /// 获取「推理函数 @ 直接推理」
     /// * ✅不会长期借用`self`：允许「推理引擎」作为「推理上下文」的一部分（被引用）
     pub fn direct_f(&self) -> fn(&mut ReasonContextDirect) {
