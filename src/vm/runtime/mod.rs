@@ -77,8 +77,9 @@ impl VmRuntime for Runtime {
         // ! ⚠️不要直接朝推理器输入NAVM指令，要利用推理器自身的通道机制
         // * 🚩将指令置入通道中
         self.i_channel.mut_().put(cmd);
-        // * 🚩让推理器做一个完整步进周期
-        self.reasoner.tick();
+        // * 🚩让推理器处理一次完整输入输出
+        // * 📌其中包括`NSE`指令，会将执行的回执（输出）单独带出
+        self.reasoner.handle_io();
         Ok(())
     }
 

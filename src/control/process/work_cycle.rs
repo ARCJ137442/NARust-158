@@ -72,26 +72,30 @@ impl Reasoner {
 
 /// 推理器步进
 impl Reasoner {
-    /// 推理器步进
-    pub fn tick_steps(&mut self, steps: usize) {
+    /// 推理循环
+    /// * 🚩只负责推理，不处理输入输出
+    ///   * 📌在「处理输入」的同时，也可能发生「推理循环」（`CYC`指令）
+    pub fn cycle(&mut self, steps: usize) {
         for _ in 0..steps {
-            self.tick();
+            self.handle_work_cycle();
         }
     }
-    /// 推理器步进
-    pub fn tick(&mut self) {
-        // ! ❌【2024-06-27 21:06:41】不实现有关`DEBUG`的部分
-        // if DEBUG {
-        //     self.handle_debug();
-        // }
-        // * 🚩【2024-06-29 00:24:57】此处不同于OpenNARS：每次都是一个完整的「输入→工作→输出」周期
+
+    /// 处理输入输出
+    /// * 🚩负责处理输入输出，并**有可能触发推理循环**
+    ///   * 📌输入的`CYC`指令 会【立即】触发工作周期
+    ///   * 💭【2024-06-29 01:41:03】这样的机制仍有其必要性
+    ///     * 💡不同通道的指令具有执行上的优先级
+    ///     * 💡每个操作都是【原子性】的，执行过程中顺序先后往往影响最终结果
+    pub fn handle_io(&mut self) {
+        // * 🚩处理输入（可能会有推理器步进）
         self.handle_input();
-        self.handle_work_cycle();
+        // * 🚩处理输出
         self.handle_output();
     }
 
     /// 处理输入：遍历所有通道，拿到指令
-    pub fn handle_input(&mut self) {
+    fn handle_input(&mut self) {
         // * 🚩遍历所有通道，拿到要执行的指令（序列）
         let input_cmds = self.fetch_cmd_from_input();
         // * 🚩在此过程中执行指令，相当于「在通道中调用`textInputLine`」
@@ -101,7 +105,7 @@ impl Reasoner {
     }
 
     /// 处理输出
-    pub fn handle_output(&mut self) {
+    fn handle_output(&mut self) {
         let outputs = list![
             {output}
             while let Some(output) = (self.recorder.take())
@@ -125,7 +129,7 @@ impl Reasoner {
         }
     }
 
-    pub fn handle_work_cycle(&mut self) {
+    fn handle_work_cycle(&mut self) {
         // * 🚩处理时钟
         self.clock += 1;
         self.tick_timer();
@@ -136,7 +140,7 @@ impl Reasoner {
 
 /// 工作周期
 impl Reasoner {
-    pub fn work_cycle(&mut self) {
+    fn work_cycle(&mut self) {
         self.report_comment(format!("--- {} ---", self.time()));
 
         // * 🚩本地任务直接处理 阶段 * //
@@ -185,7 +189,9 @@ impl Reasoner {
 
     /// 模拟`ReasonerBatch.textInputLine`
     /// * 🚩🆕【2024-05-13 02:27:07】从「字符串输入」变为「NAVM指令输入」
-    pub fn input_cmd(&mut self, cmd: Cmd) {
+    /// * 🚩【2024-06-29 01:42:46】现在不直接暴露「输入NAVM指令」：全权交给「通道」机制
+    ///   * 🚩由「通道」的「处理IO」引入
+    fn input_cmd(&mut self, cmd: Cmd) {
         match cmd {
             // Cmd::SAV { target, path } => (),
             // Cmd::LOA { target, path } => (),
@@ -208,8 +214,8 @@ impl Reasoner {
             }
             // Cmd::NEW { target } => (),
             // Cmd::DEL { target } => (),
-            // * 🚩工作周期：添加「预备循环计数」
-            Cmd::CYC(cycles) => self.tick_steps(cycles),
+            // * 🚩工作周期：只执行推理，不处理输入输出
+            Cmd::CYC(cycles) => self.cycle(cycles),
             // * 🚩音量：设置音量
             Cmd::VOL(volume) => self.silence_value = volume,
             // Cmd::REG { name } => (),
@@ -246,7 +252,7 @@ impl Reasoner {
     /// with low priority are ignored, and the others are put into task buffer.
     ///
     /// @param task The input task
-    pub fn input_task(&mut self, task: Task) {
+    fn input_task(&mut self, task: Task) {
         let budget_threshold = self.parameters.budget_threshold;
         if task.budget_above_threshold(budget_threshold) {
             // ? 💭【2024-05-07 22:57:48】实际上只需要输出`IN`即可：日志系统不必照着OpenNARS的来
