@@ -272,8 +272,6 @@ impl ToDisplayAndBrief for Concept {
     fn to_display_long(&self) -> String {
         let mut base = join! {
             => self.to_display_brief()
-            => " "
-            => self.key()
             => "\nterm_links: " => self.term_links.to_display()
             => "\ntask_links: " => self.task_links.to_display()
         };
