@@ -63,7 +63,7 @@ impl Runtime {
 /// 实现[虚拟机运行时](VmRuntime)
 impl VmRuntime for Runtime {
     fn input_cmd(&mut self, cmd: Cmd) -> Result<()> {
-        Reasoner::input_cmd(&mut self.reasoner, cmd);
+        self.reasoner.input_cmd(cmd);
         Ok(())
     }
 

@@ -45,32 +45,39 @@ impl Reasoner {
     }
 }
 
-/// 推理器时钟控制
-impl Reasoner {
-    /// # 📄OpenNARS
-    ///
-    /// Start the inference process
-    pub fn run(&mut self) {
-        self.running = true;
-    }
+// ! 弃用
+// /// 推理器时钟控制
+// impl Reasoner {
+//     /// # 📄OpenNARS
+//     ///
+//     /// Start the inference process
+//     pub fn run(&mut self) {
+//         self.running = true;
+//     }
 
-    /// # 📄OpenNARS
-    ///
-    /// Will carry the inference process for a certain number of steps
-    pub fn walk(&mut self, steps: usize) {
-        self.walking_steps = steps;
-    }
+//     /// # 📄OpenNARS
+//     ///
+//     /// Will carry the inference process for a certain number of steps
+//     pub fn walk(&mut self, steps: usize) {
+//         self.walking_steps = steps;
+//     }
 
-    /// # 📄OpenNARS
-    ///
-    /// Will stop the inference process
-    pub fn stop(&mut self) {
-        self.running = false;
-    }
-}
+//     /// # 📄OpenNARS
+//     ///
+//     /// Will stop the inference process
+//     pub fn stop(&mut self) {
+//         self.running = false;
+//     }
+// }
 
 /// 推理器步进
 impl Reasoner {
+    /// 推理器步进
+    pub fn tick_steps(&mut self, steps: usize) {
+        for _ in 0..steps {
+            self.tick();
+        }
+    }
     /// 推理器步进
     pub fn tick(&mut self) {
         // ! ❌【2024-06-27 21:06:41】不实现有关`DEBUG`的部分
@@ -82,16 +89,13 @@ impl Reasoner {
         self.handle_work_cycle();
     }
 
-    /// 处理输入
+    /// 处理输入：遍历所有通道，拿到指令
     pub fn handle_input(&mut self) {
-        // * 🚩处理输入：遍历所有通道，拿到指令
-        if self.walking_steps == 0 {
-            // * 🚩遍历所有通道，拿到要执行的指令（序列）
-            let input_cmds = self.fetch_cmd_from_input();
-            // * 🚩在此过程中执行指令，相当于「在通道中调用`textInputLine`」
-            for cmd in input_cmds {
-                self.input_cmd(cmd);
-            }
+        // * 🚩遍历所有通道，拿到要执行的指令（序列）
+        let input_cmds = self.fetch_cmd_from_input();
+        // * 🚩在此过程中执行指令，相当于「在通道中调用`textInputLine`」
+        for cmd in input_cmds {
+            self.input_cmd(cmd);
         }
     }
 
@@ -121,17 +125,11 @@ impl Reasoner {
     }
 
     pub fn handle_work_cycle(&mut self) {
-        if self.running || self.walking_steps > 0 {
-            // * 🚩处理时钟
-            self.clock += 1;
-            self.tick_timer();
-            // * 🚩工作周期
-            self.work_cycle();
-            // * 🚩步数递减
-            if self.walking_steps > 0 {
-                self.walking_steps -= 1;
-            }
-        }
+        // * 🚩处理时钟
+        self.clock += 1;
+        self.tick_timer();
+        // * 🚩工作周期
+        self.work_cycle();
     }
 }
 
@@ -210,7 +208,7 @@ impl Reasoner {
             // Cmd::NEW { target } => (),
             // Cmd::DEL { target } => (),
             // * 🚩工作周期：添加「预备循环计数」
-            Cmd::CYC(cycles) => self.walk(cycles),
+            Cmd::CYC(cycles) => self.tick_steps(cycles),
             // * 🚩音量：设置音量
             Cmd::VOL(volume) => self.silence_value = volume,
             // Cmd::REG { name } => (),
