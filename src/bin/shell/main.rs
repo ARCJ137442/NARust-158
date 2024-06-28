@@ -2,6 +2,7 @@ use anyhow::Result;
 use narsese::conversion::string::impl_lexical::format_instances::FORMAT_ASCII;
 use narust_158::{control::DEFAULT_PARAMETERS, inference::InferenceEngine, vm::Launcher};
 use navm::{
+    cmd::Cmd,
     output::Output,
     vm::{VmLauncher, VmRuntime},
 };
@@ -35,7 +36,11 @@ fn shell(
             // 正常获取
             Some(Ok(Some(input))) => input,
         };
-        match navm::cmd::Cmd::parse(input.trim()) {
+        let input = input.trim();
+        if input.is_empty() {
+            continue;
+        }
+        match Cmd::parse(input) {
             Ok(cmd) => runtime.input_cmd(cmd)?,
             Err(err) => eprintln!("NAVM cmd parse error: {err}"),
         }
