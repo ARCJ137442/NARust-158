@@ -125,9 +125,24 @@ pub fn main() -> Result<()> {
 mod tests {
     use super::*;
 
+    /// 测试多行NAVM指令（文本形式）输入
+    /// * 🚩仅测试文本输入（稳定性），不负责捕获输出等额外操作
+    fn test_line_inputs(inputs: &str) -> Result<()> {
+        let runtime = create_runtime()?;
+        let inputs = shell_iter_inputs(
+            inputs
+                .lines()
+                .filter(|s| !s.is_empty())
+                .map(|s| s.trim().to_string()),
+        );
+        shell(runtime, inputs)?;
+        Ok(())
+    }
+
     #[test]
     fn long_term_stability() -> Result<()> {
-        const INPUTS: &str = r#"
+        test_line_inputs(
+            r#"
             nse <{tim} --> (/,livingIn,_,{graz})>. %0%
             cyc 100
             nse <<(*,$1,sunglasses) --> own> ==> <$1 --> [aggressive]>>.
@@ -180,618 +195,601 @@ mod tests {
             nse <(&/,<$1 --> [pliable]>,(^reshape,{SELF},$1)) =/> <$1 --> [hardened]>>.
             nse <<$1 --> [hardened]> =|> <$1 --> [unscrewing]>>.
             nse (&&,<#1 --> object>,<#1 --> [unscrewing]>)!
-            cyc 20000"#;
-        let runtime = create_runtime()?;
-        // let inputs = shell_iter_stdin();
-        let inputs = shell_iter_inputs(
-            INPUTS
-                .lines()
-                .filter(|s| !s.is_empty())
-                .map(|s| s.trim().to_string()),
-        );
-        shell(runtime, inputs)?;
-        Ok(())
+            cyc 20000"#,
+        )
     }
 
     #[test]
     fn logical_stability() -> Result<()> {
-        const INPUTS: &str = r#"
-        rem 1-6 stability
-
-        rem file: '1.0.nal'
-        nse $0.80;0.80;0.95$ <bird --> swimmer>. %1.00;0.90%
-        nse $0.80;0.80;0.95$ <bird --> swimmer>. %0.10;0.60%
-        cyc 100
-
-        rem file: '1.1.nal'
-        nse $0.80;0.80;0.95$ <bird --> animal>. %1.00;0.90%
-        nse $0.80;0.80;0.95$ <robin --> bird>. %1.00;0.90%
-        cyc 100
-
-        rem file: '1.2.nal'
-        nse $0.80;0.80;0.95$ <sport --> competition>. %1.00;0.90%
-        nse $0.80;0.80;0.95$ <chess --> competition>. %0.90;0.90%
-        cyc 100
-
-        rem file: '1.3.nal'
-        nse $0.80;0.80;0.95$ <swan --> swimmer>. %0.90;0.90%
-        nse $0.80;0.80;0.95$ <swan --> bird>. %1.00;0.90%
-        cyc 100
-
-        rem file: '1.4.nal'
-        nse $0.80;0.80;0.95$ <robin --> bird>. %1.00;0.90%
-        nse $0.80;0.80;0.95$ <bird --> animal>. %1.00;0.90%
-        cyc 100
-
-        rem file: '1.5.nal'
-        nse $0.80;0.80;0.95$ <bird --> swimmer>. %1.00;0.90%
-        nse $0.90;0.80;1.00$ <swimmer --> bird>?
-        cyc 100
-
-        rem file: '1.6.nal'
-        nse $0.80;0.80;0.95$ <bird --> swimmer>. %1.00;0.90%
-        nse $0.90;0.80;1.00$ <bird --> swimmer>?
-        cyc 100
-
-        rem file: '1.7.nal'
-        nse $0.80;0.80;0.95$ <bird --> swimmer>. %1.00;0.80%
-        nse $0.90;0.80;1.00$ <?x --> swimmer>?
-        cyc 100
-
-        rem file: '1.8.nal'
-        nse $0.80;0.80;0.95$ <bird --> swimmer>. %1.00;0.80%
-        nse $0.90;0.80;1.00$ <?1 --> swimmer>?
-        cyc 100
-
-        rem file: '2.0.nal'
-        nse $0.80;0.80;0.95$ <robin <-> swan>. %1.00;0.90%
-        nse $0.80;0.80;0.95$ <robin <-> swan>. %0.10;0.60%
-        cyc 100
-
-        rem file: '2.1.nal'
-        nse $0.80;0.80;0.95$ <swan --> swimmer>. %0.90;0.90%
-        nse $0.80;0.80;0.95$ <swan --> bird>. %1.00;0.90%
-        cyc 100
-
-        rem file: '2.10.nal'
-        nse $0.80;0.80;0.95$ <Birdie <-> Tweety>. %0.90;0.90%
-        nse $0.90;0.80;1.00$ <{Birdie} <-> {Tweety}>?
-        cyc 100
-
-        rem file: '2.11.nal'
-        nse $0.80;0.80;0.95$ <swan --> bird>. %0.90;0.90%
-        nse $0.90;0.80;1.00$ <bird <-> swan>?
-        cyc 100
-
-        rem file: '2.12.nal'
-        nse $0.80;0.80;0.95$ <bird <-> swan>. %0.90;0.90%
-        nse $0.90;0.80;1.00$ <swan --> bird>?
-        cyc 100
-
-        rem file: '2.13.nal'
-        nse $0.80;0.80;0.95$ <Tweety {-- bird>. %1.00;0.90%
-        cyc 100
-
-        rem file: '2.14.nal'
-        nse $0.80;0.80;0.95$ <raven --] black>. %1.00;0.90%
-        cyc 100
-
-        rem file: '2.15.nal'
-        nse $0.80;0.80;0.95$ <Tweety {-] yellow>. %1.00;0.90%
-        cyc 100
-
-        rem file: '2.16.nal'
-        nse $0.80;0.80;0.95$ <{Tweety} --> {Birdie}>. %1.00;0.90%
-        cyc 100
-
-        rem file: '2.17.nal'
-        nse $0.80;0.80;0.95$ <[smart] --> [bright]>. %1.00;0.90%
-        cyc 100
-
-        rem file: '2.18.nal'
-        nse $0.80;0.80;0.95$ <{Birdie} <-> {Tweety}>. %1.00;0.90%
-        cyc 100
-
-        rem file: '2.19.nal'
-        nse $0.80;0.80;0.95$ <[bright] <-> [smart]>. %1.00;0.90%
-        cyc 100
-
-        rem file: '2.2.nal'
-        nse $0.80;0.80;0.95$ <bird --> swimmer>. %1.00;0.90%
-        nse $0.90;0.80;1.00$ <{?1} --> swimmer>?
-        cyc 100
-
-        rem file: '2.3.nal'
-        nse $0.80;0.80;0.95$ <sport --> competition>. %1.00;0.90%
-        nse $0.80;0.80;0.95$ <chess --> competition>. %0.90;0.90%
-        cyc 100
-
-        rem file: '2.4.nal'
-        nse $0.80;0.80;0.95$ <swan --> swimmer>. %1.00;0.90%
-        nse $0.80;0.80;0.95$ <gull <-> swan>. %1.00;0.90%
-        cyc 100
-
-        rem file: '2.5.nal'
-        nse $0.80;0.80;0.95$ <gull --> swimmer>. %1.00;0.90%
-        nse $0.80;0.80;0.95$ <gull <-> swan>. %1.00;0.90%
-        cyc 100
-
-        rem file: '2.6.nal'
-        nse $0.80;0.80;0.95$ <robin <-> swan>. %1.00;0.90%
-        nse $0.80;0.80;0.95$ <gull <-> swan>. %1.00;0.90%
-        cyc 100
-
-        rem file: '2.7.nal'
-        nse $0.80;0.80;0.95$ <swan --> bird>. %1.00;0.90%
-        nse $0.80;0.80;0.95$ <bird --> swan>. %0.10;0.90%
-        cyc 100
-
-        rem file: '2.8.nal'
-        nse $0.80;0.80;0.95$ <bright <-> smart>. %0.90;0.90%
-        nse $0.90;0.80;1.00$ <[smart] --> [bright]>?
-        cyc 100
-
-        rem file: '2.9.nal'
-        nse $0.80;0.80;0.95$ <swan --> bird>. %0.90;0.90%
-        nse $0.80;0.80;0.95$ <bird <-> swan>. %0.10;0.90%
-        cyc 100
-
-        rem file: '3.0.nal'
-        nse $0.80;0.80;0.95$ <swan --> swimmer>. %0.90;0.90%
-        nse $0.80;0.80;0.95$ <swan --> bird>. %0.80;0.90%
-        cyc 100
-
-        rem file: '3.1.nal'
-        nse $0.80;0.80;0.95$ <sport --> competition>. %0.90;0.90%
-        nse $0.80;0.80;0.95$ <chess --> competition>. %0.80;0.90%
-        cyc 100
-
-        rem file: '3.10.nal'
-        nse $0.80;0.80;0.95$ <swan --> bird>. %0.90;0.90%
-        nse $0.90;0.80;1.00$ <swan --> (-,swimmer,bird)>?
-        cyc 100
-
-        rem file: '3.11.nal'
-        nse $0.80;0.80;0.95$ <swan --> bird>. %0.90;0.90%
-        nse $0.90;0.80;1.00$ <(~,swimmer,swan) --> bird>?
-        cyc 100
-
-        rem file: '3.12.nal'
-        nse $0.80;0.80;0.95$ <robin --> (&,bird,swimmer)>. %0.90;0.90%
-        cyc 100
-
-        rem file: '3.13.nal'
-        nse $0.80;0.80;0.95$ <robin --> (-,bird,swimmer)>. %0.90;0.90%
-        cyc 100
-
-        rem file: '3.14.nal'
-        nse $0.80;0.80;0.95$ <(|,boy,girl) --> youth>. %0.90;0.90%
-        cyc 100
-
-        rem file: '3.15.nal'
-        nse $0.80;0.80;0.95$ <(~,boy,girl) --> [strong]>. %0.90;0.90%
-        cyc 100
-
-        rem file: '3.2.nal'
-        nse $0.80;0.80;0.95$ <robin --> (|,bird,swimmer)>. %1.00;0.90%
-        nse $0.80;0.80;0.95$ <robin --> swimmer>. %0.00;0.90%
-        cyc 100
-
-        rem file: '3.3.nal'
-        nse $0.80;0.80;0.95$ <robin --> swimmer>. %0.00;0.90%
-        nse $0.80;0.80;0.95$ <robin --> (-,mammal,swimmer)>. %0.00;0.90%
-        cyc 100
-
-        rem file: '3.4.nal'
-        nse $0.80;0.80;0.95$ <planetX --> {Mars,Pluto,Venus}>. %0.90;0.90%
-        nse $0.80;0.80;0.95$ <planetX --> {Pluto,Saturn}>. %0.70;0.90%
-        cyc 100
-
-        rem file: '3.5.nal'
-        nse $0.80;0.80;0.95$ <planetX --> {Mars,Pluto,Venus}>. %0.90;0.90%
-        nse $0.80;0.80;0.95$ <planetX --> {Pluto,Saturn}>. %0.10;0.90%
-        cyc 100
-
-        rem file: '3.6.nal'
-        nse $0.80;0.80;0.95$ <bird --> animal>. %0.90;0.90%
-        nse $0.90;0.80;1.00$ <(&,bird,swimmer) --> (&,animal,swimmer)>?
-        cyc 100
-
-        rem file: '3.7.nal'
-        nse $0.80;0.80;0.95$ <bird --> animal>. %0.90;0.90%
-        nse $0.90;0.80;1.00$ <(-,swimmer,animal) --> (-,swimmer,bird)>?
-        cyc 100
-
-        rem file: '3.8.nal'
-        nse $0.80;0.80;0.95$ <swan --> bird>. %0.90;0.90%
-        nse $0.90;0.80;1.00$ <swan --> (|,bird,swimmer)>?
-        cyc 100
-
-        rem file: '3.9.nal'
-        nse $0.80;0.80;0.95$ <swan --> bird>. %0.90;0.90%
-        nse $0.90;0.80;1.00$ <(&,swan,swimmer) --> bird>?
-        cyc 100
-
-        rem file: '4.0.nal'
-        nse $0.80;0.80;0.95$ <(*,acid,base) --> reaction>. %1.00;0.90%
-        cyc 100
-
-        rem file: '4.1.nal'
-        nse $0.80;0.80;0.95$ <acid --> (/,reaction,_,base)>. %1.00;0.90%
-        cyc 100
-
-        rem file: '4.2.nal'
-        nse $0.80;0.80;0.95$ <base --> (/,reaction,acid,_)>. %1.00;0.90%
-        cyc 100
-
-        rem file: '4.3.nal'
-        nse $0.80;0.80;0.95$ <neutralization --> (*,acid,base)>. %1.00;0.90%
-        cyc 100
-
-        rem file: '4.4.nal'
-        nse $0.80;0.80;0.95$ <(\\,neutralization,_,base) --> acid>. %1.00;0.90%
-        cyc 100
-
-        rem file: '4.5.nal'
-        nse $0.80;0.80;0.95$ <(\\,neutralization,acid,_) --> base>. %1.00;0.90%
-        cyc 100
-
-        rem file: '4.6.nal'
-        nse $0.80;0.80;0.95$ <bird --> animal>. %1.00;0.90%
-        nse $0.90;0.80;1.00$ <(*,bird,plant) --> ?x>?
-        cyc 100
-
-        rem file: '4.7.nal'
-        nse $0.80;0.80;0.95$ <neutralization --> reaction>. %1.00;0.90%
-        nse $0.90;0.80;1.00$ <(\\,neutralization,acid,_) --> ?x>?
-        cyc 100
-
-        rem file: '4.8.nal'
-        nse $0.80;0.80;0.95$ <soda --> base>. %1.00;0.90%
-        nse $0.90;0.80;1.00$ <(/,neutralization,_,base) --> ?x>?
-        cyc 100
-
-        rem file: '5.0.nal'
-        nse $0.80;0.80;0.95$ <<robin --> [flying]> ==> <robin --> bird>>. %1.00;0.90%
-        nse $0.80;0.80;0.95$ <<robin --> [flying]> ==> <robin --> bird>>. %0.00;0.60%
-        cyc 100
-
-        rem file: '5.1.nal'
-        nse $0.80;0.80;0.95$ <<robin --> bird> ==> <robin --> animal>>. %1.00;0.90%
-        nse $0.80;0.80;0.95$ <<robin --> [flying]> ==> <robin --> bird>>. %1.00;0.90%
-        cyc 100
-
-        rem file: '5.10.nal'
-        nse $0.80;0.80;0.95$ <robin --> bird>. %1.00;0.90%
-        nse $0.80;0.80;0.95$ <<robin --> bird> <=> <robin --> [flying]>>. %0.80;0.90%
-        cyc 100
-
-        rem file: '5.11.nal'
-        nse $0.80;0.80;0.95$ <<robin --> animal> <=> <robin --> bird>>. %1.00;0.90%
-        nse $0.80;0.80;0.95$ <<robin --> bird> <=> <robin --> [flying]>>. %0.90;0.90%
-        cyc 100
-
-        rem file: '5.12.nal'
-        nse $0.80;0.80;0.95$ <<robin --> [flying]> ==> <robin --> bird>>. %0.90;0.90%
-        nse $0.80;0.80;0.95$ <<robin --> bird> ==> <robin --> [flying]>>. %0.90;0.90%
-        cyc 100
-
-        rem file: '5.13.nal'
-        nse $0.80;0.80;0.95$ <<robin --> bird> ==> <robin --> animal>>. %1.00;0.90%
-        nse $0.80;0.80;0.95$ <<robin --> bird> ==> <robin --> [flying]>>. %0.90;0.90%
-        cyc 100
-
-        rem file: '5.14.nal'
-        nse $0.80;0.80;0.95$ <<robin --> bird> ==> <robin --> animal>>. %1.00;0.90%
-        nse $0.80;0.80;0.95$ <<robin --> [flying]> ==> <robin --> animal>>. %0.90;0.90%
-        cyc 100
-
-        rem file: '5.15.nal'
-        nse $0.80;0.80;0.95$ <<robin --> bird> ==> (&&,<robin --> animal>,<robin --> [flying]>)>. %0.00;0.90%
-        nse $0.80;0.80;0.95$ <<robin --> bird> ==> <robin --> [flying]>>. %1.00;0.90%
-        cyc 100
-
-        rem file: '5.16.nal'
-        nse $0.80;0.80;0.95$ (&&,<robin --> [flying]>,<robin --> swimmer>). %0.00;0.90%
-        nse $0.80;0.80;0.95$ <robin --> [flying]>. %1.00;0.90%
-        cyc 100
-
-        rem file: '5.17.nal'
-        nse $0.80;0.80;0.95$ (||,<robin --> [flying]>,<robin --> swimmer>). %1.00;0.90%
-        nse $0.80;0.80;0.95$ <robin --> swimmer>. %0.00;0.90%
-        cyc 100
-
-        rem file: '5.18.nal'
-        nse $0.80;0.80;0.95$ <robin --> [flying]>. %1.00;0.90%
-        nse $0.90;0.80;1.00$ (||,<robin --> [flying]>,<robin --> swimmer>)?
-        cyc 100
-
-        rem file: '5.19.nal'
-        nse $0.90;0.90;0.86$ (&&,<robin --> swimmer>,<robin --> [flying]>). %0.90;0.90%
-        cyc 100
-
-        rem file: '5.2.nal'
-        nse $0.80;0.80;0.95$ <<robin --> [flying]> ==> <robin --> bird>>. %1.00;0.90%
-        nse $0.80;0.80;0.95$ <<robin --> bird> ==> <robin --> animal>>. %1.00;0.90%
-        cyc 100
-
-        rem file: '5.20.nal'
-        nse $0.80;0.80;0.95$ (--,<robin --> [flying]>). %0.10;0.90%
-        cyc 100
-
-        rem file: '5.21.nal'
-        nse $0.80;0.80;0.95$ <robin --> [flying]>. %0.90;0.90%
-        nse $0.90;0.80;1.00$ (--,<robin --> [flying]>)?
-        cyc 100
-
-        rem file: '5.22.nal'
-        nse $0.80;0.80;0.95$ <(--,<robin --> bird>) ==> <robin --> [flying]>>. %0.10;0.90%
-        nse $0.90;0.80;1.00$ <(--,<robin --> [flying]>) ==> <robin --> bird>>?
-        cyc 100
-
-        rem file: '5.23.nal'
-        nse $0.80;0.80;0.95$ <(&&,<robin --> [flying]>,<robin --> [with_wings]>) ==> <robin --> bird>>. %1.00;0.90%
-
-        nse $0.80;0.80;0.95$ <robin --> [flying]>. %1.00;0.90%
-        cyc 100
-
-        rem file: '5.24.nal'
-        nse $0.80;0.80;0.95$ <(&&,<robin --> [chirping]>,<robin --> [flying]>,<robin --> [with_wings]>) ==> <robin --> bird>>. %1.00;0.90%
-
-        nse $0.80;0.80;0.95$ <robin --> [flying]>. %1.00;0.90%
-        cyc 100
-
-        rem file: '5.25.nal'
-        nse $0.80;0.80;0.95$ <(&&,<robin --> bird>,<robin --> [living]>) ==> <robin --> animal>>. %1.00;0.90%
-        nse $0.80;0.80;0.95$ <<robin --> [flying]> ==> <robin --> bird>>. %1.00;0.90%
-        cyc 100
-
-        rem file: '5.26.nal'
-        nse $0.80;0.80;0.95$ <<robin --> [flying]> ==> <robin --> bird>>. %1.00;0.90%
-        nse $0.80;0.80;0.95$ <(&&,<robin --> swimmer>,<robin --> [flying]>) ==> <robin --> bird>>. %1.00;0.90%
-        cyc 100
-
-        rem file: '5.27.nal'
-        nse $0.80;0.80;0.95$ <(&&,<robin --> [with_wings]>,<robin --> [chirping]>) ==> <robin --> bird>>. %1.00;0.90%
-
-        nse $0.80;0.80;0.95$ <(&&,<robin --> [flying]>,<robin --> [with_wings]>,<robin --> [chirping]>) ==> <robin --> bird>>. %1.00;0.90%
-
-        cyc 100
-
-        rem file: '5.28.nal'
-        nse $0.80;0.80;0.95$ <(&&,<robin --> [flying]>,<robin --> [with_wings]>) ==> <robin --> [living]>>. %0.90;0.90%
-
-        nse $0.80;0.80;0.95$ <(&&,<robin --> [flying]>,<robin --> bird>) ==> <robin --> [living]>>. %1.00;0.90%
-        cyc 100
-
-        rem file: '5.29.nal'
-        nse $0.80;0.80;0.95$ <(&&,<robin --> [chirping]>,<robin --> [flying]>) ==> <robin --> bird>>. %1.00;0.90%
-        nse $0.80;0.80;0.95$ <<robin --> [flying]> ==> <robin --> [with_beak]>>. %0.90;0.90%
-        cyc 100
-
-        rem file: '5.3.nal'
-        nse $0.80;0.80;0.95$ <<robin --> bird> ==> <robin --> animal>>. %1.00;0.90%
-        nse $0.80;0.80;0.95$ <<robin --> bird> ==> <robin --> [flying]>>. %0.80;0.90%
-        cyc 100
-
-        rem file: '5.4.nal'
-        nse $0.80;0.80;0.95$ <<robin --> bird> ==> <robin --> animal>>. %1.00;0.90%
-        nse $0.80;0.80;0.95$ <<robin --> [flying]> ==> <robin --> animal>>. %0.80;0.90%
-        cyc 100
-
-        rem file: '5.5.nal'
-        nse $0.80;0.80;0.95$ <<robin --> bird> ==> <robin --> animal>>. %1.00;0.90%
-        nse $0.80;0.80;0.95$ <robin --> bird>. %1.00;0.90%
-        cyc 100
-
-        rem file: '5.6.nal'
-        nse $0.80;0.80;0.95$ <<robin --> bird> ==> <robin --> animal>>. %0.70;0.90%
-        nse $0.80;0.80;0.95$ <robin --> animal>. %1.00;0.90%
-        cyc 100
-
-        rem file: '5.7.nal'
-        nse $0.80;0.80;0.95$ <<robin --> bird> ==> <robin --> animal>>. %1.00;0.90%
-        nse $0.80;0.80;0.95$ <<robin --> bird> ==> <robin --> [flying]>>. %0.80;0.90%
-        cyc 100
-
-        rem file: '5.8.nal'
-        nse $0.80;0.80;0.95$ <<robin --> bird> ==> <robin --> animal>>. %0.70;0.90%
-        nse $0.80;0.80;0.95$ <<robin --> [flying]> ==> <robin --> animal>>. %1.00;0.90%
-        cyc 100
-
-        rem file: '5.9.nal'
-        nse $0.80;0.80;0.95$ <<robin --> bird> ==> <robin --> animal>>. %1.00;0.90%
-        nse $0.80;0.80;0.95$ <<robin --> bird> <=> <robin --> [flying]>>. %0.80;0.90%
-        cyc 100
-
-        rem file: '6.0.nal'
-        nse $0.80;0.80;0.95$ <<$x --> bird> ==> <$x --> flyer>>. %1.00;0.90%
-        nse $0.80;0.80;0.95$ <<$y --> bird> ==> <$y --> flyer>>. %0.00;0.70%
-        cyc 100
-
-        rem file: '6.1.nal'
-        nse $0.80;0.80;0.95$ <<$x --> bird> ==> <$x --> animal>>. %1.00;0.90%
-        nse $0.80;0.80;0.95$ <<$y --> robin> ==> <$y --> bird>>. %1.00;0.90%
-        cyc 100
-
-        rem file: '6.10.nal'
-        nse $0.80;0.80;0.95$ (&&,<#x --> bird>,<#x --> swimmer>). %1.00;0.90%
-        nse $0.80;0.80;0.95$ <swan --> bird>. %0.90;0.90%
-        cyc 100
-
-        rem file: '6.11.nal'
-        nse $0.80;0.80;0.95$ <{Tweety} --> [with_wings]>. %1.00;0.90%
-        nse $0.80;0.80;0.95$ <(&&,<$x --> [chirping]>,<$x --> [with_wings]>) ==> <$x --> bird>>. %1.00;0.90%
-        cyc 100
-
-        rem file: '6.12.nal'
-        nse $0.80;0.80;0.95$ <(&&,<$x --> flyer>,<$x --> [chirping]>, <(*, $x, worms) --> food>) ==> <$x --> bird>>. %1.00;0.90%
-
-        nse $0.80;0.80;0.95$ <{Tweety} --> flyer>. %1.00;0.90%
-        cyc 100
-
-        rem file: '6.13.nal'
-        nse $0.80;0.80;0.95$ <(&&,<$x --> key>,<$y --> lock>) ==> <$y --> (/,open,$x,_)>>. %1.00;0.90%
-        nse $0.80;0.80;0.95$ <{lock1} --> lock>. %1.00;0.90%
-        cyc 100
-
-        rem file: '6.14.nal'
-        nse $0.80;0.80;0.95$ <<$x --> lock> ==> (&&,<#y --> key>,<$x --> (/,open,#y,_)>)>. %1.00;0.90%
-        nse $0.80;0.80;0.95$ <{lock1} --> lock>. %1.00;0.90%
-        cyc 100
-
-        rem file: '6.15.nal'
-        nse $0.80;0.80;0.95$ (&&,<#x --> lock>,<<$y --> key> ==> <#x --> (/,open,$y,_)>>). %1.00;0.90%
-        nse $0.80;0.80;0.95$ <{lock1} --> lock>. %1.00;0.90%
-        cyc 100
-
-        rem file: '6.16.nal'
-        nse $0.80;0.80;0.95$ (&&,<#x --> (/,open,#y,_)>,<#x --> lock>,<#y --> key>). %1.00;0.90%
-        nse $0.80;0.80;0.95$ <{lock1} --> lock>. %1.00;0.90%
-        cyc 100
-
-        rem file: '6.17.nal'
-        nse $0.80;0.80;0.95$ <swan --> bird>. %1.00;0.90%
-        nse $0.80;0.80;0.95$ <swan --> swimmer>. %0.80;0.90%
-        cyc 100
-
-        rem file: '6.18.nal'
-        nse $0.80;0.80;0.95$ <gull --> swimmer>. %1.00;0.90%
-        nse $0.80;0.80;0.95$ <swan --> swimmer>. %0.80;0.90%
-        cyc 100
-
-        rem file: '6.19.nal'
-        nse $0.80;0.80;0.95$ <{key1} --> (/,open,_,{lock1})>. %1.00;0.90%
-        nse $0.80;0.80;0.95$ <{key1} --> key>. %1.00;0.90%
-        cyc 100
-
-        rem file: '6.2.nal'
-        nse $0.80;0.80;0.95$ <<$x --> swan> ==> <$x --> bird>>. %1.00;0.80%
-        nse $0.80;0.80;0.95$ <<$y --> swan> ==> <$y --> swimmer>>. %0.80;0.90%
-        cyc 100
-
-        rem file: '6.20.nal'
-        nse $0.80;0.80;0.95$ <<$x --> key> ==> <{lock1} --> (/,open,$x,_)>>. %1.00;0.90%
-        nse $0.80;0.80;0.95$ <{lock1} --> lock>. %1.00;0.90%
-        cyc 100
-
-        rem file: '6.21.nal'
-        nse $0.80;0.80;0.95$ (&&,<#x --> key>,<{lock1} --> (/,open,#x,_)>). %1.00;0.90%
-        nse $0.80;0.80;0.95$ <{lock1} --> lock>. %1.00;0.90%
-        cyc 100
-
-        rem file: '6.22.nal'
-        nse $0.80;0.80;0.95$ <0 --> num>. %1.00;0.90%
-        nse $0.80;0.80;0.95$ <<$1 --> num> ==> <(*,$1) --> num>>. %1.00;0.90%
-        nse $0.90;0.80;1.00$ <(*,(*,(*,0))) --> num>?
-        cyc 100
-
-        rem file: '6.23.nal'
-        nse $0.80;0.80;0.95$ (&&,<#1 --> lock>,<<$2 --> key> ==> <#1 --> (/,open,$2,_)>>). %1.00;0.90%
-        nse $0.80;0.80;0.95$ <{key1} --> key>. %1.00;0.90%
-        cyc 100
-
-        rem file: '6.24.nal'
-        nse $0.80;0.80;0.95$ <<$1 --> lock> ==> (&&,<#2 --> key>,<$1 --> (/,open,#2,_)>)>. %1.00;0.90%
-        nse $0.80;0.80;0.95$ <{key1} --> key>. %1.00;0.90%
-        cyc 100
-
-        rem file: '6.25.nal'
-        nse $0.80;0.80;0.95$ <<lock1 --> (/,open,$1,_)> ==> <$1 --> key>>. %1.00;0.90%
-        nse $0.80;0.80;0.95$ <lock1 --> lock>. %1.00;0.90%
-        cyc 100
-
-        rem file: '6.26.nal'
-        nse $0.80;0.80;0.95$ <lock1 --> lock>. %1.00;0.90%
-        nse $0.80;0.80;0.95$ <(&&,<#1 --> lock>,<#1 --> (/,open,$2,_)>) ==> <$2 --> key>>. %1.00;0.90%
-        cyc 100
-
-        rem file: '6.27.nal'
-        nse $0.80;0.80;0.95$ <<lock1 --> (/,open,$1,_)> ==> <$1 --> key>>. %1.00;0.90%
-        nse $0.80;0.80;0.95$ <(&&,<#1 --> lock>,<#1 --> (/,open,$2,_)>) ==> <$2 --> key>>. %1.00;0.90%
-        cyc 100
-
-        rem file: '6.3.nal'
-        nse $0.80;0.80;0.95$ <<bird --> $x> ==> <robin --> $x>>. %1.00;0.90%
-        nse $0.80;0.80;0.95$ <<swimmer --> $y> ==> <robin --> $y>>. %0.70;0.90%
-        cyc 100
-
-        rem file: '6.4.nal'
-        nse $0.80;0.80;0.95$ <(&&,<$x --> flyer>,<$x --> [chirping]>) ==> <$x --> bird>>. %1.00;0.90%
-        nse $0.80;0.80;0.95$ <<$y --> [with_wings]> ==> <$y --> flyer>>. %1.00;0.90%
-        cyc 100
-
-        rem file: '6.5.nal'
-        nse $0.80;0.80;0.95$ <(&&,<$x --> flyer>,<$x --> [chirping]>, <(*, $x, worms) --> food>) ==> <$x --> bird>>. %1.00;0.90%
-
-        nse $0.80;0.80;0.95$ <(&&,<$x --> [chirping]>,<$x --> [with_wings]>) ==> <$x --> bird>>. %1.00;0.90%
-        cyc 100
-
-        rem file: '6.6.nal'
-        nse $0.80;0.80;0.95$ <(&&,<$x --> flyer>,<(*,$x,worms) --> food>) ==> <$x --> bird>>. %1.00;0.90%
-        nse $0.80;0.80;0.95$ <<$y --> flyer> ==> <$y --> [with_wings]>>. %1.00;0.90%
-        cyc 100
-
-        rem file: '6.7.nal'
-        nse $0.80;0.80;0.95$ <<$x --> bird> ==> <$x --> animal>>. %1.00;0.90%
-        nse $0.80;0.80;0.95$ <robin --> bird>. %1.00;0.90%
-        cyc 100
-
-        rem file: '6.8.nal'
-        nse $0.80;0.80;0.95$ <<$x --> bird> ==> <$x --> animal>>. %1.00;0.90%
-        nse $0.80;0.80;0.95$ <tiger --> animal>. %1.00;0.90%
-        cyc 100
-
-        rem file: '6.9.nal'
-        nse $0.80;0.80;0.95$ <<$x --> animal> <=> <$x --> bird>>. %1.00;0.90%
-        nse $0.80;0.80;0.95$ <robin --> bird>. %1.00;0.90%
-        cyc 100
-
-        rem file: '6.birdClaimedByBob.nal'
-        nse $0.80;0.80;0.95$ <(&,<{Tweety} --> bird>,<bird --> fly>) --> claimedByBob>. %1.00;0.90%
-        nse $0.80;0.80;0.95$ <<(&,<#1 --> $2>,<$3 --> #1>) --> claimedByBob> ==> <<$3 --> $2> --> claimedByBob>>. %1.00;0.90%
-
-        nse $0.90;0.80;1.00$ <?x --> claimedByBob>?
-        cyc 100
-
-        rem file: '6.can_of_worms.nal'
-        nse $0.80;0.80;0.95$ <0 --> num>. %1.00;0.90%
-        nse $0.80;0.80;0.95$ <0 --> (/,num,_)>. %1.00;0.90%
-        cyc 100
-
-        rem file: '6.nlp1.nal'
-        nse $0.80;0.80;0.95$ <(\\,REPRESENT,_,CAT) --> cat>. %1.00;0.90%
-        nse $0.80;0.80;0.95$ <(\\,(\\,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish) --> cat>. %1.00;0.90%
-        cyc 100
-
-        rem file: '6.nlp2.nal'
-        nse $0.80;0.80;0.95$ <cat --> (/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish)>. %1.00;0.90%
-        nse $0.80;0.80;0.95$ <cat --> CAT>. %1.00;0.90%
-        cyc 100
-
-        rem file: '6.redundant.nal'
-        nse $0.80;0.80;0.95$ <<lock1 --> (/,open,$1,_)> ==> <$1 --> key>>. %1.00;0.90%
-        cyc 100
-
-        rem file: '6.symmetry.nal'
-        nse $0.80;0.80;0.95$ <(*,a,b) --> like>. %1.00;0.90%
-        nse $0.80;0.80;0.95$ <(*,b,a) --> like>. %1.00;0.90%
-        nse $0.90;0.80;1.00$ <<(*,$1,$2) --> like> <=> <(*,$2,$1) --> like>>?
-        cyc 100
-
-        rem file: '6.uncle.nal'
-        nse $0.80;0.80;0.95$ <tim --> (/,uncle,_,tom)>. %1.00;0.90%
-        nse $0.80;0.80;0.95$ <tim --> (/,uncle,tom,_)>. %0.00;0.90%
-        cyc 100"#;
-        let runtime = create_runtime()?;
-        // let inputs = shell_iter_stdin();
-        let inputs = shell_iter_inputs(
-            INPUTS
-                .lines()
-                .filter(|s| !s.is_empty())
-                .map(|s| s.trim().to_string()),
-        );
-        shell(runtime, inputs)?;
-        Ok(())
+        test_line_inputs(
+            r#"
+            rem 1-6 stability
+
+            rem file: '1.0.nal'
+            nse $0.80;0.80;0.95$ <bird --> swimmer>. %1.00;0.90%
+            nse $0.80;0.80;0.95$ <bird --> swimmer>. %0.10;0.60%
+            cyc 100
+
+            rem file: '1.1.nal'
+            nse $0.80;0.80;0.95$ <bird --> animal>. %1.00;0.90%
+            nse $0.80;0.80;0.95$ <robin --> bird>. %1.00;0.90%
+            cyc 100
+
+            rem file: '1.2.nal'
+            nse $0.80;0.80;0.95$ <sport --> competition>. %1.00;0.90%
+            nse $0.80;0.80;0.95$ <chess --> competition>. %0.90;0.90%
+            cyc 100
+
+            rem file: '1.3.nal'
+            nse $0.80;0.80;0.95$ <swan --> swimmer>. %0.90;0.90%
+            nse $0.80;0.80;0.95$ <swan --> bird>. %1.00;0.90%
+            cyc 100
+
+            rem file: '1.4.nal'
+            nse $0.80;0.80;0.95$ <robin --> bird>. %1.00;0.90%
+            nse $0.80;0.80;0.95$ <bird --> animal>. %1.00;0.90%
+            cyc 100
+
+            rem file: '1.5.nal'
+            nse $0.80;0.80;0.95$ <bird --> swimmer>. %1.00;0.90%
+            nse $0.90;0.80;1.00$ <swimmer --> bird>?
+            cyc 100
+
+            rem file: '1.6.nal'
+            nse $0.80;0.80;0.95$ <bird --> swimmer>. %1.00;0.90%
+            nse $0.90;0.80;1.00$ <bird --> swimmer>?
+            cyc 100
+
+            rem file: '1.7.nal'
+            nse $0.80;0.80;0.95$ <bird --> swimmer>. %1.00;0.80%
+            nse $0.90;0.80;1.00$ <?x --> swimmer>?
+            cyc 100
+
+            rem file: '1.8.nal'
+            nse $0.80;0.80;0.95$ <bird --> swimmer>. %1.00;0.80%
+            nse $0.90;0.80;1.00$ <?1 --> swimmer>?
+            cyc 100
+
+            rem file: '2.0.nal'
+            nse $0.80;0.80;0.95$ <robin <-> swan>. %1.00;0.90%
+            nse $0.80;0.80;0.95$ <robin <-> swan>. %0.10;0.60%
+            cyc 100
+
+            rem file: '2.1.nal'
+            nse $0.80;0.80;0.95$ <swan --> swimmer>. %0.90;0.90%
+            nse $0.80;0.80;0.95$ <swan --> bird>. %1.00;0.90%
+            cyc 100
+
+            rem file: '2.10.nal'
+            nse $0.80;0.80;0.95$ <Birdie <-> Tweety>. %0.90;0.90%
+            nse $0.90;0.80;1.00$ <{Birdie} <-> {Tweety}>?
+            cyc 100
+
+            rem file: '2.11.nal'
+            nse $0.80;0.80;0.95$ <swan --> bird>. %0.90;0.90%
+            nse $0.90;0.80;1.00$ <bird <-> swan>?
+            cyc 100
+
+            rem file: '2.12.nal'
+            nse $0.80;0.80;0.95$ <bird <-> swan>. %0.90;0.90%
+            nse $0.90;0.80;1.00$ <swan --> bird>?
+            cyc 100
+
+            rem file: '2.13.nal'
+            nse $0.80;0.80;0.95$ <Tweety {-- bird>. %1.00;0.90%
+            cyc 100
+
+            rem file: '2.14.nal'
+            nse $0.80;0.80;0.95$ <raven --] black>. %1.00;0.90%
+            cyc 100
+
+            rem file: '2.15.nal'
+            nse $0.80;0.80;0.95$ <Tweety {-] yellow>. %1.00;0.90%
+            cyc 100
+
+            rem file: '2.16.nal'
+            nse $0.80;0.80;0.95$ <{Tweety} --> {Birdie}>. %1.00;0.90%
+            cyc 100
+
+            rem file: '2.17.nal'
+            nse $0.80;0.80;0.95$ <[smart] --> [bright]>. %1.00;0.90%
+            cyc 100
+
+            rem file: '2.18.nal'
+            nse $0.80;0.80;0.95$ <{Birdie} <-> {Tweety}>. %1.00;0.90%
+            cyc 100
+
+            rem file: '2.19.nal'
+            nse $0.80;0.80;0.95$ <[bright] <-> [smart]>. %1.00;0.90%
+            cyc 100
+
+            rem file: '2.2.nal'
+            nse $0.80;0.80;0.95$ <bird --> swimmer>. %1.00;0.90%
+            nse $0.90;0.80;1.00$ <{?1} --> swimmer>?
+            cyc 100
+
+            rem file: '2.3.nal'
+            nse $0.80;0.80;0.95$ <sport --> competition>. %1.00;0.90%
+            nse $0.80;0.80;0.95$ <chess --> competition>. %0.90;0.90%
+            cyc 100
+
+            rem file: '2.4.nal'
+            nse $0.80;0.80;0.95$ <swan --> swimmer>. %1.00;0.90%
+            nse $0.80;0.80;0.95$ <gull <-> swan>. %1.00;0.90%
+            cyc 100
+
+            rem file: '2.5.nal'
+            nse $0.80;0.80;0.95$ <gull --> swimmer>. %1.00;0.90%
+            nse $0.80;0.80;0.95$ <gull <-> swan>. %1.00;0.90%
+            cyc 100
+
+            rem file: '2.6.nal'
+            nse $0.80;0.80;0.95$ <robin <-> swan>. %1.00;0.90%
+            nse $0.80;0.80;0.95$ <gull <-> swan>. %1.00;0.90%
+            cyc 100
+
+            rem file: '2.7.nal'
+            nse $0.80;0.80;0.95$ <swan --> bird>. %1.00;0.90%
+            nse $0.80;0.80;0.95$ <bird --> swan>. %0.10;0.90%
+            cyc 100
+
+            rem file: '2.8.nal'
+            nse $0.80;0.80;0.95$ <bright <-> smart>. %0.90;0.90%
+            nse $0.90;0.80;1.00$ <[smart] --> [bright]>?
+            cyc 100
+
+            rem file: '2.9.nal'
+            nse $0.80;0.80;0.95$ <swan --> bird>. %0.90;0.90%
+            nse $0.80;0.80;0.95$ <bird <-> swan>. %0.10;0.90%
+            cyc 100
+
+            rem file: '3.0.nal'
+            nse $0.80;0.80;0.95$ <swan --> swimmer>. %0.90;0.90%
+            nse $0.80;0.80;0.95$ <swan --> bird>. %0.80;0.90%
+            cyc 100
+
+            rem file: '3.1.nal'
+            nse $0.80;0.80;0.95$ <sport --> competition>. %0.90;0.90%
+            nse $0.80;0.80;0.95$ <chess --> competition>. %0.80;0.90%
+            cyc 100
+
+            rem file: '3.10.nal'
+            nse $0.80;0.80;0.95$ <swan --> bird>. %0.90;0.90%
+            nse $0.90;0.80;1.00$ <swan --> (-,swimmer,bird)>?
+            cyc 100
+
+            rem file: '3.11.nal'
+            nse $0.80;0.80;0.95$ <swan --> bird>. %0.90;0.90%
+            nse $0.90;0.80;1.00$ <(~,swimmer,swan) --> bird>?
+            cyc 100
+
+            rem file: '3.12.nal'
+            nse $0.80;0.80;0.95$ <robin --> (&,bird,swimmer)>. %0.90;0.90%
+            cyc 100
+
+            rem file: '3.13.nal'
+            nse $0.80;0.80;0.95$ <robin --> (-,bird,swimmer)>. %0.90;0.90%
+            cyc 100
+
+            rem file: '3.14.nal'
+            nse $0.80;0.80;0.95$ <(|,boy,girl) --> youth>. %0.90;0.90%
+            cyc 100
+
+            rem file: '3.15.nal'
+            nse $0.80;0.80;0.95$ <(~,boy,girl) --> [strong]>. %0.90;0.90%
+            cyc 100
+
+            rem file: '3.2.nal'
+            nse $0.80;0.80;0.95$ <robin --> (|,bird,swimmer)>. %1.00;0.90%
+            nse $0.80;0.80;0.95$ <robin --> swimmer>. %0.00;0.90%
+            cyc 100
+
+            rem file: '3.3.nal'
+            nse $0.80;0.80;0.95$ <robin --> swimmer>. %0.00;0.90%
+            nse $0.80;0.80;0.95$ <robin --> (-,mammal,swimmer)>. %0.00;0.90%
+            cyc 100
+
+            rem file: '3.4.nal'
+            nse $0.80;0.80;0.95$ <planetX --> {Mars,Pluto,Venus}>. %0.90;0.90%
+            nse $0.80;0.80;0.95$ <planetX --> {Pluto,Saturn}>. %0.70;0.90%
+            cyc 100
+
+            rem file: '3.5.nal'
+            nse $0.80;0.80;0.95$ <planetX --> {Mars,Pluto,Venus}>. %0.90;0.90%
+            nse $0.80;0.80;0.95$ <planetX --> {Pluto,Saturn}>. %0.10;0.90%
+            cyc 100
+
+            rem file: '3.6.nal'
+            nse $0.80;0.80;0.95$ <bird --> animal>. %0.90;0.90%
+            nse $0.90;0.80;1.00$ <(&,bird,swimmer) --> (&,animal,swimmer)>?
+            cyc 100
+
+            rem file: '3.7.nal'
+            nse $0.80;0.80;0.95$ <bird --> animal>. %0.90;0.90%
+            nse $0.90;0.80;1.00$ <(-,swimmer,animal) --> (-,swimmer,bird)>?
+            cyc 100
+
+            rem file: '3.8.nal'
+            nse $0.80;0.80;0.95$ <swan --> bird>. %0.90;0.90%
+            nse $0.90;0.80;1.00$ <swan --> (|,bird,swimmer)>?
+            cyc 100
+
+            rem file: '3.9.nal'
+            nse $0.80;0.80;0.95$ <swan --> bird>. %0.90;0.90%
+            nse $0.90;0.80;1.00$ <(&,swan,swimmer) --> bird>?
+            cyc 100
+
+            rem file: '4.0.nal'
+            nse $0.80;0.80;0.95$ <(*,acid,base) --> reaction>. %1.00;0.90%
+            cyc 100
+
+            rem file: '4.1.nal'
+            nse $0.80;0.80;0.95$ <acid --> (/,reaction,_,base)>. %1.00;0.90%
+            cyc 100
+
+            rem file: '4.2.nal'
+            nse $0.80;0.80;0.95$ <base --> (/,reaction,acid,_)>. %1.00;0.90%
+            cyc 100
+
+            rem file: '4.3.nal'
+            nse $0.80;0.80;0.95$ <neutralization --> (*,acid,base)>. %1.00;0.90%
+            cyc 100
+
+            rem file: '4.4.nal'
+            nse $0.80;0.80;0.95$ <(\\,neutralization,_,base) --> acid>. %1.00;0.90%
+            cyc 100
+
+            rem file: '4.5.nal'
+            nse $0.80;0.80;0.95$ <(\\,neutralization,acid,_) --> base>. %1.00;0.90%
+            cyc 100
+
+            rem file: '4.6.nal'
+            nse $0.80;0.80;0.95$ <bird --> animal>. %1.00;0.90%
+            nse $0.90;0.80;1.00$ <(*,bird,plant) --> ?x>?
+            cyc 100
+
+            rem file: '4.7.nal'
+            nse $0.80;0.80;0.95$ <neutralization --> reaction>. %1.00;0.90%
+            nse $0.90;0.80;1.00$ <(\\,neutralization,acid,_) --> ?x>?
+            cyc 100
+
+            rem file: '4.8.nal'
+            nse $0.80;0.80;0.95$ <soda --> base>. %1.00;0.90%
+            nse $0.90;0.80;1.00$ <(/,neutralization,_,base) --> ?x>?
+            cyc 100
+
+            rem file: '5.0.nal'
+            nse $0.80;0.80;0.95$ <<robin --> [flying]> ==> <robin --> bird>>. %1.00;0.90%
+            nse $0.80;0.80;0.95$ <<robin --> [flying]> ==> <robin --> bird>>. %0.00;0.60%
+            cyc 100
+
+            rem file: '5.1.nal'
+            nse $0.80;0.80;0.95$ <<robin --> bird> ==> <robin --> animal>>. %1.00;0.90%
+            nse $0.80;0.80;0.95$ <<robin --> [flying]> ==> <robin --> bird>>. %1.00;0.90%
+            cyc 100
+
+            rem file: '5.10.nal'
+            nse $0.80;0.80;0.95$ <robin --> bird>. %1.00;0.90%
+            nse $0.80;0.80;0.95$ <<robin --> bird> <=> <robin --> [flying]>>. %0.80;0.90%
+            cyc 100
+
+            rem file: '5.11.nal'
+            nse $0.80;0.80;0.95$ <<robin --> animal> <=> <robin --> bird>>. %1.00;0.90%
+            nse $0.80;0.80;0.95$ <<robin --> bird> <=> <robin --> [flying]>>. %0.90;0.90%
+            cyc 100
+
+            rem file: '5.12.nal'
+            nse $0.80;0.80;0.95$ <<robin --> [flying]> ==> <robin --> bird>>. %0.90;0.90%
+            nse $0.80;0.80;0.95$ <<robin --> bird> ==> <robin --> [flying]>>. %0.90;0.90%
+            cyc 100
+
+            rem file: '5.13.nal'
+            nse $0.80;0.80;0.95$ <<robin --> bird> ==> <robin --> animal>>. %1.00;0.90%
+            nse $0.80;0.80;0.95$ <<robin --> bird> ==> <robin --> [flying]>>. %0.90;0.90%
+            cyc 100
+
+            rem file: '5.14.nal'
+            nse $0.80;0.80;0.95$ <<robin --> bird> ==> <robin --> animal>>. %1.00;0.90%
+            nse $0.80;0.80;0.95$ <<robin --> [flying]> ==> <robin --> animal>>. %0.90;0.90%
+            cyc 100
+
+            rem file: '5.15.nal'
+            nse $0.80;0.80;0.95$ <<robin --> bird> ==> (&&,<robin --> animal>,<robin --> [flying]>)>. %0.00;0.90%
+            nse $0.80;0.80;0.95$ <<robin --> bird> ==> <robin --> [flying]>>. %1.00;0.90%
+            cyc 100
+
+            rem file: '5.16.nal'
+            nse $0.80;0.80;0.95$ (&&,<robin --> [flying]>,<robin --> swimmer>). %0.00;0.90%
+            nse $0.80;0.80;0.95$ <robin --> [flying]>. %1.00;0.90%
+            cyc 100
+
+            rem file: '5.17.nal'
+            nse $0.80;0.80;0.95$ (||,<robin --> [flying]>,<robin --> swimmer>). %1.00;0.90%
+            nse $0.80;0.80;0.95$ <robin --> swimmer>. %0.00;0.90%
+            cyc 100
+
+            rem file: '5.18.nal'
+            nse $0.80;0.80;0.95$ <robin --> [flying]>. %1.00;0.90%
+            nse $0.90;0.80;1.00$ (||,<robin --> [flying]>,<robin --> swimmer>)?
+            cyc 100
+
+            rem file: '5.19.nal'
+            nse $0.90;0.90;0.86$ (&&,<robin --> swimmer>,<robin --> [flying]>). %0.90;0.90%
+            cyc 100
+
+            rem file: '5.2.nal'
+            nse $0.80;0.80;0.95$ <<robin --> [flying]> ==> <robin --> bird>>. %1.00;0.90%
+            nse $0.80;0.80;0.95$ <<robin --> bird> ==> <robin --> animal>>. %1.00;0.90%
+            cyc 100
+
+            rem file: '5.20.nal'
+            nse $0.80;0.80;0.95$ (--,<robin --> [flying]>). %0.10;0.90%
+            cyc 100
+
+            rem file: '5.21.nal'
+            nse $0.80;0.80;0.95$ <robin --> [flying]>. %0.90;0.90%
+            nse $0.90;0.80;1.00$ (--,<robin --> [flying]>)?
+            cyc 100
+
+            rem file: '5.22.nal'
+            nse $0.80;0.80;0.95$ <(--,<robin --> bird>) ==> <robin --> [flying]>>. %0.10;0.90%
+            nse $0.90;0.80;1.00$ <(--,<robin --> [flying]>) ==> <robin --> bird>>?
+            cyc 100
+
+            rem file: '5.23.nal'
+            nse $0.80;0.80;0.95$ <(&&,<robin --> [flying]>,<robin --> [with_wings]>) ==> <robin --> bird>>. %1.00;0.90%
+
+            nse $0.80;0.80;0.95$ <robin --> [flying]>. %1.00;0.90%
+            cyc 100
+
+            rem file: '5.24.nal'
+            nse $0.80;0.80;0.95$ <(&&,<robin --> [chirping]>,<robin --> [flying]>,<robin --> [with_wings]>) ==> <robin --> bird>>. %1.00;0.90%
+
+            nse $0.80;0.80;0.95$ <robin --> [flying]>. %1.00;0.90%
+            cyc 100
+
+            rem file: '5.25.nal'
+            nse $0.80;0.80;0.95$ <(&&,<robin --> bird>,<robin --> [living]>) ==> <robin --> animal>>. %1.00;0.90%
+            nse $0.80;0.80;0.95$ <<robin --> [flying]> ==> <robin --> bird>>. %1.00;0.90%
+            cyc 100
+
+            rem file: '5.26.nal'
+            nse $0.80;0.80;0.95$ <<robin --> [flying]> ==> <robin --> bird>>. %1.00;0.90%
+            nse $0.80;0.80;0.95$ <(&&,<robin --> swimmer>,<robin --> [flying]>) ==> <robin --> bird>>. %1.00;0.90%
+            cyc 100
+
+            rem file: '5.27.nal'
+            nse $0.80;0.80;0.95$ <(&&,<robin --> [with_wings]>,<robin --> [chirping]>) ==> <robin --> bird>>. %1.00;0.90%
+
+            nse $0.80;0.80;0.95$ <(&&,<robin --> [flying]>,<robin --> [with_wings]>,<robin --> [chirping]>) ==> <robin --> bird>>. %1.00;0.90%
+
+            cyc 100
+
+            rem file: '5.28.nal'
+            nse $0.80;0.80;0.95$ <(&&,<robin --> [flying]>,<robin --> [with_wings]>) ==> <robin --> [living]>>. %0.90;0.90%
+
+            nse $0.80;0.80;0.95$ <(&&,<robin --> [flying]>,<robin --> bird>) ==> <robin --> [living]>>. %1.00;0.90%
+            cyc 100
+
+            rem file: '5.29.nal'
+            nse $0.80;0.80;0.95$ <(&&,<robin --> [chirping]>,<robin --> [flying]>) ==> <robin --> bird>>. %1.00;0.90%
+            nse $0.80;0.80;0.95$ <<robin --> [flying]> ==> <robin --> [with_beak]>>. %0.90;0.90%
+            cyc 100
+
+            rem file: '5.3.nal'
+            nse $0.80;0.80;0.95$ <<robin --> bird> ==> <robin --> animal>>. %1.00;0.90%
+            nse $0.80;0.80;0.95$ <<robin --> bird> ==> <robin --> [flying]>>. %0.80;0.90%
+            cyc 100
+
+            rem file: '5.4.nal'
+            nse $0.80;0.80;0.95$ <<robin --> bird> ==> <robin --> animal>>. %1.00;0.90%
+            nse $0.80;0.80;0.95$ <<robin --> [flying]> ==> <robin --> animal>>. %0.80;0.90%
+            cyc 100
+
+            rem file: '5.5.nal'
+            nse $0.80;0.80;0.95$ <<robin --> bird> ==> <robin --> animal>>. %1.00;0.90%
+            nse $0.80;0.80;0.95$ <robin --> bird>. %1.00;0.90%
+            cyc 100
+
+            rem file: '5.6.nal'
+            nse $0.80;0.80;0.95$ <<robin --> bird> ==> <robin --> animal>>. %0.70;0.90%
+            nse $0.80;0.80;0.95$ <robin --> animal>. %1.00;0.90%
+            cyc 100
+
+            rem file: '5.7.nal'
+            nse $0.80;0.80;0.95$ <<robin --> bird> ==> <robin --> animal>>. %1.00;0.90%
+            nse $0.80;0.80;0.95$ <<robin --> bird> ==> <robin --> [flying]>>. %0.80;0.90%
+            cyc 100
+
+            rem file: '5.8.nal'
+            nse $0.80;0.80;0.95$ <<robin --> bird> ==> <robin --> animal>>. %0.70;0.90%
+            nse $0.80;0.80;0.95$ <<robin --> [flying]> ==> <robin --> animal>>. %1.00;0.90%
+            cyc 100
+
+            rem file: '5.9.nal'
+            nse $0.80;0.80;0.95$ <<robin --> bird> ==> <robin --> animal>>. %1.00;0.90%
+            nse $0.80;0.80;0.95$ <<robin --> bird> <=> <robin --> [flying]>>. %0.80;0.90%
+            cyc 100
+
+            rem file: '6.0.nal'
+            nse $0.80;0.80;0.95$ <<$x --> bird> ==> <$x --> flyer>>. %1.00;0.90%
+            nse $0.80;0.80;0.95$ <<$y --> bird> ==> <$y --> flyer>>. %0.00;0.70%
+            cyc 100
+
+            rem file: '6.1.nal'
+            nse $0.80;0.80;0.95$ <<$x --> bird> ==> <$x --> animal>>. %1.00;0.90%
+            nse $0.80;0.80;0.95$ <<$y --> robin> ==> <$y --> bird>>. %1.00;0.90%
+            cyc 100
+
+            rem file: '6.10.nal'
+            nse $0.80;0.80;0.95$ (&&,<#x --> bird>,<#x --> swimmer>). %1.00;0.90%
+            nse $0.80;0.80;0.95$ <swan --> bird>. %0.90;0.90%
+            cyc 100
+
+            rem file: '6.11.nal'
+            nse $0.80;0.80;0.95$ <{Tweety} --> [with_wings]>. %1.00;0.90%
+            nse $0.80;0.80;0.95$ <(&&,<$x --> [chirping]>,<$x --> [with_wings]>) ==> <$x --> bird>>. %1.00;0.90%
+            cyc 100
+
+            rem file: '6.12.nal'
+            nse $0.80;0.80;0.95$ <(&&,<$x --> flyer>,<$x --> [chirping]>, <(*, $x, worms) --> food>) ==> <$x --> bird>>. %1.00;0.90%
+
+            nse $0.80;0.80;0.95$ <{Tweety} --> flyer>. %1.00;0.90%
+            cyc 100
+
+            rem file: '6.13.nal'
+            nse $0.80;0.80;0.95$ <(&&,<$x --> key>,<$y --> lock>) ==> <$y --> (/,open,$x,_)>>. %1.00;0.90%
+            nse $0.80;0.80;0.95$ <{lock1} --> lock>. %1.00;0.90%
+            cyc 100
+
+            rem file: '6.14.nal'
+            nse $0.80;0.80;0.95$ <<$x --> lock> ==> (&&,<#y --> key>,<$x --> (/,open,#y,_)>)>. %1.00;0.90%
+            nse $0.80;0.80;0.95$ <{lock1} --> lock>. %1.00;0.90%
+            cyc 100
+
+            rem file: '6.15.nal'
+            nse $0.80;0.80;0.95$ (&&,<#x --> lock>,<<$y --> key> ==> <#x --> (/,open,$y,_)>>). %1.00;0.90%
+            nse $0.80;0.80;0.95$ <{lock1} --> lock>. %1.00;0.90%
+            cyc 100
+
+            rem file: '6.16.nal'
+            nse $0.80;0.80;0.95$ (&&,<#x --> (/,open,#y,_)>,<#x --> lock>,<#y --> key>). %1.00;0.90%
+            nse $0.80;0.80;0.95$ <{lock1} --> lock>. %1.00;0.90%
+            cyc 100
+
+            rem file: '6.17.nal'
+            nse $0.80;0.80;0.95$ <swan --> bird>. %1.00;0.90%
+            nse $0.80;0.80;0.95$ <swan --> swimmer>. %0.80;0.90%
+            cyc 100
+
+            rem file: '6.18.nal'
+            nse $0.80;0.80;0.95$ <gull --> swimmer>. %1.00;0.90%
+            nse $0.80;0.80;0.95$ <swan --> swimmer>. %0.80;0.90%
+            cyc 100
+
+            rem file: '6.19.nal'
+            nse $0.80;0.80;0.95$ <{key1} --> (/,open,_,{lock1})>. %1.00;0.90%
+            nse $0.80;0.80;0.95$ <{key1} --> key>. %1.00;0.90%
+            cyc 100
+
+            rem file: '6.2.nal'
+            nse $0.80;0.80;0.95$ <<$x --> swan> ==> <$x --> bird>>. %1.00;0.80%
+            nse $0.80;0.80;0.95$ <<$y --> swan> ==> <$y --> swimmer>>. %0.80;0.90%
+            cyc 100
+
+            rem file: '6.20.nal'
+            nse $0.80;0.80;0.95$ <<$x --> key> ==> <{lock1} --> (/,open,$x,_)>>. %1.00;0.90%
+            nse $0.80;0.80;0.95$ <{lock1} --> lock>. %1.00;0.90%
+            cyc 100
+
+            rem file: '6.21.nal'
+            nse $0.80;0.80;0.95$ (&&,<#x --> key>,<{lock1} --> (/,open,#x,_)>). %1.00;0.90%
+            nse $0.80;0.80;0.95$ <{lock1} --> lock>. %1.00;0.90%
+            cyc 100
+
+            rem file: '6.22.nal'
+            nse $0.80;0.80;0.95$ <0 --> num>. %1.00;0.90%
+            nse $0.80;0.80;0.95$ <<$1 --> num> ==> <(*,$1) --> num>>. %1.00;0.90%
+            nse $0.90;0.80;1.00$ <(*,(*,(*,0))) --> num>?
+            cyc 100
+
+            rem file: '6.23.nal'
+            nse $0.80;0.80;0.95$ (&&,<#1 --> lock>,<<$2 --> key> ==> <#1 --> (/,open,$2,_)>>). %1.00;0.90%
+            nse $0.80;0.80;0.95$ <{key1} --> key>. %1.00;0.90%
+            cyc 100
+
+            rem file: '6.24.nal'
+            nse $0.80;0.80;0.95$ <<$1 --> lock> ==> (&&,<#2 --> key>,<$1 --> (/,open,#2,_)>)>. %1.00;0.90%
+            nse $0.80;0.80;0.95$ <{key1} --> key>. %1.00;0.90%
+            cyc 100
+
+            rem file: '6.25.nal'
+            nse $0.80;0.80;0.95$ <<lock1 --> (/,open,$1,_)> ==> <$1 --> key>>. %1.00;0.90%
+            nse $0.80;0.80;0.95$ <lock1 --> lock>. %1.00;0.90%
+            cyc 100
+
+            rem file: '6.26.nal'
+            nse $0.80;0.80;0.95$ <lock1 --> lock>. %1.00;0.90%
+            nse $0.80;0.80;0.95$ <(&&,<#1 --> lock>,<#1 --> (/,open,$2,_)>) ==> <$2 --> key>>. %1.00;0.90%
+            cyc 100
+
+            rem file: '6.27.nal'
+            nse $0.80;0.80;0.95$ <<lock1 --> (/,open,$1,_)> ==> <$1 --> key>>. %1.00;0.90%
+            nse $0.80;0.80;0.95$ <(&&,<#1 --> lock>,<#1 --> (/,open,$2,_)>) ==> <$2 --> key>>. %1.00;0.90%
+            cyc 100
+
+            rem file: '6.3.nal'
+            nse $0.80;0.80;0.95$ <<bird --> $x> ==> <robin --> $x>>. %1.00;0.90%
+            nse $0.80;0.80;0.95$ <<swimmer --> $y> ==> <robin --> $y>>. %0.70;0.90%
+            cyc 100
+
+            rem file: '6.4.nal'
+            nse $0.80;0.80;0.95$ <(&&,<$x --> flyer>,<$x --> [chirping]>) ==> <$x --> bird>>. %1.00;0.90%
+            nse $0.80;0.80;0.95$ <<$y --> [with_wings]> ==> <$y --> flyer>>. %1.00;0.90%
+            cyc 100
+
+            rem file: '6.5.nal'
+            nse $0.80;0.80;0.95$ <(&&,<$x --> flyer>,<$x --> [chirping]>, <(*, $x, worms) --> food>) ==> <$x --> bird>>. %1.00;0.90%
+
+            nse $0.80;0.80;0.95$ <(&&,<$x --> [chirping]>,<$x --> [with_wings]>) ==> <$x --> bird>>. %1.00;0.90%
+            cyc 100
+
+            rem file: '6.6.nal'
+            nse $0.80;0.80;0.95$ <(&&,<$x --> flyer>,<(*,$x,worms) --> food>) ==> <$x --> bird>>. %1.00;0.90%
+            nse $0.80;0.80;0.95$ <<$y --> flyer> ==> <$y --> [with_wings]>>. %1.00;0.90%
+            cyc 100
+
+            rem file: '6.7.nal'
+            nse $0.80;0.80;0.95$ <<$x --> bird> ==> <$x --> animal>>. %1.00;0.90%
+            nse $0.80;0.80;0.95$ <robin --> bird>. %1.00;0.90%
+            cyc 100
+
+            rem file: '6.8.nal'
+            nse $0.80;0.80;0.95$ <<$x --> bird> ==> <$x --> animal>>. %1.00;0.90%
+            nse $0.80;0.80;0.95$ <tiger --> animal>. %1.00;0.90%
+            cyc 100
+
+            rem file: '6.9.nal'
+            nse $0.80;0.80;0.95$ <<$x --> animal> <=> <$x --> bird>>. %1.00;0.90%
+            nse $0.80;0.80;0.95$ <robin --> bird>. %1.00;0.90%
+            cyc 100
+
+            rem file: '6.birdClaimedByBob.nal'
+            nse $0.80;0.80;0.95$ <(&,<{Tweety} --> bird>,<bird --> fly>) --> claimedByBob>. %1.00;0.90%
+            nse $0.80;0.80;0.95$ <<(&,<#1 --> $2>,<$3 --> #1>) --> claimedByBob> ==> <<$3 --> $2> --> claimedByBob>>. %1.00;0.90%
+
+            nse $0.90;0.80;1.00$ <?x --> claimedByBob>?
+            cyc 100
+
+            rem file: '6.can_of_worms.nal'
+            nse $0.80;0.80;0.95$ <0 --> num>. %1.00;0.90%
+            nse $0.80;0.80;0.95$ <0 --> (/,num,_)>. %1.00;0.90%
+            cyc 100
+
+            rem file: '6.nlp1.nal'
+            nse $0.80;0.80;0.95$ <(\\,REPRESENT,_,CAT) --> cat>. %1.00;0.90%
+            nse $0.80;0.80;0.95$ <(\\,(\\,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish) --> cat>. %1.00;0.90%
+            cyc 100
+
+            rem file: '6.nlp2.nal'
+            nse $0.80;0.80;0.95$ <cat --> (/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish)>. %1.00;0.90%
+            nse $0.80;0.80;0.95$ <cat --> CAT>. %1.00;0.90%
+            cyc 100
+
+            rem file: '6.redundant.nal'
+            nse $0.80;0.80;0.95$ <<lock1 --> (/,open,$1,_)> ==> <$1 --> key>>. %1.00;0.90%
+            cyc 100
+
+            rem file: '6.symmetry.nal'
+            nse $0.80;0.80;0.95$ <(*,a,b) --> like>. %1.00;0.90%
+            nse $0.80;0.80;0.95$ <(*,b,a) --> like>. %1.00;0.90%
+            nse $0.90;0.80;1.00$ <<(*,$1,$2) --> like> <=> <(*,$2,$1) --> like>>?
+            cyc 100
+
+            rem file: '6.uncle.nal'
+            nse $0.80;0.80;0.95$ <tim --> (/,uncle,_,tom)>. %1.00;0.90%
+            nse $0.80;0.80;0.95$ <tim --> (/,uncle,tom,_)>. %0.00;0.90%
+            cyc 100"#,
+        )
     }
 }
