@@ -332,17 +332,18 @@ impl Memory {
     ///   * 📝此时需要考虑借用问题
     #[must_use]
     fn insert_task_link_inner(&mut self, key: &str, link: TaskLink) -> Option<TaskLink> {
+        // * 🚩先拿出对应的概念
+        // * 📝【2024-06-29 02:45:55】此处通过「先拿出概念，再激活，最后才放回」暂且解决了「长期稳定性中袋mass下溢」问题
+        let mut component_concept = self.pick_out_concept(key)?;
+
         // * 🚩计算预算值
-        let component_concept = self.key_to_concept(key)?;
-        let new_budget = self.activate_concept_calculate(component_concept, &link);
+        let new_budget = self.activate_concept_calculate(&component_concept, &link);
 
         // * 🚩放入任务链 & 更新预算值
-        let component_concept = self.key_to_concept_mut(key)?;
         let overflowed_task_link = component_concept.put_in_task_link(link);
         component_concept.copy_budget_from(&new_budget);
 
-        // * 🚩拿出再放回 | 用「遗忘函数」更新预算值
-        let component_concept = self.pick_out_concept(key)?;
+        // * 🚩再放回 | 用「遗忘函数」更新预算值
         self.put_back_concept(component_concept);
 
         // * 🚩返回溢出的任务链

@@ -1,6 +1,10 @@
 use anyhow::Result;
+use narsese::conversion::string::impl_lexical::format_instances::FORMAT_ASCII;
 use narust_158::{control::DEFAULT_PARAMETERS, inference::InferenceEngine, vm::Launcher};
-use navm::vm::{VmLauncher, VmRuntime};
+use navm::{
+    output::Output,
+    vm::{VmLauncher, VmRuntime},
+};
 
 pub fn launcher_void() -> impl VmLauncher {
     Launcher::new("nar_158", DEFAULT_PARAMETERS, InferenceEngine::VOID)
@@ -37,8 +41,45 @@ fn shell(
         }
         // out
         while let Some(output) = runtime.try_fetch_output()? {
-            println!("{}", output.to_json_string());
+            shell_output(output);
         }
+    }
+}
+
+fn shell_output(output: Output) {
+    use Output::*;
+    match &output {
+        // 带Narsese输出
+        IN { content, narsese }
+        | OUT {
+            content_raw: content,
+            narsese,
+        }
+        | ANSWER {
+            content_raw: content,
+            narsese,
+        }
+        | ACHIEVED {
+            content_raw: content,
+            narsese,
+        } => match narsese {
+            Some(narsese) => {
+                println!("[{}] {}", output.get_type(), FORMAT_ASCII.format(narsese))
+            }
+            None => println!("[{}] {}", output.get_type(), content),
+        },
+        // 仅消息
+        ERROR {
+            description: content,
+        }
+        | INFO { message: content }
+        | COMMENT { content }
+        | TERMINATED {
+            description: content,
+        }
+        | OTHER { content } => println!("[{}] {}", output.get_type(), content),
+        // 其它
+        output => println!("{}", output.to_json_string()),
     }
 }
 
@@ -134,7 +175,7 @@ mod tests {
             nse <(&/,<$1 --> [pliable]>,(^reshape,{SELF},$1)) =/> <$1 --> [hardened]>>.
             nse <<$1 --> [hardened]> =|> <$1 --> [unscrewing]>>.
             nse (&&,<#1 --> object>,<#1 --> [unscrewing]>)!
-            cyc 2000000"#;
+            cyc 20000"#;
         let runtime = create_runtime()?;
         // let inputs = shell_iter_stdin();
         let inputs = shell_iter_inputs(

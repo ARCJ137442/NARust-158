@@ -556,6 +556,18 @@ impl<E: Item> Bag<E> {
         if self.item_map.is_empty() {
             return None;
         }
+        let level = self.select_next_level_for_take();
+        let selected_key = self.take_out_first(level);
+        // * 此处需要对内部可能有的「元素id」进行转换
+        match selected_key {
+            Some(key) => self.item_map.remove(&key),
+            None => None,
+        }
+    }
+
+    /// 为[`Self::take_out`]选择下一个要被取走的level
+    /// * 🚩计算并返回「下一个level值」
+    fn select_next_level_for_take(&mut self) -> usize {
         if self.empty_level(self.current_level) || (self.current_counter) == 0 {
             self.current_level = self.distributor.pick(self.level_index);
             self.level_index = self.distributor.next(self.level_index);
@@ -569,13 +581,8 @@ impl<E: Item> Bag<E> {
                 false => self.level_map.get(self.current_level).size(),
             };
         }
-        let selected_key = self.take_out_first(self.current_level);
         self.current_counter -= 1;
-        // * 此处需要对内部可能有的「元素id」进行转换
-        match selected_key {
-            Some(key) => self.item_map.remove(&key),
-            None => None,
-        }
+        self.current_level
     }
 
     /// 模拟`Bag.pickOut`
