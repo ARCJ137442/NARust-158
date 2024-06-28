@@ -56,7 +56,9 @@ impl ReasonContext for ReasonContextTransform<'_> {
 
     fn absorbed_by_reasoner(mut self) {
         // * 🚩将「当前任务链」归还给「当前概念」（所有权转移）
-        self.core // ! 📌必须分到不同字段
+        // * 📝此处只能销毁：会有「部分借用」的问题
+        let _ = self
+            .core // ! 📌必须分到不同字段
             .current_concept_mut()
             .put_task_link_back(self.current_task_link);
         // * 🚩从基类方法继续

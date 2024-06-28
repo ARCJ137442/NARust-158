@@ -15,38 +15,57 @@ use crate::control::{ReasonContextConcept, ReasonContextDirect, ReasonContextTra
 pub struct InferenceEngine {
     /// 直接推理 入口函数
     /// * 📌接收 [直接推理上下文](ReasonContextDirect)
-    /// * 🚩Rust的「对象安全」要求方法必须带`self`参数
     /// * 📝不建议迁出去当类型别名：生命周期参数需要额外补充
     #[doc(alias = "direct_process")]
     direct: fn(&mut ReasonContextDirect),
 
     /// 转换推理 入口函数
     /// * 📌接收 [转换推理上下文](ReasonContextTransform)
-    /// * 🚩Rust的「对象安全」要求方法必须带`self`参数
     /// * 📝不建议迁出去当类型别名：生命周期参数需要额外补充
     #[doc(alias = "transform_task")]
     transform: fn(&mut ReasonContextTransform),
 
+    /// 匹配推理 入口函数
+    /// * 📌接收 [概念推理上下文](ReasonContextConcept)
+    /// * 📝不建议迁出去当类型别名：生命周期参数需要额外补充
+    #[doc(alias = "match_links")]
+    matching: fn(&mut ReasonContextConcept),
+
     /// 概念推理 入口函数
     /// * 📌接收 [概念推理上下文](ReasonContextConcept)
-    /// * 🚩Rust的「对象安全」要求方法必须带`self`参数
     /// * 📝不建议迁出去当类型别名：生命周期参数需要额外补充
     #[doc(alias = "concept_reason")]
     reason: fn(&mut ReasonContextConcept),
 }
 
 impl InferenceEngine {
-    pub fn new(
-        direct: fn(context: &mut ReasonContextDirect),
-        reason: fn(context: &mut ReasonContextConcept),
-        transform: fn(context: &mut ReasonContextTransform),
+    // 使用函数指针构造
+    #[inline]
+    pub const fn new(
+        direct: fn(&mut ReasonContextDirect),
+        transform: fn(&mut ReasonContextTransform),
+        matching: fn(&mut ReasonContextConcept),
+        reason: fn(&mut ReasonContextConcept),
     ) -> Self {
         Self {
             direct,
-            reason,
             transform,
+            matching,
+            reason,
         }
     }
+
+    /// 空指针引擎
+    /// * 📌这个引擎「什么都不做」
+    pub const VOID: Self = {
+        // 三个空函数
+        fn direct(_: &mut ReasonContextDirect) {}
+        fn transform(_: &mut ReasonContextTransform) {}
+        fn matching(_: &mut ReasonContextConcept) {}
+        fn reason(_: &mut ReasonContextConcept) {}
+        // 构造自身
+        Self::new(direct, transform, matching, reason)
+    };
 
     /// 获取「推理函数 @ 直接推理」
     /// * ✅不会长期借用`self`：允许「推理引擎」作为「推理上下文」的一部分（被引用）
@@ -58,6 +77,12 @@ impl InferenceEngine {
     /// * ✅不会长期借用`self`：允许「推理引擎」作为「推理上下文」的一部分（被引用）
     pub fn transform_f(&self) -> fn(&mut ReasonContextTransform) {
         self.transform
+    }
+
+    /// 获取「推理函数 @ 匹配推理」
+    /// * ✅不会长期借用`self`：允许「推理引擎」作为「推理上下文」的一部分（被引用）
+    pub fn matching(&self) -> fn(&mut ReasonContextConcept) {
+        self.matching
     }
 
     /// 获取「推理函数 @ 概念推理」

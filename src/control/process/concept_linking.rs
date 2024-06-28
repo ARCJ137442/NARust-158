@@ -3,7 +3,7 @@
 //! * 📍复合词项「链接到任务」的功能
 
 use crate::{
-    control::{ReasonContext, ReasonContextDirect},
+    control::{ReasonContext, ReasonContextDirect, ReasonRecorder},
     entity::{
         BudgetValue, Concept, Item, RCTask, TLink, TLinkType, TaskLink, TermLink, TermLinkTemplate,
     },
@@ -13,7 +13,6 @@ use crate::{
     util::{RefCount, ToDisplayAndBrief},
 };
 use nar_dev_utils::unwrap_or_return;
-use navm::output::Output;
 
 /// Build TermLink templates to constant components and sub-components
 ///
@@ -174,12 +173,11 @@ impl ReasonContextDirect<'_> {
         let mut outputs = vec![]; // 使用缓存延迟输出，避免借用问题
         let mut add_overflowed_task_link = |overflowed_task_link: &TaskLink| {
             // 使用闭包封装逻辑
-            outputs.push(Output::COMMENT {
-                content: format!(
-                    "!!! Overflowed TaskLink: {}",
-                    overflowed_task_link.to_display_long()
-                ),
-            })
+            let output = ReasonRecorder::output_comment(format!(
+                "!!! Overflowed TaskLink: {}",
+                overflowed_task_link.to_display_long()
+            ));
+            outputs.push(output);
         };
 
         // 对自身 //
@@ -216,7 +214,7 @@ impl ReasonContextDirect<'_> {
 
         // * 🚩🆕汇报「溢出的任务链」
         for output in outputs {
-            self.add_output(output);
+            self.report(output);
         }
     }
 
@@ -231,10 +229,7 @@ impl ReasonContextDirect<'_> {
 
     fn build_term_links_sub(&mut self, concept_key: &str) {
         // * 🚩获取「当前概念」（对「推理上下文的当前概念」也有效）
-        let concept = unwrap_or_return! {
-            ?self.key_to_concept(concept_key)
-            => ()
-        };
+        let concept = unwrap_or_return!(?self.key_to_concept(concept_key));
         // * 🚩仅在有「词项链模板」时
         if concept.link_templates_to_self().is_empty() {
             return;
@@ -323,7 +318,7 @@ impl Memory {
     ) -> Option<TaskLink> {
         let component_term = template.target();
         // ! 📝数据竞争：不能在「其它概念被拿出去后」并行推理，会导致重复创建概念
-        let component_concept = unwrap_or_return!(?self.get_concept_or_create(&component_term) );
+        let component_concept = self.get_concept_or_create(&component_term)?;
         let link =
             TaskLink::from_template(task.clone(), template, BudgetValue::from_other(sub_budget));
         let key = component_concept.key().clone();
@@ -338,16 +333,16 @@ impl Memory {
     #[must_use]
     fn insert_task_link_inner(&mut self, key: &str, link: TaskLink) -> Option<TaskLink> {
         // * 🚩计算预算值
-        let component_concept = unwrap_or_return!(?self.key_to_concept(key));
+        let component_concept = self.key_to_concept(key)?;
         let new_budget = self.activate_concept_calculate(component_concept, &link);
 
         // * 🚩放入任务链 & 更新预算值
-        let component_concept = unwrap_or_return!(?self.key_to_concept_mut(key));
+        let component_concept = self.key_to_concept_mut(key)?;
         let overflowed_task_link = component_concept.put_in_task_link(link);
         component_concept.copy_budget_from(&new_budget);
 
         // * 🚩拿出再放回 | 用「遗忘函数」更新预算值
-        let component_concept = unwrap_or_return!(?self.pick_out_concept(key));
+        let component_concept = self.pick_out_concept(key)?;
         self.put_back_concept(component_concept);
 
         // * 🚩返回溢出的任务链

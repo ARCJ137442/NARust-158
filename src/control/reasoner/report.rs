@@ -3,10 +3,11 @@
 //! * 🎯推理器（原记忆区）输出信息
 //! * 🚩【2024-05-06 09:35:37】复用[`navm`]中的「NAVM输出」
 
+use super::Reasoner;
+use crate::{entity::Task, util::ToDisplayAndBrief};
+use narsese::api::NarseseValue;
 use navm::output::Output;
 use std::collections::VecDeque;
-
-use super::Reasoner;
 
 #[derive(Debug, Clone, Default)]
 pub(in super::super) struct ReasonRecorder {
@@ -44,10 +45,56 @@ impl ReasonRecorder {
     }
 }
 
+/// 简化「添加常用类型输出」功能
+impl ReasonRecorder {
+    /// 「注释」输出
+    /// * 📌一般用于「推理过程debug记录」
+    /// * 🎯快捷生成并使用[`Output::COMMENT`]
+    pub fn output_comment(message: impl Into<String>) -> Output {
+        Output::COMMENT {
+            content: message.into(),
+        }
+    }
+
+    /// 「错误」输出
+    /// * 📌一般用于「推理过程debug记录」
+    /// * 🎯快捷生成并使用[`Output::COMMENT`]
+    pub fn output_error(description: impl ToString) -> Output {
+        Output::ERROR {
+            description: description.to_string(),
+        }
+    }
+
+    /// 「导出结论」输出（语句）
+    /// * 📌一般用于「推理导出结论」
+    /// * 🎯快捷生成并使用[`Output::OUT`]
+    /// * 🚩【2024-06-28 15:41:53】目前统一消息输出格式，仅保留Narsese
+    pub fn output_out(narsese: &Task) -> Output {
+        Output::OUT {
+            // * 🚩此处使用「简短结论」以对齐OpenNARS两位数
+            content_raw: format!("Derived: {}", narsese.to_display_brief()),
+            narsese: Some(NarseseValue::Task(narsese.to_lexical())),
+        }
+    }
+}
+
 /// 为「推理器」扩展方法
 impl Reasoner {
     /// 报告输出
     pub fn report(&mut self, output: Output) {
         self.recorder.put(output);
+    }
+
+    pub fn report_comment(&mut self, message: impl Into<String>) {
+        self.report(ReasonRecorder::output_comment(message));
+    }
+
+    #[doc(alias = "report_derived")]
+    pub fn report_out(&mut self, narsese: &Task) {
+        self.report(ReasonRecorder::output_out(narsese));
+    }
+
+    pub fn report_error(&mut self, description: impl ToString) {
+        self.report(ReasonRecorder::output_error(description));
     }
 }

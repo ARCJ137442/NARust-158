@@ -20,10 +20,10 @@ pub fn process_direct(context: &mut ReasonContextDirect) {
     }
 }
 
-fn process_judgement(context: &mut ReasonContextDirect) {
+fn process_judgement(_context: &mut ReasonContextDirect) {
     todo!()
 }
 
-fn process_question(context: &mut ReasonContextDirect) {
+fn process_question(_context: &mut ReasonContextDirect) {
     todo!()
 }

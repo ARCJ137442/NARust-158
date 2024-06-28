@@ -9,7 +9,7 @@
 #![doc(alias = "derivation_context")]
 
 use crate::{
-    control::{Parameters, Reasoner},
+    control::{Parameters, ReasonRecorder, Reasoner},
     entity::{Concept, JudgementV1, RCTask, Task, TaskLink, TermLink},
     global::{ClockTime, Float},
     language::Term,
@@ -66,8 +66,23 @@ pub trait ReasonContext {
     /// * 📌同时复刻`addExportString`、`report`与`addStringToRecord`几个方法
     #[doc(alias = "add_export_string")]
     #[doc(alias = "add_string_to_record")]
-    #[doc(alias = "report")]
-    fn add_output(&mut self, output: Output);
+    #[doc(alias = "add_output")]
+    fn report(&mut self, output: Output);
+
+    /// 派生易用性方法
+    fn report_comment(&mut self, message: impl Into<String>) {
+        self.report(ReasonRecorder::output_comment(message));
+    }
+
+    /// 派生易用性方法
+    fn report_out(&mut self, narsese: &Task) {
+        self.report(ReasonRecorder::output_out(narsese));
+    }
+
+    /// 派生易用性方法
+    fn report_error(&mut self, description: impl ToString) {
+        self.report(ReasonRecorder::output_error(description));
+    }
 
     /// 获取「当前概念」（不可变）
     fn current_concept(&self) -> &Concept;
@@ -315,7 +330,7 @@ macro_rules! __delegate_from_core {
             self.core.add_new_task(task)
         }
 
-        fn add_output(&mut self, output: Output) {
+        fn report(&mut self, output: Output) {
             self.core.add_output(output)
         }
 

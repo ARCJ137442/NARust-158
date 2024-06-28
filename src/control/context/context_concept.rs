@@ -4,7 +4,7 @@
 //!
 //! * ♻️【2024-06-26 23:49:25】开始根据改版OpenNARS重写
 
-use super::{ReasonContext, ReasonContextCore};
+use super::{ReasonContext, ReasonContextCore, ReasonContextWithLinks};
 use crate::{
     __delegate_from_core,
     control::{Parameters, Reasoner},
@@ -128,7 +128,7 @@ impl ReasonContextConcept<'_> {
 
         // * 🚩尝试从「当前信念链的目标」获取「当前信念」所对应的概念
         let belief_term = &*new_belief_link.target();
-        let belief_concept = unwrap_or_return!(?self.term_to_concept(belief_term));
+        let belief_concept = self.term_to_concept(belief_term)?;
 
         // * 🚩找到新的「信念」充当「当前信念」并返回（可空性相对独立）
         belief_concept
@@ -169,5 +169,23 @@ impl ReasonContext for ReasonContextConcept<'_> {
 
         // * 🚩吸收核心
         self.core.absorbed_by_reasoner();
+    }
+}
+
+impl ReasonContextWithLinks for ReasonContextConcept<'_> {
+    fn current_belief(&self) -> Option<&JudgementV1> {
+        self.current_belief.as_ref()
+    }
+
+    fn belief_link_for_budget_inference(&mut self) -> Option<&mut TermLink> {
+        Some(&mut self.current_belief_link)
+    }
+
+    fn current_task_link(&self) -> &TaskLink {
+        &self.current_task_link
+    }
+
+    fn current_task_link_mut(&mut self) -> &mut TaskLink {
+        &mut self.current_task_link
     }
 }

@@ -11,8 +11,6 @@ use crate::{
     language::Term,
     util::{RefCount, ToDisplayAndBrief},
 };
-use narsese::api::NarseseValue;
-use navm::output::Output;
 
 /// 自动实现 for 「推理上下文」
 pub trait ContextDerivation: ReasonContext {
@@ -37,9 +35,7 @@ pub trait ContextDerivation: ReasonContext {
             Some(candidate_belief.clone()),
         );
         // * 🚩现在重新改为`COMMENT`，但更详细地展示「任务」本身
-        self.add_output(Output::COMMENT {
-            content: format!("!!! Activated: {}", task.to_display_long()),
-        });
+        self.report_comment(format!("!!! Activated: {}", task.to_display_long()));
         // // * 🚩若为「问题」⇒输出显著的「导出结论」
         self.add_new_task(task);
     }
@@ -52,23 +48,15 @@ pub trait ContextDerivation: ReasonContext {
     fn derived_task(&mut self, new_task: Task) {
         // * 🚩判断「导出的新任务」是否有价值
         if !new_task.budget_above_threshold(self.parameters().budget_threshold) {
-            self.add_output(Output::COMMENT {
-                content: format!("!!! Ignored: {}", new_task.to_display_long()),
-            });
+            self.report_comment(format!("!!! Ignored: {}", new_task.to_display_long()));
             return;
         }
         // * 🚩报告
-        self.add_output(Output::COMMENT {
-            content: format!("!!! Derived: {}", new_task.to_display_long()),
-        });
+        self.report_comment(format!("!!! Derived: {}", new_task.to_display_long()));
         let budget_summary = new_task.budget_summary().to_float();
         if budget_summary > self.silence_percent() {
             // only report significant derived Tasks
-            let narsese = Some(NarseseValue::Task(new_task.to_lexical()));
-            self.add_output(Output::OUT {
-                content_raw: format!("OUT: {}", new_task.to_display_long()),
-                narsese,
-            });
+            self.report_out(&new_task);
         }
         // * 🚩将「导出的新任务」添加到「新任务表」中
         self.add_new_task(new_task);
@@ -103,9 +91,7 @@ pub trait ContextDerivation: ReasonContext {
                 );
                 self.derived_task(new_task);
             }
-            Err(error) => self.add_output(Output::ERROR {
-                description: error.to_string(),
-            }),
+            Err(error) => self.report_error(error.to_string()),
         }
     }
 }

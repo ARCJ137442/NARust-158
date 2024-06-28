@@ -28,7 +28,6 @@ use crate::{
     util::{RefCount, ToDisplayAndBrief},
 };
 use nar_dev_utils::{manipulate, unwrap_or_return};
-use navm::output::Output;
 
 /// 为「推理器」添加功能
 /// * 📌入口函数
@@ -82,18 +81,16 @@ impl Reasoner {
                     true => {
                         if let Some(overflowed) = self.derivation_datas.put_in_novel_tasks(task) {
                             // 🆕🚩报告「任务溢出」
-                            self.report(Output::COMMENT {
-                                content: format!(
-                                    "!!! NovelTasks overflowed: {}",
-                                    overflowed.to_display_long()
-                                ),
-                            })
+                            self.report_comment(format!(
+                                "!!! NovelTasks overflowed: {}",
+                                overflowed.to_display_long()
+                            ))
                         }
                     }
                     // * 🚩忽略
-                    false => self.report(Output::COMMENT {
-                        content: format!("!!! Neglected: {}", task.to_display_long()),
-                    }),
+                    false => {
+                        self.report_comment(format!("!!! Neglected: {}", task.to_display_long()))
+                    }
                 }
             }
         }
@@ -127,9 +124,7 @@ impl Reasoner {
     /// 立即处理
     /// * 🚩返回「是否有结果」
     fn immediate_process(&mut self, task_to_process: Task) -> bool {
-        self.report(Output::COMMENT {
-            content: format!("!!! Insert: {}", task_to_process.to_display_long()),
-        });
+        self.report_comment(format!("!!! Insert: {}", task_to_process.to_display_long()));
 
         // * 🚩构建「实际上下文」并断言可空性 | 构建失败⇒返回「无结果」
         let mut context =
