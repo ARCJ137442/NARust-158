@@ -15,6 +15,11 @@ pub trait RankTable<T>: Iterable<T> {
     /// 表内已有元素数量
     fn size(&self) -> usize;
 
+    /// 判断是否为空
+    fn is_empty(&self) -> bool {
+        self.size() == 0
+    }
+
     /// 表内最大元素数量（容量）
     fn capacity(&self) -> usize;
 

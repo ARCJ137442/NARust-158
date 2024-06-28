@@ -12,7 +12,7 @@ use crate::{
     inference::{Budget, BudgetFunctions},
     language::Term,
     storage::{ArrayBuffer, ArrayRankTable, Bag, Buffer, RankTable},
-    util::{Iterable, ToDisplayAndBrief},
+    util::{to_display_when_has_content, Iterable, ToDisplayAndBrief},
 };
 use nar_dev_utils::join;
 use std::usize;
@@ -272,18 +272,22 @@ impl ToDisplayAndBrief for Concept {
     fn to_display_long(&self) -> String {
         let mut base = join! {
             => self.to_display_brief()
-            => "\nterm_links: " => self.term_links.to_display()
-            => "\ntask_links: " => self.task_links.to_display()
+            => to_display_when_has_content("  term_links: ", self.term_links.to_display())
+            => to_display_when_has_content("  task_links: ", self.task_links.to_display())
         };
-        base += "\nquestions:";
-        for t in self.questions.iter() {
-            base += "\n";
-            base += &t.to_display();
+        if !self.questions.is_empty() {
+            base += "\n  questions:";
+            for t in self.questions.iter() {
+                base += "\n";
+                base += &t.to_display();
+            }
         }
-        base += "\nbeliefs:";
-        for b in self.beliefs.iter() {
-            base += "\n";
-            base += &b.to_display();
+        if !self.beliefs.is_empty() {
+            base += "\n  beliefs:";
+            for b in self.beliefs.iter() {
+                base += "\n";
+                base += &b.to_display();
+            }
         }
         base
     }
