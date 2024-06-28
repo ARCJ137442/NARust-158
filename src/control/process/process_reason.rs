@@ -66,10 +66,22 @@ impl Reasoner {
             self.choose_term_links_to_reason(&mut current_concept, &mut current_task_link);
         if belief_links_to_reason.is_empty() {
             // * 🚩中途返回时要回收
-            // ! ❓↓这个「当前任务链」不知为何，按理应该放回，但若放回则推不出结果
+            // ! ❓【2024-05-24 22:55:**】↓这个「当前任务链」不知为何，按理应该放回，但若放回则推不出结果
             // * 🚩【2024-05-24 22:53:16】目前「维持原判」不放回「当前任务链」
-            // currentConcept.__putTaskLinkBack(currentTaskLink);
+            // * 🚩【2024-06-29 00:08:44】遵照同义重构前`Concept.fire`代码 同义修复：始终需要放回「当前任务链」
+            // * 📝OpenNARS在「当前概念没找到信念链」时，仍然将「已取出的『当前任务链』」放回「当前概念」中
+            // 🔗https://github.com/ARCJ137442/OpenNARS-158-dev/blob/be8e7ddb9f2c918ac7c99491ef9a6f6318a93c18/src/nars/entity/Concept.java#L453
+            // * 🚩回收当前任务链
+            let overflowed = current_concept.put_task_link_back(current_task_link);
+            if let Some(overflowed_task_link) = overflowed {
+                self.report_comment(format!(
+                    "!!! Overflowed TaskLink: {}",
+                    overflowed_task_link.to_display_long()
+                ));
+            }
+            // * 🚩回收当前概念
             self.memory.put_back_concept(current_concept);
+            // 返回空
             return None;
         }
 
