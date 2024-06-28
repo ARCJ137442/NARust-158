@@ -1,4 +1,6 @@
 //! 为推理器新实现的「输入通道」
+use std::collections::VecDeque;
+
 use super::*;
 use crate::{
     io::{Channel, InputChannel},
@@ -11,29 +13,37 @@ use navm::cmd::Cmd;
 /// * 🚩【2024-06-29 00:47:31】现在需要「初代输入通道」
 ///   * 🎯检验并利用推理器自身机制
 ///   * ✅技术不难：通过函数指针很轻松地引入外部代码
-#[derive(Debug, Clone)]
+/// * 🚩【2024-06-29 01:14:48】现在基于外部需要，改为「虚拟机的输入在此临时存储」
+#[derive(Debug, Clone, Default)]
 pub struct ChannelIn {
-    /// 输入源（一个）
-    /// * 🚩可返回指令，亦可不返回指令
-    input_source: fn() -> Option<Cmd>,
+    /// 缓存的输入
+    cached_inputs: VecDeque<Cmd>,
 }
 
 impl ChannelIn {
     /// 构造函数
-    pub fn new(input_source: fn() -> Option<Cmd>) -> Self {
-        Self { input_source }
+    /// * 🚩默认构造一个空通道
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// 放置输入
+    /// * 🎯从NAVM虚拟机中放置，后续预计将被推理器自身拿出
+    /// * 🚩先进先出
+    pub fn put(&mut self, cmd: Cmd) {
+        self.cached_inputs.push_back(cmd);
+    }
+
+    /// 向「共享引用」中放置输入
+    #[inline]
+    pub fn put_rc(this: &mut RC<Self>, cmd: Cmd) {
+        this.mut_().put(cmd);
     }
 
     /// 拉取输入
     /// * 🚩先进先出
-    pub fn fetch(&self) -> Option<Cmd> {
-        (self.input_source)()
-    }
-
-    /// 从「共享引用」中拉取输入
-    #[inline]
-    pub fn fetch_rc(this: &mut RC<Self>) -> Option<Cmd> {
-        this.get_().fetch()
+    pub fn fetch(&mut self) -> Option<Cmd> {
+        self.cached_inputs.pop_front()
     }
 }
 

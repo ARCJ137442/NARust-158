@@ -27,6 +27,8 @@ use navm::{
 pub struct Runtime {
     /// 内部推理器字段
     reasoner: Reasoner,
+    /// 输入通道的共享引用
+    i_channel: RC<ChannelIn>,
     /// 输出通道的共享引用
     /// * 🎯避免「运行时→推理器→通道→运行时」的循环引用
     /// * 🚩「缓存的输出」亦包含在内
@@ -44,20 +46,12 @@ impl Runtime {
         name: impl Into<String>,
         hyper_parameters: Parameters,
         inference_engine: InferenceEngine,
-        input_source: Option<fn() -> Option<Cmd>>,
     ) -> Self {
         // * 🚩创建推理器
         let mut reasoner = Reasoner::new(name.into(), hyper_parameters, inference_engine);
 
         // * 🚩创建并加入通道
-        let input_source = input_source.unwrap_or({
-            /// 默认的输入源
-            fn void_input() -> Option<Cmd> {
-                None
-            }
-            void_input
-        });
-        let i_channel = RC::new_(ChannelIn::new(input_source));
+        let i_channel = RC::new_(ChannelIn::new());
         let b = Box::new(i_channel.clone());
         reasoner.add_input_channel(b); // * ✅解决：在「推理器」中细化生命周期约束，现在不再报错与要求`'static`
 
@@ -70,6 +64,8 @@ impl Runtime {
             // * 🚩载入推理器
             reasoner,
             // * 🚩空通道
+            i_channel,
+            // * 🚩空通道
             o_channel,
         }
     }
@@ -78,9 +74,11 @@ impl Runtime {
 /// 实现[虚拟机运行时](VmRuntime)
 impl VmRuntime for Runtime {
     fn input_cmd(&mut self, cmd: Cmd) -> Result<()> {
-        self.reasoner.input_cmd(cmd);
-        self.reasoner.handle_output();
-        self.reasoner.handle_work_cycle();
+        // ! ⚠️不要直接朝推理器输入NAVM指令，要利用推理器自身的通道机制
+        // * 🚩将指令置入通道中
+        self.i_channel.mut_().put(cmd);
+        // * 🚩让推理器做一个完整步进周期
+        self.reasoner.tick();
         Ok(())
     }
 
