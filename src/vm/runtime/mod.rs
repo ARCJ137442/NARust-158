@@ -3,8 +3,10 @@
 //! * ✅【2024-05-15 16:57:37】初代全功能实现
 
 // 通道
-mod channels;
-pub use channels::*;
+mod channel_in;
+pub use channel_in::*;
+mod channel_out;
+pub use channel_out::*;
 
 use crate::{
     control::{Parameters, Reasoner},
@@ -37,15 +39,28 @@ impl Runtime {
     /// * 🚩【2024-05-15 10:40:49】暂不允许「直接由推理器创建」
     ///   * 📌需要更精细地控制「内部推理器」的状态与成员
     /// * 🚩【2024-06-28 22:54:15】现在需要传递推理引擎
+    /// * 🚩【2024-06-29 00:59:24】现在需要给出「输入源」（当输入），亦可不
     pub fn new(
         name: impl Into<String>,
         hyper_parameters: Parameters,
         inference_engine: InferenceEngine,
+        input_source: Option<fn() -> Option<Cmd>>,
     ) -> Self {
         // * 🚩创建推理器
         let mut reasoner = Reasoner::new(name.into(), hyper_parameters, inference_engine);
 
         // * 🚩创建并加入通道
+        let input_source = input_source.unwrap_or({
+            /// 默认的输入源
+            fn void_input() -> Option<Cmd> {
+                None
+            }
+            void_input
+        });
+        let i_channel = RC::new_(ChannelIn::new(input_source));
+        let b = Box::new(i_channel.clone());
+        reasoner.add_input_channel(b); // * ✅解决：在「推理器」中细化生命周期约束，现在不再报错与要求`'static`
+
         let o_channel = RC::new_(ChannelOut::new());
         let b = Box::new(o_channel.clone());
         reasoner.add_output_channel(b); // * ✅解决：在「推理器」中细化生命周期约束，现在不再报错与要求`'static`
@@ -64,6 +79,8 @@ impl Runtime {
 impl VmRuntime for Runtime {
     fn input_cmd(&mut self, cmd: Cmd) -> Result<()> {
         self.reasoner.input_cmd(cmd);
+        self.reasoner.handle_output();
+        self.reasoner.handle_work_cycle();
         Ok(())
     }
 
