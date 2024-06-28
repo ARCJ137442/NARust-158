@@ -1,12 +1,12 @@
 //! 为推理器新实现的「输入通道」
-use std::collections::VecDeque;
 
-use super::*;
 use crate::{
+    global::RC,
     io::{Channel, InputChannel},
     util::RefCount,
 };
 use navm::cmd::Cmd;
+use std::collections::VecDeque;
 
 /// 初代通用`InputChannel`实现
 /// * 🚩【2024-05-17 17:01:54】没有「初代输入通道」：暂时不需要

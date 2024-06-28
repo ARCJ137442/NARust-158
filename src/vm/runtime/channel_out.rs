@@ -7,11 +7,12 @@
 //!       * 🚩运行时被拉取输出时，从中拉取
 //!     * ✅单线程不会导致借用问题
 
-use super::*;
 use crate::{
+    global::RC,
     io::{Channel, OutputChannel},
     util::RefCount,
 };
+use navm::output::Output;
 use std::collections::VecDeque;
 
 /// 初代通用`OutputChannel`实现

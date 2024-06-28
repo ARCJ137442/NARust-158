@@ -2,12 +2,6 @@
 //!
 //! * ✅【2024-05-15 16:57:37】初代全功能实现
 
-// 通道
-mod channel_in;
-pub use channel_in::*;
-mod channel_out;
-pub use channel_out::*;
-
 use crate::{
     control::{Parameters, Reasoner},
     global::RC,
@@ -20,6 +14,12 @@ use navm::{
     output::Output,
     vm::{VmRuntime, VmStatus},
 };
+
+// 通道
+mod channel_in;
+pub use channel_in::*;
+mod channel_out;
+pub use channel_out::*;
 
 /// 虚拟机运行时
 /// * 🎯包装一个虚拟机，以跳出孤儿规则的限制
