@@ -1,9 +1,9 @@
 [package]
 name = "narust-158"
-version = "0.0.5"
+version = "0.1.0"
 edition = "2021"
 description = """
-OpenNARS 1.5.8的Rust复刻
+A Rust reproduction of OpenNARS 1.5.8
 """
 
 readme = "README.md"

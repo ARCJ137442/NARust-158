@@ -110,7 +110,7 @@ dependencies = [
 
 [[package]]
 name = "narust-158"
-version = "0.0.5"
+version = "0.1.0"
 dependencies = [
  "anyhow",
  "nar_dev_utils 0.35.0",
