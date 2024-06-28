@@ -176,22 +176,22 @@ pub fn unify_substitute(
     substitution_2: &VarSubstitution,
 ) {
     // 根据「变量替换映射」在两头相应地替换变量
+    apply_unify_one(unified_in_1, substitution_1);
+    apply_unify_one(unified_in_2, substitution_2);
+}
+
+fn apply_unify_one(unified_in: &mut CompoundTermRefMut, substitution: &VarSubstitution) {
     // * 🚩若「变量替换映射」为空，本来就不会执行
-    unified_in_1.apply_substitute(substitution_1);
-    unified_in_2.apply_substitute(substitution_2);
-    // 替换后根据「是否已替换」设置词项
-    if !substitution_1.is_empty() {
-        // 📄 `((CompoundTerm) compound1).renameVariables();`
-        // 📄 `setConstant(true);` @ `CompoundTerm`
-        // unified_in_1.is_constant = true;
-        todo!("TODO: 尚需在OpenNARS中假定「找到了变量替换映射，就一定是复合词项」")
+    if substitution.is_empty() {
+        return;
     }
-    if !substitution_2.is_empty() {
-        // 📄 `((CompoundTerm) compound2).renameVariables();`
-        // 📄 `setConstant(true);` @ `CompoundTerm`
-        // unified_in_2.is_constant = true;
-        todo!("TODO: 尚需在OpenNARS中假定「找到了变量替换映射，就一定是复合词项」")
-    }
+    // 根据「变量替换映射」相应地替换变量
+    unified_in.apply_substitute(substitution);
+    // 替换后设置词项
+    // 📄 `((CompoundTerm) compound1).renameVariables();`
+    // 📄 `setConstant(true);` @ `CompoundTerm`
+    // unified_in_1.is_constant = true;
+    todo!("TODO: 尚需在OpenNARS中假定「找到了变量替换映射，就一定是复合词项」")
 }
 
 /// 📄OpenNARS `Variable.findSubstitute` 方法
