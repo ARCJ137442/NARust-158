@@ -84,9 +84,10 @@ impl Reasoner {
         // if DEBUG {
         //     self.handle_debug();
         // }
+        // * 🚩【2024-06-29 00:24:57】此处不同于OpenNARS：每次都是一个完整的「输入→工作→输出」周期
         self.handle_input();
-        self.handle_output();
         self.handle_work_cycle();
+        self.handle_output();
     }
 
     /// 处理输入：遍历所有通道，拿到指令
