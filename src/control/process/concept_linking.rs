@@ -251,8 +251,6 @@ impl ReasonContextDirect<'_> {
         let self_term = concept.term().clone();
         let templates = concept.link_templates_to_self().to_vec();
         for template in &templates {
-            // * 🚩载入引用
-            let memory = &mut self.core.reasoner.memory;
             // * 🚩仅在链接类型不是「转换」时
             if template.link_type() == TLinkType::Transform {
                 continue;
@@ -260,26 +258,21 @@ impl ReasonContextDirect<'_> {
             // * 🚩仅在「元素词项所对应概念」存在时
             let component = template.target();
             // * 🚩建立双向链接：整体⇒元素
-            let self_concept = match memory.key_to_concept_mut(concept_key) {
-                Some(c) => c,
-                None => continue,
-            };
+            let self_concept = unwrap_or_return!(?self.key_to_concept_mut(concept_key) => continue);
             let link = TermLink::from_template(component.clone(), template, sub_budget);
             self_concept.put_in_term_link(link); // this termLink to that
 
-            // * 🚩建立双向链接：元素⇒整体
+            // * 🚩建立双向链接：元素⇒整体 | 获取概念或在其中创建新概念（为数不多几个「创建概念」之处）
             // that termLink to this
-            let component_concept = match memory.get_concept_or_create(&component) {
-                Some(c) => c,
-                None => continue,
-            };
+            let component_concept =
+                unwrap_or_return!(?self.get_concept_or_create(&component) => continue);
             let link = TermLink::from_template(self_term.clone(), template, sub_budget);
             component_concept.put_in_term_link(link);
 
             // * 🚩对复合子项 继续深入递归
             if let Some(component) = component.as_compound() {
-                let concept_key = &Memory::term_to_key(&component);
-                self.build_term_links_sub(concept_key);
+                let concept_key = Memory::term_to_key(&component);
+                self.build_term_links_sub(&concept_key);
             }
         }
     }

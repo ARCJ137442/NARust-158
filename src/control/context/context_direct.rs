@@ -6,6 +6,7 @@ use crate::{
     control::{Parameters, Reasoner},
     entity::{Concept, RCTask, Task},
     global::{ClockTime, Float},
+    language::Term,
     storage::Memory,
 };
 use navm::output::Output;
@@ -34,6 +35,24 @@ impl<'this> ReasonContextDirect<'this> {
 
     pub fn memory_mut(&mut self) -> &mut Memory {
         self.core.memory_mut()
+    }
+
+    /// 获取「已存在的概念」（从「键」出发，可变引用）
+    /// * 🎯在「概念链接到任务」中使用
+    pub fn key_to_concept_mut(&mut self, key: &str) -> Option<&mut Concept> {
+        match key == Memory::term_to_key(self.current_term()) {
+            true => Some(self.current_concept_mut()),
+            false => self.memory_mut().key_to_concept_mut(key),
+        }
+    }
+
+    /// 获取「已存在的概念」或创建（从「键」出发，可变引用）
+    /// * 🎯在「概念链接到任务」中使用（子概念→自身，或递归处理时）
+    pub fn get_concept_or_create(&mut self, term: &Term) -> Option<&mut Concept> {
+        match term == self.current_term() {
+            true => Some(self.current_concept_mut()),
+            false => self.memory_mut().get_concept_or_create(term),
+        }
     }
 }
 
