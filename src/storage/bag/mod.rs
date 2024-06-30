@@ -1,9 +1,5 @@
 //! 有关「袋」的数据结构定义
 
-// 特征
-mod traits;
-use traits::*;
-
 // 【内部】分派器
 mod distributor;
 use distributor::*;

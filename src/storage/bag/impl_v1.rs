@@ -1,9 +1,6 @@
 //! 🎯复刻OpenNARS `nars.entity.Bag`
 
-use super::{
-    BagItemLevel, BagItemTable, BagItemTableV1, BagNameTable, BagNameTableV1, Distribute,
-    Distributor,
-};
+use super::{BagItemTable, BagNameTable, Distribute, Distributor};
 use crate::{
     control::DEFAULT_PARAMETERS,
     entity::{Item, ShortFloat},
@@ -78,7 +75,7 @@ pub struct Bag<E: Item> {
     /// # 📄OpenNARS
     ///
     /// `mapping from key to item`
-    item_map: BagNameTableV1<E>,
+    item_map: BagNameTable<E>,
 
     /// 层级映射
     /// * 📝OpenNARS中主要用到的操作
@@ -96,7 +93,7 @@ pub struct Bag<E: Item> {
     /// # 📄OpenNARS
     ///
     /// array of lists of items, for items on different level
-    level_map: BagItemTableV1,
+    level_map: BagItemTable,
 
     /// 袋容量
     /// * 📌在不同地方有不同的定义
@@ -214,8 +211,8 @@ impl<E: Item> Bag<E> {
             // ? ❓【2024-05-04 12:32:58】因为上边这个不支持[`Default`]，所以就要写这些模板代码吗？
             // * 💭以及，这个`new`究竟要不要照抄OpenNARS的「先创建全空属性⇒再全部init初始化」特性
             //   * 毕竟Rust没有`null`要担心
-            item_map: BagNameTableV1::default(),
-            level_map: BagItemTableV1::default(),
+            item_map: BagNameTable::default(),
+            level_map: BagItemTable::default(),
             mass: usize::default(),
             level_index: usize::default(),
             current_level: usize::default(),
@@ -323,11 +320,11 @@ impl<E: Item> Bag<E> {
         levelIndex = capacity % TOTAL_LEVEL; // so that different bags start at different point
         mass = 0;
         currentCounter = 0; */
-        self.level_map = BagItemTableV1::new(Self::__TOTAL_LEVEL);
+        self.level_map = BagItemTable::new(Self::__TOTAL_LEVEL);
         for level in 0..Self::__TOTAL_LEVEL {
             self.level_map.add_new(level);
         }
-        self.item_map = BagNameTableV1::new();
+        self.item_map = BagNameTable::new();
         self.current_level = Self::__TOTAL_LEVEL - 1;
         self.level_index = self.capacity() % Self::__TOTAL_LEVEL; // 不同的「袋」在分派器中有不同的起点
         self.mass = 0;
@@ -628,7 +625,8 @@ impl<E: Item> Bag<E> {
 
     /// 模拟`Bag.getLevel`
     /// * 📝Rust中[`usize`]无需考虑负值问题
-    /// *
+    /// * 🚩【2024-06-30 17:55:38】现更改计算方法：不能信任物品的「优先级」
+    ///   * ⚠️bug：可能物品在袋内变更了优先级，后续拿出时就会mass溢出
     ///
     /// # 📄OpenNARS
     ///
@@ -636,7 +634,13 @@ impl<E: Item> Bag<E> {
     ///
     /// @param item The Item to put in
     /// @return The put-in level
-    fn get_level(&self, item: &E) -> usize {
+    fn level_from_item(&self, item: &E) -> usize {
+        // self.item_map.get_item_and_level(key)
+        self.calculate_level_for_item(item)
+    }
+
+    /// 🆕只在[`Self::item_into_base`]中被调用
+    fn calculate_level_for_item(&self, item: &E) -> usize {
         /* 📄OpenNARS源码：
         float fl = item.getPriority() * TOTAL_LEVEL;
         int level = (int) Math.ceil(fl) - 1;
@@ -686,10 +690,10 @@ impl<E: Item> Bag<E> {
         itemTable.get(inLevel).add(newItem); // FIFO
         mass += (inLevel + 1); // increase total mass
         refresh(); // refresh the window
-        return oldItem; // TODO return null is a bad smell */
+        return oldItem; */
         let new_item = self.get(new_key).expect("不能没有所要获取的值"); // * 🚩🆕（在调用方处）重新获取「置入后的新项」（⚠️一定有）
         let mut old_item = None;
-        let in_level = self.get_level(new_item);
+        let in_level = self.calculate_level_for_item(new_item);
 
         // 🆕先假设「新元素已被置入」，「先加后减」防止usize溢出
         self.mass += in_level + 1;
@@ -751,7 +755,7 @@ impl<E: Item> Bag<E> {
         itemTable.get(level).remove(oldItem);
         mass -= (level + 1);
         refresh(); */
-        let level = self.get_level(old_item);
+        let level = self.level_from_item(old_item);
         self.level_map.get_mut(level).remove_element(old_item.key());
         self.mass -= level + 1;
     }
@@ -864,7 +868,7 @@ mod tests {
             overflowed.is_none(), // 没有溢出
             bag.get(key1) == Some(&item1), // 放进「对应id位置」的就是原来的元素
             bag.size() == 1, // 放进了一个
-            bag.get_level(&item1) => 0, // 放进的是第0层（优先级为0.0）
+            bag.level_from_item(&item1) => 0, // 放进的是第0层（优先级为0.0）
             bag.empty_level(0) => false, // 放进的是第0层
             bag.mass() == 1, // 放进第0层，获得(0+1)的重量
         }
@@ -979,7 +983,7 @@ mod tests {
                 overflowed.is_none(), // 没有溢出
                 bag.get(key) == Some(item), // 放进「对应id位置」的就是原来的元素
                 bag.size() == i + 1, // 放进了(i+1)个
-                bag.get_level(item) => expected_level(i), // 放进了指定层
+                bag.level_from_item(item) => expected_level(i), // 放进了指定层
                 bag.empty_level(expected_level(i)) => false, // 放进的是指定层
             }
         }
