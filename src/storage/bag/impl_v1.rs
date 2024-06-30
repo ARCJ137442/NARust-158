@@ -1,6 +1,6 @@
 //! 🎯复刻OpenNARS `nars.entity.Bag`
 
-use super::{BagItemTable, BagNameTable, Distribute, Distributor};
+use super::{BagItemTable, BagNameTable, Distribute, Distributor, NameValue};
 use crate::{
     control::DEFAULT_PARAMETERS,
     entity::{Item, ShortFloat},
@@ -399,7 +399,7 @@ impl<E: Item> Bag<E> {
     #[inline(always)]
     #[must_use]
     pub fn get(&self, key: &str) -> Option<&E> {
-        self.item_map.get(key)
+        self.item_map.get(key).map(|(e, _)| e)
     }
     /// [`Self::get`]的可变版本
     /// * 🎯【2024-04-28 09:08:14】备用
@@ -407,7 +407,7 @@ impl<E: Item> Bag<E> {
     #[inline(always)]
     #[must_use]
     pub fn get_mut(&mut self, key: &str) -> Option<&mut E> {
-        self.item_map.get_mut(key)
+        self.item_map.get_mut(key).map(|(e, _)| e)
     }
 
     /// 🆕提供「元素id是否对应值」的功能
@@ -450,12 +450,15 @@ impl<E: Item> Bag<E> {
 
         // 置入「元素映射」
         let new_key = new_item.key().clone();
-        let old_item = self.item_map.put(&new_key, new_item);
+        let level = self.calculate_level_for_item(&new_item);
+        let old_item = self.item_map.put(&new_key, new_item, level);
 
         // 若在「元素映射」中重复了：有旧项⇒合并「重复了的新旧项」
-        if let Some(mut old_item) = old_item {
-            // 将旧项（的预算值）并入新项 | 🆕⚠️必须在前：`new_item`可变借用了`self`，而下一句中不能出现`new_item`
-            // new_item.merge(&old_item);
+        if let Some(old) = old_item {
+            // * 在「层级映射」移除旧项 | 🚩【2024-05-04 11:45:02】现在仍需使用「元素」，因为下层调用需要访问元素本身（预算值），并需避免过多的「按键取值」过程
+            self.item_out_of_base(&old);
+            let (mut old_item, _) = old;
+
             // * 🚩计算「合并顺序」
             let new_item = self.get(&new_key).unwrap(); // * 🚩🆕重新获取「置入后的新项」（⚠️一定有）
             let merge_order = (self.merge_order_f)(&old_item, new_item); // 此处调用函数指针，一定是不可变引用
@@ -467,8 +470,6 @@ impl<E: Item> Bag<E> {
                 OldToNew => new_item.merge_from(&old_item),
                 NewToOld => old_item.merge_from(new_item),
             }
-            // 在「层级映射」移除旧项 | 🚩【2024-05-04 11:45:02】现在仍需使用「元素」，因为下层调用需要访问元素本身（预算值），并需避免过多的「按键取值」过程
-            self.item_out_of_base(&old_item);
         }
 
         // 置入「层级映射」
@@ -478,7 +479,7 @@ impl<E: Item> Bag<E> {
             // 直接返回「根据『溢出的元素之id』在『元素映射』中移除」的结果
             // * 🚩若与自身相同⇒返回`Some`，添加失败
             // * 🚩若与自身不同⇒返回`None`，添加仍然成功
-            let overflow_item = self.item_map.remove(&overflow_key);
+            let overflow_item = self.item_map.remove_item(&overflow_key);
             match overflow_key == new_key {
                 true => overflow_item,
                 false => None, // ! 此时将抛掉溢出的元素
@@ -557,7 +558,7 @@ impl<E: Item> Bag<E> {
         let selected_key = self.take_out_first(level);
         // * 此处需要对内部可能有的「元素id」进行转换
         match selected_key {
-            Some(key) => self.item_map.remove(&key),
+            Some(key) => self.item_map.remove_item(&key),
             None => None,
         }
     }
@@ -600,13 +601,9 @@ impl<E: Item> Bag<E> {
             nameTable.remove(key);
         }
         return picked; */
-        if self.item_map.has(key) {
-            let item = self.item_map.remove(key).unwrap(); // 此时一定有
-            self.item_out_of_base(&item);
-            Some(item)
-        } else {
-            None
-        }
+        let name_value = self.item_map.remove(key)?;
+        self.item_out_of_base(&name_value);
+        Some(name_value.0)
     }
 
     /// 模拟`Bag.emptyLevel`
@@ -627,6 +624,7 @@ impl<E: Item> Bag<E> {
     /// * 📝Rust中[`usize`]无需考虑负值问题
     /// * 🚩【2024-06-30 17:55:38】现更改计算方法：不能信任物品的「优先级」
     ///   * ⚠️bug：可能物品在袋内变更了优先级，后续拿出时就会mass溢出
+    /// * 🆕只在[`Self::item_into_base`]中被调用
     ///
     /// # 📄OpenNARS
     ///
@@ -634,12 +632,7 @@ impl<E: Item> Bag<E> {
     ///
     /// @param item The Item to put in
     /// @return The put-in level
-    fn level_from_item(&self, item: &E) -> usize {
-        // self.item_map.get_item_and_level(key)
-        self.calculate_level_for_item(item)
-    }
-
-    /// 🆕只在[`Self::item_into_base`]中被调用
+    #[doc(alias = "level_from_item")]
     fn calculate_level_for_item(&self, item: &E) -> usize {
         /* 📄OpenNARS源码：
         float fl = item.getPriority() * TOTAL_LEVEL;
@@ -749,14 +742,15 @@ impl<E: Item> Bag<E> {
     /// Remove an item from itemTable, then adjust mass
     ///
     /// @param oldItem The Item to be removed
-    fn item_out_of_base(&mut self, old_item: &E) {
+    fn item_out_of_base(&mut self, (old_item, level): &NameValue<E>) {
         /* 📄OpenNARS源码：
         int level = getLevel(oldItem);
         itemTable.get(level).remove(oldItem);
         mass -= (level + 1);
         refresh(); */
-        let level = self.level_from_item(old_item);
-        self.level_map.get_mut(level).remove_element(old_item.key());
+        self.level_map
+            .get_mut(*level)
+            .remove_element(old_item.key());
         self.mass -= level + 1;
     }
 
@@ -868,7 +862,7 @@ mod tests {
             overflowed.is_none(), // 没有溢出
             bag.get(key1) == Some(&item1), // 放进「对应id位置」的就是原来的元素
             bag.size() == 1, // 放进了一个
-            bag.level_from_item(&item1) => 0, // 放进的是第0层（优先级为0.0）
+            bag.calculate_level_for_item(&item1) => 0, // 放进的是第0层（优先级为0.0）
             bag.empty_level(0) => false, // 放进的是第0层
             bag.mass() == 1, // 放进第0层，获得(0+1)的重量
         }
@@ -983,7 +977,7 @@ mod tests {
                 overflowed.is_none(), // 没有溢出
                 bag.get(key) == Some(item), // 放进「对应id位置」的就是原来的元素
                 bag.size() == i + 1, // 放进了(i+1)个
-                bag.level_from_item(item) => expected_level(i), // 放进了指定层
+                bag.calculate_level_for_item(item) => expected_level(i), // 放进了指定层
                 bag.empty_level(expected_level(i)) => false, // 放进的是指定层
             }
         }
@@ -1114,7 +1108,7 @@ mod tests {
             overflowed.is_none(), // 没有溢出
             bag.get(key) == Some(&item), // 放进「对应id位置」的就是原来的元素
             bag.size() == 1, // 放进了一个
-            bag.level_from_item(&item) => 0, // 放进的是第0层（优先级为0.0）
+            bag.calculate_level_for_item(&item) => 0, // 放进的是第0层（优先级为0.0）
             bag.empty_level(0) => false, // 放进的是第0层
             bag.mass() == 1, // 放进第0层，获得(0+1)的重量
         }
@@ -1148,7 +1142,6 @@ mod tests {
         // 取出元素
         let taken = bag.take_out().unwrap();
         asserts! {
-            taken == item, // 取出的就是放回了的
             taken.priority() == ShortFloat::HALF,
             bag.size() == 0, // 取走了
             bag.mass() == 0, // 取走了

@@ -8,7 +8,13 @@ use std::{
 
 /// 初代「元素映射」实现
 #[derive(Debug, Clone, PartialEq)]
-pub struct BagNameTable<E>(HashMap<String, E>);
+pub struct BagNameTable<E>(HashMap<String, NameValue<E>>);
+
+/// 「元素映射」最终从「名称」映射到的结构
+/// * 🎯允许「一个键对多个值」
+///   * 💭后续可以将预算值加入进去
+///   * ⚠️不允许外部调用者随意通过「修改物品优先级」变更「所在层级信息」
+pub type NameValue<E> = (E, usize);
 
 impl<E> BagNameTable<E> {
     pub fn new() -> Self {
@@ -33,21 +39,17 @@ impl<E: Item> BagNameTable<E> {
         self.0.len()
     }
 
-    /// 获取指定键下的物品和层级
-    /// * 📌获取其内「物品」及其层级
-    /// * 🎯防止「物品在袋内优先级变化导致mass计算错误」的问题
-    pub fn get_item_and_level(&self, key: &str) -> Option<(&E, usize)> {
-        todo!()
-    }
-
     /// 模拟`Bag.nameTable.containsValue`方法
     /// * 🎯预期是「在映射查找值；找到⇒Some，没找到⇒None」
-    pub fn get(&self, key: &str) -> Option<&E> {
+    /// * 🚩【2024-06-30 18:28:02】现在获取指定键下的物品和层级
+    ///   * 🎯防止「物品在袋内优先级变化导致mass计算错误」的问题
+    pub fn get(&self, key: &str) -> Option<&NameValue<E>> {
         self.0.get(key)
     }
+
     /// [`Self::get`]的可变引用版本
     /// * 🎯【2024-04-28 09:27:23】备用
-    pub fn get_mut(&mut self, key: &str) -> Option<&mut E> {
+    pub fn get_mut(&mut self, key: &str) -> Option<&mut NameValue<E>> {
         self.0.get_mut(key)
     }
 
@@ -62,17 +64,23 @@ impl<E: Item> BagNameTable<E> {
     /// * 🎯预期是「向映射插入值」
     /// * 📄出现在`putIn`方法中
     /// * 🚩需要返回「被替换出的旧有项」
-    pub fn put(&mut self, key: &str, item: E) -> Option<E> {
+    pub fn put(&mut self, key: &str, item: E, level: usize) -> Option<NameValue<E>> {
         // * 🚩【2024-05-04 13:06:22】始终尝试插入（在「从无到有」的时候需要）
-        self.0.insert(key.to_string(), item)
+        let name_value = (item, level);
+        self.0.insert(key.to_string(), name_value)
     }
 
     /// 模拟`Bag.nameTable.remove`方法
     /// * 🎯预期是「从映射移除值」
     /// * 📄出现在`putIn`方法中
     /// * 🚩【2024-05-01 23:03:15】现在需要返回「被移除的元素」作为[`Bag::put_in`]的返回值
-    pub fn remove(&mut self, key: &str) -> Option<E> {
+    pub fn remove(&mut self, key: &str) -> Option<NameValue<E>> {
         self.0.remove(key)
+    }
+
+    /// 移除物品，然后只返回移除出来的物品
+    pub fn remove_item(&mut self, key: &str) -> Option<E> {
+        self.0.remove(key).map(|(item, _)| item)
     }
 
     /// 模拟`Bag.nameTable.isEmpty`方法
