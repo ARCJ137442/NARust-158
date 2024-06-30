@@ -1093,4 +1093,65 @@ mod tests {
         // 最终完成
         ok!()
     }
+
+    /// 测试/物品在袋内优先级变化
+    /// * ⚠️测试「袋内优先级发生变化，是否能正确被 挑出/拿出」
+    #[test]
+    fn modified_level_in_bag() -> AResult {
+        // 构造测试用「袋」
+        let mut bag = Bag1::new(1, 1);
+        bag.init();
+
+        // 放入元素
+        let key = "item001";
+        let item = new_item(key, 0.0, 0.0, 0.0); // * 🚩固定为「全零预算」
+        let overflowed = bag.put_in(dbg!(item.clone()));
+        asserts! {
+            overflowed.is_none(), // 没有溢出
+            bag.get(key) == Some(&item), // 放进「对应id位置」的就是原来的元素
+            bag.size() == 1, // 放进了一个
+            bag.level_from_item(&item) => 0, // 放进的是第0层（优先级为0.0）
+            bag.empty_level(0) => false, // 放进的是第0层
+            bag.mass() == 1, // 放进第0层，获得(0+1)的重量
+        }
+        dbg!(&bag);
+
+        // ! 在袋内修改优先级
+        let item_mut = bag.get_mut(key).expect("此时袋内必须有物品");
+        item_mut.set_priority(ShortFloat::ONE);
+
+        // 挑出元素
+        let picked = bag.pick_out(key).unwrap();
+        asserts! {
+            bag.size() == 0, // 取走了
+            bag.mass() == 0, // 取走了
+            bag.empty_level(0) => true, // 取走的是第0层
+        }
+
+        // 放回元素
+        let overflowed = bag.put_back(picked);
+        asserts! {
+            overflowed => None, // 没有溢出
+            bag.size() == 1, // 放回了
+            bag.empty_level(0) => false, // 放入的是第0层
+            bag.mass() == 1, // 放进第0层，获得(0+1)的重量
+        }
+
+        // ! 在袋内修改优先级
+        let item_mut = bag.get_mut(key).expect("此时袋内必须有物品");
+        item_mut.set_priority(ShortFloat::HALF);
+
+        // 取出元素
+        let taken = bag.take_out().unwrap();
+        asserts! {
+            taken == item, // 取出的就是放回了的
+            taken.priority() == ShortFloat::HALF,
+            bag.size() == 0, // 取走了
+            bag.mass() == 0, // 取走了
+            bag.empty_level(0) => true, // 取走的是第0层
+        }
+
+        // 最后完成
+        ok!()
+    }
 }
