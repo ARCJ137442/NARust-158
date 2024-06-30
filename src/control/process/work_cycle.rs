@@ -108,7 +108,7 @@ impl Reasoner {
     fn handle_output(&mut self) {
         let outputs = list![
             {output}
-            while let Some(output) = (self.recorder.take())
+            while let Some(output) = (self.take_output())
         ];
         if !outputs.is_empty() {
             // * 🚩先将自身通道中的元素挪出（在此过程中筛除），再从此临时通道中计算与获取输入（以便引用自身）

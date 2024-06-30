@@ -102,18 +102,21 @@ impl Concept {
     ///
     /// Add a new belief (or goal) into the table Sort the beliefs/goals by rank,
     /// and remove redundant or low rank one
+    #[must_use]
     pub fn add_belief(&mut self, belief: JudgementV1) -> Option<JudgementV1> {
         self.beliefs.add(belief)
     }
 
     /// 🆕对外接口：获取「当前所有问题」
     /// * 🎯从「直接推理」而来
-    pub fn questions(&self) -> &ArrayBuffer<Task> {
-        &self.questions
+    /// * ⚠️需要可变引用：要在过程中「设置最优解」
+    pub fn questions(&mut self) -> &mut ArrayBuffer<Task> {
+        &mut self.questions
     }
 
     /// 🆕对外接口：添加问题到「问题集」
     /// * 🚩除了「添加」以外，还会实行「任务缓冲区」机制
+    #[must_use]
     pub fn add_question(&mut self, question: Task) -> Option<Task> {
         self.questions.add(question)
     }

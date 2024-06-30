@@ -141,7 +141,7 @@ impl Reasoner {
         //     .flatten()
         //     .map(|link| {
         //         // * 🚩报告
-        //         reason_recorder.put(ReasonRecorder::output_comment(format!(
+        //         reason_recorder.put(util_outputs::output_comment(format!(
         //             "* Selected TermLink: {}",
         //             link.to_display()
         //         )));

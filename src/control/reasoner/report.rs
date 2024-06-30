@@ -4,13 +4,12 @@
 //! * 🚩【2024-05-06 09:35:37】复用[`navm`]中的「NAVM输出」
 
 use super::Reasoner;
-use crate::{entity::Task, util::ToDisplayAndBrief};
-use narsese::api::NarseseValue;
+use crate::entity::Task;
 use navm::output::Output;
 use std::collections::VecDeque;
 
 #[derive(Debug, Clone, Default)]
-pub(in super::super) struct ReasonRecorder {
+pub(super) struct ReasonRecorder {
     /// 缓存的NAVM输出
     cached_outputs: VecDeque<Output>,
 }
@@ -45,8 +44,15 @@ impl ReasonRecorder {
     }
 }
 
-/// 简化「添加常用类型输出」功能
-impl ReasonRecorder {
+/// 输出生成实用库
+pub mod util_outputs {
+    use crate::{
+        entity::{Judgement, Task},
+        util::ToDisplayAndBrief,
+    };
+    use narsese::api::NarseseValue;
+    use navm::output::Output;
+
     /// 「注释」输出
     /// * 📌一般用于「推理过程debug记录」
     /// * 🎯快捷生成并使用[`Output::COMMENT`]
@@ -97,6 +103,19 @@ impl ReasonRecorder {
             narsese: Some(NarseseValue::Task(narsese.to_lexical())),
         }
     }
+
+    /// 「回答」输出（任务）
+    /// * 📌一般用于「推理导出结论」
+    /// * 🎯快捷生成并使用[`Output::ANSWER`]
+    /// * 🚩【2024-06-28 15:41:53】目前统一消息输出格式，仅保留Narsese
+    pub fn output_answer(new_belief: &impl Judgement) -> Output {
+        Output::ANSWER {
+            // * 🚩此处使用「简短结论」以对齐OpenNARS两位数
+            content_raw: format!("Answer: {}", new_belief.to_display_brief()),
+            // * 🚩使用一个「判断句」回答
+            narsese: Some(NarseseValue::Sentence(new_belief.judgement_to_lexical())),
+        }
+    }
 }
 
 /// 为「推理器」扩展方法
@@ -107,24 +126,24 @@ impl Reasoner {
     }
 
     pub fn report_comment(&mut self, message: impl ToString) {
-        self.report(ReasonRecorder::output_comment(message));
+        self.report(util_outputs::output_comment(message));
     }
 
     pub fn report_info(&mut self, message: impl ToString) {
-        self.report(ReasonRecorder::output_info(message));
+        self.report(util_outputs::output_info(message));
     }
 
     #[doc(alias = "report_input")]
     pub fn report_in(&mut self, narsese: &Task) {
-        self.report(ReasonRecorder::output_in(narsese));
+        self.report(util_outputs::output_in(narsese));
     }
 
     #[doc(alias = "report_derived")]
     pub fn report_out(&mut self, narsese: &Task) {
-        self.report(ReasonRecorder::output_out(narsese));
+        self.report(util_outputs::output_out(narsese));
     }
 
     pub fn report_error(&mut self, description: impl ToString) {
-        self.report(ReasonRecorder::output_error(description));
+        self.report(util_outputs::output_error(description));
     }
 }

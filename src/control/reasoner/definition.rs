@@ -4,6 +4,8 @@
 //!
 //! * ♻️【2024-06-26 12:02:36】开始根据改版OpenNARS重写
 
+use navm::output::Output;
+
 use super::{ReasonRecorder, ReasonerChannels, ReasonerDerivationData};
 use crate::{control::Parameters, global::ClockTime, inference::InferenceEngine, storage::Memory};
 use std::fmt::Debug;
@@ -24,7 +26,7 @@ pub struct Reasoner {
     pub(in super::super) memory: Memory,
 
     /// 记录器
-    pub(in super::super) recorder: ReasonRecorder,
+    pub(super) recorder: ReasonRecorder,
 
     /// IO通道
     pub(in super::super) io_channels: ReasonerChannels,
@@ -133,5 +135,10 @@ impl Reasoner {
     pub fn updated_stamp_current_serial(&mut self) -> ClockTime {
         self.stamp_current_serial += 1;
         self.stamp_current_serial
+    }
+
+    /// 从内部「记录器」中拉取一个输出
+    pub fn take_output(&mut self) -> Option<Output> {
+        self.recorder.take()
     }
 }

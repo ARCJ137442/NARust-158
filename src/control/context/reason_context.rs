@@ -9,7 +9,7 @@
 #![doc(alias = "derivation_context")]
 
 use crate::{
-    control::{Parameters, ReasonRecorder, Reasoner},
+    control::{util_outputs, Parameters, Reasoner},
     entity::{Concept, JudgementV1, RCTask, Task, TaskLink, TermLink},
     global::{ClockTime, Float},
     language::Term,
@@ -71,17 +71,17 @@ pub trait ReasonContext {
 
     /// 派生易用性方法
     fn report_comment(&mut self, message: impl ToString) {
-        self.report(ReasonRecorder::output_comment(message));
+        self.report(util_outputs::output_comment(message));
     }
 
     /// 派生易用性方法
     fn report_out(&mut self, narsese: &Task) {
-        self.report(ReasonRecorder::output_out(narsese));
+        self.report(util_outputs::output_out(narsese));
     }
 
     /// 派生易用性方法
     fn report_error(&mut self, description: impl ToString) {
-        self.report(ReasonRecorder::output_error(description));
+        self.report(util_outputs::output_error(description));
     }
 
     /// 获取「当前概念」（不可变）

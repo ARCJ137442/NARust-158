@@ -23,15 +23,15 @@ pub trait ContextDerivation: ReasonContext {
     fn activated_task(
         &mut self,
         new_budget: BudgetValue,
-        new_task: &JudgementV1,
+        solution: &JudgementV1,
         candidate_belief: &JudgementV1,
     ) {
         let parent_task = self.current_task().clone();
         let task = Task::new(
-            SentenceV1::JudgementV1(new_task.clone()),
+            solution.clone().into(),
             new_budget,
             Some(parent_task),
-            Some(new_task.clone()),
+            Some(solution.clone()),
             Some(candidate_belief.clone()),
         );
         // * 🚩现在重新改为`COMMENT`，但更详细地展示「任务」本身

@@ -3,7 +3,7 @@
 //! * 📍复合词项「链接到任务」的功能
 
 use crate::{
-    control::{ReasonContext, ReasonContextDirect, ReasonRecorder},
+    control::{util_outputs, ReasonContext, ReasonContextDirect},
     entity::{
         BudgetValue, Concept, Item, RCTask, TLink, TLinkType, TaskLink, TermLink, TermLinkTemplate,
     },
@@ -173,7 +173,7 @@ impl ReasonContextDirect<'_> {
         let mut outputs = vec![]; // 使用缓存延迟输出，避免借用问题
         let mut add_overflowed_task_link = |overflowed_task_link: &TaskLink| {
             // 使用闭包封装逻辑
-            let output = ReasonRecorder::output_comment(format!(
+            let output = util_outputs::output_comment(format!(
                 "!!! Overflowed TaskLink: {}",
                 overflowed_task_link.to_display_long()
             ));
