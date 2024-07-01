@@ -59,7 +59,6 @@ pub(in crate::inference) fn try_solution_calculate(
     }
 
     // * 🚩若比先前「最优解」还优，那就确立新的「最优解」
-    let need_refresh_solution = true;
     let new_output = match question_task.is_input() {
         // moved from Sentence
         // * 🚩同时在此确立「回答」：只在回应「输入的任务」时反映
@@ -100,7 +99,7 @@ pub(in crate::inference) fn try_solution_apply(
     use SolutionResult::*;
     match result {
         // * 🚩驳回⇒直接返回
-        Rejected => return None,
+        Rejected => None,
         // * 🚩新解⇒应用新解
         NewSolution {
             new_output,
