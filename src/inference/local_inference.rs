@@ -200,14 +200,14 @@ fn process_question(context: &mut ReasonContextDirect) {
                         {
                             let output = util_outputs::output_comment(message);
                             {
-                                context.core.add_output(output);
+                                context.outs.add_output(output);
                             }
                         };
                     };
                     // // * 🚩若为「问题」⇒输出显著的「导出结论」
                     {
                         let task = task;
-                        context.core.add_new_task(task)
+                        context.outs.add_new_task(task)
                     };
                 }
             },

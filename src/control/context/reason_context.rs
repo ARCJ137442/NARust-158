@@ -198,20 +198,6 @@ pub struct ReasonContextCore<'this> {
     /// * 🚩【2024-05-30 09:02:10】现仅在构造时赋值，其余情况不变
     silence_value: usize,
 
-    /// 新增加的「任务列表」
-    /// * 📍【2024-06-26 20:54:20】因其本身新创建，故可不用「共享引用」
-    ///   * 💭在「被推理器吸收」时，才需要共享引用
-    /// * 🚩【2024-05-18 17:29:40】在「记忆区」与「推理上下文」中各有一个，但语义不同
-    /// * 📌「记忆区」的跨越周期，而「推理上下文」仅用于存储
-    ///
-    /// # 📄OpenNARS
-    /// List of new tasks accumulated in one cycle, to be processed in the next cycle
-    pub(in crate::control) new_tasks: Vec<Task>,
-
-    /// 🆕新的NAVM输出
-    /// * 🚩用以复刻`exportStrings`与`stringsToRecord`二者
-    pub(in crate::control) outputs: Vec<Output>,
-
     /// 当前概念
     ///
     /// # 📄OpenNARS
@@ -229,8 +215,6 @@ impl<'this> ReasonContextCore<'this> {
             silence_value: reasoner.silence_value(),
             current_concept,
             reasoner,
-            new_tasks: vec![],
-            outputs: vec![],
         }
     }
 }
@@ -265,6 +249,66 @@ impl ReasonContextCore<'_> {
         self.silence_value as Float / 100.0
     }
 
+    pub fn current_concept(&self) -> &Concept {
+        &self.current_concept
+    }
+
+    pub fn current_concept_mut(&mut self) -> &mut Concept {
+        &mut self.current_concept
+    }
+
+    /// 共用的方法：被推理器吸收
+    /// * 🚩【2024-07-02 18:20:17】引入`outs`参数：强制调用者传入「产生的输出」
+    pub fn absorbed_by_reasoner(self, outs: ReasonContextCoreOut) {
+        let reasoner = self.reasoner;
+        let memory = reasoner.memory_mut();
+        // * 🚩将「当前概念」归还到「推理器」中
+        memory.put_back_concept(self.current_concept);
+        // * 🚩将「推理输出」归还到「推理器」中
+        outs.absorbed_by_reasoner(reasoner);
+        // * ✅Rust已在此处自动销毁剩余字段
+    }
+}
+
+/// 🆕内置公开结构体，用于公共导出
+/// * 🎯使「读取输入」与「写入输出」隔离
+#[derive(Debug, Clone, Default)]
+pub struct ReasonContextCoreOut {
+    /// 新增加的「任务列表」
+    /// * 📍【2024-06-26 20:54:20】因其本身新创建，故可不用「共享引用」
+    ///   * 💭在「被推理器吸收」时，才需要共享引用
+    /// * 🚩【2024-05-18 17:29:40】在「记忆区」与「推理上下文」中各有一个，但语义不同
+    /// * 📌「记忆区」的跨越周期，而「推理上下文」仅用于存储
+    ///
+    /// # 📄OpenNARS
+    /// List of new tasks accumulated in one cycle, to be processed in the next cycle
+    pub(in crate::control) new_tasks: Vec<Task>,
+
+    /// 🆕新的NAVM输出
+    /// * 🚩用以复刻`exportStrings`与`stringsToRecord`二者
+    pub(in crate::control) outputs: Vec<Output>,
+}
+
+impl ReasonContextCoreOut {
+    /// 创建空的输出
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// 共用的方法：被推理器吸收
+    /// * ⚠️需要从外部引入「推理器」数据（被存储在「核心」中）
+    pub fn absorbed_by_reasoner(self, reasoner: &mut Reasoner) {
+        // * 🚩将推理导出的「新任务」添加到自身新任务中（先进先出）
+        for new_task in self.new_tasks {
+            reasoner.derivation_datas.add_new_task(new_task);
+        }
+        // * 🚩将推理导出的「NAVM输出」添加进自身「NAVM输出」中（先进先出）
+        for output in self.outputs {
+            reasoner.report(output);
+        }
+        // * ✅Rust已在此处自动销毁剩余字段
+    }
+
     pub fn num_new_tasks(&self) -> usize {
         self.new_tasks.len()
     }
@@ -275,31 +319,6 @@ impl ReasonContextCore<'_> {
 
     pub fn add_output(&mut self, output: Output) {
         self.outputs.push(output);
-    }
-
-    pub fn current_concept(&self) -> &Concept {
-        &self.current_concept
-    }
-
-    pub fn current_concept_mut(&mut self) -> &mut Concept {
-        &mut self.current_concept
-    }
-
-    /// 共用的方法：被推理器吸收
-    pub fn absorbed_by_reasoner(self) {
-        let reasoner = self.reasoner;
-        let memory = reasoner.memory_mut();
-        // * 🚩将「当前概念」归还到「推理器」中
-        memory.put_back_concept(self.current_concept);
-        // * 🚩将推理导出的「新任务」添加到自身新任务中（先进先出）
-        for new_task in self.new_tasks {
-            reasoner.derivation_datas.add_new_task(new_task);
-        }
-        // * 🚩将推理导出的「NAVM输出」添加进自身「NAVM输出」中（先进先出）
-        for output in self.outputs {
-            reasoner.report(output);
-        }
-        // * ✅Rust已在此处自动销毁剩余字段
     }
 }
 
@@ -323,15 +342,15 @@ macro_rules! __delegate_from_core {
         }
 
         fn num_new_tasks(&self) -> usize {
-            self.core.num_new_tasks()
+            self.outs.num_new_tasks()
         }
 
         fn add_new_task(&mut self, task: Task) {
-            self.core.add_new_task(task)
+            self.outs.add_new_task(task)
         }
 
         fn report(&mut self, output: Output) {
-            self.core.add_output(output)
+            self.outs.add_output(output)
         }
 
         fn current_concept(&self) -> &Concept {

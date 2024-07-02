@@ -1,6 +1,6 @@
 //! 直接推理上下文
 
-use super::{ReasonContext, ReasonContextCore};
+use super::{ReasonContext, ReasonContextCore, ReasonContextCoreOut};
 use crate::{
     __delegate_from_core,
     control::{Parameters, Reasoner},
@@ -17,6 +17,8 @@ use navm::output::Output;
 pub struct ReasonContextDirect<'this> {
     /// 内部存储的「上下文核心」
     pub(crate) core: ReasonContextCore<'this>,
+    /// 内部存储的「上下文输出」
+    pub(crate) outs: ReasonContextCoreOut,
 
     /// 选中的「任务」
     /// * 📌需要共享引用：从推理器的「共享引用池」中来
@@ -30,7 +32,12 @@ impl<'this> ReasonContextDirect<'this> {
         current_task: RCTask,
     ) -> Self {
         let core = ReasonContextCore::new(reasoner, current_concept);
-        Self { core, current_task }
+        let outs = ReasonContextCoreOut::new();
+        Self {
+            core,
+            outs,
+            current_task,
+        }
     }
 
     pub fn memory_mut(&mut self) -> &mut Memory {
@@ -69,7 +76,7 @@ impl ReasonContext for ReasonContextDirect<'_> {
 
     fn absorbed_by_reasoner(self) {
         // * 🚩销毁核心
-        self.core.absorbed_by_reasoner();
+        self.core.absorbed_by_reasoner(self.outs);
         // * ✅Rust已在此处自动销毁剩余字段
     }
 }

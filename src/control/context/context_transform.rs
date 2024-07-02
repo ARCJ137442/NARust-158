@@ -4,7 +4,7 @@
 //!
 //! * ♻️【2024-06-27 12:54:19】开始根据改版OpenNARS重写
 
-use super::{ReasonContext, ReasonContextCore, ReasonContextWithLinks};
+use super::{ReasonContext, ReasonContextCore, ReasonContextCoreOut, ReasonContextWithLinks};
 use crate::{
     __delegate_from_core,
     control::{Parameters, Reasoner},
@@ -19,7 +19,9 @@ use std::ops::{Deref, DerefMut};
 #[derive(Debug)]
 pub struct ReasonContextTransform<'this> {
     /// 内部存储的「上下文核心」
-    core: ReasonContextCore<'this>,
+    pub(crate) core: ReasonContextCore<'this>,
+    /// 内部存储的「上下文输出」
+    pub(crate) outs: ReasonContextCoreOut,
 
     /// 选中的任务链
     /// * 📌【2024-05-21 20:26:30】不可空！
@@ -35,8 +37,10 @@ impl<'this> ReasonContextTransform<'this> {
     ) -> Self {
         // * 🚩构造核心
         let core = ReasonContextCore::new(reasoner, current_concept);
+        let outs = ReasonContextCoreOut::new();
         Self {
             core,
+            outs,
             // * 🚩特有字段
             current_task_link,
         }
@@ -62,7 +66,7 @@ impl ReasonContext for ReasonContextTransform<'_> {
             .current_concept_mut()
             .put_task_link_back(self.current_task_link);
         // * 🚩从基类方法继续
-        self.core.absorbed_by_reasoner();
+        self.core.absorbed_by_reasoner(self.outs);
     }
 }
 
