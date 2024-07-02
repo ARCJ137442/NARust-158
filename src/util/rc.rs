@@ -42,9 +42,18 @@ pub trait RefCount<T>: Sized + Clone {
     /// * 🎯统一表示「弱引用数」
     fn n_weak_(&self) -> usize;
 
+    /// 默认特征方法：返回整个共享引用的拷贝
+    /// * 🚩约束：仅在内部元素支持[`Clone`]时使用
+    fn clone_(&self) -> Self
+    where
+        T: Clone,
+    {
+        self.clone()
+    }
+
     /// 默认特征方法：返回内部元素的拷贝
     /// * 🚩约束：仅在内部元素支持[`Clone`]时使用
-    fn clone_(&self) -> T
+    fn clone_inner(&self) -> T
     where
         T: Clone,
     {
@@ -121,7 +130,7 @@ pub mod tests {
     fn test_rc<R: std::fmt::Debug + RefCount<i32>>() {
         // * 🚩创建一个可变共享引用，并展示
         let mut rc = R::new_(0);
-        dbg!(rc.clone());
+        dbg!(rc.clone_());
         // * 🚩修改引用，断言，并展示
         let mut r = rc.mut_();
         *r += 1;
@@ -130,7 +139,7 @@ pub mod tests {
         drop(r);
 
         // * 🚩复制这个可变共享引用，验证「多个不可变引用同时存在」
-        let rc2 = dbg!(rc.clone());
+        let rc2 = dbg!(rc.clone_());
 
         // ! ⚠️此处不能同时获取：对`Mutex`会导致线程死锁
         let value = *rc.get_();

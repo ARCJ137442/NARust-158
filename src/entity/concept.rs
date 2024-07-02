@@ -5,14 +5,14 @@
 use crate::{
     control::{Parameters, DEFAULT_PARAMETERS},
     entity::{
-        BudgetValue, Item, Judgement, JudgementV1, Sentence, Task, TaskLink, TermLink,
+        BudgetValue, Item, Judgement, JudgementV1, RCTask, Sentence, TaskLink, TermLink,
         TermLinkTemplate, Token,
     },
     global::{ClockTime, Float},
     inference::{Budget, BudgetFunctions},
     language::Term,
     storage::{ArrayBuffer, ArrayRankTable, Bag, Buffer, RankTable},
-    util::{to_display_when_has_content, Iterable, ToDisplayAndBrief},
+    util::{to_display_when_has_content, Iterable, RefCount, ToDisplayAndBrief},
 };
 use nar_dev_utils::join;
 use std::usize;
@@ -48,7 +48,9 @@ pub struct Concept {
     link_templates_to_self: Vec<TermLinkTemplate>,
 
     /// Question directly asked about the term
-    questions: ArrayBuffer<Task>,
+    /// * 📝需要是共享引用：一个「问题」既然是一个「任务」，那除了被存储在这缓冲区内，还会被「任务链」引用
+    /// * 🚩【2024-07-02 15:58:38】转换为共享引用
+    questions: ArrayBuffer<RCTask>,
 
     /// Sentences directly made about the term, with non-future tense
     beliefs: ArrayRankTable<JudgementV1>,
@@ -92,8 +94,9 @@ impl Concept {
 
     /// 🆕对外接口：获取「当前信念表」
     /// * 🎯从「直接推理」而来
-    pub fn beliefs(&self) -> &ArrayRankTable<JudgementV1> {
-        &self.beliefs
+    /// * 🚩【2024-07-02 16:23:51】目前因「无需获取内部表」，直接返回迭代器
+    pub fn beliefs(&self) -> impl Iterator<Item = &JudgementV1> {
+        self.beliefs.iter()
     }
 
     /// * 🚩添加到固定容量的缓冲区，并返回溢出的那个（溢出==所添加 ⇒ 添加失败）
@@ -109,15 +112,24 @@ impl Concept {
 
     /// 🆕对外接口：获取「当前所有问题」
     /// * 🎯从「直接推理」而来
+    /// * 📝有可能是「拿着问题找答案」：此时引用无需可变
+    /// * 🚩【2024-07-02 16:23:51】目前因「无需获取内部表」，直接返回迭代器
+    pub fn questions(&self) -> impl Iterator<Item = &RCTask> {
+        self.questions.iter()
+    }
+
+    /// 🆕对外接口：获取「当前所有问题」
+    /// * 🎯从「直接推理」而来
     /// * ⚠️需要可变引用：要在过程中「设置最优解」
-    pub fn questions(&mut self) -> &mut ArrayBuffer<Task> {
-        &mut self.questions
+    /// * 🚩【2024-07-02 16:23:51】目前因「无需获取内部表」，直接返回迭代器
+    pub fn questions_mut(&mut self) -> impl Iterator<Item = &mut RCTask> {
+        self.questions.iter_mut()
     }
 
     /// 🆕对外接口：添加问题到「问题集」
     /// * 🚩除了「添加」以外，还会实行「任务缓冲区」机制
     #[must_use]
-    pub fn add_question(&mut self, question: Task) -> Option<Task> {
+    pub fn add_question(&mut self, question: RCTask) -> Option<RCTask> {
         self.questions.add(question)
     }
 
@@ -282,7 +294,7 @@ impl ToDisplayAndBrief for Concept {
             base += "\n  questions:";
             for t in self.questions.iter() {
                 base += "\n";
-                base += &t.to_display();
+                base += &t.get_().to_display();
             }
         }
         if !self.beliefs.is_empty() {

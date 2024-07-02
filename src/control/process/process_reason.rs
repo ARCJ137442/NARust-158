@@ -162,7 +162,7 @@ impl Reasoner {
             let old_derived_tasks = context.num_new_tasks();
             if context.has_current_belief() {
                 // * 🚩开始「匹配推理」
-                let matching = context.core.reasoner.inference_engine.matching();
+                let matching = context.core.reasoner.inference_engine.matching_f();
                 matching(&mut context);
             }
 

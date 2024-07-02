@@ -135,7 +135,7 @@ impl InferenceEngine {
 
     /// 获取「推理函数 @ 匹配推理」
     /// * ✅不会长期借用`self`：允许「推理引擎」作为「推理上下文」的一部分（被引用）
-    pub fn matching(&self) -> fn(&mut ReasonContextConcept) {
+    pub fn matching_f(&self) -> fn(&mut ReasonContextConcept) {
         self.matching
     }
 

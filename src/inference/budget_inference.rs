@@ -4,7 +4,12 @@
 
 //! 🎯复刻OpenNARS `nars.inference.BudgetFunctions`
 
-use crate::inference::{Budget, BudgetFunctions};
+use crate::{
+    entity::BudgetValue,
+    inference::{Budget, BudgetFunctions, ReviseResult},
+};
+
+use super::Truth;
 
 /// 预算推理
 pub trait BudgetInference: Budget {
@@ -18,6 +23,36 @@ pub trait BudgetInference: Budget {
         let this = &*self;
         let new_budget = this.merge(other);
         self.copy_budget_from(&new_budget);
+    }
+
+    /// 修正@直接推理
+    /// * 🚩【2024-05-21 10:30:50】现在仅用于直接推理，但逻辑可以共用：「反馈到链接」与「具体任务计算」并不矛盾
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// Evaluate the quality of a revision, then de-prioritize the premises
+    fn revise_direct(
+        new_belief_truth: &impl Truth,
+        old_belief_truth: &impl Truth,
+        revised_truth: &impl Truth,
+        current_task_budget: &mut impl Budget,
+    ) -> BudgetValue {
+        // * 🚩计算
+        let ReviseResult {
+            new_budget,
+            new_task_budget,
+            ..
+        } = BudgetValue::revise(
+            new_belief_truth,
+            old_belief_truth,
+            revised_truth,
+            current_task_budget,
+            None::<[&BudgetValue; 2]>,
+        );
+        // * 🚩应用修改
+        current_task_budget.copy_budget_from(&new_task_budget);
+        // * 🚩返回
+        new_budget
     }
 
     // TODO: 【2024-06-22 14:50:02】后续拆分到「预算推理」中去

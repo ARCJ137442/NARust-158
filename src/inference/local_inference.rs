@@ -3,12 +3,16 @@
 //! * 📝其中包含「修订规则」等
 
 use crate::{
-    control::{util_outputs, ReasonContext, ReasonContextDirect},
-    entity::{BudgetValue, Concept, Judgement, Punctuation, Sentence, ShortFloat, Task},
+    control::{util_outputs, ContextDerivation, ReasonContext, ReasonContextDirect},
+    entity::{
+        BudgetValue, Concept, Judgement, Punctuation, RCTask, Sentence, ShortFloat, Stamp, Task,
+    },
     inference::{try_solution_apply, try_solution_calculate, Budget, BudgetFunctions, Evidential},
     language::Term,
-    util::{Iterable, RefCount, ToDisplayAndBrief},
+    util::{RefCount, ToDisplayAndBrief},
 };
+
+use super::{BudgetInference, TruthFunctions};
 
 /// 本地推理 入口函数
 pub fn process_direct(context: &mut ReasonContextDirect) {
@@ -38,12 +42,8 @@ fn process_judgement(context: &mut ReasonContextDirect) {
     let judgment = task.get_().as_judgement().unwrap().clone(); // ? 此处是否要将「任务」直接作为「信念」存储
 
     // * 🚩找到旧信念，并尝试修正
-    let old_belief = evaluation(
-        &judgment,
-        this.beliefs().iter(),
-        BudgetValue::solution_quality,
-    );
-    if let Some(old_belief) = old_belief {
+    let old_belief = evaluation(&judgment, this.beliefs(), BudgetValue::solution_quality);
+    if let Some((old_belief, ..)) = old_belief {
         if judgment.evidential_eq(old_belief) {
             // * 🚩时间戳上重复⇒优先级沉底，避免重复推理
             let task = task.get_(); // 获取不可变引用，然后覆盖之
@@ -64,7 +64,7 @@ fn process_judgement(context: &mut ReasonContextDirect) {
             if !has_overlap {
                 // * 📌【2024-06-07 11:38:02】现在由于「新时间戳」的内置，经检查不再需要设置「当前信念」
                 // * 📌此处的「当前信念」直接取`oldBelief`，并以此构造时间戳
-                revision_direct(judgment.clone(), old_belief.clone(), context);
+                revision_direct(context, judgment.clone(), old_belief.clone());
             }
         }
     }
@@ -83,17 +83,19 @@ fn process_judgement(context: &mut ReasonContextDirect) {
         let mut new_tasks = vec![];
         let mut results = vec![];
         // * 🚩先计算
-        for existed_question in this.questions().iter() {
-            let result = try_solution_calculate(&judgment, existed_question, budget_threshold);
+        for existed_question in this.questions() {
+            let result =
+                try_solution_calculate(&judgment, &existed_question.get_(), budget_threshold);
             results.push(result);
         }
         // * 🚩再应用
-        for (existed_question, result) in this.questions().iter_mut().zip(results.into_iter()) {
+        for (existed_question, result) in this.questions_mut().zip(results.into_iter()) {
             // TODO: 🏗️有待重构：此处「应用修改需要激活任务，但激活任务需要借用上下文」存在严重借用问题
             let output = try_solution_apply(
                 result,
-                existed_question,
+                &mut existed_question.mut_(),
                 &judgment,
+                // TODO: 💫【2024-07-02 15:35:01】混乱：此处内联了`activated_task`，以保证借用不冲突
                 |new_budget, new_task, candidate_belief| {
                     {
                         let parent_task = context.current_task.clone(); // TODO: 原先要借用context的部分
@@ -121,6 +123,7 @@ fn process_judgement(context: &mut ReasonContextDirect) {
                 outputs.push(output);
             }
         }
+        // * 🚩此时再借用context
         for output in outputs {
             context.report(output);
         }
@@ -149,34 +152,167 @@ fn process_judgement(context: &mut ReasonContextDirect) {
 ///
 /// To answer a question by existing beliefs
 fn process_question(context: &mut ReasonContextDirect) {
-    todo!()
+    let budget_threshold = context.parameters().budget_threshold;
+    // * 📝【2024-05-18 14:32:20】根据上游调用，此处「传入」的`task`只可能是`context.currentTask`
+    let question_task = context.current_task.clone_(); // * 🚩引用拷贝，否则会涉及大量借用问题
+    let question_task_ref = question_task.get_(); // * 🚩引用拷贝，否则会涉及大量借用问题
+
+    // * 🚩断言传入任务的「语句」一定是「问题」
+    debug_assert!(question_task_ref.is_question(), "要处理的必须是「问题」");
+
+    // * 🚩断言所基于的「当前概念」就是「推理上下文」的「当前概念」
+    // * 📝在其被唯一使用的地方，传入的`task`只有可能是`context.currentConcept`
+    let this = context.core.current_concept();
+
+    // * 🚩尝试寻找已有问题，若已有相同问题则直接处理已有问题
+    let existed_question = find_existed_question(this, question_task_ref.content());
+    let question = existed_question.unwrap_or(&question_task);
+
+    // * 🚩实际上「先找答案，再新增『问题任务』」区别不大——找答案的时候，不会用到「问题任务」
+    let new_answer = evaluation(
+        &*question.get_(),
+        this.beliefs(),
+        BudgetValue::solution_quality,
+    );
+    if let Some((answer, ..)) = new_answer {
+        let solution_result = try_solution_calculate(answer, &question_task_ref, budget_threshold);
+        drop(question_task_ref);
+        let parent_task = context.current_task.clone(); // 提取到前头
+        let mut question_task = context.current_task.mut_(); // TODO: 一边要借用整个「推理上下文」，一边又要借用「当前任务」……
+        let output = try_solution_apply(
+            solution_result,
+            &mut question_task,
+            &answer.clone(), // TODO: 拷贝以防止借用问题
+            // * 🚩以下代码完全内联自`activated_task`
+            |new_budget, solution, candidate_belief| {
+                {
+                    let task = Task::new(
+                        solution.clone().into(),
+                        new_budget,
+                        Some(parent_task),
+                        Some(solution.clone()),
+                        Some(candidate_belief.clone()),
+                    );
+                    // * 🚩现在重新改为`COMMENT`，但更详细地展示「任务」本身
+                    {
+                        let message = format!("!!! Activated: {}", task.to_display_long());
+                        {
+                            let output = util_outputs::output_comment(message);
+                            {
+                                context.core.add_output(output);
+                            }
+                        };
+                    };
+                    // // * 🚩若为「问题」⇒输出显著的「导出结论」
+                    {
+                        let task = task;
+                        context.core.add_new_task(task)
+                    };
+                }
+            },
+        );
+        if let Some(output) = output {
+            drop(question_task);
+            context.report(output);
+        }
+        // LocalRules.trySolution(ques, newAnswer, task, memory);
+    } else {
+        drop(question_task_ref);
+    }
+    // * 🚩新增问题
+    let this = context.core.current_concept_mut();
+    let overflowed_question = this.add_question(question_task);
+    if let Some(task) = overflowed_question {
+        context.report(util_outputs::output_comment(format!(
+            "!!! Overflowed Question Task: {}",
+            task.get_().to_display_long()
+        )));
+    }
 }
 
 /// 信念修正 @ 直接推理
 /// * 🚩【2024-06-30 10:55:06】目前直接传入两个信念的所有权，避免借用问题
 fn revision_direct(
+    context: &mut ReasonContextDirect,
     new_belief: impl Judgement,
     old_belief: impl Judgement,
-    context: &mut ReasonContextDirect,
 ) {
-    todo!()
+    // * 🚩词项
+    let new_content = new_belief.clone_content();
+    // * 🚩真值
+    let new_truth = new_belief.revision(&old_belief);
+    // * 🚩预算值
+    let new_budget = BudgetValue::revise_direct(
+        &new_belief,
+        &old_belief,
+        &new_truth,
+        &mut *context.current_task.mut_(),
+    );
+    // * 🚩创建并导入结果：双前提
+    // * 📝仅在此处用到「当前信念」作为「导出信念」
+    // * 📝此处用不到「当前信念」（旧信念）
+    // * 🚩【2024-06-06 08:52:56】现场构建「新时间戳」
+    let new_stamp = Stamp::from_merge_unchecked(
+        &new_belief,
+        &old_belief,
+        context.time(),
+        context.max_evidence_base_length(),
+    );
+    context.double_premise_task_revision(new_content, new_truth, new_budget, new_stamp);
 }
 
-/// 寻找已知问题
-fn find_existed_question<'c>(concept: &'c Concept, task_content: &Term) -> Option<&'c Task> {
-    todo!()
+/// 根据输入的任务，寻找并尝试返回已有的问题
+/// * ⚠️输出可空，且此时具有含义：概念中并没有「已有问题」
+/// * 🚩经上游确认，此处的`task`只可能是`context.currentTask`
+fn find_existed_question<'c>(concept: &'c Concept, task_content: &Term) -> Option<&'c RCTask> {
+    // // * 🚩遍历所有已知问题：任意一个问题「词项相等」就返回
+    // for existed_question in concept.questions().iter() {
+    //     let question_term = existed_question.get_().content();
+    //     // * 🚩词项相等⇒返回
+    //     if question_term == task_content {
+    //         return Some(existed_question);
+    //     }
+    // }
+    // None;
+    concept
+        // * 🚩遍历所有已知问题：任意一个问题「词项相等」就返回
+        .questions()
+        .find(
+            // * 🚩词项相等⇒返回
+            |question| question.get_().content() == task_content,
+        )
 }
 
 /// 答问评估
+/// * ✨增加功能：返回包括「解答质量」在内的整个结果
+///
+/// # 📄OpenNARS
+///
+/// Evaluate a query against beliefs (and desires in the future)
 fn evaluation<'a, S, J: 'a>(
     query: &S,
     list: impl IntoIterator<Item = &'a J>,
-    solution_query: fn(&S, &J) -> ShortFloat,
-) -> Option<&'a J>
+    solution_quality: fn(&S, &J) -> ShortFloat,
+) -> Option<(&'a J, ShortFloat)>
 where
     S: Sentence,
     J: Judgement,
 {
-    let list = list.into_iter();
-    todo!()
+    // * 🚩筛选出其中排行最前的回答
+    let mut current_best = ShortFloat::default();
+    let mut candidate = None;
+    for judgement in list {
+        let belief_quality = solution_quality(query, judgement);
+        // * 🚩排行大于⇒更新
+        if belief_quality > current_best {
+            current_best = belief_quality;
+            candidate = Some(judgement);
+        }
+    }
+    // * 🚩将最大值也一并传出
+    candidate.map(|solution| (solution, current_best))
+    // ! ❌【2024-07-02 16:43:44】不能使用迭代器方法
+    // * 📝在处理「等号情况」时，`max_by_key`要用后者【覆盖】前者
+    // * 测试代码：`dbg!([-1_i32, 1, 2, 3, -3, -2, 0].iter().max_by_key(|n| n.abs()));`返回`-3`而非`3`
+    // list.into_iter().max_by_key(|judgement| solution_query(query, judgement))
 }

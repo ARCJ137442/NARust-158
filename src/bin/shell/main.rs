@@ -1,3 +1,5 @@
+use std::io::{stdout, Write};
+
 use anyhow::Result;
 use narsese::conversion::string::impl_lexical::format_instances::FORMAT_ASCII;
 use narust_158::{control::DEFAULT_PARAMETERS, inference::InferenceEngine, vm::Launcher};
@@ -84,7 +86,10 @@ fn shell_output(output: Output) {
         }
         | OTHER { content } => println!("[{}] {}", output.get_type(), content),
         // 其它
-        output => println!("{}", output.to_json_string()),
+        output => {
+            println!("{}", output.to_json_string());
+            stdout().flush().unwrap();
+        }
     }
 }
 
@@ -125,16 +130,54 @@ pub fn main() -> Result<()> {
 mod tests {
     use super::*;
 
+    /// 测试/推理终端
+    fn _test_inference_engine(engine: InferenceEngine) -> Result<()> {
+        let launcher = Launcher::new("test for inference", DEFAULT_PARAMETERS, engine);
+        let vm = launcher.launch()?;
+        shell(vm, shell_iter_stdin())?;
+        Ok(())
+    }
+
+    /// 测试/推理终端（指定输入）
+    fn _test_inference_engine_inputs(engine: InferenceEngine, inputs: &str) -> Result<()> {
+        let launcher = Launcher::new("test for inference", DEFAULT_PARAMETERS, engine);
+        let vm = launcher.launch()?;
+        shell(vm, shell_iter_inputs(_inputs_iter(inputs)))?;
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "终端不应被自动测试"]
+    fn test_inference_direct() -> Result<()> {
+        let engine = InferenceEngine::new(
+            narust_158::inference::process_direct,
+            InferenceEngine::ECHO.transform_f(),
+            InferenceEngine::ECHO.matching_f(),
+            InferenceEngine::ECHO.reason_f(),
+        );
+        _test_inference_engine_inputs(
+            engine,
+            "
+        nse <A --> B>.
+        nse <A --> B>?
+        cyc 10
+        ",
+        )?;
+        Ok(())
+    }
+
+    fn _inputs_iter(inputs: &str) -> impl Iterator<Item = String> + '_ {
+        inputs
+            .lines()
+            .filter(|s| !s.is_empty())
+            .map(|s| s.trim().to_string())
+    }
+
     /// 测试多行NAVM指令（文本形式）输入
     /// * 🚩仅测试文本输入（稳定性），不负责捕获输出等额外操作
     fn test_line_inputs(inputs: &str) -> Result<()> {
         let runtime = create_runtime()?;
-        let inputs = shell_iter_inputs(
-            inputs
-                .lines()
-                .filter(|s| !s.is_empty())
-                .map(|s| s.trim().to_string()),
-        );
+        let inputs = shell_iter_inputs(_inputs_iter(inputs));
         shell(runtime, inputs)?;
         Ok(())
     }
