@@ -120,8 +120,18 @@ pub fn shell_iter_stdin() -> impl Iterator<Item = Result<Option<String>>> {
     })
 }
 
+/// 设置虚拟机到「最大音量」
+/// * 🎯使虚拟机得以输出尽可能详尽的信息
+pub fn set_max_volume(vm: &mut impl VmRuntime) -> Result<()> {
+    vm.input_cmd(Cmd::VOL(100))
+}
+
 pub fn main() -> Result<()> {
-    let runtime = create_runtime()?;
+    // * 🚩创建
+    let mut runtime = create_runtime()?;
+    // * 🚩音量
+    set_max_volume(&mut runtime)?;
+    // * 🚩交互
     shell(runtime, shell_iter_stdin())?;
     Ok(())
 }

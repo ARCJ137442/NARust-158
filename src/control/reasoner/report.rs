@@ -125,24 +125,40 @@ impl Reasoner {
         self.recorder.put(output);
     }
 
+    /// 推理器记录「注释」的音量阈值
+    /// * 🎯避免推理器过于繁杂的输出
+    /// * 🚩【2024-07-02 18:35:05】目前阈值：音量不满就不会输出了
+    /// * 📌表示「允许通过[`Self::report_comment`]产生输出的最小音量」
+    const COMMENT_VOLUME_THRESHOLD: usize = 100;
+
+    /// 派生易用性方法
+    /// * ⚠️【2024-07-02 18:32:42】现在具有筛选性
+    ///   * 🚩当未达「最小阈值」时，不输出「注释」
     pub fn report_comment(&mut self, message: impl ToString) {
+        if self.silence_value < Self::COMMENT_VOLUME_THRESHOLD {
+            return;
+        }
         self.report(util_outputs::output_comment(message));
     }
 
+    /// 派生易用性方法
     pub fn report_info(&mut self, message: impl ToString) {
         self.report(util_outputs::output_info(message));
     }
 
     #[doc(alias = "report_input")]
+    /// 派生易用性方法
     pub fn report_in(&mut self, narsese: &Task) {
         self.report(util_outputs::output_in(narsese));
     }
 
     #[doc(alias = "report_derived")]
+    /// 派生易用性方法
     pub fn report_out(&mut self, narsese: &Task) {
         self.report(util_outputs::output_out(narsese));
     }
 
+    /// 派生易用性方法
     pub fn report_error(&mut self, description: impl ToString) {
         self.report(util_outputs::output_error(description));
     }

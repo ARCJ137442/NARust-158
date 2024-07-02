@@ -9,7 +9,7 @@
 #![doc(alias = "derivation_context")]
 
 use crate::{
-    control::{util_outputs, Parameters, Reasoner},
+    control::{Parameters, Reasoner},
     entity::{Concept, JudgementV1, RCTask, Task, TaskLink, TermLink},
     global::{ClockTime, Float},
     language::Term,
@@ -21,6 +21,11 @@ use std::ops::{Deref, DerefMut};
 /// 🆕新的「推理上下文」对象
 /// * 📄仿自OpenNARS 3.1.0
 pub trait ReasonContext {
+    /// 🆕获取推理器
+    fn reasoner(&self) -> &Reasoner;
+
+    fn reasoner_mut(&mut self) -> &mut Reasoner;
+
     /// 🆕获取记忆区（不可变引用）
     fn memory(&self) -> &Memory;
 
@@ -67,21 +72,23 @@ pub trait ReasonContext {
     #[doc(alias = "add_export_string")]
     #[doc(alias = "add_string_to_record")]
     #[doc(alias = "add_output")]
-    fn report(&mut self, output: Output);
+    fn report(&mut self, output: Output) {
+        self.reasoner_mut().report(output)
+    }
 
     /// 派生易用性方法
     fn report_comment(&mut self, message: impl ToString) {
-        self.report(util_outputs::output_comment(message));
+        self.reasoner_mut().report_comment(message)
     }
 
     /// 派生易用性方法
     fn report_out(&mut self, narsese: &Task) {
-        self.report(util_outputs::output_out(narsese));
+        self.reasoner_mut().report_out(narsese)
     }
 
     /// 派生易用性方法
     fn report_error(&mut self, description: impl ToString) {
-        self.report(util_outputs::output_error(description));
+        self.reasoner_mut().report_error(description)
     }
 
     /// 获取「当前概念」（不可变）
@@ -325,6 +332,13 @@ impl ReasonContextCoreOut {
 #[macro_export]
 macro_rules! __delegate_from_core {
     () => {
+        fn reasoner(&self) -> &Reasoner {
+            &self.core.reasoner
+        }
+        fn reasoner_mut(&mut self) -> &mut Reasoner {
+            &mut self.core.reasoner
+        }
+
         fn memory(&self) -> &Memory {
             self.core.memory()
         }
@@ -347,10 +361,6 @@ macro_rules! __delegate_from_core {
 
         fn add_new_task(&mut self, task: Task) {
             self.outs.add_new_task(task)
-        }
-
-        fn report(&mut self, output: Output) {
-            self.outs.add_output(output)
         }
 
         fn current_concept(&self) -> &Concept {

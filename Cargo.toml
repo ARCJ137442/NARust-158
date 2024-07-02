@@ -34,7 +34,7 @@ features = [
 
 # NAVM：统IO模型
 [dependencies.navm]
-version = "0.15"
+version = "0.16"
 features = ["bundled"]
 
 # 用于方言解析的词法解析器

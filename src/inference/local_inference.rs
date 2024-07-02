@@ -137,12 +137,12 @@ fn process_judgement(context: &mut ReasonContextDirect) {
         let overflowed_belief = this.add_belief(judgment);
         // * 🚩报告溢出
         if let Some(overflowed_belief) = overflowed_belief {
-            let output = util_outputs::output_comment(format!(
+            let message = format!(
                 "!!! Overflowed Belief in '{}': {}",
                 this.term(),
                 overflowed_belief.to_display_long()
-            ));
-            context.report(output);
+            );
+            context.report_comment(message);
         }
     }
 }
@@ -224,10 +224,10 @@ fn process_question(context: &mut ReasonContextDirect) {
     let this = context.core.current_concept_mut();
     let overflowed_question = this.add_question(question_task);
     if let Some(task) = overflowed_question {
-        context.report(util_outputs::output_comment(format!(
+        context.report_comment(format!(
             "!!! Overflowed Question Task: {}",
             task.get_().to_display_long()
-        )));
+        ));
     }
 }
 

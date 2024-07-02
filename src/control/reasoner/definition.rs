@@ -4,10 +4,9 @@
 //!
 //! * ♻️【2024-06-26 12:02:36】开始根据改版OpenNARS重写
 
-use navm::output::Output;
-
 use super::{ReasonRecorder, ReasonerChannels, ReasonerDerivationData};
 use crate::{control::Parameters, global::ClockTime, inference::InferenceEngine, storage::Memory};
+use navm::output::Output;
 use std::fmt::Debug;
 
 // ! ❌【2024-06-27 18:01:23】不复刻静态常量`Reasoner.DEBUG`
