@@ -123,25 +123,31 @@ impl InferenceEngine {
 
     /// 获取「推理函数 @ 直接推理」
     /// * ✅不会长期借用`self`：允许「推理引擎」作为「推理上下文」的一部分（被引用）
-    pub fn direct_f(&self) -> fn(&mut ReasonContextDirect) {
+    /// * 🚩【2024-07-02 17:38:22】四个均可作为「常量函数」被调用
+    ///   * 📝Rust中引用字段的函数均可如此
+    pub const fn direct_f(&self) -> fn(&mut ReasonContextDirect) {
         self.direct
     }
 
     /// 获取「推理函数 @ 转换推理」
     /// * ✅不会长期借用`self`：允许「推理引擎」作为「推理上下文」的一部分（被引用）
-    pub fn transform_f(&self) -> fn(&mut ReasonContextTransform) {
+    pub const fn transform_f(&self) -> fn(&mut ReasonContextTransform) {
         self.transform
     }
 
     /// 获取「推理函数 @ 匹配推理」
     /// * ✅不会长期借用`self`：允许「推理引擎」作为「推理上下文」的一部分（被引用）
-    pub fn matching_f(&self) -> fn(&mut ReasonContextConcept) {
+    /// * 🚩【2024-07-02 17:38:22】四个均可作为「常量函数」被调用
+    ///   * 📝Rust中引用字段的函数均可如此
+    pub const fn matching_f(&self) -> fn(&mut ReasonContextConcept) {
         self.matching
     }
 
     /// 获取「推理函数 @ 概念推理」
     /// * ✅不会长期借用`self`：允许「推理引擎」作为「推理上下文」的一部分（被引用）
-    pub fn reason_f(&self) -> fn(&mut ReasonContextConcept) {
+    /// * 🚩【2024-07-02 17:38:22】四个均可作为「常量函数」被调用
+    ///   * 📝Rust中引用字段的函数均可如此
+    pub const fn reason_f(&self) -> fn(&mut ReasonContextConcept) {
         self.reason
     }
 }

@@ -48,3 +48,86 @@ nar_dev_utils::mods! {
     // ♻️具体规则
     pub use rules;
 }
+
+/// 单元测试 通用函数
+#[cfg(test)]
+pub mod test {
+    use super::*;
+    use crate::{
+        control::{Parameters, DEFAULT_PARAMETERS},
+        vm::{Launcher, Runtime},
+    };
+    use nar_dev_utils::list;
+    use navm::{
+        cmd::Cmd,
+        output::Output,
+        vm::{VmLauncher, VmRuntime},
+    };
+
+    /// 从「超参数」与「推理引擎」创建虚拟机
+    pub fn create_vm(parameters: Parameters, engine: InferenceEngine) -> Runtime {
+        let launcher = Launcher::new("test", parameters, engine);
+        launcher.launch().expect("推理器虚拟机 启动失败")
+    }
+
+    /// 从「推理引擎」创建虚拟机
+    /// * 📜使用默认参数
+    pub fn create_vm_from_engine(engine: InferenceEngine) -> Runtime {
+        create_vm(DEFAULT_PARAMETERS, engine)
+    }
+
+    /// 输入NAVM指令到虚拟机
+    pub fn input_cmds(vm: &mut impl VmRuntime, cmds: &str) {
+        for cmd in cmds
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .map(|line| Cmd::parse(line).expect("NAVM指令{line}解析失败"))
+        {
+            let cmd_s = cmd.to_string();
+            vm.input_cmd(cmd)
+                .unwrap_or_else(|_| panic!("NAVM指令「{cmd_s}」输入失败"));
+        }
+    }
+
+    /// 拉取虚拟机的输出
+    pub fn fetch_outputs(vm: &mut impl VmRuntime) -> Vec<Output> {
+        list![
+            output
+            while let Some(output) = (vm.try_fetch_output().expect("拉取输出失败"))
+        ]
+    }
+
+    /// 输入指令并拉取输出
+    #[must_use]
+    pub fn input_cmds_and_fetch_out(vm: &mut impl VmRuntime, cmds: &str) -> Vec<Output> {
+        input_cmds(vm, cmds);
+        fetch_outputs(vm)
+    }
+
+    pub fn print_outputs<'a>(outs: impl IntoIterator<Item = &'a Output>) {
+        outs.into_iter()
+            .for_each(|output| println!("{}", output.to_json_string()))
+    }
+
+    /// 预期输出
+    pub fn expect_outputs<'a>(
+        outputs: impl IntoIterator<Item = &'a Output>,
+        expect: impl Fn(&Output) -> bool,
+    ) -> &'a Output {
+        outputs
+            .into_iter()
+            .find(|&output| expect(output))
+            .expect("没有找到期望的输出")
+    }
+
+    /// 拉取输出并预期其中的输出
+    pub fn fetch_expected_outputs(
+        vm: &mut impl VmRuntime,
+        expect: impl Fn(&Output) -> bool,
+    ) -> Vec<Output> {
+        let outputs = fetch_outputs(vm);
+        expect_outputs(&outputs, expect);
+        outputs
+    }
+}

@@ -7,12 +7,13 @@ use crate::{
     entity::{
         BudgetValue, Concept, Judgement, Punctuation, RCTask, Sentence, ShortFloat, Stamp, Task,
     },
-    inference::{try_solution_apply, try_solution_calculate, Budget, BudgetFunctions, Evidential},
+    inference::{
+        try_solution_apply, try_solution_calculate, Budget, BudgetFunctions, BudgetInference,
+        Evidential, TruthFunctions,
+    },
     language::Term,
     util::{RefCount, ToDisplayAndBrief},
 };
-
-use super::{BudgetInference, TruthFunctions};
 
 /// 本地推理 入口函数
 pub fn process_direct(context: &mut ReasonContextDirect) {
@@ -315,4 +316,53 @@ where
     // * 📝在处理「等号情况」时，`max_by_key`要用后者【覆盖】前者
     // * 测试代码：`dbg!([-1_i32, 1, 2, 3, -3, -2, 0].iter().max_by_key(|n| n.abs()));`返回`-3`而非`3`
     // list.into_iter().max_by_key(|judgement| solution_query(query, judgement))
+}
+
+/// 单元测试
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::inference::{test::*, InferenceEngine};
+    use navm::output::Output;
+
+    const ENGINE: InferenceEngine = InferenceEngine::new(
+        process_direct,
+        InferenceEngine::ECHO.transform_f(),
+        InferenceEngine::ECHO.matching_f(),
+        InferenceEngine::ECHO.reason_f(),
+    );
+
+    #[test]
+    fn direct_answer_question() {
+        let mut vm = create_vm_from_engine(ENGINE);
+        // * 🚩输入指令并拉取输出
+        let outs = input_cmds_and_fetch_out(
+            &mut vm,
+            "
+            nse Sentence.
+            nse Sentence?
+            cyc 1
+            ",
+        );
+        // * 🚩打印输出
+        print_outputs(&outs);
+        // * 🚩检查其中是否有回答
+        expect_outputs(&outs, |answer| matches!(answer, Output::ANSWER { .. }));
+        // * 🚩再检验长期稳定性
+        for i in 0..0x10 {
+            let outs = input_cmds_and_fetch_out(
+                &mut vm,
+                &format!(
+                    "
+                    nse <A{i} --> B>.
+                    nse <A{i} --> B>?
+                    cyc 1
+                    "
+                ),
+            );
+            // * 🚩检测有回答
+            expect_outputs(&outs, |answer| matches!(answer, Output::ANSWER { .. }));
+        }
+        input_cmds(&mut vm, "cyc 1000");
+    }
 }

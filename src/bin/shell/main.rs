@@ -158,9 +158,9 @@ mod tests {
         _test_inference_engine_inputs(
             engine,
             "
-        nse <A --> B>.
-        nse <A --> B>?
-        cyc 10
+            nse <A --> B>.
+            nse <A --> B>?
+            cyc 10
         ",
         )?;
         Ok(())
