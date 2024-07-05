@@ -5,8 +5,10 @@
 //! 🎯复刻OpenNARS `nars.inference.BudgetFunctions`
 
 use crate::{
+    control::ReasonContextWithLinks,
     entity::BudgetValue,
     inference::{Budget, BudgetFunctions, ReviseResult},
+    language::Term,
 };
 
 use super::Truth;
@@ -53,6 +55,55 @@ pub trait BudgetInference: Budget {
         current_task_budget.copy_budget_from(&new_task_budget);
         // * 🚩返回
         new_budget
+    }
+}
+
+/// 自动实现「预算推理」
+/// * 🎯直接在「预算值」上加功能
+impl<B: Budget> BudgetInference for B {}
+
+/// 🆕为「推理上下文」实现的「预算推理」系列方法
+pub trait BudgetInferenceContext: ReasonContextWithLinks {
+    /// # 📄OpenNARS
+    ///
+    /// Forward inference result and adjustment
+    fn forward(&mut self, truth: Option<&impl Truth>) -> BudgetValue {
+        todo!()
+    }
+
+    /// # 📄OpenNARS
+    ///
+    /// Backward inference result and adjustment, stronger case
+    fn backward(&mut self, truth: Option<&impl Truth>) -> BudgetValue {
+        todo!()
+    }
+
+    /// # 📄OpenNARS
+    ///
+    /// Backward inference result and adjustment, weaker case
+    fn backward_weak(&mut self, truth: Option<&impl Truth>) -> BudgetValue {
+        todo!()
+    }
+
+    /// # 📄OpenNARS
+    ///
+    /// Forward inference with CompoundTerm conclusion
+    fn compound_forward(&mut self, truth: Option<&impl Truth>, content: &Term) -> BudgetValue {
+        todo!()
+    }
+
+    /// # 📄OpenNARS
+    ///
+    /// Backward inference with CompoundTerm conclusion, stronger case
+    fn compound_backward(&mut self, content: &Term) -> BudgetValue {
+        todo!()
+    }
+
+    /// # 📄OpenNARS
+    ///
+    /// Backward inference with CompoundTerm conclusion, weaker case
+    fn compound_backward_weak(&mut self, content: &Term) -> BudgetValue {
+        todo!()
     }
 
     // TODO: 【2024-06-22 14:50:02】后续拆分到「预算推理」中去
@@ -267,10 +318,7 @@ pub trait BudgetInference: Budget {
     //     BudgetValue::new(priority, durability, quality)
     // }
 }
-
-/// 自动实现「预算推理」
-/// * 🎯直接在「预算值」上加功能
-impl<B: Budget> BudgetInference for B {}
+impl<C: ReasonContextWithLinks> BudgetInferenceContext for C {}
 
 /// TODO: 单元测试
 #[cfg(test)]

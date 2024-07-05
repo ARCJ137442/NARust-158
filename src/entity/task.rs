@@ -5,7 +5,7 @@
 use super::{BudgetValue, Item, JudgementV1, Sentence, SentenceV1, Token};
 use crate::{
     global::{ClockTime, RC},
-    inference::{Budget, Evidential},
+    inference::{Budget, Evidential, Truth},
     util::{RefCount, ToDisplayAndBrief},
 };
 use nar_dev_utils::join;
@@ -82,11 +82,11 @@ impl Task {
     /// * 🚩默认没有「最优解」
     pub fn from_derived(
         sentence: SentenceV1,
-        budget: BudgetValue,
+        budget: impl Into<BudgetValue>,
         parent_task: Orc<Self>,
         parent_belief: Option<JudgementV1>,
     ) -> Self {
-        Self::new(sentence, budget, parent_task, parent_belief, None)
+        Self::new(sentence, budget.into(), parent_task, parent_belief, None)
     }
 }
 
@@ -117,6 +117,13 @@ impl Task {
     /// * 🚩其「父任务」是否为空
     pub fn is_input(&self) -> bool {
         self.parent_task.is_none()
+    }
+
+    /// 🆕尝试提取其中的「真值」
+    /// * 🚩判断句⇒真值，否则为空
+    /// * 🎯转换推理等处用于「获取当前任务的真值」
+    pub fn get_truth(&self) -> Option<&impl Truth> {
+        self.sentence.as_judgement()
     }
 }
 

@@ -10,10 +10,11 @@
 
 use crate::{
     control::{Parameters, Reasoner},
-    entity::{Concept, JudgementV1, RCTask, Task, TaskLink, TermLink},
+    entity::{Concept, JudgementV1, Punctuation, RCTask, Sentence, Task, TaskLink, TermLink},
     global::{ClockTime, Float},
     language::Term,
     storage::Memory,
+    util::RefCount,
 };
 use navm::output::Output;
 use std::ops::{Deref, DerefMut};
@@ -136,6 +137,19 @@ pub trait ReasonContext {
     /// * 📌共享引用
     fn current_task_mut<'r, 's: 'r>(&'s mut self) -> impl DerefMut<Target = RCTask> + 'r;
 
+    /// 获取推理方向
+    /// * 🚩【2024-07-05 18:26:28】目前从「当前任务的语句类型」判断
+    fn reason_direction(&self) -> ReasonDirection {
+        use Punctuation::*;
+        use ReasonDirection::*;
+        match self.current_task().get_().punctuation() {
+            // * 🚩判断⇒判断+判断⇒前向
+            Judgement => Forward,
+            // * 🚩问题⇒判断+问题⇒反向
+            Question => Backward,
+        }
+    }
+
     /// 让「推理器」吸收「推理上下文」
     /// * 🚩【2024-05-19 18:39:44】现在会在每次「准备上下文⇒推理」的过程中执行
     /// * 🎯变量隔离，防止「上下文串线」与「重复使用」
@@ -144,6 +158,19 @@ pub trait ReasonContext {
     /// * 🚩【2024-06-28 00:06:45】现在「内置推理器可变引用」后，不再需要第二个参数
     ///   * ✅「推理器引用」可以从自身中取出来
     fn absorbed_by_reasoner(self);
+}
+
+/// 🆕特意实现的「推理方向」
+/// * 🎯相比[`bool`]更为明确地表明推理的方向，同时兼顾零成本抽象
+///   * 📝Rust编译器完全可以当作布尔值处理
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ReasonDirection {
+    /// 前向推理（正向推理）
+    /// * 📄判断+判断
+    Forward,
+    /// 反向推理
+    /// * 📄判断+问题
+    Backward,
 }
 
 /// 「概念推理上下文+链接」

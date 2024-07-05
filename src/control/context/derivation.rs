@@ -22,14 +22,14 @@ pub trait ContextDerivation: ReasonContext {
     /// * 📝仅被「答问」调用
     fn activated_task(
         &mut self,
-        new_budget: BudgetValue,
+        new_budget: impl Into<BudgetValue>,
         solution: &JudgementV1,
         candidate_belief: &JudgementV1,
     ) {
         let parent_task = self.current_task().clone();
         let task = Task::new(
             solution.clone().into(),
-            new_budget,
+            new_budget.into(),
             Some(parent_task),
             Some(solution.clone()),
             Some(candidate_belief.clone()),
@@ -66,8 +66,8 @@ pub trait ContextDerivation: ReasonContext {
     fn double_premise_task_revision(
         &mut self,
         new_content: Term,
-        new_truth: TruthValue,
-        new_budget: BudgetValue,
+        new_truth: impl Into<TruthValue>,
+        new_budget: impl Into<BudgetValue>,
         new_stamp: Stamp,
     ) {
         // * 🚩仅在「任务内容」可用时构造
@@ -77,14 +77,14 @@ pub trait ContextDerivation: ReasonContext {
             new_content,
             new_punctuation,
             new_stamp,
-            Some((new_truth, true)),
+            Some((new_truth.into(), true)),
         );
         drop(current_task); // ! 先抛掉引用代理
         match new_sentence {
             Ok(new_sentence) => {
                 let new_task = Task::new(
                     new_sentence,
-                    new_budget,
+                    new_budget.into(),
                     Some(self.current_task().clone()),
                     None,
                     None,
@@ -137,7 +137,7 @@ pub trait ContextDerivationConcept: ReasonContextWithLinks {
         &mut self,
         new_content: Term,
         new_truth: Option<TruthValue>,
-        new_budget: BudgetValue,
+        new_budget: impl Into<BudgetValue>,
     ) {
         // * 🚩尝试创建「新时间戳」然后使用之
         if let Some(new_stamp) = self.generate_new_stamp_double() {
@@ -160,7 +160,7 @@ pub trait ContextDerivationConcept: ReasonContextWithLinks {
         current_task: Option<&Task>,
         new_content: Term,
         new_truth: Option<TruthValue>,
-        new_budget: BudgetValue,
+        new_budget: impl Into<BudgetValue>,
         new_stamp: Stamp,
     ) {
         self.double_premise_task_full(
@@ -177,8 +177,8 @@ pub trait ContextDerivationConcept: ReasonContextWithLinks {
     fn double_premise_task_not_revisable(
         &mut self,
         new_content: Term,
-        new_truth: Option<TruthValue>,
-        new_budget: BudgetValue,
+        new_truth: Option<impl Into<TruthValue>>,
+        new_budget: impl Into<BudgetValue>,
     ) {
         if let Some(new_stamp) = self.generate_new_stamp_double() {
             self.double_premise_task_full(
@@ -205,8 +205,8 @@ pub trait ContextDerivationConcept: ReasonContextWithLinks {
         &mut self,
         current_task: Option<&Task>,
         new_content: Term,
-        new_truth_revisable: Option<(TruthValue, bool)>,
-        new_budget: BudgetValue,
+        new_truth_revisable: Option<(impl Into<TruthValue>, bool)>,
+        new_budget: impl Into<BudgetValue>,
         new_stamp: Stamp,
     ) {
         // * 🚩参考「传入任务/自身默认任务」构造标点
@@ -217,7 +217,7 @@ pub trait ContextDerivationConcept: ReasonContextWithLinks {
             new_content,
             new_punctuation,
             new_stamp,
-            new_truth_revisable,
+            new_truth_revisable.map(|(truth, revisable)| (truth.into(), revisable)),
         );
         if let Ok(sentence) = new_sentence {
             let new_task = Task::from_derived(
@@ -237,9 +237,12 @@ pub trait ContextDerivationConcept: ReasonContextWithLinks {
         &mut self,
         new_content: Term,
         punctuation: Punctuation,
-        new_truth: Option<TruthValue>,
-        new_budget: BudgetValue,
+        new_truth: Option<impl Into<TruthValue>>,
+        new_budget: impl Into<BudgetValue>,
     ) {
+        // * 🚩兼容各类「真值」「预算值」的引用（自动转换成真值）
+        let new_truth = new_truth.map(Into::into);
+        let new_budget = new_budget.into();
         let current_task_ref = self.current_task();
         let current_task = current_task_ref.get_();
         let parent_task = current_task.parent_task();
@@ -283,6 +286,19 @@ pub trait ContextDerivationConcept: ReasonContextWithLinks {
         drop(current_task); // ! 先释放「借用代理」
         drop(current_task_ref);
         self.derived_task(new_task);
+    }
+
+    /// 来自「结构规则」与「转换规则」的单前提导出
+    /// * 🚩除了「标点」固定指向「当前任务」外，其它与[完整方法](ContextDerivationConcept::single_premise_task_full)一致
+    fn single_premise_task_structural(
+        &mut self,
+        new_content: Term,
+        new_truth: Option<impl Into<TruthValue>>,
+        new_budget: impl Into<BudgetValue>,
+    ) {
+        // * 🚩新任务标点取自「当前任务」
+        let punctuation = self.current_task().get_().punctuation();
+        self.single_premise_task_full(new_content, punctuation, new_truth, new_budget)
     }
 }
 
