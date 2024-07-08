@@ -181,7 +181,6 @@ pub trait Sentence: ToDisplayAndBrief + Evidential {
     /// 🆕与OpenNARS改版不同：转换为「词法语句」
     /// * ℹ️原有的「内部语句」可能不存在标点信息，故只能上移至此
     fn sentence_to_lexical(&self) -> LexicalSentence;
-    // TODO: 代码交给后续实现者实现
     /* {
         // LexicalSentence {
         //     term: self.content().into(),

@@ -14,6 +14,7 @@ use crate::{
     util::RefCount,
 };
 use nar_dev_utils::unwrap_or_return;
+use navm::output::Output;
 use std::ops::{Deref, DerefMut};
 
 /// 概念推理上下文

@@ -12,6 +12,7 @@ use crate::{
     global::{ClockTime, Float},
     storage::Memory,
 };
+use navm::output::Output;
 use std::ops::{Deref, DerefMut};
 
 /// 转换推理上下文

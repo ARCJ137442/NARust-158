@@ -7,8 +7,8 @@ use crate::{
     },
     entity::{Sentence, TLink, TruthValue},
     inference::BudgetInferenceContext,
-    io::symbols::INHERITANCE_RELATION,
-    language::{CompoundTermRef, Term},
+    io::symbols::{CONJUNCTION_OPERATOR, INHERITANCE_RELATION, PRODUCT_OPERATOR},
+    language::{CompoundTermRef, StatementRef, Term},
     util::RefCount,
 };
 use nar_dev_utils::unwrap_or_return;
@@ -68,9 +68,19 @@ pub fn transform_task(context: &mut ReasonContextTransform) {
                 transform_predicate_product_image(inh_subject, inh_predicate, context);
             }
         }
-        // * 🚩其它⇒转换内部的「继承」系词
+        // * 🚩复合词项⇒尝试转换内部的「继承」系词
         // * 📌【2024-07-05 18:22:05】此处不传递indexes，避免借用冲突
-        false => transform_product_image(inheritance_to_be_transform, old_content, context),
+        false => {
+            if let Some(old_content) = old_content.as_compound() {
+                transform_product_image(
+                    inheritance_to_be_transform
+                        .as_statement()
+                        .expect("此处一定是陈述"),
+                    old_content,
+                    context,
+                );
+            }
+        }
     }
 }
 
@@ -103,8 +113,8 @@ fn get_inheritance_to_be_transform<'t>(
 /// {<S --> (/, P, _, M)>, P@(/, P, _, M)} |- <(*, S, M) --> P>
 /// {<S --> (/, P, _, M)>, M@(/, P, _, M)} |- <M --> (/, P, S, _)>
 fn transform_product_image(
-    inheritance_to_be_transform: Term,
-    old_content: Term,
+    inheritance_to_be_transform: StatementRef,
+    old_content: CompoundTermRef,
     context: &mut ReasonContextTransform,
 ) {
     // * 🚩提取参数 * //
@@ -142,18 +152,131 @@ fn transform_product_image(
     context.single_premise_task_structural(content, truth, budget);
 }
 
+/// 🆕使用转换后的「关系继承句」回替词项
+/// * 🚩按照词项链索引，在「转换后的词项」中找回其位置，并替换原有的词项
+/// * ⚠️返回值可能为空
 fn replaced_transformed_content(
-    old_content: Term,
+    old_content: CompoundTermRef,
     indexes: &[usize],
     new_inheritance: Term,
 ) -> Option<Term> {
-    todo!()
+    // * 🚩选择或构建最终内容：模仿链接重构词项
+    match indexes.len() {
+        // * 🚩只有两层 ⇒ 只有「继承+关系」两层 ⇒ 直接使用
+        // * 📄A @ <(*, A, B) --> R>
+        2 => Some(new_inheritance.clone()),
+        // * 🚩三层 ⇒ 只有「继承+关系」两层 ⇒ 直接使用
+        // * 📄A @ <<(*, A, B) --> R> ==> C>
+        // * 📄oldContent="<(&&,<$1 --> key>,<$2 --> lock>) ==> <$2 --> (/,open,$1,_)>>"
+        // * * indices=[1, 1, 1]
+        // * * newInh="<(*,$1,$2) --> open>"
+        // *=> content="<(&&,<$1 --> key>,<$2 --> lock>) ==> <(*,$1,$2) --> open>>"
+        _ if old_content.is_statement() && indexes[0] == 1 => {
+            debug_assert!(
+                indexes.len() == 3,
+                "【2024-07-03 21:55:34】此处原意是「三层、陈述、在谓项中」"
+            );
+            debug_assert!(old_content.is_compound(), "原内容必须是复合词项");
+            Term::make_statement(
+                &old_content,
+                old_content
+                    .as_compound()
+                    .unwrap()
+                    .component_at(0)
+                    .expect("复合词项必须有元素")
+                    .clone(),
+                new_inheritance,
+            )
+        }
+        _ => match old_content.as_conditional() {
+            Some((statement, conditional)) => {
+                // * 🚩复合条件⇒四层：蕴含/等价 ⇒ 条件 ⇒ 关系继承 ⇒ 积/像
+                // * 📄oldContent="<(&&,<#1-->lock>,<#1-->(/,open,$2,_)>)==>C>"
+                // * * indices=[0, 1, 1, 1]
+                // * * newInh="<(*,$2,#1)-->open>"
+                // *=> content="<(&&,<#1-->lock>,<(*,$2,#1)-->open>)==>C>"
+                debug_assert!(
+                    indexes.len() == 4,
+                    "【2024-07-03 21:55:34】此处原意是「四层、条件、在条件项中」"
+                );
+                let new_condition =
+                    CompoundTermRef::set_component(conditional, indexes[1], Some(new_inheritance))?;
+                Term::make_statement(&statement, new_condition, statement.predicate.clone())
+            }
+            _ => {
+                // * 🚩非条件⇒三层：蕴含/等价/合取 ⇒ 结论=关系继承 ⇒ 积/像
+                // * 📄oldContent="(&&,<#1 --> lock>,<#1 --> (/,open,#2,_)>,<#2 --> key>)"
+                // * * indices=[1, 1, 1] @ "open"
+                // * * newInh="<(*,#2,#1) --> open>"
+                // *=> content="(&&,<#1 --> lock>,<#2 --> key>,<(*,#2,#1) --> open>)"
+                // * 📄oldContent="<<$1 --> (/,open,_,{lock1})> ==> <$1 --> key>>"
+                // * * indices=[0, 1, 0] @ "open"
+                // * * newInh="<(*,$1,{lock1}) --> open>"
+                // *=> content="<<(*,$1,{lock1}) --> open> ==> <$1 --> key>>"
+                let mut components = old_content.clone_components();
+                components[indexes[0]] = new_inheritance;
+                if let Some(conjunction) = old_content.as_compound_type(CONJUNCTION_OPERATOR) {
+                    Term::make_compound_term(conjunction, components)
+                } else if let Some(statement) = old_content.as_statement() {
+                    let subject = components.remove(0);
+                    let predicate = components.remove(0);
+                    Term::make_statement(&statement, subject, predicate)
+                } else {
+                    None
+                }
+            }
+        },
+    }
 }
 
-fn transform_inheritance(inheritance_to_be_transform: Term, indexes: &[usize]) -> Option<Term> {
-    let inheritance_statement = inheritance_to_be_transform
-        .as_statement()
-        .expect("【2024-07-05 18:51:25】已在传参前断言");
+/// 🆕从「转换 乘积/像」中提取出的「转换继承」函数
+/// * ⚠️返回值可能为空
+/// * 🚩转换构造新的「继承」
+fn transform_inheritance(
+    inheritance_to_be_transform: StatementRef,
+    indexes: &[usize],
+) -> Option<Term> {
+    // * 🚩决定前后项（此时已完成对「继承」的转换）
+    let index = indexes[indexes.len() - 1]; // * 📝取索引 @ 复合词项内 | 📄B@(/, R, B, _) => 1
+    let side = indexes[indexes.len() - 2]; // * 📝取索引 @ 复合词项所属继承句 | (*, A, B)@<(*, A, B) --> R> => 0
+    let inner_compound = inheritance_to_be_transform
+        .into_compound_ref()
+        .component_at(side)?
+        .as_compound()?; // * 📝拿到「继承」中的复合词项
+    let [subject, predicate] = match inner_compound.identifier() {
+        _ => return None,
+        // * 🚩乘积⇒转像
+        PRODUCT_OPERATOR => match side {
+            // * 🚩乘积在左侧⇒外延像
+            // * 📝占位符位置：与词项链位置有关
+            0 => [
+                inner_compound.component_at(index)?.clone(),
+                Term::make_image_ext_from_product(
+                    inner_compound,
+                    inheritance_to_be_transform.predicate,
+                    index,
+                )?,
+            ],
+            // * 🚩乘积在右侧⇒内涵像
+            // * 📝占位符位置：与词项链位置有关
+            _ => [
+                Term::make_image_int_from_product(
+                    inner_compound,
+                    inheritance_to_be_transform.subject,
+                    index,
+                )?,
+                inner_compound.component_at(index)?.clone(),
+            ],
+        },
+        // TODO
+        // * 🚩外延像⇒乘积/换索引
+        // * 🚩链接来源正好是「关系词项」⇒转乘积
+        // * * 📝实际情况是「索引在1⇒构造词项」
+        // * * 📄「关系词项」如："open" @ "(/,open,$1,_)" | 始终在第一位，只是存储时放占位符的位置上
+        // * 🚩其它⇒调转占位符位置
+        // * * 📄「关系词项」如
+    };
+    // * 🚩最终返回构造好的陈述
     todo!()
 }
 

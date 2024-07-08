@@ -9,7 +9,7 @@
 #![doc(alias = "derivation_context")]
 
 use crate::{
-    control::{Parameters, Reasoner},
+    control::{util_outputs, Parameters, Reasoner},
     entity::{Concept, JudgementV1, Punctuation, RCTask, Sentence, Task, TaskLink, TermLink},
     global::{ClockTime, Float},
     language::Term,
@@ -70,26 +70,26 @@ pub trait ReasonContext {
     /// 🆕添加「导出的NAVM输出」
     /// * ⚠️不同于OpenNARS，此处集成NAVM中的 [NARS输出](navm::out::Output) 类型
     /// * 📌同时复刻`addExportString`、`report`与`addStringToRecord`几个方法
+    ///
+    /// ! 不应直接给「推理器」发送报告输出
     #[doc(alias = "add_export_string")]
     #[doc(alias = "add_string_to_record")]
     #[doc(alias = "add_output")]
-    fn report(&mut self, output: Output) {
-        self.reasoner_mut().report(output)
-    }
+    fn report(&mut self, output: Output);
 
     /// 派生易用性方法
     fn report_comment(&mut self, message: impl ToString) {
-        self.reasoner_mut().report_comment(message)
+        self.report(util_outputs::output_comment(message))
     }
 
     /// 派生易用性方法
     fn report_out(&mut self, narsese: &Task) {
-        self.reasoner_mut().report_out(narsese)
+        self.report(util_outputs::output_out(narsese))
     }
 
     /// 派生易用性方法
     fn report_error(&mut self, description: impl ToString) {
-        self.reasoner_mut().report_error(description)
+        self.report(util_outputs::output_error(description))
     }
 
     /// 获取「当前概念」（不可变）
@@ -363,6 +363,7 @@ macro_rules! __delegate_from_core {
         fn reasoner(&self) -> &Reasoner {
             &self.core.reasoner
         }
+        
         fn reasoner_mut(&mut self) -> &mut Reasoner {
             &mut self.core.reasoner
         }
@@ -389,6 +390,10 @@ macro_rules! __delegate_from_core {
 
         fn add_new_task(&mut self, task: Task) {
             self.outs.add_new_task(task)
+        }
+
+        fn report(&mut self, output: Output) {
+            self.outs.add_output(output);
         }
 
         fn current_concept(&self) -> &Concept {

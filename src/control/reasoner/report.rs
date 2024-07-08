@@ -4,7 +4,7 @@
 //! * 🚩【2024-05-06 09:35:37】复用[`navm`]中的「NAVM输出」
 
 use super::Reasoner;
-use crate::entity::Task;
+use crate::{control::ReasonContextCoreOut, entity::Task, global::Float};
 use navm::output::Output;
 use std::collections::VecDeque;
 
@@ -118,18 +118,41 @@ pub mod util_outputs {
     }
 }
 
+/// 为「推理上下文输出」扩展方法
+impl ReasonContextCoreOut {
+    /// 派生易用性方法
+    pub fn report_comment(&mut self, message: impl ToString, silence_percent: Float) {
+        if silence_percent < Reasoner::COMMENT_VOLUME_THRESHOLD_PERCENT {
+            return;
+        }
+        self.add_output(util_outputs::output_comment(message))
+    }
+
+    /// 派生易用性方法
+    pub fn report_out(&mut self, narsese: &Task) {
+        self.add_output(util_outputs::output_out(narsese))
+    }
+
+    /// 派生易用性方法
+    pub fn report_error(&mut self, description: impl ToString) {
+        self.add_output(util_outputs::output_error(description))
+    }
+}
+
 /// 为「推理器」扩展方法
 impl Reasoner {
     /// 报告输出
     pub fn report(&mut self, output: Output) {
         self.recorder.put(output);
     }
-
     /// 推理器记录「注释」的音量阈值
     /// * 🎯避免推理器过于繁杂的输出
     /// * 🚩【2024-07-02 18:35:05】目前阈值：音量不满就不会输出了
     /// * 📌表示「允许通过[`Self::report_comment`]产生输出的最小音量」
     const COMMENT_VOLUME_THRESHOLD: usize = 100;
+    /// [`COMMENT_VOLUME_THRESHOLD`]的百分比形式
+    const COMMENT_VOLUME_THRESHOLD_PERCENT: Float =
+        (Self::COMMENT_VOLUME_THRESHOLD as Float) / 100.0;
 
     /// 派生易用性方法
     /// * ⚠️【2024-07-02 18:32:42】现在具有筛选性

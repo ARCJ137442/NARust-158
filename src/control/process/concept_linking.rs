@@ -257,16 +257,29 @@ impl ReasonContextDirect<'_> {
             }
             // * 🚩仅在「元素词项所对应概念」存在时
             let component = template.target();
+
             // * 🚩建立双向链接：整体⇒元素
-            let self_concept = unwrap_or_return!(?self.key_to_concept_mut(concept_key) => continue);
             let link = TermLink::from_template(component.clone(), template, sub_budget);
+            self.outs.report_comment(
+                format!("Term-link built @ {self_term}: {}", link.to_display_long()),
+                self.silence_percent(),
+            );
+            let self_concept = unwrap_or_return!(?self.key_to_concept_mut(concept_key) => continue);
             self_concept.put_in_term_link(link); // this termLink to that
 
             // * 🚩建立双向链接：元素⇒整体 | 获取概念或在其中创建新概念（为数不多几个「创建概念」之处）
             // that termLink to this
+            let link = TermLink::from_template(self_term.clone(), template, sub_budget);
+            self.outs.report_comment(
+                format!(
+                    "Term-link built @ {}: {}",
+                    &*component,
+                    link.to_display_long()
+                ),
+                self.silence_percent(),
+            );
             let component_concept =
                 unwrap_or_return!(?self.get_concept_or_create(&component) => continue);
-            let link = TermLink::from_template(self_term.clone(), template, sub_budget);
             component_concept.put_in_term_link(link);
 
             // * 🚩对复合子项 继续深入递归
