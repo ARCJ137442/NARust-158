@@ -180,7 +180,11 @@ impl ReasonContextWithLinks for ReasonContextConcept<'_> {
         self.current_belief.as_ref()
     }
 
-    fn belief_link_for_budget_inference(&mut self) -> Option<&mut TermLink> {
+    fn belief_link_for_budget_inference(&self) -> Option<&TermLink> {
+        Some(&self.current_belief_link)
+    }
+
+    fn belief_link_for_budget_inference_mut(&mut self) -> Option<&mut TermLink> {
         Some(&mut self.current_belief_link)
     }
 

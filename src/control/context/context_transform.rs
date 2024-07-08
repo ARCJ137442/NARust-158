@@ -76,7 +76,13 @@ impl ReasonContextWithLinks for ReasonContextTransform<'_> {
         None
     }
 
-    fn belief_link_for_budget_inference(&mut self) -> Option<&mut crate::entity::TermLink> {
+    fn belief_link_for_budget_inference(&self) -> Option<&crate::entity::TermLink> {
+        // ! 📌「转换推理」的「当前信念链」始终为空
+        // * 🚩【2024-06-09 11:03:54】妥协：诸多「预算推理」需要使用「当前信念链」，但「当前信念」在「概念推理」中不允许为空
+        None
+    }
+
+    fn belief_link_for_budget_inference_mut(&mut self) -> Option<&mut crate::entity::TermLink> {
         // ! 📌「转换推理」的「当前信念链」始终为空
         // * 🚩【2024-06-09 11:03:54】妥协：诸多「预算推理」需要使用「当前信念链」，但「当前信念」在「概念推理」中不允许为空
         None

@@ -193,7 +193,8 @@ pub trait ReasonContextWithLinks: ReasonContext {
     /// * 📌仅在「概念推理」中非空
     /// * 🚩对于用不到的实现者，只需实现为空
     /// * 🎯【2024-06-09 11:25:14】规避对`instanceof DerivationContextReason`的滥用
-    fn belief_link_for_budget_inference(&mut self) -> Option<&mut TermLink>;
+    fn belief_link_for_budget_inference(&self) -> Option<&TermLink>;
+    fn belief_link_for_budget_inference_mut(&mut self) -> Option<&mut TermLink>;
 
     // * 📄「转换推理上下文」「概念推理上下文」仅作为「当前任务链之目标」
     // ! 【2024-06-27 00:48:01】但Rust不支持「转换为默认实现」
