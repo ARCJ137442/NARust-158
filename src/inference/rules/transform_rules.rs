@@ -7,7 +7,7 @@ use crate::{
     },
     entity::{Sentence, TLink, TruthValue},
     inference::BudgetInferenceContext,
-    io::symbols::{CONJUNCTION_OPERATOR, INHERITANCE_RELATION, PRODUCT_OPERATOR},
+    io::symbols::*,
     language::{CompoundTermRef, StatementRef, Term},
     util::RefCount,
 };
@@ -168,8 +168,8 @@ fn replaced_transformed_content(
         // * 🚩三层 ⇒ 只有「继承+关系」两层 ⇒ 直接使用
         // * 📄A @ <<(*, A, B) --> R> ==> C>
         // * 📄oldContent="<(&&,<$1 --> key>,<$2 --> lock>) ==> <$2 --> (/,open,$1,_)>>"
-        // * * indices=[1, 1, 1]
-        // * * newInh="<(*,$1,$2) --> open>"
+        //   * indices=[1, 1, 1]
+        //   * newInh="<(*,$1,$2) --> open>"
         // *=> content="<(&&,<$1 --> key>,<$2 --> lock>) ==> <(*,$1,$2) --> open>>"
         _ if old_content.is_statement() && indexes[0] == 1 => {
             debug_assert!(
@@ -192,8 +192,8 @@ fn replaced_transformed_content(
             Some((statement, conditional)) => {
                 // * 🚩复合条件⇒四层：蕴含/等价 ⇒ 条件 ⇒ 关系继承 ⇒ 积/像
                 // * 📄oldContent="<(&&,<#1-->lock>,<#1-->(/,open,$2,_)>)==>C>"
-                // * * indices=[0, 1, 1, 1]
-                // * * newInh="<(*,$2,#1)-->open>"
+                //   * indices=[0, 1, 1, 1]
+                //   * newInh="<(*,$2,#1)-->open>"
                 // *=> content="<(&&,<#1-->lock>,<(*,$2,#1)-->open>)==>C>"
                 debug_assert!(
                     indexes.len() == 4,
@@ -206,12 +206,12 @@ fn replaced_transformed_content(
             _ => {
                 // * 🚩非条件⇒三层：蕴含/等价/合取 ⇒ 结论=关系继承 ⇒ 积/像
                 // * 📄oldContent="(&&,<#1 --> lock>,<#1 --> (/,open,#2,_)>,<#2 --> key>)"
-                // * * indices=[1, 1, 1] @ "open"
-                // * * newInh="<(*,#2,#1) --> open>"
+                //   * indices=[1, 1, 1] @ "open"
+                //   * newInh="<(*,#2,#1) --> open>"
                 // *=> content="(&&,<#1 --> lock>,<#2 --> key>,<(*,#2,#1) --> open>)"
                 // * 📄oldContent="<<$1 --> (/,open,_,{lock1})> ==> <$1 --> key>>"
-                // * * indices=[0, 1, 0] @ "open"
-                // * * newInh="<(*,$1,{lock1}) --> open>"
+                //   * indices=[0, 1, 0] @ "open"
+                //   * newInh="<(*,$1,{lock1}) --> open>"
                 // *=> content="<<(*,$1,{lock1}) --> open> ==> <$1 --> key>>"
                 let mut components = old_content.clone_components();
                 components[indexes[0]] = new_inheritance;
@@ -244,7 +244,6 @@ fn transform_inheritance(
         .component_at(side)?
         .as_compound()?; // * 📝拿到「继承」中的复合词项
     let [subject, predicate] = match inner_compound.identifier() {
-        _ => return None,
         // * 🚩乘积⇒转像
         PRODUCT_OPERATOR => match side {
             // * 🚩乘积在左侧⇒外延像
@@ -268,16 +267,66 @@ fn transform_inheritance(
                 inner_compound.component_at(index)?.clone(),
             ],
         },
-        // TODO
-        // * 🚩外延像⇒乘积/换索引
-        // * 🚩链接来源正好是「关系词项」⇒转乘积
-        // * * 📝实际情况是「索引在1⇒构造词项」
-        // * * 📄「关系词项」如："open" @ "(/,open,$1,_)" | 始终在第一位，只是存储时放占位符的位置上
-        // * 🚩其它⇒调转占位符位置
-        // * * 📄「关系词项」如
+        // * 🚩外延像@后项⇒乘积/换索引
+        IMAGE_EXT_OPERATOR if side == 1 => match index {
+            // * 🚩链接来源正好是「关系词项」⇒转乘积
+            //   * ℹ️新陈述：积 --> 关系词项
+            //   * 📝实际情况是「索引在1⇒构造词项」
+            //   * 📄「关系词项」如："open" @ "(/,open,$1,_)" | 始终在第一位，只是存储时放占位符的位置上
+            0 => [
+                inner_compound.component_at(index)?.clone(),
+                Term::make_image_ext_from_image(
+                    inner_compound,
+                    inheritance_to_be_transform.subject,
+                    index,
+                )?,
+            ],
+            // * 🚩其它⇒调转占位符位置
+            //   * ℹ️新陈述：另一元素 --> 新像
+            //   * 📄「关系词项」如"{lock1}" @ "(/,open,_,{lock1})"
+            //   * inh="<$1 --> (/,open,_,{lock1})>"
+            //   * => "(/,open,$1,_)"
+            _ => [
+                inner_compound.component_at(index)?.clone(),
+                Term::make_image_ext_from_image(
+                    inner_compound,
+                    inheritance_to_be_transform.subject,
+                    index,
+                )?,
+            ],
+        },
+        // * 🚩内涵像@前项⇒乘积/换索引
+        IMAGE_INT_OPERATOR if side == 1 => match index {
+            // * 🚩链接来源正好是「关系词项」⇒转乘积
+            //   * ℹ️新陈述：关系词项 --> 积
+            //   * 📄「关系词项」如："open" @ "(\,open,$1,_)" | 始终在第一位，只是存储时放占位符的位置上
+            0 => [
+                inner_compound.component_at(index)?.clone(),
+                Term::make_image_ext_from_image(
+                    inner_compound,
+                    inheritance_to_be_transform.subject,
+                    index,
+                )?,
+            ],
+            // * 🚩其它⇒调转占位符位置
+            //   * ℹ️新陈述：新像 --> 另一元素
+            //   * 📄「关系词项」如"neutralization" @ "(\,neutralization,_,$1)"
+            //   * inh="<(\,neutralization,acid,_) --> $1>"
+            //   * => "<(\,neutralization,_,$1) --> acid>"
+            _ => [
+                inner_compound.component_at(index)?.clone(),
+                Term::make_image_ext_from_image(
+                    inner_compound,
+                    inheritance_to_be_transform.subject,
+                    index,
+                )?,
+            ],
+        },
+        // * 🚩其它⇒无效
+        _ => return None,
     };
     // * 🚩最终返回构造好的陈述
-    todo!()
+    Term::make_inheritance(subject, predicate)
 }
 
 fn transform_subject_product_image(
