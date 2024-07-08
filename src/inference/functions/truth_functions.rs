@@ -14,6 +14,22 @@ use crate::{
 pub trait TruthFunctions: Truth {
     /* ----- Single argument functions, called in MatchingRules ----- */
 
+    /// 🆕恒等真值函数，用于转换推理
+    /// * 🎯维护「真值计算」的一致性：所有真值计算均通过真值函数
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// {<(*, A, B) --> R>} |- <A --> (/, R, _, B)>
+    ///
+    /// @param v1 [&] Truth value of the premise
+    /// @return Truth value of the conclusion
+    fn identity(&self) -> TruthValue {
+        let [f1, c1] = self.fc();
+        // * 📝频率=旧频率
+        // * 📝信度=旧信度
+        TruthValue::new_fc(f1, c1)
+    }
+
     /// 模拟`TruthFunctions.conversion`
     /// * 🚩转换
     ///

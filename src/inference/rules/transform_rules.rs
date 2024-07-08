@@ -6,7 +6,7 @@ use crate::{
         ReasonDirection,
     },
     entity::{Sentence, TLink, TruthValue},
-    inference::BudgetInferenceContext,
+    inference::{BudgetInferenceContext, TruthFunctions},
     io::symbols::*,
     language::{CompoundTermRef, StatementRef, Term},
     util::RefCount,
@@ -329,18 +329,222 @@ fn transform_inheritance(
     Term::make_inheritance(subject, predicate)
 }
 
+/// # 📄OpenNARS
+///
+/// Equivalent transformation between products and images when the subject is a
+/// compound
+/// `{<(*, S, M) --> P>, S@(*, S, M)} |- <S --> (/, P, _, M)>`
+/// `{<(\, P, _, M) --> S>, P@(\, P, _, M)} |- <P --> (*, S, M)>`
+/// `{<(\, P, _, M) --> S>, M@(\, P, _, M)} |- <(\, P, S, _) --> M>`
 fn transform_subject_product_image(
     inh_subject: CompoundTermRef,
     inh_predicate: &Term,
     context: &mut ReasonContextTransform,
 ) {
-    todo!()
+    use ReasonDirection::*;
+    // * 🚩预置变量
+    let direction = context.reason_direction();
+    // * 🚩积⇒内涵像
+    if let Some(product) = inh_subject.as_compound_type(PRODUCT_OPERATOR) {
+        // * 🚩一次多个：遍历所有可能的索引
+        for (i, new_subject) in product.components.iter().cloned().enumerate() {
+            // * 🚩词项 * //
+            let new_predicate = unwrap_or_return!(?Term::make_image_ext_from_product(product, inh_predicate, i) => continue);
+            let inheritance =
+                unwrap_or_return!(?Term::make_inheritance(new_subject, new_predicate) => continue);
+            // * 🚩真值 * //
+            let truth = match direction {
+                Forward => Some(
+                    context
+                        .current_task()
+                        .get_()
+                        .as_judgement()
+                        .expect("前向推理要求「当前任务」必须有真值")
+                        .identity(),
+                ),
+                Backward => None,
+            };
+            // * 🚩预算 * //
+            let budget = match direction {
+                // * 🚩复合前向
+                Forward => {
+                    let task_truth: TruthValue = context
+                        .current_task()
+                        .get_()
+                        .as_judgement()
+                        .expect("前向推理要求「当前任务」必须有真值")
+                        .into();
+                    context.compound_forward(&task_truth, &inheritance)
+                }
+                // * 🚩复合反向
+                Backward => context.compound_backward(&inheritance),
+            };
+            // * 🚩结论 * //
+            // * 📝「真值」在「导出任务」时（从「当前任务」）自动生成
+            context.single_premise_task_structural(inheritance, truth, budget);
+        }
+    }
+    // * 🚩内涵像⇒积/其它内涵像
+    else if let Some(image) = inh_subject.as_compound_type(IMAGE_INT_OPERATOR) {
+        let placeholder_index = image.get_placeholder_index();
+        // * 🚩一次多个：遍历所有可能的索引
+        for (i, component) in image.components.iter().cloned().enumerate() {
+            // * 🚩词项 * //
+            // * 🚩根据「链接索引」与「关系索引（占位符位置）」的关系决定「积/像」
+            let [new_subject, new_predicate] = match i == placeholder_index {
+                // * 🚩转换回「积」
+                true => [
+                    component,
+                    unwrap_or_return!(?Term::make_product(image, inh_predicate, i) => continue),
+                ],
+                // * 🚩更改位置
+                false => [
+                    unwrap_or_return!(?Term::make_image_int_from_image(image, inh_predicate, i) => continue),
+                    component.clone(),
+                ],
+            };
+            let inheritance =
+                unwrap_or_return!(?Term::make_inheritance(new_subject, new_predicate) => continue);
+            // * 🚩真值 * //
+            let truth = match direction {
+                Forward => Some(
+                    context
+                        .current_task()
+                        .get_()
+                        .as_judgement()
+                        .expect("前向推理要求「当前任务」必须有真值")
+                        .identity(),
+                ),
+                Backward => None,
+            };
+            // * 🚩预算 * //
+            let budget = match direction {
+                // * 🚩复合前向
+                Forward => {
+                    let task_truth: TruthValue = context
+                        .current_task()
+                        .get_()
+                        .as_judgement()
+                        .expect("前向推理要求「当前任务」必须有真值")
+                        .into();
+                    context.compound_forward(&task_truth, &inheritance)
+                }
+                // * 🚩复合反向
+                Backward => context.compound_backward(&inheritance),
+            };
+            // * 🚩结论 * //
+            // * 📝「真值」在「导出任务」时（从「当前任务」）自动生成
+            context.single_premise_task_structural(inheritance, truth, budget);
+        }
+    }
 }
 
+/// # 📄OpenNARS
+///
+/// Equivalent transformation between products and images when the predicate is a
+/// compound
+/// `{<P --> (*, S, M)>, S@(*, S, M)} |- <(\, P, _, M) --> S>`
+/// `{<S --> (/, P, _, M)>, P@(/, P, _, M)} |- <(*, S, M) --> P>`
+/// `{<S --> (/, P, _, M)>, M@(/, P, _, M)} |- <M --> (/, P, S, _)>`
 fn transform_predicate_product_image(
     inh_subject: &Term,
     inh_predicate: CompoundTermRef,
     context: &mut ReasonContextTransform,
 ) {
-    todo!()
+    use ReasonDirection::*;
+    // * 🚩预置变量
+    let direction = context.reason_direction();
+    // * 🚩积⇒外延像
+    if let Some(product) = inh_predicate.as_compound_type(PRODUCT_OPERATOR) {
+        // * 🚩一次多个：遍历所有可能的索引
+        for (i, new_predicate) in product.components.iter().cloned().enumerate() {
+            // * 🚩词项 * //
+            let new_subject = unwrap_or_return!(?Term::make_image_ext_from_product(product, inh_subject, i) => continue);
+            let inheritance =
+                unwrap_or_return!(?Term::make_inheritance(new_subject, new_predicate) => continue);
+            // * 🚩真值 * //
+            let truth = match direction {
+                Forward => Some(
+                    context
+                        .current_task()
+                        .get_()
+                        .as_judgement()
+                        .expect("前向推理要求「当前任务」必须有真值")
+                        .identity(),
+                ),
+                Backward => None,
+            };
+            // * 🚩预算 * //
+            let budget = match direction {
+                // * 🚩复合前向
+                Forward => {
+                    let task_truth: TruthValue = context
+                        .current_task()
+                        .get_()
+                        .as_judgement()
+                        .expect("前向推理要求「当前任务」必须有真值")
+                        .into();
+                    context.compound_forward(&task_truth, &inheritance)
+                }
+                // * 🚩复合反向
+                Backward => context.compound_backward(&inheritance),
+            };
+            // * 🚩结论 * //
+            // * 📝「真值」在「导出任务」时（从「当前任务」）自动生成
+            context.single_premise_task_structural(inheritance, truth, budget);
+        }
+    }
+    // * 🚩外延像⇒积/其它外延像
+    else if let Some(image) = inh_predicate.as_compound_type(IMAGE_EXT_OPERATOR) {
+        let placeholder_index = image.get_placeholder_index();
+        // * 🚩一次多个：遍历所有可能的索引
+        for (i, component) in image.components.iter().cloned().enumerate() {
+            // * 🚩词项 * //
+            // * 🚩根据「链接索引」与「关系索引（占位符位置）」的关系决定「积/像」
+            let [new_subject, new_predicate] = match i == placeholder_index {
+                // * 🚩转换回「积」
+                true => [
+                    unwrap_or_return!(?Term::make_product(image, inh_subject, i) => continue),
+                    component,
+                ],
+                // * 🚩更改位置
+                false => [
+                    component.clone(),
+                    unwrap_or_return!(?Term::make_image_ext_from_image(image, inh_subject, i) => continue),
+                ],
+            };
+            let inheritance =
+                unwrap_or_return!(?Term::make_inheritance(new_subject, new_predicate) => continue);
+            // * 🚩真值 * //
+            let truth = match direction {
+                Forward => Some(
+                    context
+                        .current_task()
+                        .get_()
+                        .as_judgement()
+                        .expect("前向推理要求「当前任务」必须有真值")
+                        .identity(),
+                ),
+                Backward => None,
+            };
+            // * 🚩预算 * //
+            let budget = match direction {
+                // * 🚩复合前向
+                Forward => {
+                    let task_truth: TruthValue = context
+                        .current_task()
+                        .get_()
+                        .as_judgement()
+                        .expect("前向推理要求「当前任务」必须有真值")
+                        .into();
+                    context.compound_forward(&task_truth, &inheritance)
+                }
+                // * 🚩复合反向
+                Backward => context.compound_backward(&inheritance),
+            };
+            // * 🚩结论 * //
+            // * 📝「真值」在「导出任务」时（从「当前任务」）自动生成
+            context.single_premise_task_structural(inheritance, truth, budget);
+        }
+    }
 }
