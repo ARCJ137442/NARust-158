@@ -138,6 +138,11 @@ impl BagItemTable // * 需要在「具体值匹配删除」时用到
     pub fn get_mut(&mut self, level: usize) -> &mut BagItemLevel {
         &mut self.0[level]
     }
+
+    /// 映射中所有元素的数量
+    pub fn count(&self) -> usize {
+        self.0.iter().map(BagItemLevel::size).sum()
+    }
 }
 
 /// 实现一个「层级队列」
@@ -165,7 +170,12 @@ impl BagItemLevel // * 需要在「具体值匹配删除」时用到
     /// 模拟`LinkedList.add`
     /// * ❓不能引入一个新的元素，因为它所有权在「元素映射」里边
     /// * 🚩【2024-04-28 10:38:45】目前直接索引「键」而非「值」
+    /// * 📌【2024-07-09 02:29:01】在调试阶段增加「不重复」断言
     pub fn add(&mut self, key: String) {
+        debug_assert!(
+            self.0.iter().all(|k| k != &key),
+            "不允许添加重复值：key={key}, self={self:?}"
+        );
         self.0.push_back(key)
     }
 

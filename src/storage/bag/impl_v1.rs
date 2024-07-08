@@ -447,6 +447,7 @@ impl<E: Item> Bag<E> {
         } else {
             return true;
         } */
+        self.assert_count_consistent();
 
         // 置入「元素映射」
         let new_key = new_item.key().clone();
@@ -480,11 +481,13 @@ impl<E: Item> Bag<E> {
             // * 🚩若与自身相同⇒返回`Some`，添加失败
             // * 🚩若与自身不同⇒返回`None`，添加仍然成功
             let overflow_item = self.item_map.remove_item(&overflow_key);
+            self.assert_count_consistent();
             match overflow_key == new_key {
                 true => overflow_item,
                 false => None, // ! 此时将抛掉溢出的元素
             }
         } else {
+            self.assert_count_consistent();
             None
         }
     }
@@ -503,6 +506,7 @@ impl<E: Item> Bag<E> {
     /// @return Whether the new Item is added into the Bag
     #[must_use]
     pub fn put_back(&mut self, mut old_item: E) -> Option<E> {
+        self.assert_count_consistent();
         self.forget(&mut old_item);
         self.put_in(old_item)
     }
@@ -551,16 +555,19 @@ impl<E: Item> Bag<E> {
         nameTable.remove(selected.getKey());
         refresh();
         return selected; */
+        self.assert_count_consistent();
         if self.item_map.is_empty() {
             return None;
         }
         let level = self.select_next_level_for_take();
         let selected_key = self.take_out_first(level);
         // * 此处需要对内部可能有的「元素id」进行转换
-        match selected_key {
+        let overflowed = match selected_key {
             Some(key) => self.item_map.remove_item(&key),
             None => None,
-        }
+        };
+        self.assert_count_consistent();
+        overflowed
     }
 
     /// 为[`Self::take_out`]选择下一个要被取走的level
@@ -603,6 +610,7 @@ impl<E: Item> Bag<E> {
         return picked; */
         let name_value = self.item_map.remove(key)?;
         self.item_out_of_base(&name_value);
+        self.assert_count_consistent();
         Some(name_value.0)
     }
 
@@ -752,6 +760,22 @@ impl<E: Item> Bag<E> {
             .get_mut(*level)
             .remove_element(old_item.key());
         self.mass -= level + 1;
+    }
+
+    /// 检查其数目一致性
+    /// * 🎯检查「物品映射」与「层级映射」元素数目的一致性
+    #[inline(always)]
+    fn assert_count_consistent(&self) {
+        // 📌仅在「debug断言」时开启
+        // * 📝编译时若为否，则会自动内联并丢弃
+        if cfg!(debug_assertions) {
+            let l_count = self.level_map.count();
+            let n_count = self.size();
+            assert_eq!(
+                l_count, n_count,
+                "层级映射与物品映射数目不一致: {l_count} != {n_count}",
+            );
+        }
     }
 
     /// 模拟`Bag.toString`
