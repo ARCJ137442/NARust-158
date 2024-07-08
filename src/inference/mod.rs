@@ -58,6 +58,7 @@ pub mod test {
         vm::{Launcher, Runtime},
     };
     use nar_dev_utils::list;
+    use narsese::api::GetTerm;
     use navm::{
         cmd::Cmd,
         output::Output,
@@ -105,9 +106,16 @@ pub mod test {
         fetch_outputs(vm)
     }
 
+    /// 打印输出（基本格式）
     pub fn print_outputs<'a>(outs: impl IntoIterator<Item = &'a Output>) {
-        outs.into_iter()
-            .for_each(|output| println!("{}", output.to_json_string()))
+        outs.into_iter().for_each(|output| {
+            println!(
+                "[{}] {} as narsese {:?}",
+                output.type_name(),
+                output.get_content(),
+                output.get_narsese()
+            )
+        })
     }
 
     /// 预期输出
@@ -118,6 +126,19 @@ pub mod test {
         outputs
             .into_iter()
             .find(|&output| expect(output))
+            .expect("没有找到期望的输出")
+    }
+
+    /// 预期输出包含
+    /// * 🚩精确匹配指定类型的Narsese**词项**
+    pub fn expect_outputs_contains<'a>(
+        outputs: impl IntoIterator<Item = &'a Output>,
+        expected: impl Into<narsese::lexical::Term>,
+    ) -> &'a Output {
+        let expected = expected.into();
+        outputs
+            .into_iter()
+            .find(|&output| matches!(output.get_narsese().map(GetTerm::get_term), Some(term) if *term == expected) )
             .expect("没有找到期望的输出")
     }
 

@@ -462,3 +462,69 @@ fn transform_predicate_product_image(
         }
     }
 }
+
+/// 单元测试
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::inference::{process_direct, test::*, InferenceEngine};
+    use narsese::lexical_nse_term;
+
+    const ENGINE: InferenceEngine = InferenceEngine::new(
+        process_direct,
+        transform_task,
+        InferenceEngine::ECHO.matching_f(),
+        InferenceEngine::ECHO.reason_f(),
+    );
+
+    /// 基础转换推理
+    #[test]
+    fn transform_basic() {
+        let mut vm = create_vm_from_engine(ENGINE);
+        // * 🚩输入指令并拉取输出
+        let outs = input_cmds_and_fetch_out(
+            &mut vm,
+            "
+            nse <(*, A, B) --> R>.
+            cyc 10
+            ",
+        );
+        // * 🚩打印输出
+        print_outputs(&outs);
+        // * 🚩检查其中是否有结论
+        expect_outputs_contains(&outs, lexical_nse_term!("<A --> (/, R, _, B)>"));
+        expect_outputs_contains(&outs, lexical_nse_term!("<B --> (/, R, A, _)>"));
+
+        // * 🚩输入指令并拉取输出
+        let outs = input_cmds_and_fetch_out(
+            &mut vm,
+            "
+            res
+            nse <S --> (*, C, D)>.
+            cyc 10
+            ",
+        );
+        // * 🚩打印输出
+        print_outputs(&outs);
+        // * 🚩检查其中是否有结论
+        expect_outputs_contains(&outs, lexical_nse_term!("<(/, S, _, D) --> C>"));
+        expect_outputs_contains(&outs, lexical_nse_term!("<(/, S, C, _) --> D>"));
+    }
+
+    /// 稳定性
+    #[test]
+    fn stability() {
+        let mut vm = create_vm_from_engine(ENGINE);
+        // * 🚩输入指令并拉取输出
+        let outs = input_cmds_and_fetch_out(
+            &mut vm,
+            "
+            nse <(*, A, B) --> R>.
+            nse <S --> (*, C, D)>.
+            cyc 1000
+            ",
+        );
+        // * 🚩打印输出
+        print_outputs(&outs);
+    }
+}
