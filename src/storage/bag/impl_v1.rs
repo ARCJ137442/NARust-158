@@ -691,10 +691,10 @@ impl<E: Item> Bag<E> {
         // 🆕先假设「新元素已被置入」，「先加后减」防止usize溢出
         self.mass += in_level + 1;
         if self.size() > self.capacity() {
-            // * 📝逻辑：低优先级溢出——从低到高找到「第一个空的层」然后弹出其中第一个（最先的）元素
+            // * 📝逻辑：低优先级溢出——从低到高找到「第一个非空层」然后弹出其中第一个（最先的）元素
             // * 🚩【2024-05-04 13:14:02】实际上与Java代码等同；但若直接按源码来做就会越界
             let out_level = (0..Self::__TOTAL_LEVEL)
-                .find(|level| self.empty_level(*level))
+                .find(|level| !self.empty_level(*level))
                 .unwrap_or(Self::__TOTAL_LEVEL);
             if out_level > in_level {
                 // 若到了自身所在层⇒弹出自身（相当于「添加失败」）
