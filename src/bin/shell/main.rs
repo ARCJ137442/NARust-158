@@ -2,7 +2,11 @@ use std::io::{stdout, Write};
 
 use anyhow::Result;
 use narsese::conversion::string::impl_lexical::format_instances::FORMAT_ASCII;
-use narust_158::{control::DEFAULT_PARAMETERS, inference::InferenceEngine, vm::Launcher};
+use narust_158::{
+    control::DEFAULT_PARAMETERS,
+    inference::{match_task_and_belief, process_direct, transform_task, InferenceEngine},
+    vm::Launcher,
+};
 use navm::{
     cmd::Cmd,
     output::Output,
@@ -17,8 +21,19 @@ pub fn launcher_echo() -> impl VmLauncher {
     Launcher::new("nar_158", DEFAULT_PARAMETERS, InferenceEngine::ECHO)
 }
 
+pub fn launcher_dev() -> impl VmLauncher {
+    // * 🚩【2024-07-09 16:52:40】目前除了「概念推理」均俱全
+    const ENGINE: InferenceEngine = InferenceEngine::new(
+        process_direct,
+        transform_task,
+        match_task_and_belief,
+        InferenceEngine::ECHO.reason_f(),
+    );
+    Launcher::new("nar_158", DEFAULT_PARAMETERS, ENGINE)
+}
+
 fn create_runtime() -> Result<impl VmRuntime> {
-    let vm = launcher_echo();
+    let vm = launcher_dev();
     vm.launch()
 }
 
@@ -212,7 +227,7 @@ mod tests {
             nse <(&/,<$1 --> [pliable]>,(^reshape,{SELF},$1)) =/> <$1 --> [hardened]>>.
             nse <<$1 --> [hardened]> =|> <$1 --> [unscrewing]>>.
             nse (&&,<#1 --> object>,<#1 --> [unscrewing]>)!
-            cyc 20000"#,
+            cyc 2000"#,
         )
     }
 

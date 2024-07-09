@@ -219,7 +219,16 @@ impl Reasoner {
             // * 🚩音量：设置音量
             Cmd::VOL(volume) => self.silence_value = volume,
             // Cmd::REG { name } => (),
-            // Cmd::INF { source } => (),
+            Cmd::INF { source } => match source.to_lowercase().as_str() {
+                // * 🚩普通信息查询
+                "memory" => self.report_info(format!("memory: {:?}", self.memory)),
+                "reasoner" => self.report_info(format!("reasoner: {self:?}")),
+                // * 🚩具有缩进层级 更详尽的信息
+                "#memory" => self.report_info(format!("memory:\n{:#?}", self.memory)),
+                "#reasoner" => self.report_info(format!("reasoner:\n{self:#?}")),
+                // * 🚩其它⇒告警
+                other => self.report_error(format!("unknown info query: {other:?}")),
+            },
             // Cmd::HLP { name } => (),
             // * 🚩【2024-05-13 12:21:37】注释：不做任何事情
             Cmd::REM { .. } => (),
