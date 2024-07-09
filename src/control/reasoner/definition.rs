@@ -7,6 +7,7 @@
 use super::{ReasonRecorder, ReasonerChannels, ReasonerDerivationData};
 use crate::{control::Parameters, global::ClockTime, inference::InferenceEngine, storage::Memory};
 use navm::output::Output;
+use rand::{rngs::StdRng, SeedableRng};
 use std::fmt::Debug;
 
 // ! ❌【2024-06-27 18:01:23】不复刻静态常量`Reasoner.DEBUG`
@@ -53,6 +54,11 @@ pub struct Reasoner {
 
     /// 时间戳序列号（递增序列号）
     pub(in super::super) stamp_current_serial: ClockTime,
+
+    /// shuffle用随机生成器
+    /// * 🚩【2024-07-10 00:27:04】不应设置为全局变量：推理器之间不应共享数据
+    /// * 🎯让推理结果可重复（而非随进程变化）
+    pub(in super::super) shuffle_rng: StdRng,
 }
 
 /// 构造函数
@@ -77,7 +83,13 @@ impl Reasoner {
             timer: 0,
             silence_value: 0,
             stamp_current_serial: 0,
+            // * 🚩统一的随机数生成器
+            shuffle_rng: Self::new_shuffle_rng(),
         }
+    }
+
+    fn new_shuffle_rng() -> StdRng {
+        StdRng::seed_from_u64(0x137442)
     }
 }
 

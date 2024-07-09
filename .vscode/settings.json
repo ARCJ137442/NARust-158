@@ -10,6 +10,8 @@
         "nogui",
         "powf",
         "powi",
+        "rngs",
+        "Seedable",
         "thiserror",
         "Tweety"
     ]

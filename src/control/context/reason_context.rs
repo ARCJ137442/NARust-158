@@ -17,6 +17,7 @@ use crate::{
     util::RefCount,
 };
 use navm::output::Output;
+use rand::RngCore;
 use std::ops::{Deref, DerefMut};
 
 /// 🆕新的「推理上下文」对象
@@ -51,6 +52,11 @@ pub trait ReasonContext {
     /// * ️📝可空性：非空
     /// * 📝可变性：只读
     fn silence_percent(&self) -> Float;
+
+    /// 获取「打乱用随机数生成器」
+    fn shuffle_rng_seed(&mut self) -> u64 {
+        self.reasoner_mut().shuffle_rng.next_u64()
+    }
 
     /// 复刻自改版`DerivationContext.noNewTask`
     /// * 🚩语义改为「是否有新任务」
@@ -363,7 +369,7 @@ macro_rules! __delegate_from_core {
         fn reasoner(&self) -> &Reasoner {
             &self.core.reasoner
         }
-        
+
         fn reasoner_mut(&mut self) -> &mut Reasoner {
             &mut self.core.reasoner
         }

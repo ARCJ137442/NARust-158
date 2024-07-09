@@ -3,14 +3,13 @@
 //!
 //! ! ⚠️【2024-06-19 23:01:30】此处有关「变量处理」的逻辑尚未稳定：
 //!   * 🚧有待在OpenNARS改版中「函数式改造」
-// TODO: 【2024-06-20 22:24:43】🚧有待在OpenNARS改版中「函数式改造」
-#![allow(unused)]
 
 use crate::{
     io::symbols::*,
     language::{CompoundTermRef, CompoundTermRefMut, Term, TermComponents},
 };
-use nar_dev_utils::{matches_or, void};
+use nar_dev_utils::void;
+use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
 use std::collections::HashMap;
 
 /// 用于表示「变量替换」的字典
@@ -181,7 +180,12 @@ impl CompoundTermRefMut<'_> {
 /// `unify`的前半部分
 /// * 🎯复用「二词项」和「四词项」，兼容借用规则
 /// * 🚩从「将要被统一的词项」中计算出「变量替换映射」
-fn unify_find(var_type: &str, to_be_unified_1: &Term, to_be_unified_2: &Term) -> Unification {
+fn unify_find(
+    var_type: &str,
+    to_be_unified_1: &Term,
+    to_be_unified_2: &Term,
+    shuffle_rng_seed: u64,
+) -> Unification {
     let mut substitution_1 = VarSubstitution::new();
     let mut substitution_2 = VarSubstitution::new();
     let has_substitute = find_unification(
@@ -190,24 +194,52 @@ fn unify_find(var_type: &str, to_be_unified_1: &Term, to_be_unified_2: &Term) ->
         to_be_unified_2,
         &mut substitution_1,
         &mut substitution_2,
+        shuffle_rng_seed,
     );
     // 返回获取的映射，以及「是否有替换」
     Unification(has_substitute, substitution_1, substitution_2)
 }
 
 /// 【对外接口】统一独立变量
-pub fn unify_find_i(to_be_unified_1: &Term, to_be_unified_2: &Term) -> Unification {
-    unify_find(VAR_INDEPENDENT, to_be_unified_1, to_be_unified_2)
+pub fn unify_find_i(
+    to_be_unified_1: &Term,
+    to_be_unified_2: &Term,
+    shuffle_rng_seed: u64,
+) -> Unification {
+    unify_find(
+        VAR_INDEPENDENT,
+        to_be_unified_1,
+        to_be_unified_2,
+        shuffle_rng_seed,
+    )
 }
 
 /// 【对外接口】统一非独变量
-pub fn unify_find_d(to_be_unified_1: &Term, to_be_unified_2: &Term) -> Unification {
-    unify_find(VAR_DEPENDENT, to_be_unified_1, to_be_unified_2)
+pub fn unify_find_d(
+    to_be_unified_1: &Term,
+    to_be_unified_2: &Term,
+    shuffle_rng_seed: u64,
+) -> Unification {
+    unify_find(
+        VAR_DEPENDENT,
+        to_be_unified_1,
+        to_be_unified_2,
+        shuffle_rng_seed,
+    )
 }
 
 /// 【对外接口】统一查询变量
-pub fn unify_find_q(to_be_unified_1: &Term, to_be_unified_2: &Term) -> Unification {
-    unify_find(VAR_QUERY, to_be_unified_1, to_be_unified_2)
+pub fn unify_find_q(
+    to_be_unified_1: &Term,
+    to_be_unified_2: &Term,
+    shuffle_rng_seed: u64,
+) -> Unification {
+    unify_find(
+        VAR_QUERY,
+        to_be_unified_1,
+        to_be_unified_2,
+        shuffle_rng_seed,
+    )
 }
 
 /// 多值输出：寻找「归一替换」的中间结果
@@ -343,6 +375,7 @@ fn find_unification(
     to_be_unified_2: &Term,
     map_1: &mut VarSubstitution,
     map_2: &mut VarSubstitution,
+    shuffle_rng_seed: u64,
 ) -> bool {
     //==== 内用函数 ====//
 
@@ -389,7 +422,14 @@ fn find_unification(
             // * 🚩已有替换⇒直接使用已有替换（看子项有无替换） | 递归深入
             // already mapped
             if let Some(ref mapped) = map_1.get(var_1).cloned() {
-                return find_unification(var_type, mapped, to_be_unified_2, map_1, map_2);
+                return find_unification(
+                    var_type,
+                    mapped,
+                    to_be_unified_2,
+                    map_1,
+                    map_2,
+                    shuffle_rng_seed,
+                );
             }
             // not mapped yet
             // * 🚩生成一个外界输入中不可能的变量词项作为「匿名变量」
@@ -406,7 +446,14 @@ fn find_unification(
             // * 🚩已有替换⇒直接使用已有替换（看子项有无替换） | 递归深入
             // already mapped
             if let Some(ref mapped) = map_1.get(var_1).cloned() {
-                return find_unification(var_type, mapped, to_be_unified_2, map_1, map_2);
+                return find_unification(
+                    var_type,
+                    mapped,
+                    to_be_unified_2,
+                    map_1,
+                    map_2,
+                    shuffle_rng_seed,
+                );
             }
             // * 🚩建立映射：var1 -> term2 @ term1
             // elimination
@@ -423,7 +470,14 @@ fn find_unification(
             // * 🚩已有替换⇒直接使用已有替换（看子项有无替换） | 递归深入
             // already mapped
             if let Some(ref mapped) = map_2.get(var_2).cloned() {
-                return find_unification(var_type, to_be_unified_1, mapped, map_1, map_2);
+                return find_unification(
+                    var_type,
+                    to_be_unified_1,
+                    mapped,
+                    map_1,
+                    map_2,
+                    shuffle_rng_seed,
+                );
             }
             // not mapped yet
             // * 🚩[_1 x $2] 若非变量⇒尝试消元划归
@@ -453,10 +507,11 @@ fn find_unification(
                         return false;
                     }
                     // * 🚩复制词项列表 | 需要在「随机打乱」的同时不影响遍历
-                    let list = compound_1.clone_components();
+                    let mut list = compound_1.clone_components();
                     // * 🚩可交换⇒打乱 | 需要让算法（对两个词项）的时间复杂度为定值（O(n)而非O(n!)）
                     if compound_1.is_commutative() {
-                        eprintln!("// TODO: 后续引入rand库");
+                        let mut rng = StdRng::seed_from_u64(shuffle_rng_seed);
+                        list.shuffle(&mut rng);
                         // ! 边缘情况：   `<(*, $1, $2) --> [$1, $2]>` => `<(*, A, A) --> [A]>`
                         // ! 边缘情况：   `<<A --> [$1, $2]> ==> <A --> (*, $1, $2)>>`
                         // ! 　　　　　+  `<A --> [B, C]>` |- `<A --> (*, B, C)>`✅
@@ -466,7 +521,14 @@ fn find_unification(
                     for (inner1, inner2) in list.iter().zip(compound_2.components.iter()) {
                         // assuming matching order
                         // * 🚩对每个子项寻找替换 | 复用已有映射表
-                        if !find_unification(var_type, inner1, inner2, map_1, map_2) {
+                        if !find_unification(
+                            var_type,
+                            inner1,
+                            inner2,
+                            map_1,
+                            map_2,
+                            shuffle_rng_seed,
+                        ) {
                             return false;
                         }
                     }
@@ -493,7 +555,12 @@ fn find_unification(
 ///  @param term1 The first term to be unified
 ///  @param term2 The second term to be unified
 ///  @return Whether there is a substitution
-fn has_unification(var_type: &str, to_be_unified_1: &Term, to_be_unified_2: &Term) -> bool {
+fn has_unification(
+    var_type: &str,
+    to_be_unified_1: &Term,
+    to_be_unified_2: &Term,
+    shuffle_rng_seed: u64,
+) -> bool {
     // 📄 `return findSubstitute(type, term1, term2, new HashMap<Term, Term>(), new HashMap<Term, Term>());`
     find_unification(
         var_type,
@@ -502,21 +569,49 @@ fn has_unification(var_type: &str, to_be_unified_1: &Term, to_be_unified_2: &Ter
         // 创建一个临时的「变量替换映射」
         &mut VarSubstitution::new(),
         &mut VarSubstitution::new(),
+        shuffle_rng_seed,
     )
 }
 /// 🆕【对外接口】查找独立变量归一方式
-pub fn has_unification_i(to_be_unified_1: &Term, to_be_unified_2: &Term) -> bool {
-    has_unification(VAR_INDEPENDENT, to_be_unified_1, to_be_unified_2)
+pub fn has_unification_i(
+    to_be_unified_1: &Term,
+    to_be_unified_2: &Term,
+    shuffle_rng_seed: u64,
+) -> bool {
+    has_unification(
+        VAR_INDEPENDENT,
+        to_be_unified_1,
+        to_be_unified_2,
+        shuffle_rng_seed,
+    )
 }
 
 /// 🆕【对外接口】查找非独变量归一方式
-pub fn has_unification_d(to_be_unified_1: &Term, to_be_unified_2: &Term) -> bool {
-    has_unification(VAR_DEPENDENT, to_be_unified_1, to_be_unified_2)
+pub fn has_unification_d(
+    to_be_unified_1: &Term,
+    to_be_unified_2: &Term,
+    shuffle_rng_seed: u64,
+) -> bool {
+    has_unification(
+        VAR_DEPENDENT,
+        to_be_unified_1,
+        to_be_unified_2,
+        shuffle_rng_seed,
+    )
 }
 
 /// 🆕【对外接口】查找查询变量归一方式
-pub fn has_unification_q(to_be_unified_1: &Term, to_be_unified_2: &Term) -> bool {
-    has_unification(VAR_QUERY, to_be_unified_1, to_be_unified_2)
+pub fn has_unification_q(
+    to_be_unified_1: &Term,
+    to_be_unified_2: &Term,
+    shuffle_rng_seed: u64,
+) -> bool {
+    has_unification(
+        VAR_QUERY,
+        to_be_unified_1,
+        to_be_unified_2,
+        shuffle_rng_seed,
+    )
 }
 
 #[cfg(test)]
@@ -583,15 +678,18 @@ mod tests {
     /// 测试 / unify_find | Unification::apply_to_term | Unification::apply_to
     #[test]
     fn unify() -> AResult {
+        let mut rng = StdRng::from_seed([0; 32]);
         fn test(
             mut term1: Term,
             mut term2: Term,
             var_type: &str,
             expected_1: Term,
             expected_2: Term,
+            shuffle_rng: &mut impl Rng,
         ) {
             print!("unify: {term1}, {term2} =={var_type}=> ",);
-            unify_find(var_type, &term1, &term2).apply_to_term(&mut term1, &mut term2);
+            unify_find(var_type, &term1, &term2, shuffle_rng.next_u64())
+                .apply_to_term(&mut term1, &mut term2);
             println!("{term1}, {term2}");
             assert_eq!(term1, expected_1);
             assert_eq!(term2, expected_2);
@@ -611,6 +709,7 @@ mod tests {
                         $var_type,
                         term!($substituted_str1),
                         term!($substituted_str2),
+                        &mut rng // 用上预置的随机生成器
                     );
                 )*
             }
@@ -639,9 +738,9 @@ mod tests {
 
             // 多元复合词项（有序）：按顺序匹配 //
             "(*, $c, $b, $a)", "(*, (--, C), <B1 --> B2>, A)" => "$" => "(*, (--, C), <B1 --> B2>, A)", "(*, (--, C), <B1 --> B2>, A)"
-               "<(&&, <A-->C>, <B-->$2>) ==> <C-->$2>>", "<(&&, <A-->$1>, <B-->D>) ==> <$1-->D>>"
+               "<(*, <A-->C>, <B-->$2>) ==> <C-->$2>>", "<(*, <A-->$1>, <B-->D>) ==> <$1-->D>>"
             => "$"
-            => "<(&&, <A-->C>, <B-->D>) ==> <C-->D>>", "<(&&, <A-->C>, <B-->D>) ==> <C-->D>>"
+            => "<(*, <A-->C>, <B-->D>) ==> <C-->D>>", "<(*, <A-->C>, <B-->D>) ==> <C-->D>>"
 
             // 无序词项 | ⚠️【2024-04-22 12:38:38】对于无序词项的「模式匹配」需要进一步商酌 //
             "{$c}", "{中心点}" => "$" => "{中心点}", "{中心点}" // 平凡情况
@@ -710,7 +809,7 @@ mod tests {
             // 不同变量类型，数值不会重复
             "(*, $A, #A, ?A)" => "(*, $1, #2, ?3)"
             // 复合词项：递归深入
-            "(&&, A, $B, [C, #D])" => "(&&, A, $1, [C, #2])"
+            "(*, A, $B, [C, #D])" => "(*, A, $1, [C, #2])"
             "<(--, (--, (--, (--, (--, (--, (--, (--, A)))))))) --> (/, (-, ?B, C), _, (/, (/, (/, (/, (/, #D, _), _), _), _), _))>" => "<(--, (--, (--, (--, (--, (--, (--, (--, A)))))))) --> (/, (-, ?1, C), _, (/, (/, (/, (/, (/, #2, _), _), _), _), _))>"
             "<<A --> $B> ==> <#C --> D>>" => "<<A --> $1> ==> <#2 --> D>>"
             "<<A --> #B> ==> <$B --> D>>" => "<<A --> #1> ==> <$2 --> D>>"
@@ -720,5 +819,19 @@ mod tests {
             "(*, (*, $A, $A, $A), (*, $A, $A, $A), (*, $A, $A, $A))" => "(*, (*, $1, $1, $1), (*, $1, $1, $1), (*, $1, $1, $1))"
         }
         ok!()
+    }
+
+    use rand::rngs::StdRng;
+    use rand::seq::SliceRandom;
+    use rand::{Rng, SeedableRng};
+    #[test]
+    fn t() {
+        let mut rng = StdRng::from_seed([0; 32]);
+        let a0 = [0, 1, 2];
+        for _ in 0..100 {
+            let mut a = a0;
+            a.shuffle(&mut rng);
+            println!("{a0:?} => {a:?}");
+        }
     }
 }

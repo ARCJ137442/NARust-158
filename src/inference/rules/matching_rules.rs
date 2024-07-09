@@ -25,6 +25,7 @@ use nar_dev_utils::unwrap_or_return;
 /// The task and belief have the same content
 pub fn match_task_and_belief(context: &mut ReasonContextConcept) {
     // * 🚩保证提取出「当前信念」
+    let shuffle_rng_seed = context.shuffle_rng_seed(); // 提前生成随机种子
     let current_belief = unwrap_or_return!(?context.current_belief());
     let current_task_rc = context.current_task();
     let current_task = current_task_rc.get_();
@@ -59,8 +60,11 @@ pub fn match_task_and_belief(context: &mut ReasonContextConcept) {
             // * 📄Task :: SentenceV1@49 "<{?1} --> murder>? {105 : 6} "
             // * & Belief: SentenceV1@39 "<{tom} --> murder>. %1.0000;0.7290% {147 : 3;4;2}"
             // * ⇒ Unified SentenceV1@23 "<{tom} --> murder>? {105 : 6} "
-            let has_unified =
-                variable_process::has_unification_q(question.content(), current_belief.content());
+            let has_unified = variable_process::has_unification_q(
+                question.content(),
+                current_belief.content(),
+                shuffle_rng_seed,
+            );
             // * ⚠️只针对「特殊疑问」：传入的只有「带变量问题」，因为「一般疑问」通过直接推理就完成了
             if has_unified {
                 // * 🚩此时「当前任务」「当前信念」仍然没变
