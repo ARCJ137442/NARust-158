@@ -130,6 +130,7 @@ fn process_question(context: &mut ReasonContextDirect) {
 
     // * 🚩尝试寻找已有问题，若已有相同问题则直接处理已有问题
     let existed_question = find_existed_question(this, question_task_ref.content());
+    let is_new_question = existed_question.is_none();
     let mut question = existed_question.unwrap_or(&question_task).clone_(); // ! 拷贝以避免借用问题
 
     // * 🚩实际上「先找答案，再新增『问题任务』」区别不大——找答案的时候，不会用到「问题任务」
@@ -148,13 +149,14 @@ fn process_question(context: &mut ReasonContextDirect) {
         drop(question_task_ref);
     }
     // * 🚩新增问题
-    let this = context.core.current_concept_mut();
-    let overflowed_question = this.add_question(question_task);
-    if let Some(task) = overflowed_question {
-        context.report_comment(format!(
-            "!!! Overflowed Question Task: {}",
-            task.get_().to_display_long()
-        ));
+    if is_new_question {
+        let overflowed_question = context.current_concept_mut().add_question(question_task);
+        if let Some(task) = overflowed_question {
+            context.report_comment(format!(
+                "!!! Overflowed Question Task: {}",
+                task.get_().to_display_long()
+            ));
+        }
     }
 }
 

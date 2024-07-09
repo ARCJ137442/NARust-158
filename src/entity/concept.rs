@@ -73,7 +73,17 @@ impl Concept {
         let beliefs = ArrayRankTable::new(
             PARAMETERS.maximum_belief_length,
             BudgetValue::rank_belief, // * 📌作为「预算函数」的「预算值」
-            Self::belief_compatible_to_add,
+            {
+                /// 信念适合添加的条件：不能等价
+                fn belief_compatible_to_add(
+                    incoming: &impl Judgement,
+                    existed: &impl Judgement,
+                ) -> bool {
+                    // * 📌【2024-07-09 17:13:29】debug：应该是「不等价⇒可兼容」
+                    !incoming.is_belief_equivalent(existed)
+                }
+                belief_compatible_to_add
+            },
         );
         let task_links = Bag::new(task_link_forgetting_rate, PARAMETERS.task_link_bag_size);
         let term_links = Bag::new(term_link_forgetting_rate, PARAMETERS.term_link_bag_size);
@@ -86,10 +96,6 @@ impl Concept {
             questions,
             beliefs,
         }
-    }
-
-    fn belief_compatible_to_add(incoming: &impl Judgement, existed: &impl Judgement) -> bool {
-        incoming.is_belief_equivalent(existed)
     }
 
     /// 🆕对外接口：获取「当前信念表」
