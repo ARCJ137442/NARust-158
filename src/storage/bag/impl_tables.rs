@@ -8,7 +8,7 @@ use std::{
 
 /// 初代「元素映射」实现
 #[derive(Debug, Clone, PartialEq)]
-pub struct BagNameTable<E>(HashMap<String, NameValue<E>>);
+pub struct BagNameTable<E: Item>(HashMap<String, NameValue<E>>);
 
 /// 「元素映射」最终从「名称」映射到的结构
 /// * 🎯允许「一个键对多个值」
@@ -16,14 +16,27 @@ pub struct BagNameTable<E>(HashMap<String, NameValue<E>>);
 ///   * ⚠️不允许外部调用者随意通过「修改物品优先级」变更「所在层级信息」
 pub type NameValue<E> = (E, usize);
 
-impl<E> BagNameTable<E> {
+impl<E: Item> BagNameTable<E> {
     pub fn new() -> Self {
         Self(HashMap::new())
+    }
+
+    /// debug: 在不实现[`Debug`]的情况下通过`to_display`呈递调试用信息
+    pub(super) fn debug_display(&self) -> String {
+        format!(
+            "BagNameTable(len={}) {{\n{}\n}}",
+            self.0.len(),
+            self.0
+                .iter()
+                .map(|(k, (v, l))| format!("{k:?}: ({:?}, {l:?})", v.to_display()))
+                .collect::<Vec<_>>()
+                .join("\n")
+        )
     }
 }
 
 /// 默认构造空映射
-impl<E> Default for BagNameTable<E> {
+impl<E: Item> Default for BagNameTable<E> {
     fn default() -> Self {
         Self::new()
     }
@@ -88,6 +101,12 @@ impl<E: Item> BagNameTable<E> {
     pub fn is_empty(&self) -> bool {
         self.size() == 0
     }
+
+    /// 从0到「层数」遍历所有元素
+    /// * 🎯调试用输出
+    pub(super) fn iter(&self) -> impl Iterator<Item = (&String, &NameValue<E>)> {
+        self.0.iter()
+    }
 }
 
 /// 初代「层级映射」实现
@@ -105,13 +124,17 @@ impl Debug for BagItemTable {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // 默认做法
         // f.debug_list().entries(self.0.iter()).finish()
-        let mut debug_struct = f.debug_struct(std::any::type_name::<Self>());
-        for (i, level) in self.0.iter().enumerate() {
-            if !level.is_empty() {
-                debug_struct.field(&format!("level_{i} ({})", level.size()), &level);
+        if self.0.is_empty() {
+            write!(f, "BagItemTable([])")
+        } else {
+            let mut debug_struct = f.debug_struct(std::any::type_name::<Self>());
+            for (i, level) in self.0.iter().enumerate() {
+                if !level.is_empty() {
+                    debug_struct.field(&format!("level_{i} ({})", level.size()), &level);
+                }
             }
+            debug_struct.finish()
         }
-        debug_struct.finish()
     }
 }
 
@@ -143,6 +166,26 @@ impl BagItemTable // * 需要在「具体值匹配删除」时用到
     pub fn count(&self) -> usize {
         self.0.iter().map(BagItemLevel::size).sum()
     }
+
+    /// 从0到「层数」遍历所有层级
+    /// * 🎯调试用输出
+    pub(super) fn iter(&self) -> impl Iterator<Item = &BagItemLevel> {
+        self.0.iter()
+    }
+
+    /// 移除一个元素，无论其所在层级为何
+    /// * 🎯【2024-07-09 16:33:19】解决「在外部修改优先级后，重新加入导致『重复引用』」的问题
+    ///   * 📄原bug情况：变更层级后，删除元素结果没有删除完（因为在其它层级）
+    pub fn remove_element(&mut self, key: &str) {
+        for level in self.0.iter_mut() {
+            for i in (0..level.size()).rev() {
+                let item_key = &level.0[i];
+                if item_key == key {
+                    level.0.remove(i);
+                }
+            }
+        }
+    }
 }
 
 /// 实现一个「层级队列」
@@ -156,6 +199,7 @@ impl BagItemLevel // * 需要在「具体值匹配删除」时用到
     pub fn new() -> Self {
         Self(VecDeque::new())
     }
+
     /// 模拟`LinkedList.size`
     pub fn size(&self) -> usize {
         self.0.len()
@@ -198,11 +242,9 @@ impl BagItemLevel // * 需要在「具体值匹配删除」时用到
         self.0.pop_front();
     }
 
-    /// 模拟`LinkedList.remove`
-    /// * 🚩【2024-06-22 16:16:37】避免和实现者的[`VecDeque::remove`]冲突
-    pub fn remove_element(&mut self, key: &str) {
-        if let Some(index) = self.0.iter().position(|k| k == key) {
-            self.0.remove(index);
-        }
+    /// 从0到「层数」遍历所有元素
+    /// * 🎯调试用输出
+    pub(super) fn iter(&self) -> impl DoubleEndedIterator<Item = &String> {
+        self.0.iter()
     }
 }
