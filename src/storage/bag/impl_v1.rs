@@ -1,9 +1,6 @@
 //! 🎯复刻OpenNARS `nars.entity.Bag`
 
-use super::{
-    BagItemLevel, BagItemTable, BagItemTableV1, BagNameTable, BagNameTableV1, Distribute,
-    Distributor,
-};
+use super::{BagItemTable, BagNameTable, Distribute, Distributor, NameValue};
 use crate::{
     control::DEFAULT_PARAMETERS,
     entity::{Item, ShortFloat},
@@ -78,7 +75,7 @@ pub struct Bag<E: Item> {
     /// # 📄OpenNARS
     ///
     /// `mapping from key to item`
-    item_map: BagNameTableV1<E>,
+    item_map: BagNameTable<E>,
 
     /// 层级映射
     /// * 📝OpenNARS中主要用到的操作
@@ -96,7 +93,7 @@ pub struct Bag<E: Item> {
     /// # 📄OpenNARS
     ///
     /// array of lists of items, for items on different level
-    level_map: BagItemTableV1,
+    level_map: BagItemTable,
 
     /// 袋容量
     /// * 📌在不同地方有不同的定义
@@ -214,8 +211,8 @@ impl<E: Item> Bag<E> {
             // ? ❓【2024-05-04 12:32:58】因为上边这个不支持[`Default`]，所以就要写这些模板代码吗？
             // * 💭以及，这个`new`究竟要不要照抄OpenNARS的「先创建全空属性⇒再全部init初始化」特性
             //   * 毕竟Rust没有`null`要担心
-            item_map: BagNameTableV1::default(),
-            level_map: BagItemTableV1::default(),
+            item_map: BagNameTable::default(),
+            level_map: BagItemTable::default(),
             mass: usize::default(),
             level_index: usize::default(),
             current_level: usize::default(),
@@ -323,11 +320,11 @@ impl<E: Item> Bag<E> {
         levelIndex = capacity % TOTAL_LEVEL; // so that different bags start at different point
         mass = 0;
         currentCounter = 0; */
-        self.level_map = BagItemTableV1::new(Self::__TOTAL_LEVEL);
+        self.level_map = BagItemTable::new(Self::__TOTAL_LEVEL);
         for level in 0..Self::__TOTAL_LEVEL {
             self.level_map.add_new(level);
         }
-        self.item_map = BagNameTableV1::new();
+        self.item_map = BagNameTable::new();
         self.current_level = Self::__TOTAL_LEVEL - 1;
         self.level_index = self.capacity() % Self::__TOTAL_LEVEL; // 不同的「袋」在分派器中有不同的起点
         self.mass = 0;
@@ -402,7 +399,7 @@ impl<E: Item> Bag<E> {
     #[inline(always)]
     #[must_use]
     pub fn get(&self, key: &str) -> Option<&E> {
-        self.item_map.get(key)
+        self.item_map.get(key).map(|(e, _)| e)
     }
     /// [`Self::get`]的可变版本
     /// * 🎯【2024-04-28 09:08:14】备用
@@ -410,7 +407,7 @@ impl<E: Item> Bag<E> {
     #[inline(always)]
     #[must_use]
     pub fn get_mut(&mut self, key: &str) -> Option<&mut E> {
-        self.item_map.get_mut(key)
+        self.item_map.get_mut(key).map(|(e, _)| e)
     }
 
     /// 🆕提供「元素id是否对应值」的功能
@@ -450,15 +447,19 @@ impl<E: Item> Bag<E> {
         } else {
             return true;
         } */
+        self.assert_valid();
 
         // 置入「元素映射」
         let new_key = new_item.key().clone();
-        let old_item = self.item_map.put(&new_key, new_item);
+        let level = self.calculate_level_for_item(&new_item);
+        let old_item = self.item_map.put(&new_key, new_item, level);
 
         // 若在「元素映射」中重复了：有旧项⇒合并「重复了的新旧项」
-        if let Some(mut old_item) = old_item {
-            // 将旧项（的预算值）并入新项 | 🆕⚠️必须在前：`new_item`可变借用了`self`，而下一句中不能出现`new_item`
-            // new_item.merge(&old_item);
+        if let Some(old) = old_item {
+            // * 在「层级映射」移除旧项 | 🚩【2024-05-04 11:45:02】现在仍需使用「元素」，因为下层调用需要访问元素本身（预算值），并需避免过多的「按键取值」过程
+            self.item_out_of_base(&old);
+            let (mut old_item, _) = old;
+
             // * 🚩计算「合并顺序」
             let new_item = self.get(&new_key).unwrap(); // * 🚩🆕重新获取「置入后的新项」（⚠️一定有）
             let merge_order = (self.merge_order_f)(&old_item, new_item); // 此处调用函数指针，一定是不可变引用
@@ -470,8 +471,6 @@ impl<E: Item> Bag<E> {
                 OldToNew => new_item.merge_from(&old_item),
                 NewToOld => old_item.merge_from(new_item),
             }
-            // 在「层级映射」移除旧项 | 🚩【2024-05-04 11:45:02】现在仍需使用「元素」，因为下层调用需要访问元素本身（预算值），并需避免过多的「按键取值」过程
-            self.item_out_of_base(&old_item);
         }
 
         // 置入「层级映射」
@@ -481,12 +480,14 @@ impl<E: Item> Bag<E> {
             // 直接返回「根据『溢出的元素之id』在『元素映射』中移除」的结果
             // * 🚩若与自身相同⇒返回`Some`，添加失败
             // * 🚩若与自身不同⇒返回`None`，添加仍然成功
-            let overflow_item = self.item_map.remove(&overflow_key);
+            let overflow_item = self.item_map.remove_item(&overflow_key);
+            self.assert_valid();
             match overflow_key == new_key {
                 true => overflow_item,
                 false => None, // ! 此时将抛掉溢出的元素
             }
         } else {
+            self.assert_valid();
             None
         }
     }
@@ -505,6 +506,7 @@ impl<E: Item> Bag<E> {
     /// @return Whether the new Item is added into the Bag
     #[must_use]
     pub fn put_back(&mut self, mut old_item: E) -> Option<E> {
+        self.assert_valid();
         self.forget(&mut old_item);
         self.put_in(old_item)
     }
@@ -553,9 +555,24 @@ impl<E: Item> Bag<E> {
         nameTable.remove(selected.getKey());
         refresh();
         return selected; */
+        self.assert_valid();
         if self.item_map.is_empty() {
             return None;
         }
+        let level = self.select_next_level_for_take();
+        let selected_key = self.take_out_first(level);
+        // * 此处需要对内部可能有的「元素id」进行转换
+        let overflowed = match selected_key {
+            Some(key) => self.item_map.remove_item(&key),
+            None => None,
+        };
+        self.assert_valid();
+        overflowed
+    }
+
+    /// 为[`Self::take_out`]选择下一个要被取走的level
+    /// * 🚩计算并返回「下一个level值」
+    fn select_next_level_for_take(&mut self) -> usize {
         if self.empty_level(self.current_level) || (self.current_counter) == 0 {
             self.current_level = self.distributor.pick(self.level_index);
             self.level_index = self.distributor.next(self.level_index);
@@ -569,13 +586,8 @@ impl<E: Item> Bag<E> {
                 false => self.level_map.get(self.current_level).size(),
             };
         }
-        let selected_key = self.take_out_first(self.current_level);
         self.current_counter -= 1;
-        // * 此处需要对内部可能有的「元素id」进行转换
-        match selected_key {
-            Some(key) => self.item_map.remove(&key),
-            None => None,
-        }
+        self.current_level
     }
 
     /// 模拟`Bag.pickOut`
@@ -596,13 +608,10 @@ impl<E: Item> Bag<E> {
             nameTable.remove(key);
         }
         return picked; */
-        if self.item_map.has(key) {
-            let item = self.item_map.remove(key).unwrap(); // 此时一定有
-            self.item_out_of_base(&item);
-            Some(item)
-        } else {
-            None
-        }
+        let name_value = self.item_map.remove(key)?;
+        self.item_out_of_base(&name_value);
+        self.assert_valid();
+        Some(name_value.0)
     }
 
     /// 模拟`Bag.emptyLevel`
@@ -621,7 +630,9 @@ impl<E: Item> Bag<E> {
 
     /// 模拟`Bag.getLevel`
     /// * 📝Rust中[`usize`]无需考虑负值问题
-    /// *
+    /// * 🚩【2024-06-30 17:55:38】现更改计算方法：不能信任物品的「优先级」
+    ///   * ⚠️bug：可能物品在袋内变更了优先级，后续拿出时就会mass溢出
+    /// * 🆕只在[`Self::item_into_base`]中被调用
     ///
     /// # 📄OpenNARS
     ///
@@ -629,7 +640,8 @@ impl<E: Item> Bag<E> {
     ///
     /// @param item The Item to put in
     /// @return The put-in level
-    fn get_level(&self, item: &E) -> usize {
+    #[doc(alias = "level_from_item")]
+    fn calculate_level_for_item(&self, item: &E) -> usize {
         /* 📄OpenNARS源码：
         float fl = item.getPriority() * TOTAL_LEVEL;
         int level = (int) Math.ceil(fl) - 1;
@@ -679,18 +691,18 @@ impl<E: Item> Bag<E> {
         itemTable.get(inLevel).add(newItem); // FIFO
         mass += (inLevel + 1); // increase total mass
         refresh(); // refresh the window
-        return oldItem; // TODO return null is a bad smell */
+        return oldItem; */
         let new_item = self.get(new_key).expect("不能没有所要获取的值"); // * 🚩🆕（在调用方处）重新获取「置入后的新项」（⚠️一定有）
         let mut old_item = None;
-        let in_level = self.get_level(new_item);
+        let in_level = self.calculate_level_for_item(new_item);
 
         // 🆕先假设「新元素已被置入」，「先加后减」防止usize溢出
         self.mass += in_level + 1;
         if self.size() > self.capacity() {
-            // * 📝逻辑：低优先级溢出——从低到高找到「第一个空的层」然后弹出其中第一个（最先的）元素
+            // * 📝逻辑：低优先级溢出——从低到高找到「第一个非空层」然后弹出其中第一个（最先的）元素
             // * 🚩【2024-05-04 13:14:02】实际上与Java代码等同；但若直接按源码来做就会越界
             let out_level = (0..Self::__TOTAL_LEVEL)
-                .find(|level| self.empty_level(*level))
+                .find(|level| !self.empty_level(*level))
                 .unwrap_or(Self::__TOTAL_LEVEL);
             if out_level > in_level {
                 // 若到了自身所在层⇒弹出自身（相当于「添加失败」）
@@ -738,15 +750,67 @@ impl<E: Item> Bag<E> {
     /// Remove an item from itemTable, then adjust mass
     ///
     /// @param oldItem The Item to be removed
-    fn item_out_of_base(&mut self, old_item: &E) {
+    fn item_out_of_base(&mut self, (old_item, level): &NameValue<E>) {
         /* 📄OpenNARS源码：
         int level = getLevel(oldItem);
         itemTable.get(level).remove(oldItem);
         mass -= (level + 1);
         refresh(); */
-        let level = self.get_level(old_item);
-        self.level_map.get_mut(level).remove_element(old_item.key());
+        self.level_map.remove_element(old_item.key());
         self.mass -= level + 1;
+    }
+
+    fn debug_display(&self) -> String {
+        format!(
+            "level_map: \n{:?}\n\nitem_map: \n{}\n\nbag: \n{}",
+            self.level_map,
+            self.item_map.debug_display(),
+            self.bag_to_display(),
+        )
+    }
+
+    /// 总体检查：合法性自检
+    /// * 🎯应该仅在调试模式中启用
+    fn assert_valid(&self) {
+        // 📌仅在「debug断言」时开启
+        // * 📝编译时若为否，则会自动内联并丢弃
+        if cfg!(debug_assertions) {
+            self.assert_count_consistent();
+            self.assert_unique_level_map();
+        }
+    }
+
+    /// 检查其数目一致性
+    /// * 🎯检查「物品映射」与「层级映射」元素数目的一致性
+    /// * 🚩【2024-07-09 16:40:27】总是内联，以便编译器自动消除死代码
+    #[inline(always)]
+    fn assert_count_consistent(&self) {
+        let l_count = self.level_map.count();
+        let n_count = self.size();
+        assert_eq!(
+            l_count,
+            n_count,
+            "层级映射与物品映射数目不一致: {l_count} != {n_count}\n{}",
+            self.debug_display()
+        );
+    }
+
+    /// 检查其非重复性
+    /// * 🎯检查「层级映射」是否有「添加重复元素」的情形
+    /// * 🚩【2024-07-09 16:40:27】总是内联，以便编译器自动消除死代码
+    #[inline(always)]
+    fn assert_unique_level_map(&self) {
+        for (key, _) in self.item_map.iter() {
+            debug_assert!(
+                1 == self
+                    .level_map
+                    .iter()
+                    .map(|l| l.iter().filter(|k| *k == key).count())
+                    .sum::<usize>(),
+                "发现重复元素：{key}\nlevel_map: \n{}",
+                self.debug_display()
+            );
+        }
     }
 
     /// 模拟`Bag.toString`
@@ -770,18 +834,26 @@ impl<E: Item> Bag<E> {
         }
         return buf.toString(); */
         let mut buf = String::new();
-        for level in (0..Self::__TOTAL_LEVEL).rev() {
-            if self.empty_level(level) {
-                buf += "\n --- Level ";
-                buf += &level.to_string();
-                buf += ":\n ";
-                let level_size = self.level_map.get(level).size();
-                for i in 0..level_size {
-                    let key = self.level_map.get(level).get(i);
-                    if let Some(key) = key {
-                        let item = self.get(key).unwrap(); // ! 📌【2024-05-09 01:27:59】不可能没有
+        // * 🚩倒序遍历所有非空层
+        for level in (0..Self::__TOTAL_LEVEL)
+            .rev()
+            .filter(|&level| !self.empty_level(level))
+        {
+            buf += "\n --- Level ";
+            buf += &level.to_string();
+            buf += ":\n ";
+            let level_size = self.level_map.get(level).size();
+            for i in 0..level_size {
+                let key = self.level_map.get(level).get(i);
+                if let Some(key) = key {
+                    // ! 📌【2024-05-09 01:27:59】应该有
+                    if let Some(item) = self.get(key) {
                         buf += &item.to_display_brief();
                         buf += "\n "
+                    } else {
+                        // ! 异常情况
+                        // * 📝【2024-07-09 15:44:51】不应在显示呈现时panic，除非有十分把握
+                        buf += "!!!NONE@{key}!!!\n"
                     }
                 }
             }
@@ -855,7 +927,7 @@ mod tests {
             overflowed.is_none(), // 没有溢出
             bag.get(key1) == Some(&item1), // 放进「对应id位置」的就是原来的元素
             bag.size() == 1, // 放进了一个
-            bag.get_level(&item1) => 0, // 放进的是第0层（优先级为0.0）
+            bag.calculate_level_for_item(&item1) => 0, // 放进的是第0层（优先级为0.0）
             bag.empty_level(0) => false, // 放进的是第0层
             bag.mass() == 1, // 放进第0层，获得(0+1)的重量
         }
@@ -970,7 +1042,7 @@ mod tests {
                 overflowed.is_none(), // 没有溢出
                 bag.get(key) == Some(item), // 放进「对应id位置」的就是原来的元素
                 bag.size() == i + 1, // 放进了(i+1)个
-                bag.get_level(item) => expected_level(i), // 放进了指定层
+                bag.calculate_level_for_item(item) => expected_level(i), // 放进了指定层
                 bag.empty_level(expected_level(i)) => false, // 放进的是指定层
             }
         }
@@ -1082,6 +1154,66 @@ mod tests {
         println!("{}", bag.to_display_long());
 
         // 最终完成
+        ok!()
+    }
+
+    /// 测试/物品在袋内优先级变化
+    /// * ⚠️测试「袋内优先级发生变化，是否能正确被 挑出/拿出」
+    #[test]
+    fn modified_level_in_bag() -> AResult {
+        // 构造测试用「袋」
+        let mut bag = Bag1::new(1, 1);
+        bag.init();
+
+        // 放入元素
+        let key = "item001";
+        let item = new_item(key, 0.0, 0.0, 0.0); // * 🚩固定为「全零预算」
+        let overflowed = bag.put_in(dbg!(item.clone()));
+        asserts! {
+            overflowed.is_none(), // 没有溢出
+            bag.get(key) == Some(&item), // 放进「对应id位置」的就是原来的元素
+            bag.size() == 1, // 放进了一个
+            bag.calculate_level_for_item(&item) => 0, // 放进的是第0层（优先级为0.0）
+            bag.empty_level(0) => false, // 放进的是第0层
+            bag.mass() == 1, // 放进第0层，获得(0+1)的重量
+        }
+        dbg!(&bag);
+
+        // ! 在袋内修改优先级
+        let item_mut = bag.get_mut(key).expect("此时袋内必须有物品");
+        item_mut.set_priority(ShortFloat::ONE);
+
+        // 挑出元素
+        let picked = bag.pick_out(key).unwrap();
+        asserts! {
+            bag.size() == 0, // 取走了
+            bag.mass() == 0, // 取走了
+            bag.empty_level(0) => true, // 取走的是第0层
+        }
+
+        // 放回元素
+        let overflowed = bag.put_back(picked);
+        asserts! {
+            overflowed => None, // 没有溢出
+            bag.size() == 1, // 放回了
+            bag.empty_level(0) => false, // 放入的是第0层
+            bag.mass() == 1, // 放进第0层，获得(0+1)的重量
+        }
+
+        // ! 在袋内修改优先级
+        let item_mut = bag.get_mut(key).expect("此时袋内必须有物品");
+        item_mut.set_priority(ShortFloat::HALF);
+
+        // 取出元素
+        let taken = bag.take_out().unwrap();
+        asserts! {
+            taken.priority() == ShortFloat::HALF,
+            bag.size() == 0, // 取走了
+            bag.mass() == 0, // 取走了
+            bag.empty_level(0) => true, // 取走的是第0层
+        }
+
+        // 最后完成
         ok!()
     }
 }

@@ -3,7 +3,7 @@
 //! * 📍复合词项「链接到任务」的功能
 
 use crate::{
-    control::{ReasonContext, ReasonContextDirect, ReasonRecorder},
+    control::{util_outputs, ReasonContext, ReasonContextDirect},
     entity::{
         BudgetValue, Concept, Item, RCTask, TLink, TLinkType, TaskLink, TermLink, TermLinkTemplate,
     },
@@ -173,7 +173,7 @@ impl ReasonContextDirect<'_> {
         let mut outputs = vec![]; // 使用缓存延迟输出，避免借用问题
         let mut add_overflowed_task_link = |overflowed_task_link: &TaskLink| {
             // 使用闭包封装逻辑
-            let output = ReasonRecorder::output_comment(format!(
+            let output = util_outputs::output_comment(format!(
                 "!!! Overflowed TaskLink: {}",
                 overflowed_task_link.to_display_long()
             ));
@@ -251,35 +251,41 @@ impl ReasonContextDirect<'_> {
         let self_term = concept.term().clone();
         let templates = concept.link_templates_to_self().to_vec();
         for template in &templates {
-            // * 🚩载入引用
-            let memory = &mut self.core.reasoner.memory;
             // * 🚩仅在链接类型不是「转换」时
             if template.link_type() == TLinkType::Transform {
                 continue;
             }
             // * 🚩仅在「元素词项所对应概念」存在时
             let component = template.target();
+
             // * 🚩建立双向链接：整体⇒元素
-            let self_concept = match memory.key_to_concept_mut(concept_key) {
-                Some(c) => c,
-                None => continue,
-            };
             let link = TermLink::from_template(component.clone(), template, sub_budget);
+            self.outs.report_comment(
+                format!("Term-link built @ {self_term}: {}", link.to_display_long()),
+                self.silence_percent(),
+            );
+            let self_concept = unwrap_or_return!(?self.key_to_concept_mut(concept_key) => continue);
             self_concept.put_in_term_link(link); // this termLink to that
 
-            // * 🚩建立双向链接：元素⇒整体
+            // * 🚩建立双向链接：元素⇒整体 | 获取概念或在其中创建新概念（为数不多几个「创建概念」之处）
             // that termLink to this
-            let component_concept = match memory.get_concept_or_create(&component) {
-                Some(c) => c,
-                None => continue,
-            };
             let link = TermLink::from_template(self_term.clone(), template, sub_budget);
+            self.outs.report_comment(
+                format!(
+                    "Term-link built @ {}: {}",
+                    &*component,
+                    link.to_display_long()
+                ),
+                self.silence_percent(),
+            );
+            let component_concept =
+                unwrap_or_return!(?self.get_concept_or_create(&component) => continue);
             component_concept.put_in_term_link(link);
 
             // * 🚩对复合子项 继续深入递归
             if let Some(component) = component.as_compound() {
-                let concept_key = &Memory::term_to_key(&component);
-                self.build_term_links_sub(concept_key);
+                let concept_key = Memory::term_to_key(&component);
+                self.build_term_links_sub(&concept_key);
             }
         }
     }
@@ -332,17 +338,18 @@ impl Memory {
     ///   * 📝此时需要考虑借用问题
     #[must_use]
     fn insert_task_link_inner(&mut self, key: &str, link: TaskLink) -> Option<TaskLink> {
+        // * 🚩先拿出对应的概念
+        // * 📝【2024-06-29 02:45:55】此处通过「先拿出概念，再激活，最后才放回」暂且解决了「长期稳定性中袋mass下溢」问题
+        let mut component_concept = self.pick_out_concept(key)?;
+
         // * 🚩计算预算值
-        let component_concept = self.key_to_concept(key)?;
-        let new_budget = self.activate_concept_calculate(component_concept, &link);
+        let new_budget = self.activate_concept_calculate(&component_concept, &link);
 
         // * 🚩放入任务链 & 更新预算值
-        let component_concept = self.key_to_concept_mut(key)?;
         let overflowed_task_link = component_concept.put_in_task_link(link);
         component_concept.copy_budget_from(&new_budget);
 
-        // * 🚩拿出再放回 | 用「遗忘函数」更新预算值
-        let component_concept = self.pick_out_concept(key)?;
+        // * 🚩再放回 | 用「遗忘函数」更新预算值
         self.put_back_concept(component_concept);
 
         // * 🚩返回溢出的任务链

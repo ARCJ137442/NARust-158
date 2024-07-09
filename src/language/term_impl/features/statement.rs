@@ -187,7 +187,7 @@ impl Term {
 
 /// 为「复合词项」添加「转换到陈述」的方法
 /// * 📌依据：陈述 ⊂ 复合词项
-impl CompoundTermRef<'_> {
+impl<'s> CompoundTermRef<'s> {
     /// 🆕判断一个复合词项是否为「陈述词项」
     /// * 🚩判断其「内部元素」的个数是否为2
     /// * 📌与[`Term::is_statement`]一致
@@ -198,7 +198,7 @@ impl CompoundTermRef<'_> {
     /// 🆕将一个复合词项转换为「陈述词项」（不可变引用）
     /// * 🚩转换为Option
     /// * 📌与[`Term::as_statement`]一致
-    pub fn as_statement(&self) -> Option<StatementRef> {
+    pub fn as_statement(self) -> Option<StatementRef<'s>> {
         matches_or!(
             ?self.components,
             [ref subject, ref predicate]
@@ -248,7 +248,7 @@ pub struct StatementRef<'a> {
     pub predicate: &'a Term,
 }
 
-impl StatementRef<'_> {
+impl<'s> StatementRef<'s> {
     /// 📄OpenNARS `getSubject`
     ///
     /// # 📄OpenNARS
@@ -377,6 +377,80 @@ impl StatementRef<'_> {
     /// 🈚
     pub fn invalid(&self) -> bool {
         Self::invalid_statement(self.subject(), self.predicate())
+    }
+
+    /// 🆕作为「条件句」使用
+    /// * 🎯用于形如`<(&&, A, B) ==> C>`~~或`<(&&, A, B) <=> C>`~~的Narsese词项
+    ///   * ~~📌同时兼容`<S <=> (&&, A, B)>`，即「合取不一定在第一个」~~
+    ///   * ✨不仅可以判别，还可解包出其中的元素
+    /// * 🚩返回`(陈述自身, 第一个找到的合取词项引用, 这个合取词项所在位置索引)`
+    ///
+    /// ! ❌【2024-07-05 17:04:02】不再考虑支持「等价」陈述的词项链转换，同时也不再将「等价陈述」视作「条件句」
+    ///   * 📌【2024-07-05 17:05:48】目前认知：「等价」陈述完全可以「先转换为蕴含，再参与条件推理」
+    ///
+    /// ## 📄OpenNARS 参考代码
+    ///
+    /// ```java
+    /// if (taskContent instanceof Equivalence)
+    ///     throw new Error("【2024-07-05 17:03:18】简化代码：早已去掉「等价」系词的「复合条件」词项链！");
+    /// // ! ❌【2024-07-05 17:04:02】不再考虑支持「等价」陈述的词项链转换
+    /// final int conditionIndex = indices[0];
+    /// final Term contentCondition = taskContent.componentAt(conditionIndex);
+    /// // * 🚩判断「条件句」
+    /// // * 选取的「条件项」是「合取」
+    /// final boolean conditionCondition = contentCondition instanceof Conjunction;
+    /// // * 整体是「等价」或「合取在前头的『蕴含』」
+    /// final boolean conditionWhole = (taskContent instanceof Implication && conditionIndex == 0)
+    ///         || taskContent instanceof Equivalence;
+    /// if (conditionSubject && conditionWhole) {
+    ///     /* ... */
+    /// }
+    /// ```
+    pub fn as_conditional(self) -> Option<(StatementRef<'s>, CompoundTermRef<'s>)> {
+        // // * 🚩提取其中的继承项
+        // let subject = self.subject;
+        // let predicate = self.subject;
+
+        // // * 🚩判断「条件句」
+        // match self.identifier() {
+        //     // * 主项是「合取」的「蕴含」
+        //     IMPLICATION_RELATION => {
+        //         let subject = subject.as_compound_type(CONJUNCTION_OPERATOR)?;
+        //         Some((self, subject, 0))
+        //     }
+        //     // * 【任一处含有合取】的「等价」
+        //     EQUIVALENCE_RELATION => {
+        //         // * 🚩优先判断并提取主项
+        //         if let Some(subject) = subject.as_compound_type(CONJUNCTION_OPERATOR) {
+        //             return Some((self, subject, 0));
+        //         }
+        //         if let Some(predicate) = predicate.as_compound_type(CONJUNCTION_OPERATOR) {
+        //             return Some((self, predicate, 1));
+        //         }
+        //         None
+        //     }
+        //     // * 其它⇒空
+        //     _ => None,
+        // }
+
+        // * 🚩蕴含 | 【2024-07-05 17:08:34】现在只判断「蕴含」陈述
+        if !self.instanceof_implication() {
+            return None;
+        }
+        // * 🚩主项是合取
+        let subject_conjunction = self.subject.as_compound_type(CONJUNCTION_OPERATOR)?;
+        // * 🚩返回
+        Some((self, subject_conjunction))
+    }
+
+    /// 转换为「复合词项引用」
+    /// * 🎯不通过额外的「类型判断」（从[`DerefMut`]中来）转换为「复合词项引用」
+    /// * ❌【2024-06-15 16:37:07】危险：不能在此【只传引用】，否则将能在「拿出引用」的同时「使用自身」
+    ///   * 📝因此不能实现`Deref<Target = CompoundTermRef>`
+    pub fn into_compound_ref(self) -> CompoundTermRef<'s> {
+        debug_assert!(self.is_statement());
+        // SAFETY: 保证「陈述词项」一定从「复合词项」中来
+        unsafe { self.statement.as_compound_unchecked() }
     }
 }
 
@@ -589,7 +663,8 @@ mod tests {
                 "<あ ==> α>"            => ["あ", "α"]
                 "<{SELF} --> [good]>"   => ["{SELF}", "[good]"]
                 "<<a --> b> ==> {C}>"   => ["<a --> b>", "{C}"]
-                "<$1 --> [$2]>"         => ["$1", "[$2]"]
+                "<$1 --> [2]>"         => ["$1", "[2]"] // ! 变量词项可能会被重排编号
+                "<#2 --> {1}>"         => ["#2", "{1}"] // ! 变量词项可能会被重排编号
                 "<(*, 1, 2, 3) ==> 4>"  => ["(*, 1, 2, 3)", "4"]
                 // ! 实例、属性、实例属性 ⇒ 继承
                 "<A {-- B>"             => ["{A}",  "B"]
@@ -617,7 +692,8 @@ mod tests {
                 "<あ ==> α>"            => ["あ", "α"]
                 "<{SELF} --> [good]>"   => ["{SELF}", "[good]"]
                 "<<a --> b> ==> {C}>"   => ["<a --> b>", "{C}"]
-                "<$1 --> [$2]>"         => ["$1", "[$2]"]
+                "<$1 --> [2]>"         => ["$1", "[2]"] // ! 变量词项可能会被重排编号
+                "<#2 --> {1}>"         => ["#2", "{1}"] // ! 变量词项可能会被重排编号
                 "<(*, 1, 2, 3) ==> 4>"  => ["(*, 1, 2, 3)", "4"]
                 // ! 实例、属性、实例属性 ⇒ 继承
                 "<A {-- B>"             => ["{A}",  "B"]

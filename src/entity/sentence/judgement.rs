@@ -64,7 +64,7 @@ pub trait Judgement: Sentence + Truth {
         LexicalSentence {
             term: self.content().into(),
             // 标点：采用字符串形式
-            punctuation: self.punctuation().to_char().to_string(),
+            punctuation: self.punctuation().to_char().into(),
             stamp: self.stamp_to_lexical(),
             // 判断句有真值
             truth: self.truth_to_lexical(),

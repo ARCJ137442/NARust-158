@@ -48,3 +48,126 @@ nar_dev_utils::mods! {
     // ♻️具体规则
     pub use rules;
 }
+
+/// 单元测试 通用函数
+#[cfg(test)]
+pub mod test {
+    use super::*;
+    use crate::{
+        control::{Parameters, DEFAULT_PARAMETERS},
+        vm::{Launcher, Runtime},
+    };
+    use nar_dev_utils::list;
+    use narsese::api::GetTerm;
+    use navm::{
+        cmd::Cmd,
+        output::Output,
+        vm::{VmLauncher, VmRuntime},
+    };
+
+    /// 从「超参数」与「推理引擎」创建虚拟机
+    pub fn create_vm(parameters: Parameters, engine: InferenceEngine) -> Runtime {
+        let launcher = Launcher::new("test", parameters, engine);
+        launcher.launch().expect("推理器虚拟机 启动失败")
+    }
+
+    /// 从「推理引擎」创建虚拟机
+    /// * 📜使用默认参数
+    pub fn create_vm_from_engine(engine: InferenceEngine) -> Runtime {
+        create_vm(DEFAULT_PARAMETERS, engine)
+    }
+
+    /// 增强虚拟机运行时的特征
+    pub trait VmRuntimeBoost: VmRuntime {
+        /// 输入NAVM指令到虚拟机
+        fn input_cmds(&mut self, cmds: &str) {
+            for cmd in cmds
+                .lines()
+                .map(str::trim)
+                .filter(|line| !line.is_empty())
+                .map(|line| Cmd::parse(line).expect("NAVM指令{line}解析失败"))
+            {
+                let cmd_s = cmd.to_string();
+                self.input_cmd(cmd)
+                    .unwrap_or_else(|_| panic!("NAVM指令「{cmd_s}」输入失败"));
+            }
+        }
+
+        /// 拉取虚拟机的输出
+        fn fetch_outputs(&mut self) -> Vec<Output> {
+            list![
+                output
+                while let Some(output) = (self.try_fetch_output().expect("拉取输出失败"))
+            ]
+        }
+
+        /// 输入指令并拉取输出
+        #[must_use]
+        fn input_cmds_and_fetch_out(&mut self, cmds: &str) -> Vec<Output> {
+            self.input_cmds(cmds);
+            self.fetch_outputs()
+        }
+
+        /// 拉取输出并预期其中的输出
+        fn fetch_expected_outputs(&mut self, expect: impl Fn(&Output) -> bool) -> Vec<Output> {
+            let outputs = self.fetch_outputs();
+            expect_outputs(&outputs, expect);
+            outputs
+        }
+
+        /// 输入指令、拉取、打印并预期输出
+        fn input_fetch_print_expect(
+            &mut self,
+            cmds: &str,
+            expect: impl Fn(&Output) -> bool,
+        ) -> Vec<Output> {
+            // 输入
+            self.input_cmds(cmds);
+            // 拉取
+            let outs = self.fetch_outputs();
+            // 打印
+            print_outputs(&outs);
+            // 预期
+            expect_outputs(&outs, expect);
+            // 返回
+            outs
+        }
+    }
+    impl<T: VmRuntime> VmRuntimeBoost for T {}
+
+    /// 打印输出（基本格式）
+    pub fn print_outputs<'a>(outs: impl IntoIterator<Item = &'a Output>) {
+        outs.into_iter().for_each(|output| {
+            println!(
+                "[{}]{}\nas narsese {:?}\n",
+                output.type_name(),
+                output.get_content(),
+                output.get_narsese()
+            )
+        })
+    }
+
+    /// 预期输出
+    pub fn expect_outputs<'a>(
+        outputs: impl IntoIterator<Item = &'a Output>,
+        expect: impl Fn(&Output) -> bool,
+    ) -> &'a Output {
+        outputs
+            .into_iter()
+            .find(|&output| expect(output))
+            .expect("没有找到期望的输出")
+    }
+
+    /// 预期输出包含
+    /// * 🚩精确匹配指定类型的Narsese**词项**
+    pub fn expect_outputs_contains_term<'a>(
+        outputs: impl IntoIterator<Item = &'a Output>,
+        expected: impl Into<narsese::lexical::Term>,
+    ) -> &'a Output {
+        let expected = expected.into();
+        outputs
+            .into_iter()
+            .find(|&output| matches!(output.get_narsese().map(GetTerm::get_term), Some(term) if *term == expected) )
+            .expect("没有找到期望的输出")
+    }
+}

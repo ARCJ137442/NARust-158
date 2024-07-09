@@ -30,7 +30,7 @@ pub trait Question: Sentence {
         LexicalSentence {
             term: self.content().into(),
             // 标点：采用字符串形式
-            punctuation: self.punctuation().to_char().to_string(),
+            punctuation: self.punctuation().to_char().into(),
             stamp: self.stamp_to_lexical(),
             // 真值为空
             truth: vec![],

@@ -25,7 +25,7 @@ pub struct Reasoner {
     pub(in super::super) memory: Memory,
 
     /// 记录器
-    pub(in super::super) recorder: ReasonRecorder,
+    pub(super) recorder: ReasonRecorder,
 
     /// IO通道
     pub(in super::super) io_channels: ReasonerChannels,
@@ -39,14 +39,9 @@ pub struct Reasoner {
     /// 系统时钟
     pub(in super::super) clock: ClockTime,
 
-    /// 状态「运行中」
-    pub(in super::super) running: bool,
+    // ! ❌不再状态「运行中」，因为NARust-158是始终运行的
 
-    /// 剩下的用于「步进」的步数
-    /// * 💭最初用于多线程，但目前的NARust中拟采用单线程
-    ///
-    /// TODO: ❓明确「是否需要」
-    pub(in super::super) walking_steps: usize,
+    // ! ❌不再需要「待步进的步数」，因为NARust-158是单线程的
 
     // ! ❌不复刻`finishedInputs`：仅DEBUG变量
     /// 最后一个输出之前的步数
@@ -79,8 +74,6 @@ impl Reasoner {
             derivation_datas: ReasonerDerivationData::default(),
             // * 🚩默认为0/false
             clock: 0,
-            running: false,
-            walking_steps: 0,
             timer: 0,
             silence_value: 0,
             stamp_current_serial: 0,
@@ -99,8 +92,6 @@ impl Reasoner {
 
         // * 🚩重置状态变量
         self.init_timer();
-        self.running = false;
-        self.walking_steps = 0;
         self.clock = 0;
         self.stamp_current_serial = 0;
 
@@ -108,9 +99,7 @@ impl Reasoner {
         crate::control::init_global_reason_parameters(); // 推理过程的全局参数（随机种子等）
 
         // * 🚩最后发送消息
-        self.recorder.put(Output::INFO {
-            message: "-----RESET-----".into(),
-        });
+        self.report_info("-----RESET-----");
     }
 
     /* 直接访问属性 */
@@ -145,5 +134,10 @@ impl Reasoner {
     pub fn updated_stamp_current_serial(&mut self) -> ClockTime {
         self.stamp_current_serial += 1;
         self.stamp_current_serial
+    }
+
+    /// 从内部「记录器」中拉取一个输出
+    pub fn take_output(&mut self) -> Option<Output> {
+        self.recorder.take()
     }
 }

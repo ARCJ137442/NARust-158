@@ -1,5 +1,11 @@
-use super::{JudgementV1, Punctuation, Question, Sentence, SentenceInner};
-use crate::{__impl_to_display_and_display, entity::Stamp, inference::Evidential, language::Term};
+//! 初代疑问句实现
+
+use crate::{
+    __impl_to_display_and_display,
+    entity::{JudgementV1, PunctuatedSentenceRef, Question, Sentence, SentenceInner, Stamp},
+    inference::Evidential,
+    language::Term,
+};
 use narsese::lexical::Sentence as LexicalSentence;
 
 /// 🆕疑问句 初代实现
@@ -43,19 +49,12 @@ impl Sentence for QuestionV1 {
         self.inner.content_mut()
     }
 
-    fn punctuation(&self) -> Punctuation {
-        Punctuation::Question
-    }
-
     type Judgement = JudgementV1;
     type Question = Self;
 
-    fn as_judgement(&self) -> Option<&Self::Judgement> {
-        None
-    }
-
-    fn as_question(&self) -> Option<&Self::Question> {
-        Some(self)
+    #[inline(always)]
+    fn as_punctuated_ref(&self) -> PunctuatedSentenceRef<Self::Judgement, Self::Question> {
+        PunctuatedSentenceRef::Question(self)
     }
 
     fn to_key(&self) -> String {

@@ -4,7 +4,7 @@
 //!
 //! * ♻️【2024-06-26 23:49:25】开始根据改版OpenNARS重写
 
-use super::{ReasonContext, ReasonContextCore, ReasonContextWithLinks};
+use super::{ReasonContext, ReasonContextCore, ReasonContextCoreOut, ReasonContextWithLinks};
 use crate::{
     __delegate_from_core,
     control::{Parameters, Reasoner},
@@ -22,6 +22,8 @@ use std::ops::{Deref, DerefMut};
 pub struct ReasonContextConcept<'this> {
     /// 内部存储的「上下文核心」
     pub(crate) core: ReasonContextCore<'this>,
+    /// 内部存储的「上下文输出」
+    pub(crate) outs: ReasonContextCoreOut,
 
     /// 选中的任务链
     /// * 📌【2024-05-21 20:26:30】不可空！
@@ -53,6 +55,7 @@ impl<'this> ReasonContextConcept<'this> {
     ) -> Self {
         // * 🚩构造核心结构
         let core = ReasonContextCore::new(reasoner, current_concept);
+        let outs = ReasonContextCoreOut::new();
 
         // * 🚩先将首个元素作为「当前信念链」
         debug_assert!(!belief_links_to_reason.is_empty());
@@ -62,6 +65,7 @@ impl<'this> ReasonContextConcept<'this> {
         // * 🚩构造自身
         let mut this = Self {
             core,
+            outs,
             current_task_link,
             current_belief: None,
             current_belief_link,
@@ -168,7 +172,7 @@ impl ReasonContext for ReasonContextConcept<'_> {
         drop(self.current_belief);
 
         // * 🚩吸收核心
-        self.core.absorbed_by_reasoner();
+        self.core.absorbed_by_reasoner(self.outs);
     }
 }
 
@@ -177,7 +181,11 @@ impl ReasonContextWithLinks for ReasonContextConcept<'_> {
         self.current_belief.as_ref()
     }
 
-    fn belief_link_for_budget_inference(&mut self) -> Option<&mut TermLink> {
+    fn belief_link_for_budget_inference(&self) -> Option<&TermLink> {
+        Some(&self.current_belief_link)
+    }
+
+    fn belief_link_for_budget_inference_mut(&mut self) -> Option<&mut TermLink> {
         Some(&mut self.current_belief_link)
     }
 

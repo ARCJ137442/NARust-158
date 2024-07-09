@@ -16,6 +16,11 @@ pub trait Buffer<T>: Iterable<T> {
     /// 获取已有元素数量
     fn size(&self) -> usize;
 
+    /// 判断是否为空
+    fn is_empty(&self) -> bool {
+        self.size() == 0
+    }
+
     /// 获取容量
     fn capacity(&self) -> usize;
 

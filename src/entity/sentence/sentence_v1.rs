@@ -1,4 +1,4 @@
-use super::{JudgementV1, Punctuation, QuestionV1, Sentence, SentenceInner};
+use super::{JudgementV1, PunctuatedSentenceRef, Punctuation, QuestionV1, Sentence, SentenceInner};
 use crate::{
     __impl_to_display_and_display,
     entity::{Stamp, TruthValue},
@@ -7,7 +7,7 @@ use crate::{
     language::Term,
 };
 use anyhow::Result;
-use nar_dev_utils::{enum_union, matches_or};
+use nar_dev_utils::enum_union;
 use narsese::lexical::Sentence as LexicalSentence;
 
 // 使用「枚举联合」快捷实现「判断/问题」的「语句」类型
@@ -101,28 +101,16 @@ impl Sentence for SentenceV1 {
         self.get_inner_mut().content_mut()
     }
 
-    fn punctuation(&self) -> Punctuation {
-        // 直接朝内部分派
-        as_variant! {
-            self, s => s.punctuation()
-        }
-    }
-
     type Judgement = JudgementV1;
-
     type Question = QuestionV1;
 
-    fn as_judgement(&self) -> Option<&Self::Judgement> {
-        matches_or! {
-            ?self,
-            Self::JudgementV1(j) => j
-        }
-    }
-
-    fn as_question(&self) -> Option<&Self::Question> {
-        matches_or! {
-            ?self,
-            Self::QuestionV1(q) => q
+    /// ℹ️只需这一个方法，即可提供所有与「细分类型/标点」有关的信息
+    fn as_punctuated_ref(&self) -> PunctuatedSentenceRef<Self::Judgement, Self::Question> {
+        use PunctuatedSentenceRef::*;
+        use SentenceV1::*;
+        match self {
+            JudgementV1(j) => Judgement(j),
+            QuestionV1(q) => Question(q),
         }
     }
 

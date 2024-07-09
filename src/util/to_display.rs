@@ -45,6 +45,15 @@ pub trait ToDisplayAndBrief {
     }
 }
 
+/// 仅在内容非空时展示（且自动为标题填充换行符）
+pub fn to_display_when_has_content(title: &str, content: impl AsRef<str>) -> String {
+    let s = content.as_ref();
+    match s.trim().is_empty() {
+        true => "".into(),
+        false => format!("\n{title}{s}"),
+    }
+}
+
 /// 方便快捷地 自动实现 [`ToDisplayAndBrief`]
 /// * 🎯自动使用被实现类型内置的`__to_display`与`__to_display_brief`实现[`ToDisplayAndBrief::to_display`]
 ///

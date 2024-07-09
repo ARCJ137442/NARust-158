@@ -6,10 +6,8 @@ use crate::io::symbols::*;
 use anyhow::{anyhow, Result};
 use nar_dev_utils::*;
 use narsese::{
-    api::GetCapacity,
-    conversion::{
-        inter_type::lexical_fold::TryFoldInto, string::impl_lexical::format_instances::FORMAT_ASCII,
-    },
+    api::{FormatTo, GetCapacity},
+    conversion::inter_type::lexical_fold::TryFoldInto,
     lexical::Term as TermLexical,
 };
 use std::str::FromStr;
@@ -88,9 +86,55 @@ impl Term {
     /// * ✅基本保证「解析结果均保证『合法』」
     /// * 🚩【2024-06-13 18:39:33】现在是「词法折叠」使用本处实现
     /// * ⚠️在「词法折叠」的过程中，即开始「变量匿名化」
+    ///   * 📌【2024-07-02 00:40:39】需要保证「格式化」的是个「整体」：变量只在「整体」范围内有意义
     #[inline(always)]
     pub fn from_lexical(lexical: TermLexical) -> Result<Self> {
         fold_term(lexical, &mut vec![])
+    }
+
+    /// 从「内部Narsese」转换为「词法Narsese」
+    /// * 🚩基本无损转换（无需考虑失败情况）
+    pub fn to_lexical(&self) -> TermLexical {
+        use TermComponents::*;
+        type LTerm = TermLexical;
+        let (id, comp) = self.id_comp();
+        match (id, comp) {
+            // 专用 / 集合词项 | 默认已排序
+            (SET_EXT_OPERATOR, Compound(v)) => {
+                let v = v.iter().map(Self::to_lexical).collect::<Vec<_>>();
+                LTerm::new_set(SET_EXT_OPENER, v, SET_EXT_CLOSER)
+            }
+            (SET_INT_OPERATOR, Compound(v)) => {
+                let v = v.iter().map(Self::to_lexical).collect::<Vec<_>>();
+                LTerm::new_set(SET_INT_OPENER, v, SET_INT_CLOSER)
+            }
+            //  陈述
+            (
+                INHERITANCE_RELATION | SIMILARITY_RELATION | IMPLICATION_RELATION
+                | EQUIVALENCE_RELATION,
+                Compound(terms),
+            ) if terms.len() == 2 => {
+                LTerm::new_statement(id, (&terms[0]).into(), (&terms[1]).into())
+            }
+            // 通用 / 空：仅前缀
+            (_, Empty) => LTerm::new_atom(id, ""),
+            // 通用 / 具名：前缀+词项名
+            (_, Word(name)) => LTerm::new_atom(id, name),
+            // 通用 / 变量：前缀+变量编号
+            (_, Variable(num)) => LTerm::new_atom(id, num.to_string()),
+            // 通用 / 多元
+            (_, Compound(terms)) => {
+                LTerm::new_compound(id, terms.iter().map(Self::to_lexical).collect())
+            }
+        }
+    }
+
+    /// 转换为显示呈现上的ASCII格式
+    /// * 📌对标OpenNARS的默认呈现
+    /// * ⚠️【2024-07-02 00:52:54】目前需要「词法Narsese」作为中间格式，可能会有性能损失
+    pub fn to_display_ascii(&self) -> String {
+        use narsese::conversion::string::impl_lexical::format_instances::FORMAT_ASCII;
+        self.to_lexical().format_to(&FORMAT_ASCII)
     }
 
     /// 尝试从「方言」转换
@@ -108,38 +152,8 @@ impl Term {
 // * 🚩此处的「变量词项」一开始就应该是个数值，从「具名变量」变为「数字变量」
 /// 词项⇒词法Narsese
 impl From<&Term> for TermLexical {
-    fn from(value: &Term) -> Self {
-        use TermComponents::*;
-        let (id, comp) = value.id_comp();
-        match (id, comp) {
-            // 专用 / 集合词项 | 默认已排序
-            (SET_EXT_OPERATOR, Compound(v)) => {
-                let v = v.iter().map(TermLexical::from).collect::<Vec<_>>();
-                Self::new_set(SET_EXT_OPENER, v, SET_EXT_CLOSER)
-            }
-            (SET_INT_OPERATOR, Compound(v)) => {
-                let v = v.iter().map(TermLexical::from).collect::<Vec<_>>();
-                Self::new_set(SET_INT_OPENER, v, SET_INT_CLOSER)
-            }
-            //  陈述
-            (
-                INHERITANCE_RELATION | SIMILARITY_RELATION | IMPLICATION_RELATION
-                | EQUIVALENCE_RELATION,
-                Compound(terms),
-            ) if terms.len() == 2 => {
-                Self::new_statement(id, (&terms[0]).into(), (&terms[1]).into())
-            }
-            // 通用 / 空：仅前缀
-            (_, Empty) => Self::new_atom(id, ""),
-            // 通用 / 具名：前缀+词项名
-            (_, Word(name)) => Self::new_atom(id, name),
-            // 通用 / 变量：前缀+变量编号
-            (_, Variable(num)) => Self::new_atom(id, num.to_string()),
-            // 通用 / 多元
-            (_, Compound(terms)) => {
-                Self::new_compound(id, terms.iter().map(TermLexical::from).collect())
-            }
-        }
+    fn from(term: &Term) -> Self {
+        term.to_lexical()
     }
 }
 
@@ -210,8 +224,8 @@ fn fold_term(term: TermLexical, var_id_map: &mut Vec<String>) -> Result<Term> {
             }
         }
     }
+    // 正式开始
     let identifier = get_identifier(&term);
-    let self_str = FORMAT_ASCII.format(&term);
     // 在有限的标识符范围内匹配
     use TermLexical::*;
     let term = match (identifier.as_str(), term) {
@@ -223,31 +237,31 @@ fn fold_term(term: TermLexical, var_id_map: &mut Vec<String>) -> Result<Term> {
         (VAR_QUERY, Atom { name, .. }) => update_var(name, var_id_map, Term::new_var_q),
         // 复合词项 //
         (SET_EXT_OPERATOR, Set { terms, .. }) => {
-            Term::new_set_ext(fold_lexical_terms(terms, var_id_map)?)
+            Term::new_set_ext(fold_inner_lexical_vec(terms, var_id_map)?)
         }
         (SET_INT_OPERATOR, Set { terms, .. }) => {
-            Term::new_set_int(fold_lexical_terms(terms, var_id_map)?)
+            Term::new_set_int(fold_inner_lexical_vec(terms, var_id_map)?)
         }
         (INTERSECTION_EXT_OPERATOR, Compound { terms, .. }) => {
-            Term::new_intersection_ext(fold_lexical_terms(terms, var_id_map)?)
+            Term::new_intersection_ext(fold_inner_lexical_vec(terms, var_id_map)?)
         }
         (INTERSECTION_INT_OPERATOR, Compound { terms, .. }) => {
-            Term::new_intersection_int(fold_lexical_terms(terms, var_id_map)?)
+            Term::new_intersection_int(fold_inner_lexical_vec(terms, var_id_map)?)
         }
         (DIFFERENCE_EXT_OPERATOR, Compound { terms, .. }) if terms.len() == 2 => {
             let mut iter = terms.into_iter();
-            let term1 = iter.next().unwrap().try_into()?;
-            let term2 = iter.next().unwrap().try_into()?;
+            let term1 = fold_inner_lexical(iter.next().unwrap(), var_id_map)?;
+            let term2 = fold_inner_lexical(iter.next().unwrap(), var_id_map)?;
             Term::new_diff_ext(term1, term2)
         }
         (DIFFERENCE_INT_OPERATOR, Compound { terms, .. }) if terms.len() == 2 => {
             let mut iter = terms.into_iter();
-            let term1 = iter.next().unwrap().try_into()?;
-            let term2 = iter.next().unwrap().try_into()?;
+            let term1 = fold_inner_lexical(iter.next().unwrap(), var_id_map)?;
+            let term2 = fold_inner_lexical(iter.next().unwrap(), var_id_map)?;
             Term::new_diff_int(term1, term2)
         }
         (PRODUCT_OPERATOR, Compound { terms, .. }) => {
-            Term::new_product(fold_lexical_terms(terms, var_id_map)?)
+            Term::new_product(fold_inner_lexical_vec(terms, var_id_map)?)
         }
         (IMAGE_EXT_OPERATOR, Compound { terms, .. }) => {
             // ! ⚠️现在解析出作为「像之内容」的「词项序列」包含「占位符」作为内容
@@ -268,13 +282,14 @@ fn fold_term(term: TermLexical, var_id_map: &mut Vec<String>) -> Result<Term> {
             }
         }
         (CONJUNCTION_OPERATOR, Compound { terms, .. }) => {
-            Term::new_conjunction(fold_lexical_terms(terms, var_id_map)?)
+            Term::new_conjunction(fold_inner_lexical_vec(terms, var_id_map)?)
         }
         (DISJUNCTION_OPERATOR, Compound { terms, .. }) => {
-            Term::new_disjunction(fold_lexical_terms(terms, var_id_map)?)
+            Term::new_disjunction(fold_inner_lexical_vec(terms, var_id_map)?)
         }
         (NEGATION_OPERATOR, Compound { terms, .. }) if terms.len() == 1 => {
-            Term::new_negation(terms.into_iter().next().unwrap().try_into()?)
+            let inner = fold_inner_lexical(terms.into_iter().next().unwrap(), var_id_map)?;
+            Term::new_negation(inner)
         }
         // 陈述
         (
@@ -282,43 +297,54 @@ fn fold_term(term: TermLexical, var_id_map: &mut Vec<String>) -> Result<Term> {
             Statement {
                 subject, predicate, ..
             },
-        ) => Term::new_inheritance(subject.try_fold_into(&())?, predicate.try_fold_into(&())?),
+        ) => Term::new_inheritance(
+            fold_inner_lexical(*subject, var_id_map)?,
+            fold_inner_lexical(*predicate, var_id_map)?,
+        ),
         (
             SIMILARITY_RELATION,
             Statement {
                 subject, predicate, ..
             },
-        ) => Term::new_similarity(subject.try_fold_into(&())?, predicate.try_fold_into(&())?),
+        ) => Term::new_similarity(
+            fold_inner_lexical(*subject, var_id_map)?,
+            fold_inner_lexical(*predicate, var_id_map)?,
+        ),
         (
             IMPLICATION_RELATION,
             Statement {
                 subject, predicate, ..
             },
-        ) => Term::new_implication(subject.try_fold_into(&())?, predicate.try_fold_into(&())?),
+        ) => Term::new_implication(
+            fold_inner_lexical(*subject, var_id_map)?,
+            fold_inner_lexical(*predicate, var_id_map)?,
+        ),
         (
             EQUIVALENCE_RELATION,
             Statement {
                 subject, predicate, ..
             },
-        ) => Term::new_equivalence(subject.try_fold_into(&())?, predicate.try_fold_into(&())?),
+        ) => Term::new_equivalence(
+            fold_inner_lexical(*subject, var_id_map)?,
+            fold_inner_lexical(*predicate, var_id_map)?,
+        ),
         (
             INSTANCE_RELATION, // 派生系词/实例
             Statement {
                 subject, predicate, ..
             },
         ) => Term::new_inheritance(
-            Term::new_set_ext(vec![subject.try_fold_into(&())?]),
-            predicate.try_fold_into(&())?,
+            Term::new_set_ext(vec![fold_inner_lexical(*subject, var_id_map)?]),
+            fold_inner_lexical(*predicate, var_id_map)?,
         ),
-
         (
             PROPERTY_RELATION, // 派生系词/属性
             Statement {
                 subject, predicate, ..
             },
         ) => Term::new_inheritance(
-            subject.try_fold_into(&())?,
-            Term::new_set_int(vec![predicate.try_fold_into(&())?]),
+            fold_inner_lexical(*subject, var_id_map)?,
+            Term::new_set_int(vec![fold_inner_lexical(*predicate, var_id_map)?]),
         ),
         (
             INSTANCE_PROPERTY_RELATION, // 派生系词/实例属性
@@ -326,27 +352,50 @@ fn fold_term(term: TermLexical, var_id_map: &mut Vec<String>) -> Result<Term> {
                 subject, predicate, ..
             },
         ) => Term::new_inheritance(
-            Term::new_set_ext(vec![subject.try_fold_into(&())?]),
-            Term::new_set_int(vec![predicate.try_fold_into(&())?]),
+            Term::new_set_ext(vec![fold_inner_lexical(*subject, var_id_map)?]),
+            Term::new_set_int(vec![fold_inner_lexical(*predicate, var_id_map)?]),
         ),
         // 其它情况⇒不合法
-        _ => return Err(anyhow!("非法词项：{self_str:?}")),
+        (identifier, this) => return Err(anyhow!("标识符为「{identifier}」的非法词项：{this:?}")),
     };
+    Ok(term)
+}
+
+/// 词法折叠/单个转换
+/// * ⚠️拒绝呈递占位符：不允许「像占位符」在除了「外延像/内涵像」外的词项中出现
+#[inline]
+fn fold_inner_lexical(term: TermLexical, var_id_map: &mut Vec<String>) -> Result<Term> {
+    // * 🚩正常转换
+    let term = fold_term(term, var_id_map)?;
+    // * 🚩拦截解析出的「占位符」词项
+    if term.is_placeholder() {
+        return Err(anyhow!("词法折叠错误：占位符仅能直属于 外延像/内涵像 词项"));
+    }
+    // * 🚩正常返回
     Ok(term)
 }
 
 /// 词法折叠 / 从「数组」中转换
 /// * 🎯将「词法Narsese词项数组」转换为「内部词项数组」
+///   * 📄用于复合词项内部元素的解析
+///   * ℹ️对于「外延像/内涵像」采用特殊方法
 /// * 📌在「无法同时`map`与`?`」时独立成函数
 /// * ⚠️不允许构造空词项数组：参考NAL，不允许空集
+/// * ❌【2024-07-08 23:20:02】现不允许在其中解析出「占位符」词项
+///   * 🎯提早避免「像占位符溢出」情形
 #[inline]
-fn fold_lexical_terms(terms: Vec<TermLexical>, var_id_map: &mut Vec<String>) -> Result<Vec<Term>> {
+fn fold_inner_lexical_vec(
+    terms: Vec<TermLexical>,
+    var_id_map: &mut Vec<String>,
+) -> Result<Vec<Term>> {
     let mut v = vec![];
     for term in terms {
-        v.push(fold_term(term, var_id_map)?);
+        v.push(fold_inner_lexical(term, var_id_map)?);
     }
     check_folded_terms(v)
 }
+
+#[inline]
 
 /// 检查折叠好了的词项表
 /// * 🚩【2024-06-14 00:13:29】目前仅检查「是否为空集」
@@ -408,10 +457,12 @@ impl TryFrom<TermLexical> for Term {
 
 /// 字符串解析路线：词法解析 ⇒ 词法折叠
 /// * 🎯同时兼容[`str::parse`]与[`str::try_into`]
+/// * 📌使用标准OpenNARS ASCII语法
 impl TryFrom<&str> for Term {
     type Error = anyhow::Error;
 
     fn try_from(s: &str) -> Result<Self, Self::Error> {
+        use narsese::conversion::string::impl_lexical::format_instances::FORMAT_ASCII;
         // 词法解析
         let lexical = FORMAT_ASCII.parse(s)?;
         // 词法转换 | ⚠️对「语句」「任务」报错
@@ -444,25 +495,147 @@ mod tests {
             string::impl_lexical::format_instances::FORMAT_ASCII,
         },
         lexical::Term as LexicalTerm,
-        lexical_nse_term,
+        lexical_nse_term as l_term,
     };
 
     /// 测试 / 词法折叠
     #[test]
     fn test_lexical_fold() -> AResult {
-        fn fold(t: LexicalTerm) -> Result<Term> {
+        fn test(t: LexicalTerm) -> Result<Term> {
             print!("{:?} => ", FORMAT_ASCII.format(&t));
-            let term: Term = t.try_fold_into(&())?;
+            // 三种解析路径
+            let term_1 = Term::try_from(t.clone())?;
+            let term_2 = t.clone().try_fold_into(&())?;
+            let term_3 = Term::from_lexical(t)?;
+            // 判断路径等价性
+            assert_eq!(term_1, term_2);
+            assert_eq!(term_1, term_3);
+            assert_eq!(term_2, term_3);
+            // 打印
+            let term = term_1;
             println!("{:?}", term.format_name());
             Ok(term)
         }
-        fold(lexical_nse_term!(<A --> B>))?;
-        fold(lexical_nse_term!((&&, C, B, A, (/, A, _, B))))?;
-        // fold(lexical_nse_term!(<(*, {SELF}, x, y) --> ^left>))?; // ! ⚠️【2024-04-25 10:02:20】现在对「操作符」不再支持
-        fold(lexical_nse_term!([2, 1, 0, $0, #1, ?2]))?;
-        fold(lexical_nse_term!(<A <-> {A}>))?;
-        fold(lexical_nse_term!(<{B} <=> B>))?;
-        fold(lexical_nse_term!(<{SELF} ==> (--, [good])>))?;
+        macro_once! {
+            // * 🚩模式：词项字符串
+            macro test($($term:literal)*) {
+                $(
+                    test(l_term!($term))?;
+                )*
+            }
+            "<A --> B>"
+            "(&&, C, B, A, (/, A, _, B))"
+            // "<(*, {SELF}, x, y) --> ^left>" // ! ⚠️【2024-04-25 10:02:20】现在对「操作符」不再支持
+            "[2, 1, 0, $0, #1, ?2]"
+            "<A <-> {A}>"
+            "<{B} <=> B>"
+            "<{SELF} ==> (--, [good])>"
+        }
+        ok!()
+    }
+
+    /// 测试 / 词法折叠/失败情况
+    /// * ⚠️仅考虑词法折叠失败，不考虑解析失败
+    #[test]
+    fn test_lexical_fold_err() -> AResult {
+        fn test(t: LexicalTerm) -> AResult {
+            let t_s = FORMAT_ASCII.format(&t);
+            let e = Term::try_from(t.clone()).expect_err(&format!("非法词项{t_s:?}异常通过解析"));
+            println!("{t_s:?} => {e}");
+            ok!()
+        }
+        macro_once! {
+            // * 🚩模式：词项字符串
+            macro test($($term:literal)*) {
+                $(
+                    test(l_term!($term))?;
+                )*
+            }
+            // * 📄非法标识符
+            // * 🚩【2024-04-25 10:02:20】现在对「操作符」不再支持
+            "^operator" // ^operator
+            "<(*, {SELF}, x, y) --> ^left>" // ^left
+            "<X =/> Y>" // =/>
+            "<X =|> Y>" // =|>
+            "<X </> Y>" // </>
+            "+123" // +123
+            "(&/, 1, 2, 3)" // &/
+            "(&|, 3, 2, 1)" // &|
+            // * 📄词项数目不对
+            "(-, A, B, C)"
+            "(-, A)"
+            "(--, A, B)"
+            // * 📄空集
+            // * 📄溢出的占位符
+            "{_}"
+            "{A, B, _}"
+            "[_]"
+            "[A, B, _]"
+            "<A --> _>"
+            "<A <-> _>"
+            "<A ==> _>"
+            "<A <=> _>"
+            "<_ --> _>"
+            "<_ <-> _>"
+            "<_ ==> _>"
+            "<_ <=> _>"
+            "(&, _, A, B)"
+            "(-, _, B)"
+            "(-, A, _)"
+            "(--, _)"
+            "(&&, (*, [A, B, _]), A, B)"
+        }
+        ok!()
+    }
+
+    /// 测试 / 变量重编号
+    /// * 📄nse  `<(&&,<(*,{$1},{$2},$d)-->方向>,<(*,{$1},$c)-->格点状态>,<(*,{$2},无缺陷)-->格点状态>)==><(*,$d,$c,{$1},{$2})-->[同色连空]>>.%1.00;0.99%`
+    ///   * 🕒【2024-07-02 00:32:46】
+    ///   * 预期：`<(&&,<(*,{$1},{$2},$3)-->方向>,<(*,{$1},$4)-->格点状态>,<(*,{$2},无缺陷)-->格点状态>)==><(*,$3,$4,{$1},{$2})-->[同色连空]>>. %1.0;0.99%`
+    ///   * 当前：`<(&&,<(*,{$1},无缺陷)-->格点状态>,<(*,{$1},$2)-->格点状态>,<(*,{$1},{$2},$3)-->方向>)==><(*,$1,$2,{$3},{$4})-->[同色连空]>>.%1.0000;0.9900%`
+    ///   * 预期の映射：
+    ///     * `$1` => `$1`
+    ///     * `$2` => `$2`
+    ///     * `$d` => `$3`
+    ///     * `$c` => `$4`
+    ///   * 当前の映射：
+    ///     * `$1` => `$1`
+    ///     * `$2` => `$2`、`$1`@「无缺陷」
+    ///     * `$d` => `$3`、`$1`@同色连空
+    ///     * `$c` => `$2`
+    /// * ✅【2024-07-02 01:06:12】现在成功：至少是唯一映射了
+    ///     * `$1` => `$1`
+    ///     * `$2` => `$2`
+    ///     * `$d` => `$4`
+    ///     * `$c` => `$3`
+    #[test]
+    fn test_var_map() -> AResult {
+        // 词法Narsese展示
+        let lexical = l_term!(<(&&,<(*,{$1},{$2},$d)-->方向>,<(*,{$1},$c)-->格点状态>,<(*,{$2},无缺陷)-->格点状态>)==><(*,$d,$c,{$1},{$2})-->[同色连空]>>);
+        println!("{}", FORMAT_ASCII.format(&lexical));
+
+        // 词法折叠
+        let term1 = Term::from_lexical(lexical.clone())?;
+        let term1_s = term1.to_display_ascii();
+        println!("{term1_s}");
+
+        // 内部折叠方法
+        let mut var_map = vec![];
+        let term2 = fold_term(lexical.clone(), &mut var_map)?;
+        let term2_s = term2.to_display_ascii();
+        println!("{term2_s}");
+        assert_eq!(term1_s, term2_s); // 两种转换之后，字符串形式应该相等
+
+        // 对比：映射表
+        println!("{:?}", var_map);
+        for (var_i, original_name) in var_map.iter().enumerate() {
+            println!("{original_name} => {}", var_i + 1);
+        }
+        let expected = [("1", 1), ("2", 2), ("d", 3), ("c", 4)];
+        for (original_name, var_i) in expected.iter() {
+            // 断言映射表相等
+            assert_eq!(var_map[*var_i - 1], *original_name);
+        }
         ok!()
     }
 }

@@ -499,7 +499,7 @@ pub struct CompoundTermRef<'a> {
     pub components: &'a [Term],
 }
 
-impl CompoundTermRef<'_> {
+impl<'s> CompoundTermRef<'s> {
     /// 📄OpenNARS `CompoundTerm.size`
     /// * 🚩直接链接到[`TermComponents`]的属性
     /// * ⚠️对「像」不包括「像占位符」
@@ -521,7 +521,7 @@ impl CompoundTermRef<'_> {
     ///
     /// get a component by index
     #[inline]
-    pub fn component_at(&self, index: usize) -> Option<&Term> {
+    pub fn component_at(self, index: usize) -> Option<&'s Term> {
         self.components.get(index)
     }
 
@@ -626,6 +626,14 @@ impl CompoundTermRef<'_> {
             },
             false => self.contain_component(other),
         }
+    }
+
+    /// 🆕作为「条件句」使用
+    /// * 🚩转发到[「陈述」](StatementRef::as_conditional)中
+    ///
+    /// ! ❌【2024-07-05 17:04:02】不再考虑支持「等价」陈述的词项链转换，同时也不再将「等价陈述」视作「条件句」
+    pub fn as_conditional(self) -> Option<(StatementRef<'s>, CompoundTermRef<'s>)> {
+        self.as_statement()?.as_conditional()
     }
 }
 

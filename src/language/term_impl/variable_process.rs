@@ -414,6 +414,11 @@ pub fn has_substitute(var_type: &str, to_be_unified_1: &Term, to_be_unified_2: &
     )
 }
 
+pub fn has_unification_q(term1: &Term, term2: &Term) -> bool {
+    eprintln!("// TODO: 【2024-07-09 15:18:00】有待实装");
+    true // ! 暂且返回真
+}
+
 impl TermComponents {
     #[cfg(TODO_20240614164500_有待迁移)] // TODO: 有待后续完成迁移后改写
     /// 📄OpenNARS `CompoundTerm.applySubstitute` 方法

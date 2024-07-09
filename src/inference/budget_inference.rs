@@ -4,7 +4,14 @@
 
 //! 🎯复刻OpenNARS `nars.inference.BudgetFunctions`
 
-use crate::inference::{Budget, BudgetFunctions};
+use super::{BudgetInferenceFunction, BudgetInferenceResult, Truth};
+use crate::{
+    control::ReasonContextWithLinks,
+    entity::{BudgetValue, ShortFloat, TLink, TruthValue},
+    inference::{Budget, BudgetFunctions, ReviseResult},
+    language::Term,
+    util::{OptionOrSomeRef, RefCount},
+};
 
 /// 预算推理
 pub trait BudgetInference: Budget {
@@ -20,222 +27,184 @@ pub trait BudgetInference: Budget {
         self.copy_budget_from(&new_budget);
     }
 
-    // TODO: 【2024-06-22 14:50:02】后续拆分到「预算推理」中去
-    // /* ----- Task derivation in LocalRules and SyllogisticRules ----- */
-    // /// 模拟`BudgetInference.forward`
-    // ///
-    // /// # 📄OpenNARS
-    // ///
-    // /// Forward inference result and adjustment
-    // ///
-    // /// @param truth The truth value of the conclusion
-    // /// @return The budget value of the conclusion
-    // fn forward<C>(
-    //     truth: &impl Truth,
-    //     // * 🚩【2024-05-12 15:48:37】↓对标`memory`
-    //     context: &mut impl DerivationContextReason<C>,
-    //     memory: &impl Memory<ShortFloat = ShortFloat>,
-    // ) -> impl Budget + Sized
-    // where
-    //     C: TypeContext<ShortFloat = ShortFloat, Budget = Self>,
-    // {
-    //     /* 📄OpenNARS源码：
-    //     return budgetInference(truthToQuality(truth), 1, memory); */
-    //     Self::__budget_inference(Self::truth_to_quality(truth), 1, context, memory)
-    // }
-
-    // /// 模拟`BudgetInference.backward`
-    // /// * 💭似乎跟「前向推理」[`BudgetInference::forward`]一样
-    // ///
-    // /// # 📄OpenNARS
-    // ///
-    // /// Backward inference result and adjustment, stronger case
-    // ///
-    // /// @param truth  The truth value of the belief deriving the conclusion
-    // /// @param memory Reference to the memory
-    // /// @return The budget value of the conclusion
-    // fn backward<C>(
-    //     truth: &impl Truth,
-    //     // * 🚩【2024-05-12 15:48:37】↓对标`memory`
-    //     context: &mut impl DerivationContextReason<C>,
-    //     memory: &impl Memory<ShortFloat = ShortFloat>,
-    // ) -> impl Budget + Sized
-    // where
-    //     C: TypeContext<ShortFloat = ShortFloat, Budget = Self>,
-    // {
-    //     /* 📄OpenNARS源码：
-    //     return budgetInference(truthToQuality(truth), 1, memory); */
-    //     Self::__budget_inference(Self::truth_to_quality(truth), 1, context, memory)
-    // }
-
-    // /// 模拟`BudgetInference.backwardWeak`
-    // /// ? ❓【2024-05-04 01:18:42】究竟是哪儿「弱」了
-    // ///   * 📝答：在「质量」前乘了个恒定系数（表示「弱推理」？）
-    // ///
-    // /// # 📄OpenNARS
-    // ///
-    // /// Backward inference result and adjustment, weaker case
-    // ///
-    // /// @param truth  The truth value of the belief deriving the conclusion
-    // /// @param memory Reference to the memory
-    // /// @return The budget value of the conclusion
-    // fn backward_weak<C>(
-    //     truth: &impl Truth,
-    //     // * 🚩【2024-05-12 15:48:37】↓对标`memory`
-    //     context: &mut impl DerivationContextReason<C>,
-    //     memory: &impl Memory<ShortFloat = ShortFloat>,
-    // ) -> impl Budget + Sized
-    // where
-    //     C: TypeContext<ShortFloat = ShortFloat, Budget = Self>,
-    // {
-    //     /* 📄OpenNARS源码：
-    //     return budgetInference(w2c(1) * truthToQuality(truth), 1, memory); */
-    //     Self::__budget_inference(
-    //         ShortFloat::w2c(1.0) & Self::truth_to_quality(truth),
-    //         1,
-    //         context,
-    //         memory,
-    //     )
-    // }
-
-    // /* ----- Task derivation in CompositionalRules and StructuralRules ----- */
-    // /// 模拟`BudgetInference.compoundForward`
-    // ///
-    // /// # 📄OpenNARS
-    // ///
-    // /// Forward inference with CompoundTerm conclusion
-    // ///
-    // /// @param truth   The truth value of the conclusion
-    // /// @param content The content of the conclusion
-    // /// @param memory  Reference to the memory
-    // /// @return The budget of the conclusion
-    // fn compound_forward<C>(
-    //     truth: &impl Truth,
-    //     content: &Term,
-    //     // * 🚩【2024-05-12 15:48:37】↓对标`memory`
-    //     context: &mut impl DerivationContextReason<C>,
-    //     memory: &impl Memory<ShortFloat = ShortFloat>,
-    // ) -> impl Budget + Sized
-    // where
-    //     C: TypeContext<ShortFloat = ShortFloat, Budget = Self>,
-    // {
-    //     /* 📄OpenNARS源码：
-    //     return budgetInference(truthToQuality(truth), content.getComplexity(), memory); */
-    //     Self::__budget_inference(
-    //         Self::truth_to_quality(truth),
-    //         content.complexity(),
-    //         context,
-    //         memory,
-    //     )
-    // }
-
-    // /// 模拟`BudgetInference.compoundBackward`
-    // ///
-    // /// # 📄OpenNARS
-    // ///
-    // /// Backward inference with CompoundTerm conclusion, stronger case
-    // ///
-    // /// @param content The content of the conclusion
-    // /// @param memory  Reference to the memory
-    // /// @return The budget of the conclusion
-    // fn compound_backward<C>(
-    //     content: &Term,
-    //     // * 🚩【2024-05-12 15:48:37】↓对标`memory`
-    //     context: &mut impl DerivationContextReason<C>,
-    //     memory: &impl Memory<ShortFloat = ShortFloat>,
-    // ) -> impl Budget + Sized
-    // where
-    //     C: TypeContext<ShortFloat = ShortFloat, Budget = Self>,
-    // {
-    //     /* 📄OpenNARS源码：
-    //     return budgetInference(1, content.getComplexity(), memory); */
-    //     Self::__budget_inference(ShortFloat::ONE, content.complexity(), context, memory)
-    // }
-
-    // /// 模拟`BudgetInference.compoundBackwardWeak`
-    // ///
-    // /// # 📄OpenNARS
-    // fn compound_backward_weak<C>(
-    //     content: &Term,
-    //     // * 🚩【2024-05-12 15:48:37】↓对标`memory`
-    //     context: &mut impl DerivationContextReason<C>,
-    //     memory: &impl Memory<ShortFloat = ShortFloat>,
-    // ) -> impl Budget + Sized
-    // where
-    //     C: TypeContext<ShortFloat = ShortFloat, Budget = Self>,
-    // {
-    //     /* 📄OpenNARS源码：
-    //     return budgetInference(w2c(1), content.getComplexity(), memory); */
-    //     Self::__budget_inference(ShortFloat::w2c(1.0), content.complexity(), context, memory)
-    // }
-
-    // /// 模拟`BudgetInference.budgetInference`
-    // /// * 🚩通用的「预算推理」
-    // /// * 🚩【2024-05-02 21:22:22】此处脱离与「词项链」「任务链」的关系，仅看其「预算」部分
-    // ///   * 📝OpenNARS源码本质上还是在强调「预算」而非（继承其上的）「词项」「记忆区」
-    // ///   * 📝之所以OpenNARS要传入「记忆区」「真值」是因为需要「获取其中某个词项/任务」
-    // /// * 🚩【2024-05-12 15:55:37】目前在实现「记忆区」「推理上下文」的API之下，可以按逻辑无损复刻
-    // ///   * ❓后续是否要将「记忆区」的引用代入「推理上下文」
-    // /// * 📝【2024-05-17 15:41:10】经OpenNARS基本论证：`t`不可能为`null`
-    // ///   * 📌「直接推理（任务+概念）」从来不会调用此函数
-    // ///     * 📄证据：`processJudgement`与`processQuestion`均除了本地规则「修正/问答」外没调用别的
-    // ///   * 🚩【2024-05-18 01:58:44】故因此只会从「概念推理」被调用，
-    // ///   * ✅使用[`DerivationContextReason`]解决
-    // ///
-    // ///
-    // /// # 📄OpenNARS
-    // ///
-    // /// Common processing for all inference step
-    // ///
-    // /// @param qual       Quality of the inference
-    // /// @param complexity Syntactic complexity of the conclusion
-    // /// @param memory     Reference to the memory
-    // /// @return Budget of the conclusion task
-    // fn __budget_inference<C>(
-    //     qual: ShortFloat,
-    //     complexity: usize,
-    //     context: &mut impl DerivationContextReason<C>,
-    //     memory: &impl Memory<ShortFloat = ShortFloat>,
-    // ) -> impl Budget + Sized
-    // where
-    //     C: TypeContext<ShortFloat = ShortFloat, Budget = Self>,
-    // {
-    //     /* 📄OpenNARS源码：
-    //     Item t = memory.currentTaskLink;
-    //     if (t == null) {
-    //         t = memory.currentTask;
-    //     }
-    //     float priority = t.getPriority();
-    //     float durability = t.getDurability() / complexity;
-    //     float quality = qual / complexity;
-    //     TermLink bLink = memory.currentBeliefLink;
-    //     if (bLink != null) {
-    //         priority = or(priority, bLink.getPriority());
-    //         durability = and(durability, bLink.getDurability());
-    //         float targetActivation = memory.getConceptActivation(bLink.getTarget());
-    //         bLink.incPriority(or(quality, targetActivation));
-    //         bLink.incDurability(quality);
-    //     }
-    //     return new BudgetValue(priority, durability, quality); */
-    //     let t_budget = context.current_task_link().budget();
-    //     let mut priority = t_budget.priority();
-    //     let mut durability =
-    //         ShortFloat::from_float(t_budget.durability().to_float() / complexity as Float);
-    //     let quality = ShortFloat::from_float(qual.to_float() / complexity as Float);
-    //     let b_link = context.current_belief_link_mut();
-    //     let activation = memory.get_concept_activation(&b_link.target());
-    //     priority = priority | b_link.priority();
-    //     durability = durability & b_link.durability();
-    //     let target_activation = activation;
-    //     b_link.inc_priority(quality | target_activation);
-    //     b_link.inc_durability(quality);
-    //     BudgetValue::new(priority, durability, quality)
-    // }
+    /// 修正@直接推理
+    /// * 🚩【2024-05-21 10:30:50】现在仅用于直接推理，但逻辑可以共用：「反馈到链接」与「具体任务计算」并不矛盾
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// Evaluate the quality of a revision, then de-prioritize the premises
+    fn revise_direct(
+        new_belief_truth: &impl Truth,
+        old_belief_truth: &impl Truth,
+        revised_truth: &impl Truth,
+        current_task_budget: &mut impl Budget,
+    ) -> BudgetValue {
+        // * 🚩计算
+        let ReviseResult {
+            new_budget,
+            new_task_budget,
+            ..
+        } = BudgetValue::revise(
+            new_belief_truth,
+            old_belief_truth,
+            revised_truth,
+            current_task_budget,
+            None::<(&BudgetValue, &BudgetValue)>,
+        );
+        // * 🚩应用修改
+        current_task_budget.copy_budget_from(&new_task_budget);
+        // * 🚩返回
+        new_budget
+    }
 }
 
 /// 自动实现「预算推理」
 /// * 🎯直接在「预算值」上加功能
 impl<B: Budget> BudgetInference for B {}
+
+use BudgetInferenceFunction::*;
+/// 🆕为「推理上下文」实现的「预算推理」系列方法
+pub trait BudgetInferenceContext: ReasonContextWithLinks {
+    /// 🆕同{@link BudgetInference#revise}，但是「概念推理」专用
+    /// * 🚩在「共用逻辑」后，将预算值反馈回「词项链」「任务链」
+    fn revise_matching(
+        &mut self,
+        new_belief_truth: &impl Truth,
+        old_belief_truth: &impl Truth,
+        revised_truth: &impl Truth,
+    ) -> BudgetValue {
+        // * 🚩计算
+        let current_task = self.current_task();
+        let current_task_link = self.current_task_link();
+        let current_belief_link = self.belief_link_for_budget_inference();
+        let current_links_budget = current_belief_link.map(|b_link| (current_task_link, b_link));
+        let result = BudgetValue::revise(
+            new_belief_truth,
+            old_belief_truth,
+            revised_truth,
+            &*current_task.get_(),
+            current_links_budget,
+        );
+        // * 🚩应用修改
+        // 任务更新
+        drop(current_task);
+        self.current_task_mut()
+            .mut_()
+            .copy_budget_from(&result.new_task_budget);
+        // 链接更新
+        if let Some([new_t_budget, new_b_budget]) = result.new_links_budget {
+            let current_task_link = self.current_task_link_mut();
+            current_task_link.copy_budget_from(&new_t_budget);
+            if let Some(current_belief_link) = self.belief_link_for_budget_inference_mut() {
+                current_belief_link.copy_budget_from(&new_b_budget);
+            }
+        }
+        // * 🚩返回
+        result.new_budget
+    }
+
+    /// # 📄OpenNARS
+    ///
+    /// Forward inference result and adjustment
+    fn forward<T: Truth>(&mut self, truth: impl OptionOrSomeRef<T>) -> BudgetValue {
+        self.budget_inference(Forward, truth.or_some(), None)
+    }
+
+    /// # 📄OpenNARS
+    ///
+    /// Backward inference result and adjustment, stronger case
+    fn backward<T: Truth>(&mut self, truth: impl OptionOrSomeRef<T>) -> BudgetValue {
+        self.budget_inference(Backward, truth.or_some(), None)
+    }
+
+    /// # 📄OpenNARS
+    ///
+    /// Backward inference result and adjustment, weaker case
+    fn backward_weak<T: Truth>(&mut self, truth: impl OptionOrSomeRef<T>) -> BudgetValue {
+        self.budget_inference(BackwardWeak, truth.or_some(), None)
+    }
+
+    /// # 📄OpenNARS
+    ///
+    /// Forward inference with CompoundTerm conclusion
+    fn compound_forward<T: Truth>(
+        &mut self,
+        truth: impl OptionOrSomeRef<T>,
+        content: impl OptionOrSomeRef<Term>,
+    ) -> BudgetValue {
+        self.budget_inference(CompoundForward, truth.or_some(), content.or_some())
+    }
+
+    /// # 📄OpenNARS
+    ///
+    /// Backward inference with CompoundTerm conclusion, stronger case
+    fn compound_backward(&mut self, content: impl OptionOrSomeRef<Term>) -> BudgetValue {
+        self.budget_inference(CompoundBackward, None::<&TruthValue>, content.or_some())
+    }
+
+    /// # 📄OpenNARS
+    ///
+    /// Backward inference with CompoundTerm conclusion, weaker case
+    fn compound_backward_weak(&mut self, content: impl OptionOrSomeRef<Term>) -> BudgetValue {
+        self.budget_inference(CompoundBackwardWeak, None::<&TruthValue>, content.or_some())
+    }
+
+    /// # 📄OpenNARS
+    ///
+    /// Common processing for all inference step
+    fn budget_inference(
+        &mut self,
+        function: BudgetInferenceFunction,
+        truth: Option<&impl Truth>,
+        content: Option<&Term>,
+    ) -> BudgetValue {
+        // * 🚩获取有关「词项链」「任务链」的有关参数
+        let t_link = self.current_task_link();
+        let b_link = self.belief_link_for_budget_inference();
+        // * 🚩非空时计算，其它默认为0（转换推理不会用到）
+        let target_activation = b_link.map_or(ShortFloat::ZERO, |b_link| {
+            self.concept_activation(&b_link.target())
+        });
+        // * 🚩计算新结果
+        let result = BudgetValue::budget_inference(
+            function,
+            truth,
+            content,
+            t_link,
+            b_link,
+            target_activation,
+        );
+        // * 🚩应用新结果
+        let b_link = self.belief_link_for_budget_inference_mut();
+        Self::budget_inference_apply(result, b_link)
+    }
+
+    /// Get the current activation level of a concept.
+    /// * 🚩从「概念」中来
+    /// * 🚩【2024-06-22 16:59:34】因涉及控制机制（推理上下文），故放入此中
+    fn concept_activation(&self, term: &Term) -> ShortFloat {
+        self.term_to_concept(term)
+            .map_or(ShortFloat::ZERO, |c| c.priority())
+    }
+
+    /// 🆕根据计算出的「预算函数」应用其中的结果
+    /// * 🚩覆盖各处预算值，并以此更新
+    /// * 🚩返回得出的「新预算值」
+    fn budget_inference_apply(
+        result: BudgetInferenceResult,
+        belief_link_budget: Option<&mut impl Budget>,
+    ) -> BudgetValue {
+        // * 🚩拿出「新信念链预算」并更新
+        if let (Some(b_budget), Some(ref new_budget)) =
+            (belief_link_budget, result.new_belief_link_budget)
+        {
+            b_budget.copy_budget_from(new_budget);
+        }
+        // * 🚩拿出「新预算」并返回
+        result.new_budget
+    }
+}
+impl<C: ReasonContextWithLinks> BudgetInferenceContext for C {}
 
 /// TODO: 单元测试
 #[cfg(test)]

@@ -145,7 +145,7 @@ pub trait BudgetFunctions: Budget {
         old_belief_truth: &impl Truth, // from belief
         revised_truth: &impl Truth,
         current_task_budget: &impl Budget,
-        current_links_budget: Option<[&impl Budget; 2]>,
+        current_links_budget: Option<(&impl Budget, &impl Budget)>,
     ) -> ReviseResult {
         // * 🚩计算落差 | t = task, b = belief
         let dif_to_new_task =
@@ -153,7 +153,7 @@ pub trait BudgetFunctions: Budget {
         let dif_to_old_belief =
             ShortFloat::from_float(revised_truth.expectation_abs_dif(old_belief_truth));
         // * 🚩若有：反馈到 [任务链, 信念链]
-        let new_links_budget = current_links_budget.map(|[t_budget, b_budget]| {
+        let new_links_budget = current_links_budget.map(|(t_budget, b_budget)| {
             [
                 // * 📝当前任务链 降低预算：
                 // * * p = link & !difT
@@ -545,6 +545,7 @@ mod budget_inference_functions {
 
     /// 所有可用的预算值函数
     /// * 🎯统一呈现「在推理过程中计算预算值」的「预算超参数」
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
     pub enum BudgetInferenceFunction {
         /// 正向推理
         Forward,

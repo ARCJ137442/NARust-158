@@ -102,6 +102,31 @@ impl BudgetValue {
     }
 }
 
+/// 允许将所有[`Budget`]的引用转换为[`BudgetValue`]
+/// * 🚩在其中创建新「真值」对象
+/// * 📝Rust对[`Into`]分派方法时，能实现「自身类型⇒直接传递自身⇒内联」的「零成本抽象」
+impl<T: Budget> From<&T> for BudgetValue {
+    fn from(value: &T) -> Self {
+        Self::new(value.priority(), value.durability(), value.quality())
+    }
+}
+
+/// 允许通过「短浮点三数组」转换为预算值
+impl<SF: Into<ShortFloat>> From<[SF; 3]> for BudgetValue {
+    fn from([p, d, q]: [SF; 3]) -> Self {
+        Self::new(p.into(), d.into(), q.into())
+    }
+}
+
+/// 允许通过「pdq三元组」转换为预算值
+impl<P: Into<ShortFloat>, D: Into<ShortFloat>, Q: Into<ShortFloat>> From<(P, D, Q)>
+    for BudgetValue
+{
+    fn from((p, d, q): (P, D, Q)) -> Self {
+        Self::new(p.into(), d.into(), q.into())
+    }
+}
+
 // 自动派生并实现[`ToDisplayAndBrief`]与[`Display`]
 __impl_to_display_and_display! {
     @( budget_to_display; budget_to_display_brief;)

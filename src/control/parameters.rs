@@ -254,34 +254,39 @@ mod tests {
                 assert_eq!(parameters.$field, $expected);
             )*}
             // 默认值表
-            concept_forgetting_cycle => 10
-            task_link_forgetting_cycle => 20
-            term_link_forgetting_cycle => 50
-            silent_level => 0
-            new_task_forgetting_cycle => 1
-            max_matched_term_link => 10
-            max_reasoned_term_link => 3
-            horizon => 1.0
-            reliance => 0.9
-            budget_threshold => 0.01
+            concept_forgetting_cycle         => 10
+            task_link_forgetting_cycle       => 20
+            term_link_forgetting_cycle       => 50
+            silent_level                     => 0
+            new_task_forgetting_cycle        => 1
+            max_matched_term_link            => 10
+            max_reasoned_term_link           => 3
+            horizon                          => 1.0
+            reliance                         => 0.9
+            budget_threshold                 => 0.01
             default_confirmation_expectation => 0.8
-            default_creation_expectation => 0.66
-            default_judgement_confidence => 0.9
-            default_judgement_priority => 0.8
-            default_judgement_durability => 0.8
-            default_question_priority => 0.9
-            default_question_durability => 0.9
-            bag_level => 100
-            bag_threshold => 10
-            load_factor => 0.5
-            concept_bag_size => 1000
-            task_link_bag_size => 20
-            term_link_bag_size => 100
-            task_buffer_size => 10
-            maximum_stamp_length => 8
-            term_link_record_length => 10
-            maximum_belief_length => 7
-            maximum_questions_length => 5
+            default_creation_expectation     => 0.66
+            default_truth_analytic           => false
+            default_judgement_frequency      => 1.0
+            default_judgement_confidence     => 0.9
+            default_judgement_priority       => 0.8
+            default_judgement_durability     => 0.8
+            default_question_priority        => 0.9
+            default_question_durability      => 0.9
+            bag_level                        => 100
+            bag_threshold                    => 10
+            load_factor                      => 0.5
+            concept_bag_size                 => 1000
+            task_link_bag_size               => 20
+            term_link_bag_size               => 100
+            task_buffer_size                 => 10
+            concept_initial_priority         => 0.01
+            concept_initial_durability       => 0.01
+            concept_initial_quality          => 0.01
+            maximum_stamp_length             => 8
+            term_link_record_length          => 10
+            maximum_belief_length            => 7
+            maximum_questions_length         => 5
         }
     }
 

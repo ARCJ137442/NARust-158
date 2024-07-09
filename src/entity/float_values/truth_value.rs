@@ -138,6 +138,15 @@ impl TruthValue {
     }
 }
 
+/// 允许将所有[`Truth`]的引用转换为[`TruthValue`]
+/// * 🚩在其中创建新「真值」对象
+/// * 📝Rust对[`Into`]分派方法时，能实现「自身类型⇒直接传递自身⇒内联」的「零成本抽象」
+impl<T: Truth> From<&T> for TruthValue {
+    fn from(value: &T) -> Self {
+        Self::new(value.frequency(), value.confidence(), value.is_analytic())
+    }
+}
+
 __impl_to_display_and_display! {
     @(truth_to_display; truth_to_display_brief;)
     TruthValue as Truth

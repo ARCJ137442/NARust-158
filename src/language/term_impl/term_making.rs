@@ -81,7 +81,7 @@ impl Term {
                     // * 🚩取出其中仅有的两个元素
                     let predicate = components.pop().unwrap();
                     let subject = components.pop().unwrap();
-                    Self::make_statement(statement, subject, predicate)
+                    Self::make_statement(&statement, subject, predicate)
                 }
                 // * 🚩其它⇒无
                 _ => None,
@@ -827,7 +827,11 @@ impl Term {
         }
     }
 
-    pub fn make_statement(template: StatementRef, subject: Term, predicate: Term) -> Option<Term> {
+    /// 从模板中制作「陈述」
+    /// * 🎯推理规则
+    /// * 🚩【2024-07-08 11:45:32】放宽对「词项类型」的限制
+    ///   * 📌实际上只需识别标识符
+    pub fn make_statement(template: &Term, subject: Term, predicate: Term) -> Option<Term> {
         // * 🚩无效⇒制作失败
         if StatementRef::invalid_statement(&subject, &predicate) {
             return None;
@@ -2578,11 +2582,7 @@ mod tests {
         #[test]
         fn make_statement() -> AResult {
             fn test(template: Term, subject: Term, predicate: Term, expected: Option<Term>) {
-                let out = Term::make_statement(
-                    template.as_statement().unwrap(),
-                    subject.clone(),
-                    predicate.clone(),
-                );
+                let out = Term::make_statement(&template, subject.clone(), predicate.clone());
                 assert_eq!(
                     out,
                     expected,
