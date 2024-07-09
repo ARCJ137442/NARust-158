@@ -133,7 +133,7 @@ pub trait Sentence: ToDisplayAndBrief + Evidential {
     fn is_question(&self) -> bool {
         matches!(
             self.as_punctuated_ref(),
-            PunctuatedSentenceRef::Judgement(..)
+            PunctuatedSentenceRef::Question(..)
         )
     }
     fn as_question(&self) -> Option<&Self::Question> {

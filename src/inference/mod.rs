@@ -77,34 +77,45 @@ pub mod test {
         create_vm(DEFAULT_PARAMETERS, engine)
     }
 
-    /// 输入NAVM指令到虚拟机
-    pub fn input_cmds(vm: &mut impl VmRuntime, cmds: &str) {
-        for cmd in cmds
-            .lines()
-            .map(str::trim)
-            .filter(|line| !line.is_empty())
-            .map(|line| Cmd::parse(line).expect("NAVM指令{line}解析失败"))
-        {
-            let cmd_s = cmd.to_string();
-            vm.input_cmd(cmd)
-                .unwrap_or_else(|_| panic!("NAVM指令「{cmd_s}」输入失败"));
+    /// 增强虚拟机运行时的特征
+    pub trait VmRuntimeBoost: VmRuntime {
+        /// 输入NAVM指令到虚拟机
+        fn input_cmds(&mut self, cmds: &str) {
+            for cmd in cmds
+                .lines()
+                .map(str::trim)
+                .filter(|line| !line.is_empty())
+                .map(|line| Cmd::parse(line).expect("NAVM指令{line}解析失败"))
+            {
+                let cmd_s = cmd.to_string();
+                self.input_cmd(cmd)
+                    .unwrap_or_else(|_| panic!("NAVM指令「{cmd_s}」输入失败"));
+            }
+        }
+
+        /// 拉取虚拟机的输出
+        fn fetch_outputs(&mut self) -> Vec<Output> {
+            list![
+                output
+                while let Some(output) = (self.try_fetch_output().expect("拉取输出失败"))
+            ]
+        }
+
+        /// 输入指令并拉取输出
+        #[must_use]
+        fn input_cmds_and_fetch_out(&mut self, cmds: &str) -> Vec<Output> {
+            self.input_cmds(cmds);
+            self.fetch_outputs()
+        }
+
+        /// 拉取输出并预期其中的输出
+        fn fetch_expected_outputs(&mut self, expect: impl Fn(&Output) -> bool) -> Vec<Output> {
+            let outputs = self.fetch_outputs();
+            expect_outputs(&outputs, expect);
+            outputs
         }
     }
-
-    /// 拉取虚拟机的输出
-    pub fn fetch_outputs(vm: &mut impl VmRuntime) -> Vec<Output> {
-        list![
-            output
-            while let Some(output) = (vm.try_fetch_output().expect("拉取输出失败"))
-        ]
-    }
-
-    /// 输入指令并拉取输出
-    #[must_use]
-    pub fn input_cmds_and_fetch_out(vm: &mut impl VmRuntime, cmds: &str) -> Vec<Output> {
-        input_cmds(vm, cmds);
-        fetch_outputs(vm)
-    }
+    impl<T: VmRuntime> VmRuntimeBoost for T {}
 
     /// 打印输出（基本格式）
     pub fn print_outputs<'a>(outs: impl IntoIterator<Item = &'a Output>) {
@@ -140,15 +151,5 @@ pub mod test {
             .into_iter()
             .find(|&output| matches!(output.get_narsese().map(GetTerm::get_term), Some(term) if *term == expected) )
             .expect("没有找到期望的输出")
-    }
-
-    /// 拉取输出并预期其中的输出
-    pub fn fetch_expected_outputs(
-        vm: &mut impl VmRuntime,
-        expect: impl Fn(&Output) -> bool,
-    ) -> Vec<Output> {
-        let outputs = fetch_outputs(vm);
-        expect_outputs(&outputs, expect);
-        outputs
     }
 }

@@ -3,13 +3,11 @@
 //! * 📝其中包含「修订规则」等
 
 use crate::{
-    control::{util_outputs, ContextDerivation, ReasonContext, ReasonContextDirect},
-    entity::{
-        BudgetValue, Concept, Judgement, Punctuation, RCTask, Sentence, ShortFloat, Stamp, Task,
-    },
+    control::{ContextDerivation, ReasonContext, ReasonContextDirect},
+    entity::{BudgetValue, Concept, Judgement, Punctuation, RCTask, Sentence, ShortFloat, Stamp},
     inference::{
-        try_solution_apply, try_solution_calculate, Budget, BudgetFunctions, BudgetInference,
-        Evidential, TruthFunctions,
+        try_solution_apply_context, try_solution_apply_task, try_solution_calculate, Budget,
+        BudgetFunctions, BudgetInference, Evidential, TruthFunctions,
     },
     language::Term,
     util::{RefCount, ToDisplayAndBrief},
@@ -80,60 +78,22 @@ fn process_judgement(context: &mut ReasonContextDirect) {
     {
         // * 🚩开始尝试解决「问题表」中的所有问题
         let this = context.core.current_concept_mut();
-        let mut outputs = vec![];
-        let mut new_tasks = vec![];
         let mut results = vec![];
         // * 🚩先计算
         for existed_question in this.questions() {
             let result =
                 try_solution_calculate(&judgment, &existed_question.get_(), budget_threshold);
-            results.push(result);
+            // 拷贝「问题」的共享引用
+            results.push((existed_question.clone_(), result));
         }
         // * 🚩再应用
-        for (existed_question, result) in this.questions_mut().zip(results.into_iter()) {
-            // TODO: 🏗️有待重构：此处「应用修改需要激活任务，但激活任务需要借用上下文」存在严重借用问题
-            let output = try_solution_apply(
-                result,
-                &mut existed_question.mut_(),
-                &judgment,
-                // TODO: 💫【2024-07-02 15:35:01】混乱：此处内联了`activated_task`，以保证借用不冲突
-                |new_budget, new_task, candidate_belief| {
-                    {
-                        let parent_task = context.current_task.clone(); // TODO: 原先要借用context的部分
-                        let task = Task::new(
-                            new_task.clone().into(),
-                            new_budget,
-                            Some(parent_task),
-                            Some(new_task.clone()),
-                            Some(candidate_belief.clone()),
-                        );
-                        // * 🚩现在重新改为`COMMENT`，但更详细地展示「任务」本身
-                        {
-                            let message = format!("!!! Activated: {}", task.to_display_long());
-                            {
-                                let output = util_outputs::output_comment(message);
-                                outputs.push(output) // TODO: 原先要借用context的部分
-                            };
-                        };
-                        // // * 🚩若为「问题」⇒输出显著的「导出结论」
-                        new_tasks.push(task); // TODO: 原先要借用context的部分
-                    }
-                },
-            );
-            if let Some(output) = output {
-                outputs.push(output);
-            }
+        // * 📌【2024-07-09 14:56:32】现在分布应用，不再需要展开内联代码
+        for (mut existed_question, result) in results {
+            try_solution_apply_task(&result, &mut existed_question.mut_(), &judgment);
+            try_solution_apply_context(result, &judgment, context);
         }
-        // * 🚩此时再借用context
-        for output in outputs {
-            context.report(output);
-        }
-        for new_task in new_tasks {
-            context.add_new_task(new_task);
-        }
-        // TODO: 🏗️【2024-06-30 12:09:13】以上均为内联的代码
         // * 🚩将信念追加至「信念表」
-        let this = context.core.current_concept_mut();
+        let this = context.current_concept_mut();
         let overflowed_belief = this.add_belief(judgment);
         // * 🚩报告溢出
         if let Some(overflowed_belief) = overflowed_belief {
@@ -159,15 +119,18 @@ fn process_question(context: &mut ReasonContextDirect) {
     let question_task_ref = question_task.get_(); // * 🚩引用拷贝，否则会涉及大量借用问题
 
     // * 🚩断言传入任务的「语句」一定是「问题」
-    debug_assert!(question_task_ref.is_question(), "要处理的必须是「问题」");
+    debug_assert!(
+        question_task_ref.is_question(),
+        "要处理的必须是「问题」：{question_task:?}"
+    );
 
     // * 🚩断言所基于的「当前概念」就是「推理上下文」的「当前概念」
     // * 📝在其被唯一使用的地方，传入的`task`只有可能是`context.currentConcept`
-    let this = context.core.current_concept();
+    let this = context.current_concept();
 
     // * 🚩尝试寻找已有问题，若已有相同问题则直接处理已有问题
     let existed_question = find_existed_question(this, question_task_ref.content());
-    let question = existed_question.unwrap_or(&question_task);
+    let mut question = existed_question.unwrap_or(&question_task).clone_(); // ! 拷贝以避免借用问题
 
     // * 🚩实际上「先找答案，再新增『问题任务』」区别不大——找答案的时候，不会用到「问题任务」
     let new_answer = evaluation(
@@ -176,47 +139,11 @@ fn process_question(context: &mut ReasonContextDirect) {
         BudgetValue::solution_quality,
     );
     if let Some((answer, ..)) = new_answer {
-        let solution_result = try_solution_calculate(answer, &question_task_ref, budget_threshold);
+        let answer = answer.clone(); // ! 拷贝判断句以避免借用问题
+        let result = try_solution_calculate(&answer, &question.get_(), budget_threshold);
         drop(question_task_ref);
-        let parent_task = context.current_task.clone(); // 提取到前头
-        let mut question_task = context.current_task.mut_(); // TODO: 一边要借用整个「推理上下文」，一边又要借用「当前任务」……
-        let output = try_solution_apply(
-            solution_result,
-            &mut question_task,
-            &answer.clone(), // TODO: 拷贝以防止借用问题
-            // * 🚩以下代码完全内联自`activated_task`
-            |new_budget, solution, candidate_belief| {
-                {
-                    let task = Task::new(
-                        solution.clone().into(),
-                        new_budget,
-                        Some(parent_task),
-                        Some(solution.clone()),
-                        Some(candidate_belief.clone()),
-                    );
-                    // * 🚩现在重新改为`COMMENT`，但更详细地展示「任务」本身
-                    {
-                        let message = format!("!!! Activated: {}", task.to_display_long());
-                        {
-                            let output = util_outputs::output_comment(message);
-                            {
-                                context.outs.add_output(output);
-                            }
-                        };
-                    };
-                    // // * 🚩若为「问题」⇒输出显著的「导出结论」
-                    {
-                        let task = task;
-                        context.outs.add_new_task(task)
-                    };
-                }
-            },
-        );
-        if let Some(output) = output {
-            drop(question_task);
-            context.report(output);
-        }
-        // LocalRules.trySolution(ques, newAnswer, task, memory);
+        try_solution_apply_task(&result, &mut question.mut_(), &answer);
+        try_solution_apply_context(result, &answer, context);
     } else {
         drop(question_task_ref);
     }
@@ -337,8 +264,7 @@ mod tests {
     fn direct_answer_question() {
         let mut vm = create_vm_from_engine(ENGINE);
         // * 🚩输入指令并拉取输出
-        let outs = input_cmds_and_fetch_out(
-            &mut vm,
+        let outs = vm.input_cmds_and_fetch_out(
             "
             nse Sentence.
             nse Sentence?
@@ -357,20 +283,17 @@ mod tests {
         let mut vm = create_vm_from_engine(ENGINE);
         // * 🚩检验长期稳定性
         for i in 0..0x100 {
-            let _outs = input_cmds_and_fetch_out(
-                &mut vm,
-                &format!(
-                    "
+            let _outs = vm.input_cmds_and_fetch_out(&format!(
+                "
                     nse <A{i} --> B>.
                     nse <A{i} --> B>?
                     rem cyc 50
                     "
-                ),
-            );
+            ));
             // ! ⚠️【2024-07-09 02:22:12】不一定有回答：预算竞争约束着资源调配，可能没法立即回答
             // // * 🚩检测有回答
             // expect_outputs(&outs, |answer| matches!(answer, Output::ANSWER { .. }));
         }
-        input_cmds(&mut vm, "cyc 10000");
+        vm.input_cmds("cyc 10000");
     }
 }

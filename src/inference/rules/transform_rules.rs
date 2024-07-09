@@ -471,7 +471,7 @@ mod tests {
     use narsese::lexical_nse_term;
 
     const ENGINE: InferenceEngine = InferenceEngine::new(
-        process_direct,
+        process_direct, // ! 必须加：否则无法转换任务
         transform_task,
         InferenceEngine::ECHO.matching_f(),
         InferenceEngine::ECHO.reason_f(),
@@ -482,8 +482,7 @@ mod tests {
     fn transform_basic() {
         let mut vm = create_vm_from_engine(ENGINE);
         // * 🚩输入指令并拉取输出
-        let outs = input_cmds_and_fetch_out(
-            &mut vm,
+        let outs = vm.input_cmds_and_fetch_out(
             "
             nse <(*, A, B) --> R>.
             cyc 10
@@ -496,8 +495,7 @@ mod tests {
         expect_outputs_contains(&outs, lexical_nse_term!("<B --> (/, R, A, _)>"));
 
         // * 🚩输入指令并拉取输出
-        let outs = input_cmds_and_fetch_out(
-            &mut vm,
+        let outs = vm.input_cmds_and_fetch_out(
             "
             res
             nse <S --> (*, C, D)>.
@@ -516,8 +514,7 @@ mod tests {
     fn stability() {
         let mut vm = create_vm_from_engine(ENGINE);
         // * 🚩输入指令并拉取输出
-        let outs = input_cmds_and_fetch_out(
-            &mut vm,
+        let outs = vm.input_cmds_and_fetch_out(
             "
             nse <(*, A, B) --> R>.
             nse <S --> (*, C, D)>.

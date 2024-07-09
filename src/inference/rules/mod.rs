@@ -21,8 +21,8 @@ nar_dev_utils::mods! {
     // // 结构规则 `StructuralRules`
     // pub use structural_rules;
 
-    // // 🆕匹配规则 `MatchingRules`
-    // pub use matching_rules;
+    // 🆕匹配规则 `MatchingRules`
+    pub use matching_rules;
 
     // 🆕转换规则 `TransformRules`
     pub use transform_rules;

@@ -7,7 +7,7 @@
 //! * ♻️【2024-06-30 11:00:41】开始根据改版OpenNARS重写
 
 use crate::{
-    control::util_outputs,
+    control::{util_outputs, ContextDerivation, ReasonContext},
     entity::{BudgetValue, Judgement, JudgementV1, Sentence, ShortFloat, Task},
     global::Float,
     inference::{Budget, BudgetFunctions},
@@ -24,13 +24,13 @@ pub(in crate::inference) enum SolutionResult {
     /// 新解
     /// * 📌需要将传入的`belief`确立为「新的最优解」
     NewSolution {
-        /// 可能导出的「回答/完成」输出
-        new_output: Option<Output>,
         /// 更新后的「问题任务」优先级
         updated_question_priority: ShortFloat,
-        /// 「激活任务」所需的预算值
+        /// 「激活任务」所需的预算值与「候选信念」
         /// * `.is_some()` = 是否需要调用者（上下文）「激活任务」
-        budget_to_activate_task: Option<BudgetValue>,
+        params_to_activate_task: Option<(BudgetValue, JudgementV1)>,
+        /// 可能导出的「回答/完成」输出
+        new_output: Option<Output>,
     },
 }
 
@@ -68,13 +68,16 @@ pub(in crate::inference) fn try_solution_calculate(
 
     // * 🚩计算新预算值
     let budget = BudgetValue::solution_eval(problem, belief, question_task);
+    // * 🚩计算「候选信念」
+    // * 📝在「解决问题」时，需要使用「当前问题的上游信念」作推断
+    let parent_belief = question_task.parent_belief();
     // * 🚩预备「问题任务」的预算值（优先级）
     // * 📝解决问题后，在「已解决的问题」之预算中 降低（已经解决了，就将算力多留到「未解决问题」上）
     // * 📌【2024-06-30 11:25:23】断言：此处的`newQ`就是`solutionQuality`
     let updated_question_priority = ShortFloat::min(question_task.priority(), !new_q);
     // * 🚩计算「是否要激活任务」并返回其中的预算值
-    let budget_to_activate_task = match budget.budget_above_threshold(budget_threshold) {
-        true => Some(budget),
+    let params_to_activate_task = match budget.budget_above_threshold(budget_threshold) {
+        true => parent_belief.map(|belief| (budget, belief.clone())),
         false => None,
     };
 
@@ -82,7 +85,33 @@ pub(in crate::inference) fn try_solution_calculate(
     NewSolution {
         new_output,
         updated_question_priority,
-        budget_to_activate_task,
+        params_to_activate_task,
+    }
+}
+
+/// 将上述结果应用到「当前任务」中
+/// * 🚩要求输入选定的「最优解」以利用引用（难以将引用放到结构体中）
+/// * 🚩【2024-06-30 11:48:08】只能存在一个函数指针：调用方不能重复借用，且不知此处是先后调用
+/// * 🚩
+pub(in crate::inference) fn try_solution_apply_task(
+    result: &SolutionResult,
+    question_task: &mut Task,
+    solution: &JudgementV1,
+) {
+    use SolutionResult::*;
+    match result {
+        // * 🚩驳回⇒直接返回
+        Rejected => {}
+        // * 🚩新解⇒应用新解
+        NewSolution {
+            updated_question_priority,
+            ..
+        } => {
+            // * 🚩设置最优解
+            question_task.set_best_solution(solution.clone());
+            // * 🚩设置新优先级
+            question_task.set_priority(*updated_question_priority);
+        }
     }
 }
 
@@ -90,34 +119,30 @@ pub(in crate::inference) fn try_solution_calculate(
 /// * 📌通过函数指针实现「借用分离」
 /// * 🚩要求输入选定的「最优解」以利用引用（难以将引用放到结构体中）
 /// * 🚩【2024-06-30 11:48:08】只能存在一个函数指针：调用方不能重复借用，且不知此处是先后调用
-#[must_use]
-pub(in crate::inference) fn try_solution_apply(
+/// TODO: 后续再统一此中结果
+pub(in crate::inference) fn try_solution_apply_context(
     result: SolutionResult,
-    question_task: &mut Task,
     solution: &JudgementV1,
-    activated_task: impl FnOnce(BudgetValue, &JudgementV1, &JudgementV1),
-) -> Option<Output> {
+    context: &mut impl ReasonContext,
+) {
     use SolutionResult::*;
     match result {
         // * 🚩驳回⇒直接返回
-        Rejected => None,
+        Rejected => {}
         // * 🚩新解⇒应用新解
         NewSolution {
             new_output,
-            updated_question_priority,
-            budget_to_activate_task,
+            params_to_activate_task,
+            ..
         } => {
-            // * 🚩设置最优解
-            question_task.set_best_solution(solution.clone());
-            // * 🚩设置新优先级
-            question_task.set_priority(updated_question_priority);
             // * 🚩尝试「激活任务」
-            let parent_belief = question_task.parent_belief();
-            if let (Some(budget), Some(parent_belief)) = (budget_to_activate_task, parent_belief) {
-                activated_task(budget, solution, parent_belief);
+            if let Some((budget, candidate_belief)) = params_to_activate_task {
+                context.activated_task(budget, solution, &candidate_belief);
             }
-            // * 🚩返回输出以汇报
-            new_output
+            // * 🚩报告输出
+            if let Some(output) = new_output {
+                context.report(output);
+            }
         }
     }
 }
