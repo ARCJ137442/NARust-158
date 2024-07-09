@@ -115,7 +115,7 @@ fn process_judgement(context: &mut ReasonContextDirect) {
 fn process_question(context: &mut ReasonContextDirect) {
     let budget_threshold = context.parameters().budget_threshold;
     // * 📝【2024-05-18 14:32:20】根据上游调用，此处「传入」的`task`只可能是`context.currentTask`
-    let question_task = context.current_task.clone_(); // * 🚩引用拷贝，否则会涉及大量借用问题
+    let mut question_task = context.current_task.clone_(); // * 🚩引用拷贝，否则会涉及大量借用问题
     let question_task_ref = question_task.get_(); // * 🚩引用拷贝，否则会涉及大量借用问题
 
     // * 🚩断言传入任务的「语句」一定是「问题」
@@ -131,19 +131,20 @@ fn process_question(context: &mut ReasonContextDirect) {
     // * 🚩尝试寻找已有问题，若已有相同问题则直接处理已有问题
     let existed_question = find_existed_question(this, question_task_ref.content());
     let is_new_question = existed_question.is_none();
-    let mut question = existed_question.unwrap_or(&question_task).clone_(); // ! 拷贝以避免借用问题
 
     // * 🚩实际上「先找答案，再新增『问题任务』」区别不大——找答案的时候，不会用到「问题任务」
+    let query = existed_question.unwrap_or(&question_task).clone_(); // ! 拷贝以避免借用问题
     let new_answer = evaluation(
-        &*question.get_(),
+        &*query.get_(),
         this.beliefs(),
         BudgetValue::solution_quality,
     );
     if let Some((answer, ..)) = new_answer {
+        // ! 📝【2024-07-09 17:59:03】在「计算并应用求解」方面，使用的是「原任务」而不会用「已存在问题任务」
         let answer = answer.clone(); // ! 拷贝判断句以避免借用问题
-        let result = try_solution_calculate(&answer, &question.get_(), budget_threshold);
+        let result = try_solution_calculate(&answer, &question_task.get_(), budget_threshold);
         drop(question_task_ref);
-        try_solution_apply_task(&result, &mut question.mut_(), &answer);
+        try_solution_apply_task(&result, &mut question_task.mut_(), &answer);
         try_solution_apply_context(result, &answer, context);
     } else {
         drop(question_task_ref);
@@ -157,6 +158,13 @@ fn process_question(context: &mut ReasonContextDirect) {
                 task.get_().to_display_long()
             ));
         }
+    }
+    // * 🚩🆕未能新增⇒跳过问题
+    else {
+        context.report_comment(format!(
+            "!!! Skipped Question Task: {}",
+            question_task.get_().to_display_long()
+        ));
     }
 }
 
@@ -252,7 +260,7 @@ where
 mod tests {
     use super::*;
     use crate::inference::{test::*, InferenceEngine};
-    use navm::output::Output;
+    use navm::{output::Output, vm::VmRuntime};
 
     /// 推理引擎
     const ENGINE: InferenceEngine = InferenceEngine::new(
@@ -262,10 +270,14 @@ mod tests {
         InferenceEngine::ECHO.reason_f(),
     );
 
+    fn vm() -> impl VmRuntime {
+        create_vm_from_engine(ENGINE)
+    }
+
     /// 直接回答问题
     #[test]
     fn direct_answer_question() {
-        let mut vm = create_vm_from_engine(ENGINE);
+        let mut vm = vm();
         // * 🚩输入指令并拉取输出
         vm.input_fetch_print_expect(
             "
@@ -278,18 +290,61 @@ mod tests {
         );
     }
 
+    /// 多次回答相同问题
+    #[test]
+    fn answer_question_multiple_time() {
+        let mut vm = vm();
+        let has_answer = |answer: &Output| matches!(answer, Output::ANSWER { .. });
+
+        // 初次回答
+        vm.input_fetch_print_expect(
+            "
+            vol 100
+            nse Sentence.
+            nse Sentence?
+            cyc 2
+            ",
+            // * 🚩检查其中是否有回答
+            has_answer,
+        );
+        vm.input_fetch_print_expect(
+            "
+            nse Sentence?
+            cyc 2
+            ",
+            // * 🚩检查其中是否有回答
+            has_answer,
+        );
+        vm.input_fetch_print_expect(
+            "
+            nse Sentence?
+            cyc 2
+            ",
+            // * 🚩检查其中是否有回答
+            has_answer,
+        );
+        vm.input_fetch_print_expect(
+            "
+            nse Sentence?
+            cyc 2
+            ",
+            // * 🚩检查其中是否有回答
+            has_answer,
+        );
+    }
+
     /// 稳定性
     #[test]
     fn stability() {
-        let mut vm = create_vm_from_engine(ENGINE);
+        let mut vm = vm();
         // * 🚩检验长期稳定性
         for i in 0..0x100 {
             let _outs = vm.input_cmds_and_fetch_out(&format!(
                 "
-                    nse <A{i} --> B>.
-                    nse <A{i} --> B>?
-                    rem cyc 50
-                    "
+                nse <A{i} --> B>.
+                nse <A{i} --> B>?
+                rem cyc 50
+                "
             ));
             // ! ⚠️【2024-07-09 02:22:12】不一定有回答：预算竞争约束着资源调配，可能没法立即回答
             // // * 🚩检测有回答
