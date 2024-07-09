@@ -6,9 +6,107 @@
 // TODO: 【2024-06-20 22:24:43】🚧有待在OpenNARS改版中「函数式改造」
 #![allow(unused)]
 
-use crate::language::{CompoundTermRefMut, Term, TermComponents};
-use nar_dev_utils::matches_or;
+use crate::{
+    io::symbols::*,
+    language::{CompoundTermRef, CompoundTermRefMut, Term, TermComponents},
+};
+use nar_dev_utils::{matches_or, void};
 use std::collections::HashMap;
+
+/// 用于表示「变量替换」的字典
+/// * 🎯NAL-6中的「变量替换」「变量代入」
+#[derive(Debug, Default, Clone)]
+#[doc(alias = "VariableSubstitution")]
+pub struct VarSubstitution {
+    map: HashMap<Term, Term>,
+}
+
+impl VarSubstitution {
+    /// 构造函数
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// 从其它构造出「散列映射」的地方构造
+    pub fn from(map: impl Into<HashMap<Term, Term>>) -> Self {
+        Self { map: map.into() }
+    }
+
+    /// 从其它构造出「散列映射」的地方构造
+    pub fn from_pairs(pairs: impl IntoIterator<Item = (Term, Term)>) -> Self {
+        Self {
+            map: HashMap::from_iter(pairs),
+        }
+    }
+
+    /// 尝试获取「替代项」
+    /// * 🎯变量替换
+    pub fn get(&self, key: &Term) -> Option<&Term> {
+        self.map.get(key)
+    }
+
+    /// 链式获取「变量替换」最终点
+    /// * 🚩一路查找到头
+    /// * 📄{A -> B, B -> C}, A => Some(C)
+    /// * 📄{A -> B, B -> C}, B => Some(C)
+    /// * 📄{A -> B, B -> C}, C => None
+    pub fn chain_get(&self, key: &Term) -> Option<&Term> {
+        // * ⚠️此时应该传入非空值
+        // * 🚩从「起始点」开始查找
+        let mut end_point = self.get(key)?;
+        // * 🚩非空⇒一直溯源
+        loop {
+            match self.get(end_point) {
+                Some(next_point) => {
+                    debug_assert!(
+                        end_point != next_point,
+                        "不应有循环替换之情况！{key} @ {self:?}"
+                    );
+                    end_point = next_point
+                }
+                None => break Some(end_point),
+            }
+        }
+    }
+
+    /// 尝试判断「是否有键」
+    /// * 🎯变量重命名
+    pub fn has(&self, key: &Term) -> bool {
+        self.map.contains_key(key)
+    }
+
+    /// 获取「可替换的变量个数」
+    /// * 🚩映射的大小
+    /// * 🎯变量重命名
+    pub fn len(&self) -> usize {
+        self.map.len()
+    }
+
+    /// 判断「是否为空」
+    /// * 🎯变量替换后检查「是否已替换」
+    pub fn is_empty(&self) -> bool {
+        self.map.is_empty()
+    }
+
+    /// 设置「替代项」
+    /// * 🎯寻找可替换变量，并返回结果
+    /// * 🚩只在没有键时复制`key`，并且总是覆盖`value`值
+    pub fn put(&mut self, key: &Term, value: Term) {
+        match self.map.get_mut(key) {
+            // * 🚩有键⇒覆盖
+            Some(old_value) => *old_value = value,
+            // * 🚩无键⇒插入
+            None => void(self.map.insert(key.clone(), value)),
+        }
+    }
+
+    /// 删除映射中的「恒等替换」
+    /// * 📄`$1 => $1`
+    pub fn reduce_identities(&mut self) {
+        // * 🚩直接调用内置方法
+        self.map.retain(|k, v| k != v);
+    }
+}
 
 impl CompoundTermRefMut<'_> {
     /// 📄OpenNARS `CompoundTerm.applySubstitute` 方法
@@ -18,7 +116,6 @@ impl CompoundTermRefMut<'_> {
     /// # 📄OpenNARS
     ///
     /// Recursively apply a substitute to the current CompoundTerm
-    #[inline]
     pub fn apply_substitute(&mut self, substitution: &VarSubstitution) {
         // * 🚩遍历替换内部所有元素
         for inner in self.components() {
@@ -75,85 +172,19 @@ impl CompoundTermRefMut<'_> {
                 substitution.put(atom, Term::make_var_similar(atom, substitution.len() + 1));
             }
         });
+        substitution.reduce_identities();
         // 应用
         self.apply_substitute(&substitution);
     }
 }
 
-/// 📄OpenNARS `Variable.unify` 方法
-/// * 🚩总体流程：找「可替换的变量」并（两头都）替换之
-/// * 📝❓不对称性：从OpenNARS `findSubstitute`中所见，
-///   * `to_be_unified_1`是「包含变量，将要被消元」的那个（提供键），
-///   * 而`to_be_unified_2`是「包含常量，将要用于消元」的那个（提供值）
-/// * 📌对「在整体中替换部分」有效
-///
-/// # 📄OpenNARS
-///
-/// To unify two terms
-///
-/// @param type            The type of variable that can be substituted
-/// @param to_be_unified_1 The first term to be unified
-/// @param to_be_unified_2 The second term to be unified
-/// @param unified_in_1    The compound containing the first term
-/// @param unified_in_2    The compound containing the second term
-/// @return Whether the unification is possible
-///
-/// # 📄案例
-///
-/// ## 1 from OpenNARS调试 @ 【2024-04-21 21:48:21】
-///
-/// 传入
-///
-/// - type: "$"
-/// - to_be_unified_1: "<$1 --> B>"
-/// - to_be_unified_2: "<C --> B>"
-/// - unified_in_1: <<$1 --> A> ==> <$1 --> B>>
-/// - unified_in_2: <C --> B>
-///
-/// 结果
-/// - to_be_unified_1: "<$1 --> B>"
-/// - to_be_unified_2: "<C --> B>"
-/// - unified_in_1: <<C --> A> ==> <C --> B>>
-/// - unified_in_2: <C --> B>
-///
-#[cfg(TODO_20240614164500_有待迁移)] // TODO: 有待后续完成迁移后改写
-pub fn unify(
-    var_type: &str,
-    to_be_unified_1: &Term,
-    to_be_unified_2: &Term,
-    unified_in_1: &mut Term,
-    unified_in_2: &mut Term,
-) -> bool {
-    //  寻找
-    let (has_substitute, substitution_1, substitution_2) =
-        unify_find(var_type, to_be_unified_1, to_be_unified_2);
-
-    // 替换（+更新）
-    matches_or! {
-        // * 🚩只有在「皆为复合词项」才进行替换
-        (unified_in_1.as_compound_mut(), unified_in_2.as_compound_mut()),
-        (Some(ref mut compound_1), Some(ref mut compound_2))
-            => unify_substitute(compound_1, compound_2, &substitution_1, &substitution_2),
-        unreachable!("【2024-06-14 17:03:54】断言：能统一的词项必定是复合词项")
-        // TODO: 后续需要看改版中是否能实现「无修改构造替换后词项」
-    }
-
-    // 返回「是否替换了变量」
-    has_substitute
-}
-
 /// `unify`的前半部分
 /// * 🎯复用「二词项」和「四词项」，兼容借用规则
 /// * 🚩从「将要被统一的词项」中计算出「变量替换映射」
-#[cfg(TODO_20240614164500_有待迁移)] // TODO: 有待后续完成迁移后改写
-pub fn unify_find(
-    var_type: &str,
-    to_be_unified_1: &Term,
-    to_be_unified_2: &Term,
-) -> (bool, VarSubstitution, VarSubstitution) {
+fn unify_find(var_type: &str, to_be_unified_1: &Term, to_be_unified_2: &Term) -> Unification {
     let mut substitution_1 = VarSubstitution::new();
     let mut substitution_2 = VarSubstitution::new();
-    let has_substitute = find_substitute(
+    let has_substitute = find_unification(
         var_type,
         to_be_unified_1,
         to_be_unified_2,
@@ -161,37 +192,100 @@ pub fn unify_find(
         &mut substitution_2,
     );
     // 返回获取的映射，以及「是否有替换」
-    (has_substitute, substitution_1, substitution_2)
+    Unification(has_substitute, substitution_1, substitution_2)
 }
 
-/// `unify`的前半部分
-/// * 🎯复用「二词项」和「四词项」，兼容借用规则
-/// * 🚩替换 & 更新
-///   * 替换：在「替换所发生在的词项」中根据「变量替换映射」替换词项
-///   * 更新：替换后更新词项的「是常量」属性（源自OpenNARS）
-pub fn unify_substitute(
-    unified_in_1: &mut CompoundTermRefMut,
-    unified_in_2: &mut CompoundTermRefMut,
-    substitution_1: &VarSubstitution,
-    substitution_2: &VarSubstitution,
-) {
+/// 【对外接口】统一独立变量
+pub fn unify_find_i(to_be_unified_1: &Term, to_be_unified_2: &Term) -> Unification {
+    unify_find(VAR_INDEPENDENT, to_be_unified_1, to_be_unified_2)
+}
+
+/// 【对外接口】统一非独变量
+pub fn unify_find_d(to_be_unified_1: &Term, to_be_unified_2: &Term) -> Unification {
+    unify_find(VAR_DEPENDENT, to_be_unified_1, to_be_unified_2)
+}
+
+/// 【对外接口】统一查询变量
+pub fn unify_find_q(to_be_unified_1: &Term, to_be_unified_2: &Term) -> Unification {
+    unify_find(VAR_QUERY, to_be_unified_1, to_be_unified_2)
+}
+
+/// 多值输出：寻找「归一替换」的中间结果
+/// * 🎯使用类似`unity_find(t1, t2).apply_to(c1, c2)`完成「可变性隔离」
+pub struct Unification(pub bool, pub VarSubstitution, pub VarSubstitution);
+
+impl Unification {
+    /// 重定向到[`unify_apply`]
+    /// * 🚩返回「是否可归一化」
+    /// * 🚩【2024-07-09 21:48:43】目前作为一个实用的「链式应用方法」用以替代公开的`unifyApply`
+    #[inline]
+    pub fn apply_to(&self, parent1: CompoundTermRefMut, parent2: CompoundTermRefMut) -> bool {
+        unify_apply(parent1, parent2, self)
+    }
+
+    /// 同[`Self::apply_to`]，但允许应用在任何词项中
+    pub fn apply_to_term(&self, parent1: &mut Term, parent2: &mut Term) -> bool {
+        // * 🚩只有俩词项是复合词项时，才
+        match [parent1.as_compound_mut(), parent2.as_compound_mut()] {
+            [Some(parent1), Some(parent2)] => self.apply_to(parent1, parent2),
+            _ => false,
+        }
+    }
+}
+
+/// 使用「统一结果」统一两个复合词项
+/// * ⚠️会修改原有的复合词项
+///
+/// @param parent1 [&m] 要被修改的复合词项1
+/// @param parent2 [&m] 要被修改的复合词项2
+/// @param result  [] 上一个「寻找归一映射」的结果
+fn unify_apply(
+    unified_in_1: CompoundTermRefMut,
+    unified_in_2: CompoundTermRefMut,
+    unification: &Unification,
+) -> bool {
+    let Unification(has_unification, substitution_1, substitution_2) = unification;
     // 根据「变量替换映射」在两头相应地替换变量
     apply_unify_one(unified_in_1, substitution_1);
     apply_unify_one(unified_in_2, substitution_2);
+    *has_unification
 }
 
-fn apply_unify_one(unified_in: &mut CompoundTermRefMut, substitution: &VarSubstitution) {
-    // * 🚩若「变量替换映射」为空，本来就不会执行
+/// 得出「替代结果」后，将映射表应用到词项上
+fn apply_unify_one(mut unified_in: CompoundTermRefMut, substitution: &VarSubstitution) {
+    // * 🚩映射表非空⇒替换
     if substitution.is_empty() {
         return;
     }
-    // 根据「变量替换映射」相应地替换变量
+    // * 🚩应用 & 重命名
     unified_in.apply_substitute(substitution);
     // 替换后设置词项
     // 📄 `((CompoundTerm) compound1).renameVariables();`
     // 📄 `setConstant(true);` @ `CompoundTerm`
     // unified_in_1.is_constant = true;
-    todo!("TODO: 尚需在OpenNARS中假定「找到了变量替换映射，就一定是复合词项」")
+    unified_in.rename_variables();
+}
+
+/// 多值输出：寻找「归一替换」的中间结果
+/// ! ❌【2024-07-09 21:14:17】暂且不复刻`unifyApplied`：自成体系但不完整，需要结合`applyUnifyToNew`等「函数式方法」
+pub type AppliedCompounds = [Term; 2];
+
+/// 判断两个复合词项是否「容器相同」
+/// * 🚩只判断有关「怎么包含词项」的信息，不判断具体内容
+fn is_same_kind_compound(t1: CompoundTermRef, t2: CompoundTermRef) -> bool {
+    // * 🚩判断尺寸
+    if t1.size() != t2.size() {
+        return false;
+    }
+    // * 🚩判断「像」的关系位置（占位符位置）
+    if (t1.instanceof_image() && t2.instanceof_image())
+        && t1.get_placeholder_index() != t2.get_placeholder_index()
+    {
+        // 均为像，但占位符位置不同⇒否决
+        return false;
+    }
+    // * 🚩验证通过
+    true
 }
 
 /// 📄OpenNARS `Variable.findSubstitute` 方法
@@ -206,8 +300,8 @@ fn apply_unify_one(unified_in: &mut CompoundTermRefMut, substitution: &VarSubsti
 /// @param type            The type of variable that can be substituted
 /// @param to_be_unified_1 The first term to be unified
 /// @param to_be_unified_2 The second term to be unified
-/// @param substitution_1  The substitution for term1 formed so far
-/// @param substitution_2  The substitution for term2 formed so far
+/// @param map_1  The substitution for term1 formed so far
+/// @param map_2  The substitution for term2 formed so far
 /// @return Whether the unification is possible
 ///
 /// # 📄案例
@@ -219,14 +313,14 @@ fn apply_unify_one(unified_in: &mut CompoundTermRefMut, substitution: &VarSubsti
 /// - type: "$"
 /// - to_be_unified_1: "<$1 --> B>"
 /// - to_be_unified_2: "<C --> B>"
-/// - substitution_1: HashMap{}
-/// - substitution_2: HashMap{}
+/// - map_1: HashMap{}
+/// - map_2: HashMap{}
 ///
 /// 结果
 ///
 /// - 返回值 = true
-/// - substitution_1: HashMap{ Term"$1" => Term"C" }
-/// - substitution_2: HashMap{}
+/// - map_1: HashMap{ Term"$1" => Term"C" }
+/// - map_2: HashMap{}
 ///
 /// ## 2 from OpenNARS调试 @ 【2024-04-21 22:05:46】
 ///
@@ -235,21 +329,20 @@ fn apply_unify_one(unified_in: &mut CompoundTermRefMut, substitution: &VarSubsti
 /// - type: "$"
 /// - to_be_unified_1: "<<A --> $1> ==> <B --> $1>>"
 /// - to_be_unified_2: "<B --> C>"
-/// - substitution_1: HashMap{}
-/// - substitution_2: HashMap{}
+/// - map_1: HashMap{}
+/// - map_2: HashMap{}
 ///
 /// 结果
 ///
 /// - 返回值 = true
-/// - substitution_1: HashMap{ Term"$1" => Term"C" }
-/// - substitution_2: HashMap{}
-#[cfg(TODO_20240614164500_有待迁移)] // TODO: 有待后续完成迁移后改写
-pub fn find_substitute(
+/// - map_1: HashMap{ Term"$1" => Term"C" }
+/// - map_2: HashMap{}
+fn find_unification(
     var_type: &str,
     to_be_unified_1: &Term,
     to_be_unified_2: &Term,
-    substitution_1: &mut VarSubstitution,
-    substitution_2: &mut VarSubstitution,
+    map_1: &mut VarSubstitution,
+    map_2: &mut VarSubstitution,
 ) -> bool {
     //==== 内用函数 ====//
 
@@ -258,7 +351,9 @@ pub fn find_substitute(
     const COMMON_VARIABLE: &str = "COMMON_VARIABLE";
 
     /// 📄OpenNARS `Variable.makeCommonVariable` 函数
+    /// * 📌制作临时的「共用变量」词项
     /// * 🎯用于「变量统一」方法
+    #[inline]
     fn make_common_variable(v1: &Term, v2: &Term) -> Term {
         Term::new(
             COMMON_VARIABLE,
@@ -267,125 +362,122 @@ pub fn find_substitute(
     }
 
     /// 📄OpenNARS `Variable.isCommonVariable` 函数
+    #[inline]
     fn is_common_variable(v: &Term) -> bool {
         v.identifier() == COMMON_VARIABLE
     }
 
+    // 是【确定需要归一化】的变量
+    // * 📄临时的「共用变量」
+    // * 📄满足指定标识符的变量词项
+    // * 🚩【2024-07-09 22:46:21】因为要捕获「变量类型」故需使用闭包
+    // * 📝【2024-07-09 22:47:34】OpenNARS中似乎只在 `to_be_unified_1` 中出现「共用变量」
+    let as_correct_var = |t| match is_common_variable(t) || t.get_variable_type() == var_type {
+        true => Some(t),
+        false => None,
+    };
+
     //==== 正式开始函数体 ====//
-    // 📄 `if ((term1 instanceof Variable) && (((Variable) term1).getType() == type)) {`
-    if to_be_unified_1.get_variable_type() == var_type {
-        match substitution_1.get(to_be_unified_1).cloned() {
+    let is_same_type = to_be_unified_1.is_same_type(to_be_unified_2);
+    match [
+        as_correct_var(to_be_unified_1),
+        as_correct_var(to_be_unified_2),
+    ] {
+        // * 🚩[$1 x ?] 对应位置是变量
+        // * 🚩[$1 x $2] 若同为变量⇒统一二者（制作一个「共同变量」）
+        [Some(var_1), Some(var_2)] => {
+            // * 🚩已有替换⇒直接使用已有替换（看子项有无替换） | 递归深入
             // already mapped
-            Some(new_term) => {
-                // 📄 `return findSubstitute(type, t, term2, map1, map2);`
-                // 在新替换的变量中递归深入
-                find_substitute(
-                    var_type,
-                    &new_term, // ! 必须复制：否则会存留不可变引用
-                    to_be_unified_2,
-                    substitution_1,
-                    substitution_2,
-                )
+            if let Some(ref mapped) = map_1.get(var_1).cloned() {
+                return find_unification(var_type, mapped, to_be_unified_2, map_1, map_2);
             }
             // not mapped yet
-            None => {
-                if to_be_unified_2.get_variable_type() == var_type {
-                    let common_var = make_common_variable(to_be_unified_1, to_be_unified_2);
-                    substitution_1.put(to_be_unified_1, common_var.clone()); // unify
-                    substitution_2.put(to_be_unified_2, common_var); // unify
-                } else {
-                    substitution_1.put(to_be_unified_1, to_be_unified_2.clone()); // elimination
-                    if is_common_variable(to_be_unified_1) {
-                        substitution_2.put(to_be_unified_1, to_be_unified_2.clone());
+            // * 🚩生成一个外界输入中不可能的变量词项作为「匿名变量」
+            let common_var = make_common_variable(var_1, var_2);
+            // * 🚩建立映射：var1 -> commonVar @ term1
+            // * 🚩建立映射：var2 -> commonVar @ term2
+            map_1.put(var_1, common_var.clone()); // unify
+            map_2.put(var_2, common_var); // unify
+            true
+        }
+        // * 🚩[$1 x _2] 若并非变量⇒尝试消元划归
+        // * 📝此处意味「两个变量合并成一个变量」 | 后续「重命名变量」会将其消去
+        [Some(var_1), None] => {
+            // * 🚩已有替换⇒直接使用已有替换（看子项有无替换） | 递归深入
+            // already mapped
+            if let Some(ref mapped) = map_1.get(var_1).cloned() {
+                return find_unification(var_type, mapped, to_be_unified_2, map_1, map_2);
+            }
+            // * 🚩建立映射：var1 -> term2 @ term1
+            // elimination
+            map_1.put(var_1, to_be_unified_2.clone());
+            // * 🚩尝试消除「共同变量」
+            if is_common_variable(var_1) {
+                // * 🚩建立映射：var1 -> term2 @ term2
+                map_2.put(var_1, to_be_unified_2.clone());
+            }
+            true
+        }
+        // * 🚩[? x $2] 对应位置是变量
+        [None, Some(var_2)] => {
+            // * 🚩已有替换⇒直接使用已有替换（看子项有无替换） | 递归深入
+            // already mapped
+            if let Some(ref mapped) = map_2.get(var_2).cloned() {
+                return find_unification(var_type, to_be_unified_1, mapped, map_1, map_2);
+            }
+            // not mapped yet
+            // * 🚩[_1 x $2] 若非变量⇒尝试消元划归
+            /*
+             * 📝【2024-04-22 00:13:19】发生在如下场景：
+             * <(&&, <A-->C>, <B-->$2>) ==> <C-->$2>>.
+             * <(&&, <A-->$1>, <B-->D>) ==> <$1-->D>>.
+             * <(&&, <A-->C>, <B-->D>) ==> <C-->D>>?
+             * 📌要点：可能两边各有「需要被替换」的地方
+             */
+            // * 🚩建立映射：var2 -> term1 @ term2
+            // elimination
+            map_2.put(var_2, to_be_unified_1.clone());
+            // * 🚩尝试消除「共同变量」
+            if is_common_variable(var_2) {
+                // * 🚩建立映射：var2 -> term1 @ term2
+                map_1.put(var_2, to_be_unified_1.clone());
+            }
+            true
+        }
+        // * 🚩均非变量，但都是复合词项
+        [None, None] if is_same_type => {
+            match [to_be_unified_1.as_compound(), to_be_unified_2.as_compound()] {
+                [Some(compound_1), Some(compound_2)] => {
+                    // * 🚩替换前提：容器相似（大小相同、像占位符位置相同）
+                    if !is_same_kind_compound(compound_1, compound_2) {
+                        return false;
                     }
+                    // * 🚩复制词项列表 | 需要在「随机打乱」的同时不影响遍历
+                    let list = compound_1.clone_components();
+                    // * 🚩可交换⇒打乱 | 需要让算法（对两个词项）的时间复杂度为定值（O(n)而非O(n!)）
+                    if compound_1.is_commutative() {
+                        eprintln!("// TODO: 后续引入rand库");
+                        // ! 边缘情况：   `<(*, $1, $2) --> [$1, $2]>` => `<(*, A, A) --> [A]>`
+                        // ! 边缘情况：   `<<A --> [$1, $2]> ==> <A --> (*, $1, $2)>>`
+                        // ! 　　　　　+  `<A --> [B, C]>` |- `<A --> (*, B, C)>`✅
+                        // ! 　　　　　+  `<A --> [B]>` |- `<A --> (*, B, B)>`❌
+                    }
+                    // * 🚩逐个寻找替换
+                    for (inner1, inner2) in list.iter().zip(compound_2.components.iter()) {
+                        // assuming matching order
+                        // * 🚩对每个子项寻找替换 | 复用已有映射表
+                        if !find_unification(var_type, inner1, inner2, map_1, map_2) {
+                            return false;
+                        }
+                    }
+                    true
                 }
-                true
+                // * 🚩其它情况
+                _ => to_be_unified_1 == to_be_unified_2,
             }
         }
-    } else if to_be_unified_2.get_variable_type() == var_type {
-        // 📄 `else if ((term2 instanceof Variable) && (((Variable) term2).getType() == type)) {`
-        // 📄 `t = map2.get(var2); if (t != null) { .. }`
-        match substitution_2.get(to_be_unified_2).cloned() {
-            // already mapped
-            Some(new_term) => {
-                find_substitute(
-                    var_type,
-                    to_be_unified_1,
-                    &new_term, // ! 必须复制：否则会存留不可变引用
-                    substitution_1,
-                    substitution_2,
-                )
-            }
-            // not mapped yet
-            None => {
-                /*
-                 * 📝【2024-04-22 00:13:19】发生在如下场景：
-                 * <(&&, <A-->C>, <B-->$2>) ==> <C-->$2>>.
-                 * <(&&, <A-->$1>, <B-->D>) ==> <$1-->D>>.
-                 * <(&&, <A-->C>, <B-->D>) ==> <C-->D>>?
-                 *
-                 * 系列调用：
-                 * * `$` `A` `$1`
-                 * * `$` `D` `$1`
-                 * * `$` `<C --> D>` `<$1 --> D>`
-                 * * `$` `<C --> D>` `<C --> $1>`
-                 *
-                 * 📌要点：可能两边各有「需要被替换」的地方
-                 */
-                substitution_2.put(to_be_unified_2, to_be_unified_1.clone()); // elimination
-                if is_common_variable(to_be_unified_2) {
-                    substitution_1.put(to_be_unified_2, to_be_unified_1.clone());
-                }
-                true
-            }
-        }
-    } else if to_be_unified_1.instanceof_compound() {
-        // 必须结构匹配
-        // 📄 `if (cTerm1.size() != ...... return false; }`
-        if to_be_unified_1.structural_match(to_be_unified_2) {
-            // 📄 `else if ((term1 instanceof CompoundTerm) && term1.getClass().equals(term2.getClass())) {`
-            // ? ❓为何要打乱无序词项——集合词项的替换过于复杂，只能用「随机打乱」间接尝试所有组合
-            // 📄 `if (cTerm1.isCommutative()) { Collections.shuffle(list, Memory.randomNumber); }`
-            // TODO: 🏗️有关无序复合词项的「变量统一」需要进一步处理——不希望采用「随机打乱」的方案，可能要逐个枚举匹配
-            // ! 边缘情况：`<(*, $1, $2) --> [$1, $2]>` => `<(*, A, A) --> [A]>`
-            // ! 边缘情况：   `<<A --> [$1, $2]> ==> <A --> (*, $1, $2)>>`
-            // ! 　　　　　+  `<A --> [B, C]>` |- `<A --> (*, B, C)>`✅
-            // ! 　　　　　+  `<A --> [B]>` |- `<A --> (*, B, B)>`❌
-            // ! 🚩【2024-04-22 09:43:26】此处暂且不打乱无序词项：疑点重重
-            // 对位遍历
-            // for (t1, t2) in to_be_unified_1
-            //     .get_components()
-            //     .zip(to_be_unified_2.get_components())
-            // {
-            //     if !find_substitute(var_type, t1, t2, substitution_1, substitution_2) {
-            //         return false;
-            //     }
-            // }
-            // * 🚩【2024-04-22 09:45:55】采用接近等价的纯迭代器方案，可以直接返回
-            if let (
-                Some(CompoundTermRef {
-                    components: components1,
-                    ..
-                }),
-                Some(CompoundTermRef {
-                    components: components2,
-                    ..
-                }),
-            ) = (to_be_unified_1.as_compound(), to_be_unified_2.as_compound())
-            {
-                components1.iter().zip(components2.iter()).all(|(t1, t2)| {
-                    find_substitute(var_type, t1, t2, substitution_1, substitution_2)
-                })
-            } else {
-                false
-            }
-        } else {
-            // 复合词项结构不匹配，一定不能替代
-            false
-        }
-    } else {
-        // for atomic constant terms
-        to_be_unified_1 == to_be_unified_2
+        // * 🚩其它情况
+        _ => to_be_unified_1 == to_be_unified_2, // for atomic constant terms
     }
 }
 
@@ -401,10 +493,9 @@ pub fn find_substitute(
 ///  @param term1 The first term to be unified
 ///  @param term2 The second term to be unified
 ///  @return Whether there is a substitution
-#[cfg(TODO_20240614164500_有待迁移)] // TODO: 有待后续完成迁移后改写
-pub fn has_substitute(var_type: &str, to_be_unified_1: &Term, to_be_unified_2: &Term) -> bool {
+fn has_unification(var_type: &str, to_be_unified_1: &Term, to_be_unified_2: &Term) -> bool {
     // 📄 `return findSubstitute(type, term1, term2, new HashMap<Term, Term>(), new HashMap<Term, Term>());`
-    find_substitute(
+    find_unification(
         var_type,
         to_be_unified_1,
         to_be_unified_2,
@@ -413,156 +504,100 @@ pub fn has_substitute(var_type: &str, to_be_unified_1: &Term, to_be_unified_2: &
         &mut VarSubstitution::new(),
     )
 }
-
-pub fn has_unification_q(term1: &Term, term2: &Term) -> bool {
-    eprintln!("// TODO: 【2024-07-09 15:18:00】有待实装");
-    true // ! 暂且返回真
+/// 🆕【对外接口】查找独立变量归一方式
+pub fn has_unification_i(to_be_unified_1: &Term, to_be_unified_2: &Term) -> bool {
+    has_unification(VAR_INDEPENDENT, to_be_unified_1, to_be_unified_2)
 }
 
-impl TermComponents {
-    #[cfg(TODO_20240614164500_有待迁移)] // TODO: 有待后续完成迁移后改写
-    /// 📄OpenNARS `CompoundTerm.applySubstitute` 方法
-    pub fn apply_substitute(&mut self, substitution: &VarSubstitution) {
-        // 遍历其中所有地方的可变引用
-        for term in self.iter_mut() {
-            // 寻找其「是否有替代」
-            match substitution.get(term) {
-                // 有替代⇒直接赋值
-                Some(new_term) => *term = new_term.clone(),
-                // 没替代⇒继续递归替代
-                None => term.apply_substitute(substitution),
-            }
-        }
-    }
+/// 🆕【对外接口】查找非独变量归一方式
+pub fn has_unification_d(to_be_unified_1: &Term, to_be_unified_2: &Term) -> bool {
+    has_unification(VAR_DEPENDENT, to_be_unified_1, to_be_unified_2)
 }
 
-/// 用于表示「变量替换」的字典
-/// * 🎯NAL-6中的「变量替换」「变量代入」
-#[derive(Debug, Default, Clone)]
-#[doc(alias = "VariableSubstitution")]
-pub struct VarSubstitution {
-    map: HashMap<Term, Term>,
-}
-
-impl VarSubstitution {
-    /// 构造函数
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// 从其它构造出「散列映射」的地方构造
-    pub fn from(map: impl Into<HashMap<Term, Term>>) -> Self {
-        Self { map: map.into() }
-    }
-
-    /// 从其它构造出「散列映射」的地方构造
-    pub fn from_pairs(pairs: impl IntoIterator<Item = (Term, Term)>) -> Self {
-        Self {
-            map: HashMap::from_iter(pairs),
-        }
-    }
-
-    /// 尝试获取「替代项」
-    /// * 🎯变量替换
-    pub fn get(&self, key: &Term) -> Option<&Term> {
-        self.map.get(key)
-    }
-
-    /// 链式获取「变量替换」最终点
-    /// * 🚩一路查找到头
-    /// * 📄{A -> B, B -> C}, A => Some(C)
-    /// * 📄{A -> B, B -> C}, B => Some(C)
-    /// * 📄{A -> B, B -> C}, C => None
-    pub fn chain_get(&self, key: &Term) -> Option<&Term> {
-        // * ⚠️此时应该传入非空值
-        // * 🚩从「起始点」开始查找
-        let mut end_point = self.get(key)?;
-        // * 🚩非空⇒一直溯源
-        loop {
-            match self.get(end_point) {
-                Some(next_point) => {
-                    debug_assert!(end_point != next_point, "不应有循环替换之情况！");
-                    end_point = next_point
-                }
-                None => break Some(end_point),
-            }
-        }
-    }
-
-    /// 尝试判断「是否有键」
-    /// * 🎯变量重命名
-    pub fn has(&self, key: &Term) -> bool {
-        self.map.contains_key(key)
-    }
-
-    /// 获取「可替换的变量个数」
-    /// * 🚩映射的大小
-    /// * 🎯变量重命名
-    pub fn len(&self) -> usize {
-        self.map.len()
-    }
-
-    /// 判断「是否为空」
-    /// * 🎯变量替换后检查「是否已替换」
-    pub fn is_empty(&self) -> bool {
-        self.map.is_empty()
-    }
-
-    /// 设置「替代项」
-    /// * 🎯寻找可替换变量，并返回结果
-    /// * 🚩只在没有键时复制`key`，并且总是覆盖`value`值
-    pub fn put(&mut self, key: &Term, value: Term) {
-        match self.map.get_mut(key) {
-            Some(old_value) => *old_value = value,
-            None => {
-                self.map.insert(key.clone(), value);
-            }
-        }
-    }
+/// 🆕【对外接口】查找查询变量归一方式
+pub fn has_unification_q(to_be_unified_1: &Term, to_be_unified_2: &Term) -> bool {
+    has_unification(VAR_QUERY, to_be_unified_1, to_be_unified_2)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_term as term;
     use crate::util::AResult;
+    use crate::{ok, test_term as term};
     use nar_dev_utils::macro_once;
 
-    #[cfg(TODO_20240614164500_有待迁移)] // TODO: 有待后续完成迁移后改写
     /// 测试/变量替换
     #[test]
     fn apply_substitute() -> AResult {
+        fn test(substitution: &VarSubstitution, mut term: Term, expected: Term) {
+            let mut compound = term
+                .as_compound_mut()
+                .expect("传入的不是复合词项，无法进行替换");
+            compound.apply_substitute(substitution);
+            assert_eq!(term, expected);
+        }
+        // 映射表
         let substitution = VarSubstitution::from_pairs([
             (term!("var_word"), term!("word")),
             (term!("$1"), term!("1")),
+            (term!("?1"), term!("(/, A, <lock --> swan>, _, [1])")), // 变量⇒复合词项（实际情况不出现）
+            (term!("[#1]"), term!("<X --> (*, Y, [Z])>")), // 复合词项⇒复合词项（实际情况不出现）
         ]);
         macro_once! {
-            macro apply_substitute (
+            // * 🚩模式：待替换词项, 替换 => 替换后词项
+            macro test(
                 $(
                     $term_str:expr, $substitution:expr
                     => $substituted_str:expr
                 )*
             ) {
                 $(
-                    let mut term = term!($term_str);
-                    term.apply_substitute(&$substitution);
-                    assert_eq!(term, term!($substituted_str));
+                    test(&substitution, term!($term_str), term!($substituted_str));
                 )*
             }
+            // * 🚩一般复合词项
+            "(&&, A, var_word)", substitution => "(&&, A, word)"
+            "(&&, var_word, A)", substitution => "(&&, word, A)"
+            "(&&, A, var_word, B)", substitution => "(&&, A, word, B)"
+            "(&&, var_word, A, B)", substitution => "(&&, word, A, B)"
+            // * 🚩陈述
             "<A --> var_word>", substitution => "<A --> word>"
+            "<var_word --> A>", substitution => "<word --> A>"
+            "<A <-> var_word>", substitution => "<A <-> word>"
+            "<var_word <-> A>", substitution => "<word <-> A>"
+            "<A ==> var_word>", substitution => "<A ==> word>"
+            "<var_word ==> A>", substitution => "<word ==> A>"
+            "<A --> $1>", substitution => "<A --> 1>"
+            "<$1 --> A>", substitution => "<1 --> A>"
+            "<$1 --> var_word>", substitution => "<1 --> word>"
+            "<var_word --> $1>", substitution => "<word --> 1>"
+            // * 🚩多层复合词项
             "<<$1 --> A> ==> <B --> $1>>", substitution => "<<1 --> A> ==> <B --> 1>>"
+            "<<$1 --> var_word> ==> <var_word --> $1>>", substitution => "<<1 --> word> ==> <word --> 1>>"
+            "<<var_word --> A> ==> [#1]>", substitution => "<<word --> A> ==> <X --> (*, Y, [Z])>>"
+            "(--, (&&, (||, (&, (|, (*, ?1))))))", substitution => "(--, (&&, (||, (&, (|, (*, (/, A, <lock --> swan>, _, [1])))))))"
         }
         ok!()
     }
 
-    // TODO: 后续重写「变量重命名」机制
-    #[cfg(弃用_20240614000709_需要重写)]
-    /// 测试 / unify | unify_two
+    /// 测试 / unify_find | Unification::apply_to_term | Unification::apply_to
     #[test]
     fn unify() -> AResult {
-        use crate::language::variable::unify_two;
+        fn test(
+            mut term1: Term,
+            mut term2: Term,
+            var_type: &str,
+            expected_1: Term,
+            expected_2: Term,
+        ) {
+            print!("unify: {term1}, {term2} =={var_type}=> ",);
+            unify_find(var_type, &term1, &term2).apply_to_term(&mut term1, &mut term2);
+            println!("{term1}, {term2}");
+            assert_eq!(term1, expected_1);
+            assert_eq!(term2, expected_2);
+        }
         macro_once! {
-            macro unify(
+            macro test(
                 $(
                     $term_str1:expr, $term_str2:expr
                     => $var_type:expr =>
@@ -570,16 +605,13 @@ mod tests {
                 )*
             ) {
                 $(
-                    let mut term1 = term!($term_str1);
-                    let mut term2 = term!($term_str2);
-                    let var_type = $var_type;
-                    print!("unify: {}, {} =={var_type}=> ", term1.format_name(), term2.format_name());
-                    unify_two($var_type, &mut term1, &mut term2);
-                    let expected_1 = term!($substituted_str1);
-                    let expected_2 = term!($substituted_str2);
-                    println!("{}, {}", term1.format_name(), term2.format_name());
-                    assert_eq!(term1, expected_1);
-                    assert_eq!(term2, expected_2);
+                    test(
+                        term!($term_str1),
+                        term!($term_str2),
+                        $var_type,
+                        term!($substituted_str1),
+                        term!($substituted_str2),
+                    );
                 )*
             }
             // ! 变量替换只会发生在复合词项之中：原子词项不会因此改变自身 //
@@ -607,6 +639,9 @@ mod tests {
 
             // 多元复合词项（有序）：按顺序匹配 //
             "(*, $c, $b, $a)", "(*, (--, C), <B1 --> B2>, A)" => "$" => "(*, (--, C), <B1 --> B2>, A)", "(*, (--, C), <B1 --> B2>, A)"
+               "<(&&, <A-->C>, <B-->$2>) ==> <C-->$2>>", "<(&&, <A-->$1>, <B-->D>) ==> <$1-->D>>"
+            => "$"
+            => "<(&&, <A-->C>, <B-->D>) ==> <C-->D>>", "<(&&, <A-->C>, <B-->D>) ==> <C-->D>>"
 
             // 无序词项 | ⚠️【2024-04-22 12:38:38】对于无序词项的「模式匹配」需要进一步商酌 //
             "{$c}", "{中心点}" => "$" => "{中心点}", "{中心点}" // 平凡情况
@@ -627,33 +662,26 @@ mod tests {
         ok!()
     }
 
-    // TODO: 后续重写「变量重命名」机制
-    #[cfg(弃用_20240614000709_需要重写)]
     #[test]
     fn rename_variables() -> AResult {
+        fn test(mut term: Term, expected: Term) {
+            // 解析构造词项
+            print!("{term}");
+            // 重命名变量
+            let mut compound = term.as_compound_mut().expect("非复合词项，无法重命名变量");
+            compound.rename_variables();
+            println!("=> {term}");
+            // 比对
+            assert_eq!(term, expected);
+        }
         macro_once! {
             // * 🚩模式：词项字符串 ⇒ 预期词项字符串
-            macro rename_variables($($term:literal => $expected:expr )*) {
+            macro test($($term:literal => $expected:expr )*) {
                 $(
-                    // 解析构造词项
-                    let mut term = term!($term);
-                    print!("{term}");
-                    // 重命名变量
-                    term.rename_variables();
-                    println!("=> {term}");
-                    // 比对
-                    // dbg!(&term);
-                    // assert_eq!(term, term!($expected));
+                    test(term!($term), term!($expected));
                 )*
             }
             // 简单情况（一层） //
-            // 占位符
-            "_" => "_"
-            // 原子词项不变
-            "A" => "A"
-            "$A" => "$A"
-            "#A" => "#A"
-            "?A" => "?A"
             // 复合词项
             "{$A, $B}" => "{$1, $2}"
             "[$A, $B]" => "[$1, $2]"
@@ -675,6 +703,10 @@ mod tests {
             "<$A ==> $B>" => "<$1 ==> $2>"
             "<$A <=> $B>" => "<$1 <=> $2>"
             // 复杂情况 //
+            // 不同变量名称，数值不会重复
+            "(*, $A, $B, $C)" => "(*, $1, $2, $3)"
+            "(*, #A, #B, #C)" => "(*, #1, #2, #3)"
+            "(*, ?A, ?B, ?C)" => "(*, ?1, ?2, ?3)"
             // 不同变量类型，数值不会重复
             "(*, $A, #A, ?A)" => "(*, $1, #2, ?3)"
             // 复合词项：递归深入
