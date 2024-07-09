@@ -234,20 +234,11 @@ impl Sentence for Task {
         self.sentence.content_mut()
     }
 
-    fn punctuation(&self) -> super::Punctuation {
-        self.sentence.punctuation()
-    }
-
     type Judgement = <SentenceV1 as Sentence>::Judgement;
-
     type Question = <SentenceV1 as Sentence>::Question;
 
-    fn as_judgement(&self) -> Option<&Self::Judgement> {
-        self.sentence.as_judgement()
-    }
-
-    fn as_question(&self) -> Option<&Self::Question> {
-        self.sentence.as_question()
+    fn as_punctuated_ref(&self) -> super::PunctuatedSentenceRef<Self::Judgement, Self::Question> {
+        self.sentence.as_punctuated_ref()
     }
 
     fn to_key(&self) -> String {

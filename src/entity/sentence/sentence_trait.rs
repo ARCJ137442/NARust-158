@@ -1,11 +1,14 @@
 //! 作为特征的「语句」类型
 
-use super::{Judgement, Punctuation, Question};
 use crate::{
-    entity::Stamp, global::ClockTime, inference::Evidential, language::Term,
+    entity::{Judgement, PunctuatedSentenceRef, Punctuation, Question, Stamp},
+    global::ClockTime,
+    inference::Evidential,
+    language::Term,
     util::ToDisplayAndBrief,
 };
 use anyhow::Result;
+use nar_dev_utils::matches_or;
 use narsese::lexical::Sentence as LexicalSentence;
 
 /// 模拟`nars.entity.Sentence`
@@ -46,6 +49,28 @@ pub trait Sentence: ToDisplayAndBrief + Evidential {
     /// @param t The new content
     fn content_mut(&mut self) -> &mut Term;
 
+    /// 模拟`Sentence.cloneContent`
+    /// * 🚩拷贝内部词项
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// Clone the content of the sentence
+    ///
+    /// @return A clone of the content Term
+    #[inline(always)]
+    fn clone_content(&self) -> Term {
+        self.content().clone()
+    }
+
+    // * ⚠️Rust中必须预先定义其中的「判断句」「问题句」类型
+    //   * 📌直接原因：对于带泛型的`as_XXX`，需要知道其中的类型参数，才能正常参与编译
+    type Judgement: Judgement;
+    type Question: Question;
+
+    /// 🆕作为【标点类型与内部引用数据兼备】的「带标点引用」
+    /// * 🚩【2024-07-09 13:13:23】目前只完成不可变引用
+    fn as_punctuated_ref(&self) -> PunctuatedSentenceRef<Self::Judgement, Self::Question>;
+
     /// 模拟
     /// * `Sentence.punctuation`、`Sentence.getPunctuation`
     /// * `Sentence.truth`、`Sentence.getTruth`
@@ -67,25 +92,11 @@ pub trait Sentence: ToDisplayAndBrief + Evidential {
     /// @return The character '.' or '?'
     #[doc(alias = "type")]
     #[doc(alias = "sentence_type")]
-    fn punctuation(&self) -> Punctuation;
-
-    /// 模拟`Sentence.cloneContent`
-    /// * 🚩拷贝内部词项
-    ///
-    /// # 📄OpenNARS
-    ///
-    /// Clone the content of the sentence
-    ///
-    /// @return A clone of the content Term
-    #[inline(always)]
-    fn clone_content(&self) -> Term {
-        self.content().clone()
+    #[inline]
+    fn punctuation(&self) -> Punctuation {
+        // * 🚩现在直接用「带标点引用」转换
+        self.as_punctuated_ref().into()
     }
-
-    // * ⚠️Rust中必须预先定义其中的「判断句」「问题句」类型
-    //   * 📌直接原因：对于带泛型的`as_XXX`，需要知道其中的类型参数，才能正常参与编译
-    type Judgement: Judgement;
-    type Question: Question;
 
     /// 模拟`Sentence.isJudgement`
     /// * ❌【2024-06-21 15:02:36】无法外置到其它「给语句自动添加功能」的特征中去
@@ -97,9 +108,18 @@ pub trait Sentence: ToDisplayAndBrief + Evidential {
     ///
     /// @return Whether the object is a Judgement
     fn is_judgement(&self) -> bool {
-        self.as_judgement().is_some()
+        matches!(
+            self.as_punctuated_ref(),
+            PunctuatedSentenceRef::Judgement(..)
+        )
     }
-    fn as_judgement(&self) -> Option<&Self::Judgement>;
+    fn as_judgement(&self) -> Option<&Self::Judgement> {
+        // * 🚩【2024-07-09 13:17:25】现在直接复用一个函数
+        matches_or! {
+            ?self.as_punctuated_ref(),
+            PunctuatedSentenceRef::Judgement(j) => j
+        }
+    }
 
     /// 模拟`Sentence.isQuestion`
     /// * ❌【2024-06-21 15:02:36】无法外置到其它「给语句自动添加功能」的特征中去
@@ -111,9 +131,18 @@ pub trait Sentence: ToDisplayAndBrief + Evidential {
     ///
     /// @return Whether the object is a Question
     fn is_question(&self) -> bool {
-        self.as_question().is_some()
+        matches!(
+            self.as_punctuated_ref(),
+            PunctuatedSentenceRef::Judgement(..)
+        )
     }
-    fn as_question(&self) -> Option<&Self::Question>;
+    fn as_question(&self) -> Option<&Self::Question> {
+        // * 🚩【2024-07-09 13:17:25】现在直接复用一个函数
+        matches_or! {
+            ?self.as_punctuated_ref(),
+            PunctuatedSentenceRef::Question(q) => q
+        }
+    }
 
     /// 模拟`Sentence.containQueryVar`
     ///

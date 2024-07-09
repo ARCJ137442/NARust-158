@@ -1,4 +1,6 @@
-use crate::entity::{Judgement, Punctuation, QuestionV1, Sentence, SentenceInner};
+//! 初代判断句实现
+
+use crate::entity::{Judgement, PunctuatedSentenceRef, QuestionV1, Sentence, SentenceInner};
 use crate::{
     __impl_to_display_and_display,
     entity::{ShortFloat, Stamp, TruthValue},
@@ -61,19 +63,12 @@ impl Sentence for JudgementV1 {
         self.inner.content_mut()
     }
 
-    fn punctuation(&self) -> Punctuation {
-        Punctuation::Judgement
-    }
-
     type Judgement = Self;
     type Question = QuestionV1;
 
-    fn as_judgement(&self) -> Option<&Self::Judgement> {
-        Some(self)
-    }
-
-    fn as_question(&self) -> Option<&Self::Question> {
-        None
+    #[inline(always)]
+    fn as_punctuated_ref(&self) -> PunctuatedSentenceRef<Self::Judgement, Self::Question> {
+        PunctuatedSentenceRef::Judgement(self)
     }
 
     fn to_key(&self) -> String {
