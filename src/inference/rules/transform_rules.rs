@@ -491,8 +491,8 @@ mod tests {
         // * 🚩打印输出
         print_outputs(&outs);
         // * 🚩检查其中是否有结论
-        expect_outputs_contains(&outs, lexical_nse_term!("<A --> (/, R, _, B)>"));
-        expect_outputs_contains(&outs, lexical_nse_term!("<B --> (/, R, A, _)>"));
+        expect_outputs_contains_term(&outs, lexical_nse_term!("<A --> (/, R, _, B)>"));
+        expect_outputs_contains_term(&outs, lexical_nse_term!("<B --> (/, R, A, _)>"));
 
         // * 🚩输入指令并拉取输出
         let outs = vm.input_cmds_and_fetch_out(
@@ -505,8 +505,8 @@ mod tests {
         // * 🚩打印输出
         print_outputs(&outs);
         // * 🚩检查其中是否有结论
-        expect_outputs_contains(&outs, lexical_nse_term!("<(/, S, _, D) --> C>"));
-        expect_outputs_contains(&outs, lexical_nse_term!("<(/, S, C, _) --> D>"));
+        expect_outputs_contains_term(&outs, lexical_nse_term!("<(/, S, _, D) --> C>"));
+        expect_outputs_contains_term(&outs, lexical_nse_term!("<(/, S, C, _) --> D>"));
     }
 
     /// 稳定性

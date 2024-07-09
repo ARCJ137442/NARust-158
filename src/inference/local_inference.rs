@@ -254,6 +254,7 @@ mod tests {
     use crate::inference::{test::*, InferenceEngine};
     use navm::output::Output;
 
+    /// 推理引擎
     const ENGINE: InferenceEngine = InferenceEngine::new(
         process_direct,
         InferenceEngine::ECHO.transform_f(),
@@ -266,17 +267,15 @@ mod tests {
     fn direct_answer_question() {
         let mut vm = create_vm_from_engine(ENGINE);
         // * 🚩输入指令并拉取输出
-        let outs = vm.input_cmds_and_fetch_out(
+        vm.input_fetch_print_expect(
             "
             nse Sentence.
             nse Sentence?
             cyc 2
             ",
+            // * 🚩检查其中是否有回答
+            |answer| matches!(answer, Output::ANSWER { .. }),
         );
-        // * 🚩打印输出
-        print_outputs(&outs);
-        // * 🚩检查其中是否有回答
-        expect_outputs(&outs, |answer| matches!(answer, Output::ANSWER { .. }));
     }
 
     /// 稳定性

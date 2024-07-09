@@ -117,6 +117,7 @@ mod tests {
     use crate::inference::{process_direct, test::*, InferenceEngine};
     use navm::output::Output;
 
+    /// 引擎
     const ENGINE: InferenceEngine = InferenceEngine::new(
         process_direct, // ! 必要：需要内化成「信念」再进行匹配
         InferenceEngine::ECHO.transform_f(),
@@ -129,18 +130,51 @@ mod tests {
     fn revise_after_direct() {
         let mut vm = create_vm_from_engine(ENGINE);
         // * 🚩输入指令并拉取输出
-        let outs = vm.input_cmds_and_fetch_out(
+        vm.input_fetch_print_expect(
             "
             nse Sentence. %1.0;0.5%
             cyc 5
             nse Sentence. %0.0;0.5%
             cyc 5
             ",
+            // * 🚩检查其中是否有导出
+            |o| matches!(o, Output::OUT { .. }),
         );
-        // * 🚩打印输出
-        print_outputs(&outs);
-        // * 🚩检查其中是否有导出
-        expect_outputs(&outs, |o| matches!(o, Output::OUT { .. }));
+    }
+
+    /// 修正判断+答问
+    #[test]
+    fn answer_after_revise() {
+        let mut vm = create_vm_from_engine(ENGINE);
+
+        // 匹配时回答
+        vm.input_fetch_print_expect(
+            "
+            nse Sentence. %1.0;0.5%
+            cyc 2
+            nse Sentence?
+            cyc 2
+            ",
+            |o| matches!(o, Output::ANSWER { .. }),
+        );
+
+        // 修正后回答
+        vm.input_fetch_print_expect(
+            "
+            nse Sentence. %0.0;0.5%
+            cyc 2
+            ",
+            |o| matches!(o, Output::ANSWER { .. }),
+        );
+
+        // 修正后回答
+        vm.input_fetch_print_expect(
+            "
+            nse Sentence. %0.5;0.5%
+            cyc 2
+            ",
+            |o| matches!(o, Output::ANSWER { .. }),
+        );
     }
 
     /// 回答带变量问题
@@ -148,18 +182,15 @@ mod tests {
     fn answer_question_with_variables() {
         let mut vm = create_vm_from_engine(ENGINE);
         // * 🚩输入指令并拉取输出
-        let outs = vm.input_cmds_and_fetch_out(
+        vm.input_fetch_print_expect(
             "
             nse <A --> B>.
             cyc 5
             nse <?1 --> B>?
             cyc 50
             ",
+            |answer| matches!(answer, Output::ANSWER { .. }),
         );
-        // * 🚩打印输出
-        print_outputs(&outs);
-        // * 🚩检查其中是否有回答
-        expect_outputs(&outs, |answer| matches!(answer, Output::ANSWER { .. }));
     }
 
     /// 稳定性

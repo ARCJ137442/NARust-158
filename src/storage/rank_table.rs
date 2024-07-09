@@ -1,9 +1,8 @@
 //! 🆕新的「排行表」类型
 //! * 📌复刻自OpenNARS改版
 
-use nar_dev_utils::unwrap_or_return;
-
 use crate::{global::Float, util::Iterable};
+use nar_dev_utils::unwrap_or_return;
 
 /// 🆕排行表 抽象类型
 /// * 🎯按照一个抽象的「排行函数」确定内部元素的位置
@@ -58,6 +57,7 @@ pub trait RankTable<T>: Iterable<T> {
                 };
             }
         }
+        // * 🚩否则⇒插入末尾
         Some(self.size())
     }
 

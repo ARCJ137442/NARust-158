@@ -114,6 +114,24 @@ pub mod test {
             expect_outputs(&outputs, expect);
             outputs
         }
+
+        /// 输入指令、拉取、打印并预期输出
+        fn input_fetch_print_expect(
+            &mut self,
+            cmds: &str,
+            expect: impl Fn(&Output) -> bool,
+        ) -> Vec<Output> {
+            // 输入
+            self.input_cmds(cmds);
+            // 拉取
+            let outs = self.fetch_outputs();
+            // 打印
+            print_outputs(&outs);
+            // 预期
+            expect_outputs(&outs, expect);
+            // 返回
+            outs
+        }
     }
     impl<T: VmRuntime> VmRuntimeBoost for T {}
 
@@ -121,7 +139,7 @@ pub mod test {
     pub fn print_outputs<'a>(outs: impl IntoIterator<Item = &'a Output>) {
         outs.into_iter().for_each(|output| {
             println!(
-                "[{}] {} as narsese {:?}",
+                "[{}]{}\nas narsese {:?}\n",
                 output.type_name(),
                 output.get_content(),
                 output.get_narsese()
@@ -142,7 +160,7 @@ pub mod test {
 
     /// 预期输出包含
     /// * 🚩精确匹配指定类型的Narsese**词项**
-    pub fn expect_outputs_contains<'a>(
+    pub fn expect_outputs_contains_term<'a>(
         outputs: impl IntoIterator<Item = &'a Output>,
         expected: impl Into<narsese::lexical::Term>,
     ) -> &'a Output {
