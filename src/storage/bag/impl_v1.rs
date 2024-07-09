@@ -447,7 +447,7 @@ impl<E: Item> Bag<E> {
         } else {
             return true;
         } */
-        self.assert_count_consistent();
+        self.assert_valid();
 
         // 置入「元素映射」
         let new_key = new_item.key().clone();
@@ -481,13 +481,13 @@ impl<E: Item> Bag<E> {
             // * 🚩若与自身相同⇒返回`Some`，添加失败
             // * 🚩若与自身不同⇒返回`None`，添加仍然成功
             let overflow_item = self.item_map.remove_item(&overflow_key);
-            self.assert_count_consistent();
+            self.assert_valid();
             match overflow_key == new_key {
                 true => overflow_item,
                 false => None, // ! 此时将抛掉溢出的元素
             }
         } else {
-            self.assert_count_consistent();
+            self.assert_valid();
             None
         }
     }
@@ -506,7 +506,7 @@ impl<E: Item> Bag<E> {
     /// @return Whether the new Item is added into the Bag
     #[must_use]
     pub fn put_back(&mut self, mut old_item: E) -> Option<E> {
-        self.assert_count_consistent();
+        self.assert_valid();
         self.forget(&mut old_item);
         self.put_in(old_item)
     }
@@ -555,7 +555,7 @@ impl<E: Item> Bag<E> {
         nameTable.remove(selected.getKey());
         refresh();
         return selected; */
-        self.assert_count_consistent();
+        self.assert_valid();
         if self.item_map.is_empty() {
             return None;
         }
@@ -566,7 +566,7 @@ impl<E: Item> Bag<E> {
             Some(key) => self.item_map.remove_item(&key),
             None => None,
         };
-        self.assert_count_consistent();
+        self.assert_valid();
         overflowed
     }
 
@@ -610,7 +610,7 @@ impl<E: Item> Bag<E> {
         return picked; */
         let name_value = self.item_map.remove(key)?;
         self.item_out_of_base(&name_value);
-        self.assert_count_consistent();
+        self.assert_valid();
         Some(name_value.0)
     }
 
@@ -756,24 +756,59 @@ impl<E: Item> Bag<E> {
         itemTable.get(level).remove(oldItem);
         mass -= (level + 1);
         refresh(); */
-        self.level_map
-            .get_mut(*level)
-            .remove_element(old_item.key());
+        self.level_map.remove_element(old_item.key());
         self.mass -= level + 1;
+    }
+
+    fn debug_display(&self) -> String {
+        format!(
+            "level_map: \n{:?}\n\nitem_map: \n{}\n\nbag: \n{}",
+            self.level_map,
+            self.item_map.debug_display(),
+            self.bag_to_display(),
+        )
+    }
+
+    /// 总体检查：合法性自检
+    /// * 🎯应该仅在调试模式中启用
+    fn assert_valid(&self) {
+        // 📌仅在「debug断言」时开启
+        // * 📝编译时若为否，则会自动内联并丢弃
+        if cfg!(debug_assertions) {
+            self.assert_count_consistent();
+            self.assert_unique_level_map();
+        }
     }
 
     /// 检查其数目一致性
     /// * 🎯检查「物品映射」与「层级映射」元素数目的一致性
+    /// * 🚩【2024-07-09 16:40:27】总是内联，以便编译器自动消除死代码
     #[inline(always)]
     fn assert_count_consistent(&self) {
-        // 📌仅在「debug断言」时开启
-        // * 📝编译时若为否，则会自动内联并丢弃
-        if cfg!(debug_assertions) {
-            let l_count = self.level_map.count();
-            let n_count = self.size();
-            assert_eq!(
-                l_count, n_count,
-                "层级映射与物品映射数目不一致: {l_count} != {n_count}",
+        let l_count = self.level_map.count();
+        let n_count = self.size();
+        assert_eq!(
+            l_count,
+            n_count,
+            "层级映射与物品映射数目不一致: {l_count} != {n_count}\n{}",
+            self.debug_display()
+        );
+    }
+
+    /// 检查其非重复性
+    /// * 🎯检查「层级映射」是否有「添加重复元素」的情形
+    /// * 🚩【2024-07-09 16:40:27】总是内联，以便编译器自动消除死代码
+    #[inline(always)]
+    fn assert_unique_level_map(&self) {
+        for (key, _) in self.item_map.iter() {
+            debug_assert!(
+                1 == self
+                    .level_map
+                    .iter()
+                    .map(|l| l.iter().filter(|k| *k == key).count())
+                    .sum::<usize>(),
+                "发现重复元素：{key}\nlevel_map: \n{}",
+                self.debug_display()
             );
         }
     }
@@ -811,9 +846,15 @@ impl<E: Item> Bag<E> {
             for i in 0..level_size {
                 let key = self.level_map.get(level).get(i);
                 if let Some(key) = key {
-                    let item = self.get(key).unwrap(); // ! 📌【2024-05-09 01:27:59】不可能没有
-                    buf += &item.to_display_brief();
-                    buf += "\n "
+                    // ! 📌【2024-05-09 01:27:59】应该有
+                    if let Some(item) = self.get(key) {
+                        buf += &item.to_display_brief();
+                        buf += "\n "
+                    } else {
+                        // ! 异常情况
+                        // * 📝【2024-07-09 15:44:51】不应在显示呈现时panic，除非有十分把握
+                        buf += "!!!NONE@{key}!!!\n"
+                    }
                 }
             }
         }

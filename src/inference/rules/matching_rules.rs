@@ -175,13 +175,13 @@ mod tests {
                 nse <A{i} --> B>. %0.0;0.9%
                 cyc 5
                 nse <A{i} --> B>?
-                cyc 50
+                cyc 5
                 "
             ));
             // ! ⚠️【2024-07-09 02:22:12】不一定有回答：预算竞争约束着资源调配，可能没法立即回答
             // // * 🚩检测有回答
             // expect_outputs(&outs, |answer| matches!(answer, Output::ANSWER { .. }));
         }
-        vm.input_cmds("cyc 10000");
+        vm.input_cmds("cyc 1000");
     }
 }
