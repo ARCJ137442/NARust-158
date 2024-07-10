@@ -222,7 +222,7 @@ impl ToDisplayAndBrief for Task {
 }
 
 impl Sentence for Task {
-    fn sentence_clone(&self) -> impl Sentence {
+    fn sentence_clone<'s, 'sentence: 's>(&'s self) -> impl Sentence + 'sentence {
         self.sentence.sentence_clone()
     }
 

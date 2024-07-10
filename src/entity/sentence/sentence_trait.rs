@@ -22,7 +22,9 @@ use narsese::lexical::Sentence as LexicalSentence;
 pub trait Sentence: ToDisplayAndBrief + Evidential {
     /// 🆕复制其中的「语句」成分
     /// * 🎯为了不让方法实现冲突而构建（复制出一个「纯粹的」语句对象）
-    fn sentence_clone(&self) -> impl Sentence;
+    /// * 🚩【2024-07-10 22:12:45】此处假定「复制后语句的生命周期超过引用自身的生命周期」
+    ///   * 📌保证「复制后的语句」与自身生命周期无关（独立值）
+    fn sentence_clone<'s, 'sentence: 's>(&'s self) -> impl Sentence + 'sentence;
 
     /// 模拟`Sentence.content`、`Sentence.getContent`
     /// * 🚩读写：出现了两个方法

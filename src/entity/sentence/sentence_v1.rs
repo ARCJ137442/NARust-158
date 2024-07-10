@@ -89,7 +89,7 @@ macro_rules! as_variant {
 }
 
 impl Sentence for SentenceV1 {
-    fn sentence_clone(&self) -> impl Sentence {
+    fn sentence_clone<'s, 'sentence: 's>(&'s self) -> impl Sentence + 'sentence {
         self.clone()
     }
 

@@ -51,7 +51,7 @@ impl Evidential for JudgementV1 {
 }
 
 impl Sentence for JudgementV1 {
-    fn sentence_clone(&self) -> impl Sentence {
+    fn sentence_clone<'s, 'sentence: 's>(&'s self) -> impl Sentence + 'sentence {
         self.clone()
     }
 

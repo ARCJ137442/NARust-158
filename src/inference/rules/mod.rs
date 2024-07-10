@@ -6,8 +6,8 @@
 //! * ♻️【2024-06-26 12:08:43】开始根据改版OpenNARS重写
 
 nar_dev_utils::mods! {
-    // // 规则表 `RuleTables`
-    // pub use rule_tables;
+    // 规则表 `RuleTables`
+    pub use rule_tables;
 
     // 本地规则 `LocalRules`
     pub use local_rules;
