@@ -323,7 +323,9 @@ fn is_same_kind_compound(t1: CompoundTermRef, t2: CompoundTermRef) -> bool {
 /// 📄OpenNARS `Variable.findSubstitute` 方法
 /// * 💫【2024-04-21 21:40:45】目前尚未能完全理解此处的逻辑
 /// * 📝【2024-04-21 21:50:42】递归查找一个「同位替代」的「变量→词项」映射
-/// * 🚧缺少注释：逻辑基本照抄OpenNARS的代码
+/// * ⚠️【2024-07-10 14:40:06】目前对「可交换词项」沿用OpenNARS的「随机打乱」方案
+///   * ✅能保证「推理器相同，随机运行的结果不因系统时间而变」
+///   * 💫因借用问题，需要每次使用时引入一个「随机种子」作为随机因子
 ///
 /// # 📄OpenNARS
 ///
@@ -508,7 +510,10 @@ fn find_unification(
                     }
                     // * 🚩复制词项列表 | 需要在「随机打乱」的同时不影响遍历
                     let mut list = compound_1.clone_components();
-                    // * 🚩可交换⇒打乱 | 需要让算法（对两个词项）的时间复杂度为定值（O(n)而非O(n!)）
+                    // * 🚩可交换⇒打乱
+                    // * 📝from Wang：需要让算法（对两个词项）的时间复杂度为定值（O(n)而非O(n!)）
+                    // * ⚠️全排列的技术难度：多次尝试会修改映射表，需要多次复制才能在检验的同时完成映射替换
+                    //    * 💭【2024-07-10 14:50:09】这意味着较大的计算成本
                     if compound_1.is_commutative() {
                         let mut rng = StdRng::seed_from_u64(shuffle_rng_seed);
                         list.shuffle(&mut rng);
