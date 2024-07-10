@@ -620,6 +620,7 @@ mod tests {
     use crate::util::AResult;
     use crate::{ok, test_term as term};
     use nar_dev_utils::macro_once;
+    use rand::Rng;
 
     /// 测试/变量替换
     #[test]
@@ -819,19 +820,5 @@ mod tests {
             "(*, (*, $A, $A, $A), (*, $A, $A, $A), (*, $A, $A, $A))" => "(*, (*, $1, $1, $1), (*, $1, $1, $1), (*, $1, $1, $1))"
         }
         ok!()
-    }
-
-    use rand::rngs::StdRng;
-    use rand::seq::SliceRandom;
-    use rand::{Rng, SeedableRng};
-    #[test]
-    fn t() {
-        let mut rng = StdRng::from_seed([0; 32]);
-        let a0 = [0, 1, 2];
-        for _ in 0..100 {
-            let mut a = a0;
-            a.shuffle(&mut rng);
-            println!("{a0:?} => {a:?}");
-        }
     }
 }
