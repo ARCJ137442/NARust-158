@@ -9,8 +9,8 @@ use crate::{
     language::{CompoundTermRef, CompoundTermRefMut, Term, TermComponents},
 };
 use nar_dev_utils::void;
-use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
-use std::collections::HashMap;
+use rand::{rngs::StdRng, seq::SliceRandom, RngCore, SeedableRng};
+use std::{collections::HashMap, ops::BitAnd};
 
 /// 用于表示「变量替换」的字典
 /// * 🎯NAL-6中的「变量替换」「变量代入」
@@ -515,26 +515,26 @@ fn find_unification(
                 // * 📝from Wang：需要让算法（对两个词项）的时间复杂度为定值（O(n)而非O(n!)）
                 // * ⚠️全排列的技术难度：多次尝试会修改映射表，需要多次复制才能在检验的同时完成映射替换
                 //    * 💭【2024-07-10 14:50:09】这意味着较大的计算成本
+                let mut rng = StdRng::seed_from_u64(shuffle_rng_seed);
                 if compound_1.is_commutative() {
-                    let mut rng = StdRng::seed_from_u64(shuffle_rng_seed);
                     list.shuffle(&mut rng);
                     // ! 边缘情况：   `<(*, $1, $2) --> [$1, $2]>` => `<(*, A, A) --> [A]>`
                     // ! 边缘情况：   `<<A --> [$1, $2]> ==> <A --> (*, $1, $2)>>`
                     // ! 　　　　　+  `<A --> [B, C]>` |- `<A --> (*, B, C)>`✅
                     // ! 　　　　　+  `<A --> [B]>` |- `<A --> (*, B, B)>`❌
                 }
-                // * 🚩逐个寻找替换
+                // * 🚩按位置逐一遍历
                 // * ✨【2024-07-10 15:02:10】更新机制：不再是「截断性返回」而是「逐个尝试」
                 //    * ⚠️与OpenNARS的核心区别：始终遍历所有子项，而非「一个不符就返回」
-                let mut result = true;
-                for (inner1, inner2) in list.into_iter().zip(compound_2.components.iter()) {
-                    // assuming matching order
-                    // * 🚩对每个子项寻找替换 | 复用已有映射表
-                    if !find_unification(var_type, inner1, inner2, map_1, map_2, shuffle_rng_seed) {
-                        result = false;
-                    }
-                }
-                result
+                (list.into_iter().zip(compound_2.components.iter()))
+                    // * 🚩逐个尝试归一化
+                    .map(|(inner1, inner2)| {
+                        find_unification(var_type, inner1, inner2, map_1, map_2, rng.next_u64())
+                    })
+                    // * 🚩非惰性迭代：只有「所有子项均能归一化」才算「能归一化」
+                    //   * ⚠️不允许改为`all`：此处须强制遍历完所有子项（用`fold`+`BitAnd`）
+                    //   * 📝Rust中`bool | bool`也算合法：非惰性迭代，保证「有副作用的bool函数」正常起效
+                    .fold(true, BitAnd::bitand)
             }
             // * 🚩其它情况
             _ => to_be_unified_1 == to_be_unified_2, // for atomic constant terms
