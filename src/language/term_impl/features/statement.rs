@@ -594,6 +594,73 @@ impl DerefMut for StatementRefMut<'_> {
     }
 }
 
+/// 具备所有权的复合词项
+/// * 🎯初步决定用于「推理规则」向下分派
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Statement {
+    /// 内部词项
+    term: Term,
+}
+
+impl Statement {
+    /// 获取不可变引用
+    /// * 🚩【2024-07-10 23:51:54】此处使用[`Option::unwrap`]代替`unsafe`操作
+    pub fn get_ref(&self) -> StatementRef {
+        self.term.as_statement().unwrap()
+    }
+
+    /// 获取可变引用
+    /// * 🚩【2024-07-10 23:51:54】此处使用[`Option::unwrap`]代替`unsafe`操作
+    pub fn mut_ref(&mut self) -> StatementRefMut {
+        self.term.as_statement_mut().unwrap()
+    }
+}
+
+/// 仅有的一处入口：从[词项](Term)构造
+impl TryFrom<Term> for Statement {
+    /// 转换失败时，返回原始词项
+    type Error = Term;
+
+    fn try_from(term: Term) -> Result<Self, Self::Error> {
+        // * 🚩仅在是复合词项时转换成功
+        match term.is_statement() {
+            true => Ok(Self { term }),
+            false => Err(term),
+        }
+    }
+}
+
+/// 出口（转换成词项）
+impl From<Statement> for Term {
+    fn from(value: Statement) -> Self {
+        value.term
+    }
+}
+
+/// 方便直接作为词项使用
+/// * ❓是否要滥用此种「类似继承的模式」
+impl Deref for Statement {
+    type Target = Term;
+
+    fn deref(&self) -> &Self::Target {
+        &self.term
+    }
+}
+
+/// 方便直接作为词项使用（可变）
+impl DerefMut for Statement {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.term
+    }
+}
+
+/// 内联「显示呈现」
+impl Display for Statement {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        self.term.fmt(f)
+    }
+}
+
 /// 单元测试
 #[cfg(test)]
 mod tests {
@@ -603,6 +670,14 @@ mod tests {
     use nar_dev_utils::{asserts, macro_once};
 
     macro_rules! statement {
+        // 具所有权/新常量
+        (box $term:literal) => {
+            statement!(box term!($term))
+        };
+        // 具所有权/原有变量
+        (box $term:expr) => {
+            Statement::try_from($term).unwrap()
+        };
         // 可变引用/新常量
         (mut $term:literal) => {
             statement!(mut term!($term))
@@ -621,6 +696,7 @@ mod tests {
         };
     }
 
+    /// 不可变引用
     mod statement_ref {
         use super::*;
 
@@ -675,6 +751,7 @@ mod tests {
         }
     }
 
+    /// 可变引用
     mod statement_ref_mut {
         use super::*;
 
@@ -727,6 +804,209 @@ mod tests {
                 // !
                 "A"
                 "A"
+            }
+            ok!()
+        }
+    }
+    /// 具所有权
+    mod statement {
+        use super::*;
+        use std::str::FromStr;
+
+        /// 词项之间的类型转换
+        /// * 📄[`Term::try_into`] / [`Statement::try_from`]
+        /// * 📄[`Term::from`] / [`Statement::into`]
+        #[test]
+        fn from_into() -> AResult {
+            /// 通用测试函数
+            fn test(compound: Statement) {
+                // * 🚩首先是一个陈述
+                assert!(compound.is_compound());
+
+                // * 🚩从内部拷贝一个词项后，仍可无损转换为陈述
+                let term: Term = (*compound).clone();
+                let _: Statement = term.try_into().expect("应该是陈述！");
+
+                // * 🚩解包成普通词项后，仍可无损转换为陈述
+                let term: Term = compound.into();
+                let _: Statement = term.try_into().expect("应该是陈述！");
+            }
+            macro_once! {
+                // * 🚩模式：词项字符串 ⇒ 预期
+                macro test($( $term:literal )*) {$(
+                    test(statement!(box $term));
+                )*}
+                // 单层
+                "<A --> B>"
+                "<A <-> B>"
+                "<A ==> B>"
+                "<A <=> B>"
+                // 组合
+                "<(*, A, B) --> P>"
+                "<(*, A, B) <-> P>"
+                "<(*, A, B) ==> P>"
+                "<(*, A, B) <=> P>"
+                "<S --> (*, A, B)>"
+                "<S <-> (*, A, B)>"
+                "<S ==> (*, A, B)>"
+                "<S <=> (*, A, B)>"
+                // 多层
+                "<<A --> B> --> B>"
+                "<<A <-> B> <-> B>"
+                "<<A ==> B> ==> B>"
+                "<<A <=> B> <=> B>"
+                "<A --> <A --> B>>"
+                "<A <-> <A <-> B>>"
+                "<A ==> <A ==> B>>"
+                "<A <=> <A <=> B>>"
+                "<<A --> B> --> <A --> B>>"
+                "<<A <-> B> <-> <A <-> B>>"
+                "<<A ==> B> ==> <A ==> B>>"
+                "<<A <=> B> <=> <A <=> B>>"
+                r"<(/, R, A, _) --> (\, R, _, B)>"
+                r"<(/, R, A, _) <-> (\, R, _, B)>"
+                r"<(/, R, A, _) ==> (\, R, _, B)>"
+                r"<(/, R, A, _) <=> (\, R, _, B)>"
+            }
+            ok!()
+        }
+
+        #[test]
+        fn get_ref() -> AResult {
+            /// 通用测试函数
+            fn test(statement: Statement) {
+                // * 🚩首先是一个陈述
+                assert!(statement.is_compound());
+
+                // * 🚩获取主谓项
+                let ref_statement = statement.get_ref();
+                let subject = ref_statement.subject();
+                let predicate = ref_statement.predicate();
+                println!("{statement} => [{subject}, {predicate}]");
+
+                // * 🚩遍历所有元素 as 复合词项
+                statement
+                    .get_ref()
+                    .components()
+                    .iter()
+                    .enumerate()
+                    .for_each(|(i, component)| println!("    [{i}] => {component}"))
+            }
+            macro_once! {
+                // * 🚩模式：词项字符串 ⇒ 预期
+                macro test($( $term:literal )*) {$(
+                    test(statement!(box $term));
+                )*}
+                // 单层
+                "<A --> B>"
+                "<A <-> B>"
+                "<A ==> B>"
+                "<A <=> B>"
+                // 组合
+                "<(*, A, B) --> P>"
+                "<(*, A, B) <-> P>"
+                "<(*, A, B) ==> P>"
+                "<(*, A, B) <=> P>"
+                "<S --> (*, A, B)>"
+                "<S <-> (*, A, B)>"
+                "<S ==> (*, A, B)>"
+                "<S <=> (*, A, B)>"
+                // 多层
+                "<<A --> B> --> B>"
+                "<<A <-> B> <-> B>"
+                "<<A ==> B> ==> B>"
+                "<<A <=> B> <=> B>"
+                "<A --> <A --> B>>"
+                "<A <-> <A <-> B>>"
+                "<A ==> <A ==> B>>"
+                "<A <=> <A <=> B>>"
+                "<<A --> B> --> <A --> B>>"
+                "<<A <-> B> <-> <A <-> B>>"
+                "<<A ==> B> ==> <A ==> B>>"
+                "<<A <=> B> <=> <A <=> B>>"
+                r"<(/, R, A, _) --> (\, R, _, B)>"
+                r"<(/, R, A, _) <-> (\, R, _, B)>"
+                r"<(/, R, A, _) ==> (\, R, _, B)>"
+                r"<(/, R, A, _) <=> (\, R, _, B)>"
+            }
+            ok!()
+        }
+
+        #[test]
+        fn mut_ref() -> AResult {
+            /// 通用测试函数
+            fn test(mut statement: Statement) -> AResult {
+                // * 🚩首先是一个陈述
+                assert!(statement.is_compound());
+
+                // * 🚩修改：更改主项
+                let old_s = statement.to_string();
+                let mut mut_ref = statement.mut_ref();
+                let subject = mut_ref.subject();
+                let x = term!("X");
+                *subject = x.clone();
+                println!("modification: {old_s:?} => \"{statement}\"");
+                assert_eq!(*statement.get_ref().subject(), x); // 假定修改后的结果
+
+                // * 🚩修改：更改谓项
+                let old_s = statement.to_string();
+                let mut mut_ref = statement.mut_ref();
+                let predicate = mut_ref.predicate();
+                let y = term!("Y");
+                *predicate = y.clone();
+                println!("modification: {old_s:?} => \"{statement}\"");
+                assert_eq!(*statement.get_ref().predicate(), y); // 假定修改后的结果
+
+                // * 🚩遍历修改所有元素
+                statement
+                    .mut_ref()
+                    .into_compound_ref()
+                    .components()
+                    .iter_mut()
+                    .enumerate()
+                    .for_each(|(i, component)| {
+                        *component = Term::from_str(&format!("T{i}")).unwrap()
+                    });
+                print!(" => \"{statement}\"");
+
+                ok!()
+            }
+            macro_once! {
+                // * 🚩模式：词项字符串 ⇒ 预期
+                macro test($( $term:literal )*) {$(
+                    test(statement!(box $term))?;
+                )*}
+                // 单层
+                "<A --> B>"
+                "<A <-> B>"
+                "<A ==> B>"
+                "<A <=> B>"
+                // 组合
+                "<(*, A, B) --> P>"
+                "<(*, A, B) <-> P>"
+                "<(*, A, B) ==> P>"
+                "<(*, A, B) <=> P>"
+                "<S --> (*, A, B)>"
+                "<S <-> (*, A, B)>"
+                "<S ==> (*, A, B)>"
+                "<S <=> (*, A, B)>"
+                // 多层
+                "<<A --> B> --> B>"
+                "<<A <-> B> <-> B>"
+                "<<A ==> B> ==> B>"
+                "<<A <=> B> <=> B>"
+                "<A --> <A --> B>>"
+                "<A <-> <A <-> B>>"
+                "<A ==> <A ==> B>>"
+                "<A <=> <A <=> B>>"
+                "<<A --> B> --> <A --> B>>"
+                "<<A <-> B> <-> <A <-> B>>"
+                "<<A ==> B> ==> <A ==> B>>"
+                "<<A <=> B> <=> <A <=> B>>"
+                r"<(/, R, A, _) --> (\, R, _, B)>"
+                r"<(/, R, A, _) <-> (\, R, _, B)>"
+                r"<(/, R, A, _) ==> (\, R, _, B)>"
+                r"<(/, R, A, _) <=> (\, R, _, B)>"
             }
             ok!()
         }

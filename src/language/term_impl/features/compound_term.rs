@@ -773,6 +773,73 @@ impl<'s> From<CompoundTermRefMut<'s>> for CompoundTermRef<'s> {
     }
 }
 
+/// 具备所有权的复合词项
+/// * 🎯初步决定用于「推理规则」向下分派
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct CompoundTerm {
+    /// 内部词项
+    term: Term,
+}
+
+impl CompoundTerm {
+    /// 获取不可变引用
+    pub fn get_ref(&self) -> CompoundTermRef {
+        // SAFETY: 在构造时，已经检查了是否为复合词项，因此此处无需检查
+        unsafe { self.term.as_compound_unchecked() }
+    }
+
+    /// 获取可变引用
+    pub fn mut_ref(&mut self) -> CompoundTermRefMut {
+        // SAFETY: 在构造时，已经检查了是否为复合词项，因此此处无需检查
+        unsafe { self.term.as_compound_mut_unchecked() }
+    }
+}
+
+/// 仅有的一处入口：从[词项](Term)构造
+impl TryFrom<Term> for CompoundTerm {
+    /// 转换失败时，返回原始词项
+    type Error = Term;
+
+    fn try_from(term: Term) -> Result<Self, Self::Error> {
+        // * 🚩仅在是复合词项时转换成功
+        match term.is_compound() {
+            true => Ok(Self { term }),
+            false => Err(term),
+        }
+    }
+}
+
+/// 出口（转换成词项）
+impl From<CompoundTerm> for Term {
+    fn from(value: CompoundTerm) -> Self {
+        value.term
+    }
+}
+
+/// 方便直接作为词项使用
+/// * ❓是否要滥用此种「类似继承的模式」
+impl Deref for CompoundTerm {
+    type Target = Term;
+
+    fn deref(&self) -> &Self::Target {
+        &self.term
+    }
+}
+
+/// 方便直接作为词项使用（可变）
+impl DerefMut for CompoundTerm {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.term
+    }
+}
+
+/// 内联「显示呈现」
+impl Display for CompoundTerm {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        self.term.fmt(f)
+    }
+}
+
 /// 单元测试
 #[cfg(test)]
 pub(crate) mod tests {
@@ -784,6 +851,10 @@ pub(crate) mod tests {
     /// 构建测试用复合词项
     #[macro_export]
     macro_rules! test_compound {
+        // 具所有权
+        (box $($t:tt)*) => {
+            CompoundTerm::try_from(term!($($t)*)).unwrap()
+        };
         // 可变
         (mut $($t:tt)*) => {
             term!($($t)*).as_compound_mut().unwrap()
@@ -1545,6 +1616,159 @@ pub(crate) mod tests {
                 "[A, B, C]"[1] = "X" => "[A, X, C]" // ! 集合词项在从字符串解析时会重排，但在重排后仍然相等
                 "<A <-> B>"[0] = "a" => "<a <-> B>" // ! 可交换词项解析时重排，但在重排后仍然相等
                 "<A <=> B>"[0] = "a" => "<a <=> B>" // ! 可交换词项解析时重排，但在重排后仍然相等
+            }
+            ok!()
+        }
+    }
+
+    /// 具所有权的复合词项
+    mod compound_term {
+        use super::*;
+        use std::str::FromStr;
+
+        /// 词项之间的类型转换
+        /// * 📄[`Term::try_into`] / [`CompoundTerm::try_from`]
+        /// * 📄[`Term::from`] / [`CompoundTerm::into`]
+        #[test]
+        fn from_into() -> AResult {
+            /// 通用测试函数
+            fn test(compound: CompoundTerm) {
+                // * 🚩首先是一个复合词项
+                assert!(compound.is_compound());
+
+                // * 🚩从内部拷贝一个词项后，仍可无损转换为复合词项
+                let term: Term = (*compound).clone();
+                let _: CompoundTerm = term.try_into().expect("应该是复合词项！");
+
+                // * 🚩解包成普通词项后，仍可无损转换为复合词项
+                let term: Term = compound.into();
+                let _: CompoundTerm = term.try_into().expect("应该是复合词项！");
+            }
+            macro_once! {
+                // * 🚩模式：词项字符串 ⇒ 预期
+                macro test($( $term:literal )*) {$(
+                    test(test_compound!(box $term));
+                )*}
+                // 普通复合词项
+                "{A}"
+                "[A]"
+                "(&, A)"
+                "(|, A)"
+                "(-, A, B)"
+                "(~, A, B)"
+                "(*, A, B, C)"
+                r"(/, R, _)"
+                r"(\, R, _)"
+                r"(&&, A)"
+                r"(||, A)"
+                r"(--, A)"
+                // 陈述
+                "<A --> B>"
+                "<A <-> B>"
+                "<A ==> B>"
+                "<A <=> B>"
+            }
+            ok!()
+        }
+
+        #[test]
+        fn get_ref() -> AResult {
+            /// 通用测试函数
+            fn test(compound: CompoundTerm) {
+                // * 🚩首先是一个复合词项
+                assert!(compound.is_compound());
+
+                // * 🚩获取大小
+                let size = compound.get_ref().size();
+                println!("{compound}.size() => {size}");
+
+                // * 🚩遍历所有元素
+                compound
+                    .get_ref()
+                    .components()
+                    .iter()
+                    .enumerate()
+                    .for_each(|(i, component)| println!("    [{i}] => {component}"))
+            }
+            macro_once! {
+                // * 🚩模式：词项字符串 ⇒ 预期
+                macro test($( $term:literal )*) {$(
+                    test(test_compound!(box $term));
+                )*}
+                // 普通复合词项
+                "{A}"
+                "[A]"
+                "(&, A)"
+                "(|, A)"
+                "(-, A, B)"
+                "(~, A, B)"
+                "(*, A, B, C)"
+                r"(/, R, _)"
+                r"(\, R, _)"
+                r"(&&, A)"
+                r"(||, A)"
+                r"(--, A)"
+                // 陈述
+                "<A --> B>"
+                "<A <-> B>"
+                "<A ==> B>"
+                "<A <=> B>"
+            }
+            ok!()
+        }
+
+        #[test]
+        fn mut_ref() -> AResult {
+            /// 通用测试函数
+            fn test(mut compound: CompoundTerm) -> AResult {
+                // * 🚩首先是一个复合词项
+                assert!(compound.is_compound());
+
+                // * 🚩修改：更改第一个元素
+                let old_s = compound.to_string();
+                let mut mut_ref = compound.mut_ref();
+                let first = &mut mut_ref.components()[0];
+                let x = term!("X");
+                *first = x.clone();
+                println!("modification: {old_s:?} => \"{compound}\"");
+                assert_eq!(compound.get_ref().components[0], x); // 假定修改后的结果
+
+                // * 🚩遍历修改所有元素
+                compound
+                    .mut_ref()
+                    .components()
+                    .iter_mut()
+                    .enumerate()
+                    .for_each(|(i, component)| {
+                        *component = Term::from_str(&format!("T{i}")).unwrap()
+                    });
+                print!(" => \"{compound}\"");
+
+                ok!()
+            }
+            macro_once! {
+                // * 🚩模式：词项字符串 ⇒ 预期
+                macro test($( $term:literal )*) {$(
+                    test(test_compound!(box $term))?;
+                )*}
+                // 普通复合词项
+                "{A}"
+                "[A]"
+                "(&, A)"
+                "(|, A)"
+                "(-, A, B)"
+                "(~, A, B)"
+                "(*, A, B, C)"
+                r"(/, R, _)"
+                r"(\, R, _)"
+                r"(&&, A)"
+                r"(||, A)"
+                r"(--, A)"
+                // 陈述
+                "<A --> B>"
+                "<A <-> B>"
+                "<A ==> B>"
+                "<A <=> B>"
             }
             ok!()
         }
