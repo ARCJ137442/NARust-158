@@ -186,18 +186,22 @@ fn unify_find(
     to_be_unified_2: &Term,
     shuffle_rng_seed: u64,
 ) -> Unification {
-    let mut substitution_1 = VarSubstitution::new();
-    let mut substitution_2 = VarSubstitution::new();
-    let has_substitute = find_unification(
+    let mut unify_map_1 = VarSubstitution::new();
+    let mut unify_map_2 = VarSubstitution::new();
+    let has_unification = find_unification(
         var_type,
         to_be_unified_1,
         to_be_unified_2,
-        &mut substitution_1,
-        &mut substitution_2,
+        &mut unify_map_1,
+        &mut unify_map_2,
         shuffle_rng_seed,
     );
     // 返回获取的映射，以及「是否有替换」
-    Unification(has_substitute, substitution_1, substitution_2)
+    Unification {
+        has_unification,
+        unify_map_1,
+        unify_map_2,
+    }
 }
 
 /// 【对外接口】统一独立变量
@@ -243,8 +247,16 @@ pub fn unify_find_q(
 }
 
 /// 多值输出：寻找「归一替换」的中间结果
-/// * 🎯使用类似`unity_find(t1, t2).apply_to(c1, c2)`完成「可变性隔离」
-pub struct Unification(pub bool, pub VarSubstitution, pub VarSubstitution);
+/// * 🎯使用类似`unify_find(t1, t2).apply_to(c1, c2)`完成「可变性隔离」
+#[derive(Debug, Clone)]
+pub struct Unification {
+    /// 是否能归一
+    pub has_unification: bool,
+    /// 如若归一，归一要换掉的变量映射 @ 词项1
+    pub unify_map_1: VarSubstitution,
+    /// 如若归一，归一要换掉的变量映射 @ 词项2
+    pub unify_map_2: VarSubstitution,
+}
 
 impl Unification {
     /// 重定向到[`unify_apply`]
@@ -276,10 +288,14 @@ fn unify_apply(
     unified_in_2: CompoundTermRefMut,
     unification: &Unification,
 ) -> bool {
-    let Unification(has_unification, substitution_1, substitution_2) = unification;
+    let Unification {
+        has_unification,
+        unify_map_1,
+        unify_map_2,
+    } = unification;
     // 根据「变量替换映射」在两头相应地替换变量
-    apply_unify_one(unified_in_1, substitution_1);
-    apply_unify_one(unified_in_2, substitution_2);
+    apply_unify_one(unified_in_1, unify_map_1);
+    apply_unify_one(unified_in_2, unify_map_2);
     *has_unification
 }
 
