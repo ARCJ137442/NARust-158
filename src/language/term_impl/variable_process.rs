@@ -500,51 +500,45 @@ fn find_unification(
             }
             true
         }
-        // * 🚩均非变量，但都是复合词项
-        [None, None] if is_same_type => {
-            match [to_be_unified_1.as_compound(), to_be_unified_2.as_compound()] {
-                [Some(compound_1), Some(compound_2)] => {
-                    // * 🚩替换前提：容器相似（大小相同、像占位符位置相同）
-                    if !is_same_kind_compound(compound_1, compound_2) {
-                        return false;
-                    }
-                    // * 🚩复制词项列表 | 需要在「随机打乱」的同时不影响遍历
-                    let mut list = compound_1.clone_components();
-                    // * 🚩可交换⇒打乱
-                    // * 📝from Wang：需要让算法（对两个词项）的时间复杂度为定值（O(n)而非O(n!)）
-                    // * ⚠️全排列的技术难度：多次尝试会修改映射表，需要多次复制才能在检验的同时完成映射替换
-                    //    * 💭【2024-07-10 14:50:09】这意味着较大的计算成本
-                    if compound_1.is_commutative() {
-                        let mut rng = StdRng::seed_from_u64(shuffle_rng_seed);
-                        list.shuffle(&mut rng);
-                        // ! 边缘情况：   `<(*, $1, $2) --> [$1, $2]>` => `<(*, A, A) --> [A]>`
-                        // ! 边缘情况：   `<<A --> [$1, $2]> ==> <A --> (*, $1, $2)>>`
-                        // ! 　　　　　+  `<A --> [B, C]>` |- `<A --> (*, B, C)>`✅
-                        // ! 　　　　　+  `<A --> [B]>` |- `<A --> (*, B, B)>`❌
-                    }
-                    // * 🚩逐个寻找替换
-                    for (inner1, inner2) in list.iter().zip(compound_2.components.iter()) {
-                        // assuming matching order
-                        // * 🚩对每个子项寻找替换 | 复用已有映射表
-                        if !find_unification(
-                            var_type,
-                            inner1,
-                            inner2,
-                            map_1,
-                            map_2,
-                            shuffle_rng_seed,
-                        ) {
-                            return false;
-                        }
-                    }
-                    true
+        // * 🚩均非变量
+        [None, None] => match [to_be_unified_1.as_compound(), to_be_unified_2.as_compound()] {
+            // * 🚩都是复合词项⇒尝试深入
+            [Some(compound_1), Some(compound_2)] if is_same_type => {
+                // * 🚩替换前提：容器相似（大小相同、像占位符位置相同）
+                if !is_same_kind_compound(compound_1, compound_2) {
+                    return false;
                 }
-                // * 🚩其它情况
-                _ => to_be_unified_1 == to_be_unified_2,
+                // * 🚩复制词项列表 | 实际上只需拷贝其引用
+                // * 📝【2024-07-10 14:53:16】随机打乱不影响内部值，也不影响原有排序
+                let mut list = compound_1.clone_component_refs();
+                // * 🚩可交换⇒打乱
+                // * 📝from Wang：需要让算法（对两个词项）的时间复杂度为定值（O(n)而非O(n!)）
+                // * ⚠️全排列的技术难度：多次尝试会修改映射表，需要多次复制才能在检验的同时完成映射替换
+                //    * 💭【2024-07-10 14:50:09】这意味着较大的计算成本
+                if compound_1.is_commutative() {
+                    let mut rng = StdRng::seed_from_u64(shuffle_rng_seed);
+                    list.shuffle(&mut rng);
+                    // ! 边缘情况：   `<(*, $1, $2) --> [$1, $2]>` => `<(*, A, A) --> [A]>`
+                    // ! 边缘情况：   `<<A --> [$1, $2]> ==> <A --> (*, $1, $2)>>`
+                    // ! 　　　　　+  `<A --> [B, C]>` |- `<A --> (*, B, C)>`✅
+                    // ! 　　　　　+  `<A --> [B]>` |- `<A --> (*, B, B)>`❌
+                }
+                // * 🚩逐个寻找替换
+                // * ✨【2024-07-10 15:02:10】更新机制：不再是「截断性返回」而是「逐个尝试」
+                //    * ⚠️与OpenNARS的核心区别：始终遍历所有子项，而非「一个不符就返回」
+                let mut result = true;
+                for (inner1, inner2) in list.into_iter().zip(compound_2.components.iter()) {
+                    // assuming matching order
+                    // * 🚩对每个子项寻找替换 | 复用已有映射表
+                    if !find_unification(var_type, inner1, inner2, map_1, map_2, shuffle_rng_seed) {
+                        result = false;
+                    }
+                }
+                result
             }
-        }
-        // * 🚩其它情况
-        _ => to_be_unified_1 == to_be_unified_2, // for atomic constant terms
+            // * 🚩其它情况
+            _ => to_be_unified_1 == to_be_unified_2, // for atomic constant terms
+        },
     }
 }
 
@@ -738,9 +732,12 @@ mod tests {
             "(--, #1)", "(--, 1)" => "#" => "(--, 1)", "(--, 1)"
             "(--, ?1)", "(--, 1)" => "?" => "(--, 1)", "(--, 1)"
             // ! ⚠️【2024-04-22 12:32:47】以下示例失效：第二个例子中，OpenNARS在「第一个失配」后，就无心再匹配第二个了
-            // "(*, $i, #d, ?q)", "(*, I, D, Q)" => "$" => "(*, I, #d, ?q)", "(*, I, D, Q)"
-            // "(*, $i, #d, ?q)", "(*, I, D, Q)" => "#" => "(*, $i, D, ?q)", "(*, I, D, Q)"
-            // "(*, $i, #d, ?q)", "(*, I, D, Q)" => "?" => "(*, $i, #d, Q)", "(*, I, D, Q)"
+            // * ✅【2024-07-10 14:59:26】已解决：在「逐个查找替换」的「复合词项递归深入」中，不应「一不符合就截断式返回」
+            //   * 📝每次「查找映射替换」均会改变「替换映射」，而「循环过程中途返回」会影响后续词项的替换
+            //   * 📌【2024-07-10 15:00:45】目前认定：这三种例子均应成功
+            "(*, $i, #d, ?q)", "(*, I, D, Q)" => "$" => "(*, I, #d, ?q)", "(*, I, D, Q)"
+            "(*, $i, #d, ?q)", "(*, I, D, Q)" => "#" => "(*, $i, D, ?q)", "(*, I, D, Q)"
+            "(*, $i, #d, ?q)", "(*, I, D, Q)" => "?" => "(*, $i, #d, Q)", "(*, I, D, Q)"
 
             // 多元复合词项（有序）：按顺序匹配 //
             "(*, $c, $b, $a)", "(*, (--, C), <B1 --> B2>, A)" => "$" => "(*, (--, C), <B1 --> B2>, A)", "(*, (--, C), <B1 --> B2>, A)"

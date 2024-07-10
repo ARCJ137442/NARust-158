@@ -566,15 +566,21 @@ impl<'s> CompoundTermRef<'s> {
     }
 
     /// 📄OpenNARS `CompoundTerm.cloneComponents`
-    /// * 🚩直接连接到[`TermComponents`]的方法
     /// * 🚩【2024-06-14 10:43:03】遵照改版原意，使用变长数组
     ///   * ℹ️后续需要增删操作
+    ///   * 📝无论如何也绕不开[`Vec`]
     ///
     /// # 📄OpenNARS
     ///
     /// Clone the component list
     pub fn clone_components(&self) -> Vec<Term> {
         self.components.to_vec()
+    }
+
+    /// 📄OpenNARS `CompoundTerm.cloneComponents`
+    /// * 🚩只拷贝所有元素的引用，无需拷贝其中的值
+    pub fn clone_component_refs(&self) -> Vec<&Term> {
+        self.components.iter().collect()
     }
 
     /// 📄OpenNARS `CompoundTerm.containComponent`
