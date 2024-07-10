@@ -9,7 +9,7 @@
 use crate::{
     control::{ReasonContext, ReasonContextConcept, ReasonContextWithLinks},
     entity::{Judgement, Sentence, TLink, TLinkType},
-    language::{CompoundTermRefMut, StatementRefMut, Term},
+    language::{CompoundTerm, Statement, Term},
     util::RefCount,
 };
 
@@ -115,26 +115,26 @@ mod utils {
 }
 pub use utils::*;
 
-/// 在断言的情况下，从[`Term`]中提取[`CompoundTermRefMut`]
+/// 在断言的情况下，从[`Term`]中提取[`CompoundTerm`]
 /// * 🎯对标OpenNARS`(CompoundTerm) term`的转换
-fn cast_compound(term: &mut Term) -> CompoundTermRefMut {
+fn cast_compound(term: Term) -> CompoundTerm {
     // * 🚩调试时假定复合词项
     debug_assert!(
         term.is_compound(),
         "强制转换失败：词项\"{term}\"必须是复合词项"
     );
-    term.as_compound_mut().expect("必定是复合词项")
+    term.try_into().expect("必定是复合词项")
 }
 
-/// 在断言的情况下，从[`Term`]中提取[`StatementRefMut`]
+/// 在断言的情况下，从[`Term`]中提取[`Statement`]
 /// * 🎯对标OpenNARS`(Statement) term`的转换
-fn cast_statement(term: &mut Term) -> StatementRefMut {
+fn cast_statement(term: Term) -> Statement {
     // * 🚩调试时假定复合词项
     debug_assert!(
         term.is_statement(),
         "强制转换失败：词项\"{term}\"必须是复合词项"
     );
-    term.as_statement_mut().expect("必定是复合词项")
+    term.try_into().expect("必定是复合词项")
 }
 
 /// 模拟`RuleTables.reason`
@@ -181,14 +181,14 @@ pub fn reason(context: &mut ReasonContextConcept) {
         // * + B="object"
         // * @ C="(&&,<#1 --> object>,<#1 --> (/,made_of,_,plastic)>)"
         [SELF, Component] => {
-            compound_and_self(cast_compound(&mut task_term), belief_term, true, context)
+            compound_and_self(cast_compound(task_term), belief_term, true, context)
         }
 
         // * 📄T="<<$1 --> [aggressive]> ==> <$1 --> murder>>"
         // * + B="[aggressive]"
         // * @ C="<<$1 --> [aggressive]> ==> <$1 --> murder>>"
         [SELF, Compound] => {
-            compound_and_self(cast_compound(&mut belief_term), task_term, false, context)
+            compound_and_self(cast_compound(belief_term), task_term, false, context)
         }
 
         // * 📄T="<{tim} --> (/,livingIn,_,{graz})>"
@@ -320,8 +320,8 @@ pub fn reason(context: &mut ReasonContextConcept) {
             if let Some(belief) = belief {
                 syllogisms(
                     /* t_link, b_link, */
-                    cast_statement(&mut task_term),
-                    cast_statement(&mut belief_term),
+                    cast_statement(task_term),
+                    cast_statement(belief_term),
                     belief,
                     context,
                 )
@@ -380,8 +380,8 @@ pub fn reason(context: &mut ReasonContextConcept) {
 }
 
 fn syllogisms(
-    task_term: StatementRefMut,
-    belief_term: StatementRefMut,
+    task_term: Statement,
+    belief_term: Statement,
     belief: impl Judgement,
     context: &mut ReasonContextConcept,
 ) {
@@ -395,7 +395,7 @@ fn syllogisms(
 }
 
 fn compound_and_self(
-    compound: CompoundTermRefMut,
+    compound: CompoundTerm,
     component: Term,
     is_compound_from_task: bool,
     context: &mut ReasonContextConcept,
