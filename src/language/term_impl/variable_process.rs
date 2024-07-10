@@ -515,6 +515,7 @@ fn find_unification(
                 // * 📝from Wang：需要让算法（对两个词项）的时间复杂度为定值（O(n)而非O(n!)）
                 // * ⚠️全排列的技术难度：多次尝试会修改映射表，需要多次复制才能在检验的同时完成映射替换
                 //    * 💭【2024-07-10 14:50:09】这意味着较大的计算成本
+                // * ✨现将`rng`外置：用于在「递归深入」中产生新随机数，增强算法随机性并仍保证宏观确定性
                 let mut rng = StdRng::seed_from_u64(shuffle_rng_seed);
                 if compound_1.is_commutative() {
                     list.shuffle(&mut rng);
