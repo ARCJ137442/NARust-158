@@ -107,9 +107,9 @@ fn truth_transforming(
     // * 🚩预算 * //
     let budget = match direction {
         // * 🚩复合前向 | 📝直接复用「转换后的真值」与解包等效
-        Forward => context.compound_forward(truth.as_ref(), new_content),
+        Forward => context.budget_compound_forward(truth.as_ref(), new_content),
         // * 🚩复合反向
-        Backward => context.compound_backward(new_content),
+        Backward => context.budget_compound_backward(new_content),
     };
     (truth, budget)
 }

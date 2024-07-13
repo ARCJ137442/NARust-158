@@ -1,10 +1,8 @@
-use std::io::{stdout, Write};
-
 use anyhow::Result;
 use narsese::conversion::string::impl_lexical::format_instances::FORMAT_ASCII;
 use narust_158::{
     control::DEFAULT_PARAMETERS,
-    inference::{match_task_and_belief, process_direct, transform_task, InferenceEngine},
+    inference::{match_task_and_belief, process_direct, reason, transform_task, InferenceEngine},
     vm::Launcher,
 };
 use navm::{
@@ -12,6 +10,7 @@ use navm::{
     output::Output,
     vm::{VmLauncher, VmRuntime},
 };
+use std::io::{stdout, Write};
 
 pub fn launcher_void() -> impl VmLauncher {
     Launcher::new("nar_158", DEFAULT_PARAMETERS, InferenceEngine::VOID)
@@ -27,7 +26,7 @@ pub fn launcher_dev() -> impl VmLauncher {
         process_direct,
         transform_task,
         match_task_and_belief,
-        InferenceEngine::ECHO.reason_f(),
+        reason,
     );
     Launcher::new("nar_158", DEFAULT_PARAMETERS, ENGINE)
 }

@@ -614,6 +614,12 @@ impl Statement {
     pub fn mut_ref(&mut self) -> StatementRefMut {
         self.term.as_statement_mut().unwrap()
     }
+
+    /// 解包为内部元素（主项、谓项）
+    /// * 🎯用于「推理规则」中的新词项生成
+    pub fn unwrap_components(self) -> [Term; 2] {
+        self.term.unwrap_statement_components().unwrap()
+    }
 }
 
 /// 仅有的一处入口：从[词项](Term)构造

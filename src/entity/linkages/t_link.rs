@@ -135,4 +135,10 @@ pub trait TLink<Target> {
     fn get_index(&self, index: usize) -> Option<&usize> {
         self.indexes().get(index)
     }
+
+    /// 快速假定性获取索引
+    /// * 🎯假定在界内；若在界外，则panic
+    fn index(&self, index: usize) -> usize {
+        self.indexes()[index]
+    }
 }

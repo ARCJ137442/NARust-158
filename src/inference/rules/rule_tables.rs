@@ -8,116 +8,15 @@
 
 use crate::{
     control::{ReasonContext, ReasonContextConcept, ReasonContextWithLinks},
-    entity::{Judgement, Sentence, TLink, TLinkType},
+    entity::{Sentence, TLink, TLinkType},
+    inference::syllogisms,
     language::{CompoundTerm, Statement, Term},
     util::RefCount,
 };
 
-/// 存储规则表之外的结构与方法
-mod utils {
-    /// 🆕三段论位置
-    /// * 🎯用于表征[`RuleTables::index_to_figure`]推导出的「三段论子类型」
-    /// * 📝OpenNARS中是在「三段论推理」的「陈述🆚陈述」中表示「位置关系」
-    ///   * 📄`<A --> B>`与`<B --> C>`中，`B`就分别在`1`、`0`两个索引位置
-    ///     * 📌因此有`SP`或`Subject-Predicate`
-    ///     * 📌同时也有了其它三种「三段论图式」
-    /// * 🚩两种情况：
-    ///   * 主项
-    ///   * 谓项
-    #[doc(alias = "SyllogismLocation")]
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-    pub enum SyllogismPosition {
-        /// 主项（第一项）
-        Subject = 0,
-        /// 谓项（第二项）
-        Predicate = 1,
-    }
-
-    impl SyllogismPosition {
-        /// 🆕调转到相反位置
-        pub fn opposite(self) -> Self {
-            match self {
-                Subject => Predicate,
-                Predicate => Subject,
-            }
-        }
-
-        /// 🆕从「数组索引」中来
-        /// * 🎯[`RuleTables::__index_to_figure`]
-        /// * 🚩核心：0→主项，1→谓项，整体`<主项 --> 谓项>`
-        pub fn from_index(index: usize) -> Self {
-            match index {
-                0 => Subject,
-                1 => Predicate,
-                _ => panic!("无效索引"),
-            }
-        }
-
-        /// 🆕构造「三段论图式」
-        /// * 🎯[`RuleTables::__index_to_figure`]
-        /// * 🚩直接构造二元组
-        pub fn build_figure(first: Self, second: Self) -> SyllogismFigure {
-            (first, second)
-        }
-    }
-    use SyllogismPosition::*;
-
-    /// 三段论图式
-    /// * 🎯模拟「三段论推理」中「公共项在两陈述的位置」的四种情况
-    /// * 🚩使用二元组实现，允许更细化的组合
-    ///   * ✨基本等同于整数（低开销）类型
-    /// * 📝四种主要情况：
-    ///   * 主项-主项
-    ///   * 主项-谓项
-    ///   * 谓项-主项
-    ///   * 谓项-谓项
-    ///
-    /// # 📄OpenNARS
-    ///
-    /// location of the shared term
-    pub type SyllogismFigure = (SyllogismPosition, SyllogismPosition);
-
-    /// 存储「三段论图式」常量
-    /// * 🎯可完全引用，可简短使用
-    ///   * ⚡长度与OpenNARS的`11`、`12`相近
-    /// * 🚩仅四种
-    pub mod syllogistic_figures {
-        use super::*;
-
-        /// [三段论图式](SyllogismFigure)/常用/主项-主项
-        #[doc(alias = "SUBJECT_SUBJECT")]
-        pub const SS: SyllogismFigure = (Subject, Subject);
-
-        /// [三段论图式](SyllogismFigure)/常用/主项-谓项
-        #[doc(alias = "SUBJECT_PREDICATE")]
-        pub const SP: SyllogismFigure = (Subject, Predicate);
-
-        /// [三段论图式](SyllogismFigure)/常用/谓项-主项
-        #[doc(alias = "PREDICATE_SUBJECT")]
-        pub const PS: SyllogismFigure = (Predicate, Subject);
-
-        /// [三段论图式](SyllogismFigure)/常用/谓项-谓项
-        #[doc(alias = "PREDICATE_PREDICATE")]
-        pub const PP: SyllogismFigure = (Predicate, Predicate);
-    }
-
-    /// 三段论推理中的「某侧」
-    /// * 📌包含「主项/谓项/整个词项」
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-    pub enum SyllogismSide {
-        /// 主项（第一项）
-        Subject = 0,
-        /// 谓项（第二项）
-        Predicate = 1,
-        /// 整个词项（整体）
-        Whole = -1,
-    }
-}
-pub use utils::*;
-
 /// 在断言的情况下，从[`Term`]中提取[`CompoundTerm`]
 /// * 🎯对标OpenNARS`(CompoundTerm) term`的转换
-fn cast_compound(term: Term) -> CompoundTerm {
+pub(super) fn cast_compound(term: Term) -> CompoundTerm {
     // * 🚩调试时假定复合词项
     debug_assert!(
         term.is_compound(),
@@ -128,7 +27,7 @@ fn cast_compound(term: Term) -> CompoundTerm {
 
 /// 在断言的情况下，从[`Term`]中提取[`Statement`]
 /// * 🎯对标OpenNARS`(Statement) term`的转换
-fn cast_statement(term: Term) -> Statement {
+pub(super) fn cast_statement(term: Term) -> Statement {
     // * 🚩调试时假定复合词项
     debug_assert!(
         term.is_statement(),
@@ -138,6 +37,8 @@ fn cast_statement(term: Term) -> Statement {
 }
 
 /// 模拟`RuleTables.reason`
+/// * 📌规则表入口
+/// * 📝「概念推理」的起点
 ///
 /// # 📄OpenNARS
 ///
@@ -322,6 +223,8 @@ pub fn reason(context: &mut ReasonContextConcept) {
                     /* t_link, b_link, */
                     cast_statement(task_term),
                     cast_statement(belief_term),
+                    t_index.expect("T链接索引越界@三段论推理"),
+                    b_index.expect("T链接索引越界@三段论推理"),
                     belief,
                     context,
                 )
@@ -377,21 +280,6 @@ pub fn reason(context: &mut ReasonContextConcept) {
 
         [CompoundCondition, CompoundCondition] => {}
     }
-}
-
-fn syllogisms(
-    task_term: Statement,
-    belief_term: Statement,
-    belief: impl Judgement,
-    context: &mut ReasonContextConcept,
-) {
-    // * 🚩提取参数
-    let t_link = context.current_task_link();
-    let b_link = context.current_belief_link();
-    context.report_comment(format!(
-        "TODO @ syllogisms: \ntask_term={task_term}\nbelief_term={belief_term}\nbelief={}",
-        belief.to_display_long()
-    ))
 }
 
 fn compound_and_self(

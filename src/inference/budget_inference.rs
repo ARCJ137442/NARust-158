@@ -106,28 +106,28 @@ pub trait BudgetInferenceContext: ReasonContextWithLinks {
     /// # 📄OpenNARS
     ///
     /// Forward inference result and adjustment
-    fn forward<T: Truth>(&mut self, truth: impl OptionOrSomeRef<T>) -> BudgetValue {
+    fn budget_forward<T: Truth>(&mut self, truth: impl OptionOrSomeRef<T>) -> BudgetValue {
         self.budget_inference(Forward, truth.or_some(), None)
     }
 
     /// # 📄OpenNARS
     ///
     /// Backward inference result and adjustment, stronger case
-    fn backward<T: Truth>(&mut self, truth: impl OptionOrSomeRef<T>) -> BudgetValue {
+    fn budget_backward<T: Truth>(&mut self, truth: impl OptionOrSomeRef<T>) -> BudgetValue {
         self.budget_inference(Backward, truth.or_some(), None)
     }
 
     /// # 📄OpenNARS
     ///
     /// Backward inference result and adjustment, weaker case
-    fn backward_weak<T: Truth>(&mut self, truth: impl OptionOrSomeRef<T>) -> BudgetValue {
+    fn budget_backward_weak<T: Truth>(&mut self, truth: impl OptionOrSomeRef<T>) -> BudgetValue {
         self.budget_inference(BackwardWeak, truth.or_some(), None)
     }
 
     /// # 📄OpenNARS
     ///
     /// Forward inference with CompoundTerm conclusion
-    fn compound_forward<T: Truth>(
+    fn budget_compound_forward<T: Truth>(
         &mut self,
         truth: impl OptionOrSomeRef<T>,
         content: impl OptionOrSomeRef<Term>,
@@ -138,14 +138,17 @@ pub trait BudgetInferenceContext: ReasonContextWithLinks {
     /// # 📄OpenNARS
     ///
     /// Backward inference with CompoundTerm conclusion, stronger case
-    fn compound_backward(&mut self, content: impl OptionOrSomeRef<Term>) -> BudgetValue {
+    fn budget_compound_backward(&mut self, content: impl OptionOrSomeRef<Term>) -> BudgetValue {
         self.budget_inference(CompoundBackward, None::<&TruthValue>, content.or_some())
     }
 
     /// # 📄OpenNARS
     ///
     /// Backward inference with CompoundTerm conclusion, weaker case
-    fn compound_backward_weak(&mut self, content: impl OptionOrSomeRef<Term>) -> BudgetValue {
+    fn budget_compound_backward_weak(
+        &mut self,
+        content: impl OptionOrSomeRef<Term>,
+    ) -> BudgetValue {
         self.budget_inference(CompoundBackwardWeak, None::<&TruthValue>, content.or_some())
     }
 

@@ -12,8 +12,8 @@ nar_dev_utils::mods! {
     // 本地规则 `LocalRules`
     pub use local_rules;
 
-    // // 三段论规则 `SyllogisticRules`
-    // pub use syllogistic_rules;
+    // 三段论规则 `SyllogisticRules`
+    pub use syllogistic_rules;
 
     // // 组合规则 `CompositionalRules`
     // pub use compositional_rules;
