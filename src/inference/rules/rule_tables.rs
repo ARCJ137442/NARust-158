@@ -290,3 +290,19 @@ fn compound_and_self(
 ) {
     context.report_comment(format!("TODO @ compound_and_self: \ncompound={compound}\ncomponent={component}\nis_compound_from_task={is_compound_from_task}"))
 }
+
+/// 一些通用函数
+#[cfg(test)]
+pub(super) mod tests {
+    use super::*;
+    use crate::inference::{process_direct, transform_task, InferenceEngine};
+
+    /// 概念推理专用测试引擎
+    /// * 🚩【2024-07-14 23:51:32】禁掉了转换推理
+    pub const ENGINE_REASON: InferenceEngine = InferenceEngine::new(
+        process_direct,
+        transform_task,
+        InferenceEngine::VOID.matching_f(),
+        reason,
+    );
+}

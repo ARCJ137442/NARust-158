@@ -259,7 +259,10 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::inference::{test::*, InferenceEngine};
+    use crate::{
+        expect_narsese_term,
+        inference::{test_inference::*, InferenceEngine},
+    };
     use navm::{output::Output, vm::VmRuntime};
 
     /// 推理引擎
@@ -286,7 +289,7 @@ mod tests {
             cyc 2
             ",
             // * 🚩检查其中是否有回答
-            |answer| matches!(answer, Output::ANSWER { .. }),
+            expect_narsese_term!(ANSWER "Sentence" in outputs),
         );
     }
 

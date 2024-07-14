@@ -467,7 +467,7 @@ fn transform_predicate_product_image(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::inference::{process_direct, test::*, InferenceEngine};
+    use crate::inference::{process_direct, test_inference::*, InferenceEngine};
     use narsese::lexical_nse_term;
 
     const ENGINE: InferenceEngine = InferenceEngine::new(

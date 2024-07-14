@@ -7,8 +7,10 @@
 //!
 //! * ♻️【2024-07-11 00:07:52】开始根据改版OpenNARS重写
 
-use super::*;
-use crate::{control::*, entity::*, inference::*, io::symbols::*, language::*, util::*};
+use crate::{
+    control::*, entity::*, inference::rules::cast_statement, inference::*, io::symbols::*,
+    language::*, util::*,
+};
 use nar_dev_utils::unwrap_or_return;
 use ReasonDirection::*;
 
@@ -202,7 +204,6 @@ mod dispatch {
         // * 🚩非对称🆚非对称
         let mut t_term = cast_statement(task_sentence.clone_content());
         let mut b_term = cast_statement(belief_sentence.clone_content());
-        dbg!(&t_term, &b_term);
         let rng_seed = context.shuffle_rng_seed();
         let rng_seed2 = context.shuffle_rng_seed();
         use syllogistic_figures::*;
@@ -371,4 +372,57 @@ fn deduction(
     };
     // * 🚩结论
     context.double_premise_task(content, truth, budget);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::inference::test_inference::{create_vm_from_engine, VmRuntimeBoost};
+    use narsese::api::GetTerm;
+    use narsese::lexical_nse_term;
+    use navm::output::Output;
+    use rules::tests::ENGINE_REASON;
+
+    macro_rules! expect_narsese_term {
+        // * 🚩模式：【类型】 【内容】 in 【输出】
+        ($type:ident $term:literal in outputs) => {
+            |o| matches!(
+                o,
+                Output::$type { narsese,.. }
+                // * 🚩【2024-07-15 00:04:43】此处使用了「词法Narsese」的内部分派
+                if *narsese.as_ref().unwrap().get_term() == lexical_nse_term!(@PARSE $term)
+            )
+        };
+    }
+
+    #[test]
+    fn deduction() {
+        let mut vm = create_vm_from_engine(ENGINE_REASON);
+        // * 🚩OUT
+        vm.input_fetch_print_expect(
+            "
+            nse <A --> B>.
+            nse <B --> C>.
+            cyc 10
+            ",
+            // * 🚩检查其中是否有导出
+            expect_narsese_term!(OUT "<A --> C>" in outputs),
+        );
+    }
+
+    #[test]
+    fn deduction_answer() {
+        let mut vm = create_vm_from_engine(ENGINE_REASON);
+        // * 🚩ANSWER
+        vm.input_fetch_print_expect(
+            "
+            nse <A --> B>.
+            nse <B --> C>.
+            nse <A --> C>?
+            cyc 20
+            ",
+            // * 🚩检查其中是否有导出
+            expect_narsese_term!(ANSWER "<A --> C>" in outputs),
+        );
+    }
 }

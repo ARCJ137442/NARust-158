@@ -118,7 +118,10 @@ fn revision(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::inference::{process_direct, test::*, InferenceEngine};
+    use crate::{
+        expect_narsese_term,
+        inference::{process_direct, test_inference::*, InferenceEngine},
+    };
     use navm::output::Output;
 
     /// 引擎
@@ -142,7 +145,7 @@ mod tests {
             cyc 5
             ",
             // * 🚩检查其中是否有导出
-            |o| matches!(o, Output::OUT { .. }),
+            expect_narsese_term!(OUT "Sentence" in outputs),
         );
     }
 
@@ -159,7 +162,7 @@ mod tests {
             nse Sentence?
             cyc 2
             ",
-            |o| matches!(o, Output::ANSWER { .. }),
+            expect_narsese_term!(ANSWER "Sentence" in outputs),
         );
 
         // 修正后回答
@@ -168,7 +171,7 @@ mod tests {
             nse Sentence. %0.0;0.5%
             cyc 2
             ",
-            |o| matches!(o, Output::ANSWER { .. }),
+            expect_narsese_term!(ANSWER "Sentence" in outputs),
         );
 
         // 修正后回答
@@ -177,7 +180,7 @@ mod tests {
             nse Sentence. %0.5;0.5%
             cyc 2
             ",
-            |o| matches!(o, Output::ANSWER { .. }),
+            expect_narsese_term!(ANSWER "Sentence" in outputs),
         );
     }
 
@@ -193,7 +196,7 @@ mod tests {
             nse <?1 --> B>?
             cyc 50
             ",
-            |answer| matches!(answer, Output::ANSWER { .. }),
+            expect_narsese_term!(ANSWER "<A --> B>" in outputs),
         );
     }
 
