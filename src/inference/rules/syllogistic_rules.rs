@@ -331,44 +331,74 @@ mod dispatch {
 
         // * 🚩演绎 & 举例
         deduction(
-            term1,
-            term2,
-            task_sentence,
-            belief_sentence,
+            term1.clone(),
+            term2.clone(),
+            &old_content,
+            &task_sentence,
+            &belief_sentence,
             context,
             direction,
-            old_content,
         );
-        // TODO: 举例
+        exemplification(
+            term1,
+            term2,
+            &old_content,
+            &task_sentence,
+            &belief_sentence,
+            context,
+            direction,
+        );
     }
 }
 pub use dispatch::*;
 
+/// 🆕演绎规则
 fn deduction(
     term1: Term,
     term2: Term,
-    task_sentence: impl Sentence,
-    belief_sentence: impl Judgement,
+    old_content: &Term,
+    task: &impl Sentence,
+    belief: &impl Judgement,
     context: &mut ReasonContextConcept,
     direction: ReasonDirection,
-    old_content: Term,
 ) {
     // * 🚩词项
-    let content = unwrap_or_return!(?Term::make_statement(&old_content, term1, term2));
+    let content = unwrap_or_return!(?Term::make_statement(old_content, term1, term2));
     // * 🚩真值
     let truth = match direction {
-        Forward => Some(
-            task_sentence
-                .as_judgement()
-                .unwrap()
-                .deduction(&belief_sentence),
-        ),
+        Forward => Some(task.as_judgement().unwrap().deduction(belief)),
         Backward => None,
     };
     // * 🚩预算
     let budget = match direction {
         Forward => context.budget_forward(truth.as_ref()),
-        Backward => context.budget_backward_weak(&belief_sentence),
+        Backward => context.budget_backward_weak(belief),
+    };
+    // * 🚩结论
+    context.double_premise_task(content, truth, budget);
+}
+
+/// 🆕举例规则
+fn exemplification(
+    term1: Term,
+    term2: Term,
+    old_content: &Term,
+    task: &impl Sentence,
+    belief: &impl Judgement,
+    context: &mut ReasonContextConcept,
+    direction: ReasonDirection,
+) {
+    // * 🚩词项
+    let content = unwrap_or_return!(?Term::make_statement(old_content, term2, term1));
+    // * 🚩真值
+    let truth = match direction {
+        Forward => Some(task.as_judgement().unwrap().exemplification(belief)),
+        Backward => None,
+    };
+    // * 🚩预算
+    let budget = match direction {
+        Forward => context.budget_forward(truth.as_ref()),
+        Backward => context.budget_backward_weak(belief),
     };
     // * 🚩结论
     context.double_premise_task(content, truth, budget);
