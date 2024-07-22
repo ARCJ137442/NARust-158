@@ -250,9 +250,17 @@ mod tests {
             // * 🚩模式：`键 => 预期值`
             macro test_default_value($(
                 $field:ident => $expected:expr
-            )*) {$(
-                assert_eq!(parameters.$field, $expected);
-            )*}
+            )*) {
+                // * 🚩检查整个结构体
+                let expected = Parameters {
+                    $( $field: $expected ),*
+                };
+                assert_eq!(parameters, expected);
+                // * 🚩逐一检查预期值
+                $(
+                    assert_eq!(parameters.$field, $expected);
+                )*
+            }
             // 默认值表
             concept_forgetting_cycle         => 10
             task_link_forgetting_cycle       => 20
