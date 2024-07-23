@@ -32,7 +32,7 @@ impl Term {
             // 名称 | 原子词项
             Word(name) => id.clone() + name,
             // 名称 | 变量词项
-            Variable(n) => id.clone() + &n.to_string(),
+            Variable(n) | Interval(n) => id.clone() + &n.to_string(),
             Compound(terms) => {
                 match self.get_capacity() {
                     // 一元
@@ -120,8 +120,8 @@ impl Term {
             (_, Empty) => LTerm::new_atom(id, ""),
             // 通用 / 具名：前缀+词项名
             (_, Word(name)) => LTerm::new_atom(id, name),
-            // 通用 / 变量：前缀+变量编号
-            (_, Variable(num)) => LTerm::new_atom(id, num.to_string()),
+            // 通用 / 变量|间隔：前缀+编号
+            (_, Variable(num) | Interval(num)) => LTerm::new_atom(id, num.to_string()),
             // 通用 / 多元
             (_, Compound(terms)) => {
                 LTerm::new_compound(id, terms.iter().map(Self::to_lexical).collect())
@@ -164,7 +164,7 @@ impl From<TermComponents> for Vec<Term> {
     fn from(value: TermComponents) -> Self {
         use TermComponents::*;
         match value {
-            Empty | Word(..) | Variable(..) => vec![],
+            Empty | Word(..) | Variable(..) | Interval(..) => vec![],
             Compound(terms) => terms.into(),
         }
     }
@@ -178,7 +178,7 @@ impl From<TermComponents> for Box<[Term]> {
     fn from(value: TermComponents) -> Self {
         use TermComponents::*;
         match value {
-            Empty | Word(..) | Variable(..) => Box::new([]),
+            Empty | Word(..) | Variable(..) | Interval(..) => Box::new([]),
             Compound(terms) => terms,
         }
     }

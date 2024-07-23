@@ -22,6 +22,9 @@ pub const VAR_INDEPENDENT: &str = "$";
 pub const VAR_DEPENDENT: &str = "#";
 pub const VAR_QUERY: &str = "?";
 
+/// 间隔
+pub const INTERVAL: &str = "+";
+
 // 数值分隔符，必须与「词项分隔符」相异
 // * 🚩【2024-05-09 00:56:34】改：统一为字符串
 pub const BUDGET_VALUE_MARK: &str = "$";

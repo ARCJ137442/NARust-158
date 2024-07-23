@@ -57,7 +57,7 @@ impl Term {
             Empty => 0,
             // 原子/变量 ⇒ 1 | 不包括「变量」
             // * 🚩目前遵照更新的PyNARS设置，将「变量词项」的复杂度定为1
-            Word(..) | Variable(..) => 1,
+            Word(..) | Variable(..) | Interval(..) => 1,
             // 多元 ⇒ 1 + 内部所有词项复杂度之和
             Compound(terms) => 1 + terms.iter().map(Term::complexity).sum::<usize>(),
         }

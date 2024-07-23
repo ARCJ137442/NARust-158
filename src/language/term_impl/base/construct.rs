@@ -51,6 +51,11 @@ impl Term {
         Self::new(VAR_QUERY, TermComponents::Variable(id.into()))
     }
 
+    /// NAL-7 / 间隔
+    pub(crate) fn new_interval(n_time: impl Into<usize>) -> Self {
+        Self::new(VAR_QUERY, TermComponents::Interval(n_time.into()))
+    }
+
     /// 从旧的原子词项构造，但使用新的名称
     /// * 🎯重命名变量时，将变量「换名复制」
     /// * 🚩使用旧词项的标识符，但产生新的变量

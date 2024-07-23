@@ -39,4 +39,7 @@ nar_dev_utils::mods! {
 
     // 记忆区
     pub use memory;
+
+    // 事件缓冲区
+    pub use event_buffer;
 }

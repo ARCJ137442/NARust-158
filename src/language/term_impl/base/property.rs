@@ -64,7 +64,7 @@ impl Term {
         use TermComponents::*;
         match self.components() {
             // 无组分⇒遍历自身
-            Empty | Word(..) | Variable(..) => f(self),
+            Empty | Word(..) | Variable(..) | Interval(..) => f(self),
             // 内含词项⇒递归深入
             Compound(terms) => {
                 for term in terms.iter() {
@@ -81,7 +81,7 @@ impl Term {
         use TermComponents::*;
         match self.components_mut() {
             // 无组分⇒遍历自身
-            Empty | Word(..) | Variable(..) => f(self),
+            Empty | Word(..) | Variable(..) | Interval(..) => f(self),
             // 内含词项⇒递归深入
             Compound(terms) => {
                 for term in terms.iter_mut() {
@@ -120,7 +120,7 @@ impl TermComponents {
         use TermComponents::*;
         match self {
             // 无组分
-            Empty | Word(..) | Variable(..) => 0,
+            Empty | Word(..) | Variable(..) | Interval(..) => 0,
             // 不定数目
             Compound(terms) => terms.len(),
         }
@@ -132,7 +132,7 @@ impl TermComponents {
         use TermComponents::*;
         match self {
             // 一定空
-            Empty | Word(..) | Variable(..) => true,
+            Empty | Word(..) | Variable(..) | Interval(..) => true,
             // 可能空
             Compound(terms) => terms.is_empty(),
         }
@@ -145,7 +145,7 @@ impl TermComponents {
         use TermComponents::*;
         match self {
             // 无组分
-            Empty | Word(..) | Variable(..) => None,
+            Empty | Word(..) | Variable(..) | Interval(..) => None,
             // 有组分
             Compound(terms) => terms.get(index),
         }
@@ -176,7 +176,7 @@ impl TermComponents {
         // * 📝必须添加类型注释，以便统一不同类型的`Box`，进而统一「迭代器」类型
         let b: Box<dyn Iterator<Item = &Term>> = match self {
             // 一定空
-            Empty | Word(..) | Variable(..) => Box::new(None.into_iter()),
+            Empty | Word(..) | Variable(..) | Interval(..) => Box::new(None.into_iter()),
             // 可能空
             Compound(terms) => Box::new(terms.iter()),
         };
@@ -195,7 +195,7 @@ impl TermComponents {
         use TermComponents::*;
         match self {
             // 无组分 ⇒ 不排序
-            Empty | Word(..) | Variable(..) => self,
+            Empty | Word(..) | Variable(..) | Interval(..) => self,
             // 不定数目⇒直接对数组重排并去重
             Compound(terms) => Self::Compound(Self::sort_dedup_terms(terms)),
         }
@@ -225,7 +225,7 @@ impl TermComponents {
         use TermComponents::*;
         match self {
             // * 🚩原子词项⇒空数组
-            Empty | Word(..) | Variable(..) => vec![],
+            Empty | Word(..) | Variable(..) | Interval(..) => vec![],
             // * 🚩复合词项⇒使用`to_vec`拷贝数组
             Compound(terms) => terms.to_vec(),
         }

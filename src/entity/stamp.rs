@@ -93,6 +93,10 @@ impl Stamp {
         }
     }
 
+    pub fn from_evidential(evidential: &impl Evidential) -> Self {
+        Self::new(evidential.creation_time(), evidential.evidential_base())
+    }
+
     /// 模拟`new Stamp(long time)`
     /// * 🎯一致的对外构造函数
     /// * 🚩【2024-05-05 14:28:49】参数`current_serial`意味着**其自增要在调用方处管理**
