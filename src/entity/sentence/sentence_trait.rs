@@ -122,6 +122,12 @@ pub trait Sentence: ToDisplayAndBrief + Evidential {
             PunctuatedSentenceRef::Judgement(j) => j
         }
     }
+    /// `as_judgement`的快捷解包
+    /// * 🎯推理规则中对「正向推理⇒任务有真值」的使用
+    fn unwrap_judgement(&self) -> &Self::Judgement {
+        // * 🚩【2024-07-09 13:17:25】现在直接复用一个函数
+        self.as_judgement().unwrap()
+    }
 
     /// 模拟`Sentence.isQuestion`
     /// * ❌【2024-06-21 15:02:36】无法外置到其它「给语句自动添加功能」的特征中去
@@ -144,6 +150,11 @@ pub trait Sentence: ToDisplayAndBrief + Evidential {
             ?self.as_punctuated_ref(),
             PunctuatedSentenceRef::Question(q) => q
         }
+    }
+    /// `as_question`的快捷解包
+    fn unwrap_question(&self) -> &Self::Question {
+        // * 🚩【2024-07-09 13:17:25】现在直接复用一个函数
+        self.as_question().unwrap()
     }
 
     /// 模拟`Sentence.containQueryVar`

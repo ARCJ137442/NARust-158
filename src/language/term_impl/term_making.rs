@@ -853,23 +853,23 @@ impl Term {
     /// 📄OpenNARS `Statement.makeSym`
     /// * 🚩通过使用「标识符映射」将「非对称版本」映射到「对称版本」
     /// * ⚠️目前只支持「继承」和「蕴含」，其它均会`panic`
+    /// * 🚩【2024-07-23 15:35:41】实际上并不需要「复合词项引用」：只是对标识符做分派
     ///
     /// # 📄OpenNARS
     /// Make a symmetric Statement from given components and temporal information,
     /// called by the rules
     pub fn make_statement_symmetric(
-        template: CompoundTermRef,
+        template: &Term,
         subject: Term,
         predicate: Term,
     ) -> Option<Term> {
-        let identifier = template.identifier();
-        match identifier {
+        match template.identifier() {
             // 继承⇒相似
             INHERITANCE_RELATION => Self::make_similarity(subject, predicate),
             // 蕴含⇒等价
             IMPLICATION_RELATION => Self::make_equivalence(subject, predicate),
             // 其它⇒panic
-            _ => unimplemented!("不支持的标识符：{identifier:?}"),
+            identifier => unimplemented!("不支持的标识符：{identifier:?}"),
         }
     }
 
@@ -2927,11 +2927,8 @@ mod tests {
         #[test]
         fn make_statement_symmetric() -> AResult {
             fn test(template: Term, subject: Term, predicate: Term, expected: Option<Term>) {
-                let out = Term::make_statement_symmetric(
-                    template.as_compound().unwrap(),
-                    subject.clone(),
-                    predicate.clone(),
-                );
+                let out =
+                    Term::make_statement_symmetric(&template, subject.clone(), predicate.clone());
                 assert_eq!(
                     out,
                     expected,

@@ -212,11 +212,30 @@ mod dispatch {
             // induction
             SS => {
                 // * 🚩先尝试统一独立变量
+                let unified_i = variable_process::unify_find_i(
+                    t_term.get_ref().subject(),
+                    b_term.get_ref().subject(),
+                    rng_seed,
+                )
+                .apply_to(
+                    t_term.mut_ref().into_compound_ref(),
+                    b_term.mut_ref().into_compound_ref(),
+                );
                 // * 🚩不能统一变量⇒终止
+                if !unified_i {
+                    return;
+                }
                 // * 🚩统一后内容相等⇒终止
+                if t_term == b_term {
+                    return;
+                }
                 // * 🚩取其中两个不同的谓项 B + C
+                let ([_, term2], [_, term1]) =
+                    (t_term.unwrap_components(), b_term.unwrap_components());
                 // * 🚩构造复合词项
+                // TODO
                 // * 🚩归因+归纳+比较
+                abd_ind_com(term1, term2, task_sentence, belief_sentence, context);
             }
             // * 🚩主项×谓项 <A --> B> × <C --> A>
             // deduction
@@ -311,42 +330,79 @@ mod dispatch {
     ) {
     }
 
+    /// ```nal
+    /// {<S ==> M>, <M ==> P>} |- {<S ==> P>, <P ==> S>}
+    /// ```
+    ///
     /// 演绎&举例
-    /// * 🚩演绎 & 举例
-    /// * * 📝一个强推理，一个弱推理
+    /// * 📝一个强推理，一个弱推理
+    ///
     fn ded_exe(
-        term1: Term,
-        term2: Term,
+        sub: Term,
+        pre: Term,
         task_sentence: impl Sentence,
         belief_sentence: impl Judgement,
         context: &mut ReasonContextConcept,
     ) {
         // * 🚩陈述有效才行
-        if StatementRef::invalid_statement(&term1, &term2) {
+        if StatementRef::invalid_statement(&sub, &pre) {
             return;
         }
-        // * 🚩后续根据「是否反向推理」安排真值和预算值
-        let direction = context.reason_direction();
-        let old_content = task_sentence.clone_content();
 
         // * 🚩演绎 & 举例
         deduction(
-            term1.clone(),
-            term2.clone(),
-            &old_content,
+            sub.clone(),
+            pre.clone(),
             &task_sentence,
             &belief_sentence,
             context,
-            direction,
         );
         exemplification(
-            term1,
-            term2,
-            &old_content,
+            sub.clone(),
+            pre.clone(),
             &task_sentence,
             &belief_sentence,
             context,
-            direction,
+        );
+    }
+
+    /// ```nal
+    /// {<M ==> S>, <M ==> P>} |- {<S ==> P>, <P ==> S>, <S <=> P>}
+    /// ```
+    /// * 📝归因 & 归纳 & 比较
+    fn abd_ind_com(
+        sub: Term,
+        pre: Term,
+        task_sentence: impl Sentence,
+        belief_sentence: impl Judgement,
+        context: &mut ReasonContextConcept,
+    ) {
+        // * 🚩判断结论合法性
+        if StatementRef::invalid_statement(&sub, &pre) || StatementRef::invalid_pair(&sub, &pre) {
+            return;
+        }
+
+        // * 🚩归因 & 归纳 & 比较
+        abduction(
+            sub.clone(),
+            pre.clone(),
+            &task_sentence,
+            &belief_sentence,
+            context,
+        );
+        induction(
+            sub.clone(),
+            pre.clone(),
+            &task_sentence,
+            &belief_sentence,
+            context,
+        );
+        comparison(
+            sub.clone(),
+            pre.clone(),
+            &task_sentence,
+            &belief_sentence,
+            context,
         );
     }
 }
@@ -354,23 +410,23 @@ pub use dispatch::*;
 
 /// 🆕演绎规则
 fn deduction(
-    term1: Term,
-    term2: Term,
-    old_content: &Term,
+    sub: Term,
+    pre: Term,
     task: &impl Sentence,
     belief: &impl Judgement,
     context: &mut ReasonContextConcept,
-    direction: ReasonDirection,
 ) {
     // * 🚩词项
-    let content = unwrap_or_return!(?Term::make_statement(old_content, term1, term2));
+    let content = unwrap_or_return!(
+        ?Term::make_statement(task.content(), sub, pre)
+    );
     // * 🚩真值
-    let truth = match direction {
-        Forward => Some(task.as_judgement().unwrap().deduction(belief)),
+    let truth = match context.reason_direction() {
+        Forward => Some(task.unwrap_judgement().deduction(belief)),
         Backward => None,
     };
     // * 🚩预算
-    let budget = match direction {
+    let budget = match context.reason_direction() {
         Forward => context.budget_forward(truth.as_ref()),
         Backward => context.budget_backward_weak(belief),
     };
@@ -380,25 +436,103 @@ fn deduction(
 
 /// 🆕举例规则
 fn exemplification(
-    term1: Term,
-    term2: Term,
-    old_content: &Term,
+    sub: Term,
+    pre: Term,
     task: &impl Sentence,
     belief: &impl Judgement,
     context: &mut ReasonContextConcept,
-    direction: ReasonDirection,
 ) {
     // * 🚩词项
-    let content = unwrap_or_return!(?Term::make_statement(old_content, term2, term1));
+    let content = unwrap_or_return!(
+        ?Term::make_statement(task.content(), pre, sub)
+    );
     // * 🚩真值
-    let truth = match direction {
-        Forward => Some(task.as_judgement().unwrap().exemplification(belief)),
+    let truth = match context.reason_direction() {
+        Forward => Some(task.unwrap_judgement().exemplification(belief)),
         Backward => None,
     };
     // * 🚩预算
-    let budget = match direction {
+    let budget = match context.reason_direction() {
         Forward => context.budget_forward(truth.as_ref()),
         Backward => context.budget_backward_weak(belief),
+    };
+    // * 🚩结论
+    context.double_premise_task(content, truth, budget);
+}
+
+/// 🆕归因规则
+fn abduction(
+    sub: Term,
+    pre: Term,
+    task: &impl Sentence,
+    belief: &impl Judgement,
+    context: &mut ReasonContextConcept,
+) {
+    // * 🚩词项
+    let content = unwrap_or_return!(
+        ?Term::make_statement(task.content(), sub, pre)
+    );
+    // * 🚩真值
+    let truth = match context.reason_direction() {
+        Forward => Some(task.unwrap_judgement().abduction(belief)),
+        Backward => None,
+    };
+    // * 🚩预算
+    let budget = match context.reason_direction() {
+        Forward => context.budget_forward(truth.as_ref()),
+        Backward => context.budget_backward(belief),
+    };
+    // * 🚩结论
+    context.double_premise_task(content, truth, budget);
+}
+
+/// 🆕归纳规则
+fn induction(
+    sub: Term,
+    pre: Term,
+    task: &impl Sentence,
+    belief: &impl Judgement,
+    context: &mut ReasonContextConcept,
+) {
+    // * 🚩词项
+    let content = unwrap_or_return!(
+        ?Term::make_statement(task.content(), sub, pre)
+    );
+    // * 🚩真值
+    let truth = match context.reason_direction() {
+        Forward => Some(task.unwrap_judgement().induction(belief)),
+        Backward => None,
+    };
+    // * 🚩预算
+    let budget = match context.reason_direction() {
+        Forward => context.budget_forward(truth.as_ref()),
+        Backward => context.budget_backward_weak(belief),
+    };
+    // * 🚩结论
+    context.double_premise_task(content, truth, budget);
+}
+
+/// 🆕比较规则
+fn comparison(
+    sub: Term,
+    pre: Term,
+    task: &impl Sentence,
+    belief: &impl Judgement,
+    context: &mut ReasonContextConcept,
+) {
+    // * 🚩词项
+    let content = unwrap_or_return!(
+        ?Term::make_statement_symmetric(task.content(), sub, pre)
+    );
+    // * 🚩真值
+    let truth = match context.reason_direction() {
+        Forward => Some(task.unwrap_judgement().comparison(belief)),
+        Backward => None,
+    };
+    // * 🚩预算
+    let budget = match context.reason_direction() {
+        Forward => context.budget_forward(truth.as_ref()),
+        Backward => context.budget_backward(belief),
     };
     // * 🚩结论
     context.double_premise_task(content, truth, budget);

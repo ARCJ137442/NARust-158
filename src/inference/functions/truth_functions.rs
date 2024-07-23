@@ -11,7 +11,7 @@ use crate::{
 /// * 🚩【2024-05-02 20:46:50】不同于OpenNARS中「直接创建新值」，此处许多「真值函数」仅改变自身
 ///   * ✅若需「创建新值」可以通过「事先`clone`」实现
 /// * 🚩现在只为「具体的值」（带有「构造/转换」函数的类型）实现
-pub trait TruthFunctions: Truth {
+pub trait TruthFunctions: Truth + Sized {
     /* ----- Single argument functions, called in MatchingRules ----- */
 
     /// 🆕恒等真值函数，用于转换推理
@@ -261,7 +261,7 @@ pub trait TruthFunctions: Truth {
     /// @return Truth value of the conclusion
     fn induction(&self, v2: &impl Truth) -> TruthValue {
         // * 📝归纳是倒过来的归因
-        self.abduction(v2)
+        v2.abduction(self)
     }
 
     /// 模拟`TruthFunctions.exemplification`
@@ -503,7 +503,7 @@ pub trait TruthFunctions: Truth {
 }
 
 /// 为「真值」自动实现「真值函数」
-impl<T: Truth> TruthFunctions for T {}
+impl<T: Truth + Sized> TruthFunctions for T {}
 
 /// TODO: 单元测试
 #[cfg(test)]
