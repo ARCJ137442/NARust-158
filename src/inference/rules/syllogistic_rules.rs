@@ -496,7 +496,7 @@ fn induction(
 ) {
     // * 🚩词项
     let content = unwrap_or_return!(
-        ?Term::make_statement(task.content(), sub, pre)
+        ?Term::make_statement(task.content(), pre, sub)
     );
     // * 🚩真值
     let truth = match context.reason_direction() {
