@@ -97,7 +97,7 @@ fn process_judgement(context: &mut ReasonContextDirect) {
         let overflowed_belief = this.add_belief(judgment);
         // * 🚩报告溢出
         if let Some(overflowed_belief) = overflowed_belief {
-            let message = format!(
+            let message = format!( // ! 提取成单独的变量，避免对`this`的借用问题
                 "!!! Overflowed Belief in '{}': {}",
                 this.term(),
                 overflowed_belief.to_display_long()

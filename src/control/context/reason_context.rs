@@ -84,8 +84,13 @@ pub trait ReasonContext {
     fn report(&mut self, output: Output);
 
     /// 派生易用性方法
+    /// * ⚠️【2024-07-23 16:05:01】现在具有筛选性
+    ///   * 🚩只有「音量在最小值以上」才报告输出
     fn report_comment(&mut self, message: impl ToString) {
-        self.report(util_outputs::output_comment(message))
+        // * 🚩音量阈值
+        if self.silence_percent() >= util_outputs::COMMENT_VOLUME_THRESHOLD_PERCENT {
+            self.report(util_outputs::output_comment(message));
+        }
     }
 
     /// 派生易用性方法

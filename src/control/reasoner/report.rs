@@ -48,10 +48,19 @@ impl ReasonRecorder {
 pub mod util_outputs {
     use crate::{
         entity::{Judgement, Task},
+        global::Float,
         util::ToDisplayAndBrief,
     };
     use narsese::api::NarseseValue;
     use navm::output::Output;
+
+    /// 推理器记录「注释」的音量阈值
+    /// * 🎯避免推理器过于繁杂的输出
+    /// * 🚩【2024-07-02 18:35:05】目前阈值：音量不满就不会输出了
+    /// * 📌表示「允许通过[`Self::report_comment`]产生输出的最小音量」
+    pub const COMMENT_VOLUME_THRESHOLD: usize = 100;
+    /// [`COMMENT_VOLUME_THRESHOLD`]的百分比形式
+    pub const COMMENT_VOLUME_THRESHOLD_PERCENT: Float = (COMMENT_VOLUME_THRESHOLD as Float) / 100.0;
 
     /// 「注释」输出
     /// * 📌一般用于「推理过程debug记录」
@@ -122,7 +131,7 @@ pub mod util_outputs {
 impl ReasonContextCoreOut {
     /// 派生易用性方法
     pub fn report_comment(&mut self, message: impl ToString, silence_percent: Float) {
-        if silence_percent < Reasoner::COMMENT_VOLUME_THRESHOLD_PERCENT {
+        if silence_percent < util_outputs::COMMENT_VOLUME_THRESHOLD_PERCENT {
             return;
         }
         self.add_output(util_outputs::output_comment(message))
@@ -145,23 +154,14 @@ impl Reasoner {
     pub fn report(&mut self, output: Output) {
         self.recorder.put(output);
     }
-    /// 推理器记录「注释」的音量阈值
-    /// * 🎯避免推理器过于繁杂的输出
-    /// * 🚩【2024-07-02 18:35:05】目前阈值：音量不满就不会输出了
-    /// * 📌表示「允许通过[`Self::report_comment`]产生输出的最小音量」
-    const COMMENT_VOLUME_THRESHOLD: usize = 100;
-    /// [`COMMENT_VOLUME_THRESHOLD`]的百分比形式
-    const COMMENT_VOLUME_THRESHOLD_PERCENT: Float =
-        (Self::COMMENT_VOLUME_THRESHOLD as Float) / 100.0;
 
     /// 派生易用性方法
     /// * ⚠️【2024-07-02 18:32:42】现在具有筛选性
-    ///   * 🚩当未达「最小阈值」时，不输出「注释」
+    ///   * 🚩只有「音量在最小值以上」才报告输出
     pub fn report_comment(&mut self, message: impl ToString) {
-        if self.silence_value < Self::COMMENT_VOLUME_THRESHOLD {
-            return;
+        if self.silence_value >= util_outputs::COMMENT_VOLUME_THRESHOLD {
+            self.report(util_outputs::output_comment(message));
         }
-        self.report(util_outputs::output_comment(message));
     }
 
     /// 派生易用性方法

@@ -198,56 +198,77 @@ impl Reasoner {
             // * 🚩重置：推理器复位
             Cmd::RES { .. } => self.reset(),
             // * 🚩Narsese：输入任务（但不进行推理）
-            Cmd::NSE(narsese) => {
-                let stamp_current_serial = self.updated_stamp_current_serial();
-                match self.parse_task(narsese, stamp_current_serial) {
-                    Ok(task) => {
-                        // * 🚩解析成功⇒输入任务
-                        // * 🚩【2024-05-17 16:28:53】现在无需输入任务
-                        self.input_task(task);
-                    }
-                    Err(e) => {
-                        // * 🚩解析失败⇒新增输出
-                        self.report_error(format!("Narsese任务解析错误：{e}",));
-                    }
-                }
-            }
+            Cmd::NSE(narsese) => self.cmd_nse(narsese),
             // Cmd::NEW { target } => (),
             // Cmd::DEL { target } => (),
             // * 🚩工作周期：只执行推理，不处理输入输出
             Cmd::CYC(cycles) => self.cycle(cycles),
-            // * 🚩音量：设置音量
-            Cmd::VOL(volume) => self.silence_value = volume,
+            // * 🚩音量：设置音量 & 提示
+            Cmd::VOL(volume) => self.cmd_vol(volume),
             // Cmd::REG { name } => (),
-            Cmd::INF { source } => match source.to_lowercase().as_str() {
-                // * 🚩普通信息查询
-                "memory" => self.report_info(format!("memory: {:?}", self.memory)),
-                "reasoner" => self.report_info(format!("reasoner: {self:?}")),
-                // * 🚩具有缩进层级 更详尽的信息
-                "#memory" => self.report_info(format!("memory:\n{:#?}", self.memory)),
-                "#reasoner" => self.report_info(format!("reasoner:\n{self:#?}")),
-                // * 🚩其它⇒告警
-                other => self.report_error(format!("unknown info query: {other:?}")),
-            },
-            // Cmd::HLP { name } => (),
+            Cmd::INF { source } => self.cmd_inf(source),
+            Cmd::HLP { name } => self.cmd_hlp(name),
             // * 🚩【2024-05-13 12:21:37】注释：不做任何事情
             Cmd::REM { .. } => (),
             // * 🚩退出⇒处理完所有输出后直接退出
-            Cmd::EXI { reason } => {
-                // * 🚩最后的提示性输出
-                self.report_info(format!("Program exited with reason {reason:?}"));
-                // * 🚩处理所有输出
-                self.handle_output();
-                // * 🚩最终退出程序
-                std::process::exit(0);
-            }
+            Cmd::EXI { reason } => self.cmd_exi(reason),
             // Cmd::Custom { head, tail } => (),
             // * 🚩未知指令⇒输出提示
-            _ => {
-                // * 🚩解析失败⇒新增输出
-                self.report_error(format!("Unknown cmd: {cmd}"));
-            }
+            _ => self.report_error(format!("Unknown cmd: {cmd}")),
         }
+    }
+
+    /// 处理指令[`Cmd::NSE`]
+    fn cmd_nse(&mut self, narsese: narsese::lexical::Task) {
+        // * 🚩更新「当前时间戳序列号」
+        let stamp_current_serial = self.updated_stamp_current_serial();
+        // * 🚩解析并使用结果
+        match self.parse_task(narsese, stamp_current_serial) {
+            // * 🚩解析成功⇒输入任务
+            // * 🚩【2024-05-17 16:28:53】现在无需输入任务
+            Ok(task) => self.input_task(task),
+            // * 🚩解析失败⇒报告错误
+            Err(e) => self.report_error(format!("Narsese任务解析错误：{e}",)),
+        }
+    }
+
+    /// 处理指令[`Cmd::VOL`]
+    fn cmd_vol(&mut self, volume: usize) {
+        self.report_info(format!("volume: {} => {volume}", self.silence_value));
+        self.silence_value = volume;
+    }
+
+    /// 处理指令[`Cmd::EXI`]
+    ///
+    /// ? ❓【2024-07-23 16:10:13】是否一定要主程序退出
+    ///   * 💭还是说，NARS本身并没有个实际上的「退出」机制
+    fn cmd_exi(&mut self, reason: String) {
+        // * 🚩最后的提示性输出
+        self.report_info(format!("Program exited with reason {reason:?}"));
+        // * 🚩处理所有输出
+        self.handle_output();
+        // * 🚩最终退出程序
+        std::process::exit(0);
+    }
+
+    /// 处理指令[`Cmd::INF`]
+    fn cmd_inf(&mut self, source: String) {
+        match source.to_lowercase().as_str() {
+            // * 🚩普通信息查询
+            "memory" => self.report_info(format!("memory: {:?}", self.memory)),
+            "reasoner" => self.report_info(format!("reasoner: {self:?}")),
+            // * 🚩具有缩进层级 更详尽的信息
+            "#memory" => self.report_info(format!("memory:\n{:#?}", self.memory)),
+            "#reasoner" => self.report_info(format!("reasoner:\n{self:#?}")),
+            // TODO: 任务派生树，任务池
+            // * 🚩其它⇒告警
+            other => self.report_error(format!("unknown info query: {other:?}")),
+        }
+    }
+
+    /// 处理指令[`Cmd::HLP`]
+    fn cmd_hlp(&mut self, name: String) {
+        self.report_info(format!("help: {name:?}"));
     }
 
     /// 模拟改版`Reasoner.inputTask`
