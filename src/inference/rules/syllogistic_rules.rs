@@ -559,34 +559,153 @@ mod tests {
         };
     }
 
-    #[test]
-    fn deduction() {
+    fn expectation_test(inputs: impl AsRef<str>, expectation: impl Fn(&Output) -> bool) {
         let mut vm = create_vm_from_engine(ENGINE_REASON);
         // * 🚩OUT
         vm.input_fetch_print_expect(
+            inputs.as_ref(),
+            // * 🚩检查其中是否有导出
+            expectation,
+        );
+    }
+
+    /// 一个「单输出预期」测试
+    macro_rules! expectation_test {
+        (
+            $(#[$attr:meta])*
+            $name:ident :
+            $inputs:expr
+            => $($expectations:tt)*
+        ) => {
+            $(#[$attr])*
+            #[test]
+            fn $name() {
+                expectation_test(
+                    $inputs,
+                    // * 🚩检查其中是否有预期输出
+                    expect_narsese_term!($($expectations)*),
+                )
+            }
+        };
+    }
+
+    /// 一组「单输出预期」测试
+    macro_rules! expectation_tests {
+        (
+            $(
+                $(#[$attr:meta])*
+                $name:ident : {
+                    $inputs:expr
+                    => $($expectations:tt)*
+                }
+            )*
+        ) => {
+            $(
+                expectation_test! {
+                    $(#[$attr])*
+                    $name :
+                        $inputs
+                        => $($expectations)*
+                }
+            )*
+        };
+    }
+
+    expectation_tests! {
+        deduction: {
             "
             nse <A --> B>.
             nse <B --> C>.
             cyc 10
-            ",
-            // * 🚩检查其中是否有导出
-            expect_narsese_term!(OUT "<A --> C>" in outputs),
-        );
-    }
+            "
+            => OUT "<A --> C>" in outputs
+        }
 
-    #[test]
-    fn deduction_answer() {
-        let mut vm = create_vm_from_engine(ENGINE_REASON);
-        // * 🚩ANSWER
-        vm.input_fetch_print_expect(
+        /// ! 【2024-07-23 17:38:57】❓补完NAL-1后，需要的步数更多了
+        deduction_answer: {
             "
             nse <A --> B>.
             nse <B --> C>.
             nse <A --> C>?
+            cyc 50
+            "
+            => ANSWER "<A --> C>" in outputs
+        }
+
+        exemplification: {
+            "
+            nse <A --> B>.
+            nse <B --> C>.
+            cyc 10
+            "
+            => OUT "<C --> A>" in outputs
+        }
+
+        exemplification_answer: {
+            "
+            nse <A --> B>.
+            nse <B --> C>.
+            nse <C --> A>?
             cyc 20
-            ",
-            // * 🚩检查其中是否有导出
-            expect_narsese_term!(ANSWER "<A --> C>" in outputs),
-        );
+            "
+            => ANSWER "<C --> A>" in outputs
+        }
+
+        abduction: {
+            "
+            nse <A --> B>.
+            nse <A --> C>.
+            cyc 10
+            "
+            => OUT "<B --> C>" in outputs
+        }
+
+        abduction_answer: {
+            "
+            nse <A --> B>.
+            nse <A --> C>.
+            nse <B --> C>?
+            cyc 20
+            "
+            => ANSWER "<B --> C>" in outputs
+        }
+
+        induction: {
+            "
+            nse <A --> B>.
+            nse <A --> C>.
+            cyc 10
+            "
+            => OUT "<C --> B>" in outputs
+        }
+
+        induction_answer: {
+            "
+            nse <A --> B>.
+            nse <A --> C>.
+            nse <C --> B>?
+            cyc 20
+            "
+            => ANSWER "<C --> B>" in outputs
+        }
+
+        comparison: {
+            "
+            nse <A --> B>.
+            nse <A --> C>.
+            cyc 10
+            "
+            => OUT "<B <-> C>" in outputs
+        }
+
+        comparison_answer: {
+            "
+            nse <A --> B>.
+            nse <A --> C>.
+            nse <B <-> C>?
+            cyc 20
+            "
+            => ANSWER "<B <-> C>" in outputs
+        }
     }
 }
