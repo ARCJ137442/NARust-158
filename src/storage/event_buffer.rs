@@ -14,14 +14,18 @@ use crate::{
     inference::{BudgetFunctions, Evidential, Truth, TruthFunctions},
     io::symbols::{IMPLICATION_RELATION, PREDICTIVE_IMPLICATION_RELATION},
     language::Term,
+    storage::Memory,
 };
 use std::collections::VecDeque;
 
 mod utils {
     use crate::{
-        entity::{Sentence, Task},
+        control::DEFAULT_PARAMETERS,
+        entity::{
+            BudgetValue, Judgement, JudgementV1, Punctuation, Sentence, Stamp, Task, TruthValue,
+        },
         global::Float,
-        inference::{Budget, Truth},
+        inference::{Budget, BudgetInference, Evidential, Truth, TruthFunctions},
         storage::Memory,
     };
 
@@ -73,7 +77,7 @@ mod utils {
         }
 
         /// Replacement.
-        pub fn edit(&mut self, item: &T, identifier: impl Fn(&T, &T) -> bool) {
+        pub fn edit(&mut self, item: &T, new_priority: Float, identifier: impl Fn(&T, &T) -> bool) {
             let mut found = None;
             for i in 0..self.vec.len() {
                 if identifier(&self.vec[i].0, item) {
@@ -82,8 +86,8 @@ mod utils {
                     break;
                 }
             }
-            if let Some((item, priority)) = found {
-                self.push(item, priority);
+            if let Some((item, _)) = found {
+                self.push(item, new_priority);
             }
         }
 
@@ -190,10 +194,65 @@ mod utils {
     pub fn satisfaction_level(truth_1: &impl Truth, truth_2: &impl Truth) -> Float {
         (truth_1.frequency() - truth_2.frequency()).to_float().abs()
     }
+
+    /// 🆕从旧任务构建【内容、预算值完全相同】的新任务，**只有真值不同**
+    /// * 🎯在「预测性蕴含结论」与「检查预期」中用到
+    pub fn same_task_with_different_truth(task: &Task, truth: TruthValue) -> Task {
+        // * 🚩复制语句，仅修改其中的「真值」并锁定「标点」
+        let sentence = JudgementV1::new(
+            task.clone_content(),
+            truth,
+            Stamp::from_evidential(task),
+            task.as_judgement().unwrap().revisable(),
+        );
+        Task::from_input(sentence.into(), BudgetValue::from(task))
+    }
+
+    /// 🆕专用于「事件缓冲区」的「修正」规则
+    /// * 🎯与记忆区无关，也不支持「反馈到链接」功能
+    /// * ⚠️【2024-07-24 16:08:20】目前不支持目标推理
+    ///
+    /// ```nal
+    /// S. %f1;c1%
+    /// S. %f2;c2%
+    /// |-
+    /// S. %F_rev%
+    /// ```
+    pub fn revision(task: &Task, belief: &Task) -> Task {
+        let truth1 = task.as_judgement().unwrap();
+        let truth2 = belief.as_judgement().unwrap();
+        /* if Enable.temporal_reasoning:
+        # boolean useNewBeliefTerm = intervalProjection(nal, newBelief.getTerm(), oldBelief.getTerm(), beliefConcept.recent_intervals, newTruth);
+        raise  */
+        let truth = truth1.revision(truth2);
+
+        let budget =
+            BudgetValue::revise_direct(truth1, truth2, &truth, &mut BudgetValue::default());
+
+        let term = task.clone_content();
+
+        // stamp: Stamp = deepcopy(task.sentence.stamp) # Stamp(Global.time, task.sentence.stamp.t_occurrence, None, (j1.stamp.evidential_base | j2.stamp.evidential_base))
+        // stamp.evidential_base.extend(premise2.evidential_base)
+        let creation_time = task.creation_time(); // ? 【2024-07-24 15:11:08】这实际上在PyNARS是没有的
+        let stamp = Stamp::from_merge_unchecked(
+            task,
+            belief,
+            creation_time,
+            DEFAULT_PARAMETERS.maximum_stamp_length,
+        );
+
+        // if task.is_judgement:
+        // task = Task(Judgement(term, stamp, truth), budget)
+        // elif task.is_goal:
+        //     task = Task(Goal(term, stamp, truth), budget)
+        // else:
+        //     raise "Invalid case."
+        let sentence = JudgementV1::new(term, truth, stamp, true);
+
+        Task::from_input(sentence.into(), budget)
+    }
 }
 use utils::*;
-
-use super::Memory;
 
 #[derive(Debug, Clone)]
 pub struct Anticipation {
@@ -238,17 +297,9 @@ impl PredictiveImplication {
         if truth.confidence().to_float() < 0.3 {
             return None;
         }
-        // * 🚩复制语句，仅修改其中的「真值」并锁定「标点」
-        let sentence = SentenceV1::new_sentence_from_punctuation(
-            self.task.clone_content(),
-            Punctuation::Judgement,
-            Stamp::from_evidential(&self.task),
-            Some((truth, task_judgement.revisable())),
-        )
-        .unwrap();
         Some((
             self.interval,
-            Task::from_input(sentence, BudgetValue::from(&self.task)),
+            same_task_with_different_truth(&self.task, truth),
         ))
     }
 }
@@ -533,11 +584,11 @@ impl EventBuffer {
             return;
         }
 
-        let (mut current_max, _) = self.current_slot_mut().pop().unwrap();
+        let (mut current_max, _) = self.current_slot_mut().pop().unwrap(); // TODO: 【2024-07-24 16:03:04】后续可以while let
         let mut current_remaining = vec![];
         let mut current_composition = vec![];
         while !self.current_slot().is_empty_events() {
-            let (mut remaining, _) = self.current_slot_mut().pop().unwrap();
+            let (mut remaining, _) = self.current_slot_mut().pop().unwrap(); // TODO: 【2024-07-24 16:03:04】后续可以while let
             remaining.is_component = 1;
             current_max.is_component = 1;
             current_remaining.push(remaining);
@@ -549,7 +600,7 @@ impl EventBuffer {
         let mut previous_composition = vec![];
         for i in 0..self.current_slot {
             if !self.slots[i].is_empty_events() {
-                let (temp, _) = self.slots[i].pop().unwrap();
+                let (temp, _) = self.slots[i].pop().unwrap(); // TODO: 【2024-07-24 16:03:04】后续可以while let
                 previous_max.push(Some(temp));
                 // don't change previous max's "is_component"
                 current_max.is_component = 1;
@@ -584,5 +635,81 @@ impl EventBuffer {
             current_composition.into_iter().chain(previous_composition),
             memory,
         )
+    }
+
+    /// 📝检查预期
+    ///
+    /// Check all anticipations, award or punish the corresponding predictive implications.
+    /// If an anticipation does not even exist, apply the lowest satisfaction.
+    fn check_anticipation(&mut self, memory: &Memory) {
+        // update the predictive implications
+        // * 🚩【2024-07-24 17:41:32】必须要用一个闭包
+        let prediction_award_penalty =
+            |each: &mut PredictiveImplication,
+             frequency,
+             predictive_implications: &mut PriorityQueue<PredictiveImplication>| {
+                let belief = same_task_with_different_truth(
+                    &each.task,
+                    TruthValue::from_floats(
+                        frequency,
+                        DEFAULT_PARAMETERS.default_judgement_confidence,
+                        false,
+                    ),
+                );
+                let revised = revision(&each.task, &belief);
+                each.task = revised;
+                let new_priority = each.task.as_judgement().unwrap().expectation()
+                    * preprocessing(&each.task, memory);
+                predictive_implications.edit(each, new_priority, |x, y| {
+                    x.task.content() == y.task.content()
+                });
+            };
+
+        let mut checked_buffer_tasks = vec![];
+        while !self.current_slot().is_empty_events() {
+            let (mut buffer_task, _) = self.current_slot_mut().pop().unwrap(); // TODO: 【2024-07-24 16:03:04】后续可以while let
+
+            // ! ❌【2024-07-24 17:42:30】此处必须用`self.slots[self.current_slot]`，避免借用整个`self`
+            for anticipation in &mut self.slots[self.current_slot].anticipations {
+                // it is possible for an event satisfying multiple anticipations,
+                // e.g., A, +1 =/> B, A =/> B
+                if anticipation.task.content() == buffer_task.task.content() {
+                    anticipation.matched = true;
+                    let revised_new_task = revision(&anticipation.task, &buffer_task.task);
+                    buffer_task.task = revised_new_task;
+                    let satisfaction = 1.0
+                        - satisfaction_level(
+                            anticipation.task.as_judgement().unwrap(),
+                            buffer_task.task.as_judgement().unwrap(),
+                        );
+                    prediction_award_penalty(
+                        &mut anticipation.prediction,
+                        satisfaction,
+                        &mut self.predictive_implications,
+                    );
+                }
+            }
+            checked_buffer_tasks.push(buffer_task);
+        }
+
+        // if there are some unmatched anticipations, apply the lowest satisfaction
+        for anticipation in &mut self.slots[self.current_slot].anticipations {
+            if !anticipation.matched {
+                prediction_award_penalty(
+                    // 此处不可能与上一个地方调用的冲突
+                    &mut anticipation.prediction,
+                    0.0,
+                    &mut self.predictive_implications,
+                );
+            }
+        }
+
+        // print("prediction_award_penalty", prediction_award_penalty) // ? 💭【2024-07-24 16:33:30】这个貌似只是调试性信息
+
+        // put all buffer tasks back, some evaluations may change
+        for each in checked_buffer_tasks {
+            let priority = each.priority();
+            self.current_slot_mut().push(each, priority);
+        }
     }
 }
