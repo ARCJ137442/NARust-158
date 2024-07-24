@@ -253,6 +253,14 @@ impl Term {
             TermComponents::new_binary_unordered(subject, predicate),
         )
     }
+
+    /// NAL-7 / 预测性蕴含
+    pub fn new_predicative_implication(subject: Term, predicate: Term) -> Self {
+        Self::new(
+            PREDICTIVE_IMPLICATION_RELATION,
+            TermComponents::new_binary(subject, predicate),
+        )
+    }
 }
 
 impl TermComponents {

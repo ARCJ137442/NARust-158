@@ -855,6 +855,9 @@ impl Term {
             INSTANCE_PROPERTY_RELATION => Self::make_instance_property(subject, predicate),
             IMPLICATION_RELATION => Self::make_implication(subject, predicate),
             EQUIVALENCE_RELATION => Self::make_equivalence(subject, predicate),
+            PREDICTIVE_IMPLICATION_RELATION => {
+                Self::make_predictive_implication(subject, predicate)
+            }
             _ => None,
         }
     }
@@ -949,7 +952,12 @@ impl Term {
 
     /* Implication */
 
-    pub fn make_implication(subject: Term, predicate: Term) -> Option<Term> {
+    fn make_implication_common(
+        subject: Term,
+        predicate_testing_copula: &str,
+        predicate: Term,
+        new: impl FnOnce(Term, Term) -> Term,
+    ) -> Option<Term> {
         // * 🚩检查有效性
         if StatementRef::invalid_statement(&subject, &predicate) {
             return None;
@@ -962,7 +970,10 @@ impl Term {
             return None;
         }
         // B in <A ==> <B ==> C>>
-        if predicate.as_compound_type(IMPLICATION_RELATION).is_some() {
+        if predicate
+            .as_compound_type(predicate_testing_copula)
+            .is_some()
+        {
             let [old_condition, predicate_predicate] = predicate
                 .unwrap_statement_components()
                 .expect("已经假定是复合词项");
@@ -977,8 +988,17 @@ impl Term {
             let new_condition = Self::make_conjunction(subject, old_condition)?;
             Self::make_implication(new_condition, predicate_predicate)
         } else {
-            Some(Term::new_implication(subject, predicate))
+            Some(new(subject, predicate))
         }
+    }
+
+    pub fn make_implication(subject: Term, predicate: Term) -> Option<Term> {
+        Self::make_implication_common(
+            subject,
+            IMPLICATION_RELATION,
+            predicate,
+            Term::new_implication,
+        )
     }
 
     /* Equivalence */
@@ -1001,6 +1021,16 @@ impl Term {
             // * ✅在创建时自动排序
             false => Some(Term::new_equivalence(subject, predicate)),
         }
+    }
+    /* PredictiveImplication */
+
+    pub fn make_predictive_implication(subject: Term, predicate: Term) -> Option<Term> {
+        Self::make_implication_common(
+            subject,
+            PREDICTIVE_IMPLICATION_RELATION,
+            predicate,
+            Term::new_predicative_implication,
+        )
     }
 }
 
