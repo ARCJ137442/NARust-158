@@ -1,6 +1,8 @@
 //! 模仿复刻自PyNARS/`EventBuffer.py`
-//! * 🔗参考自：<https://github.com/bowen-xu/PyNARS/blob/72091454adc676fae7d40aad418eb9e8e728c51a/pynars/NARS/DataStructures/MC/EventBuffer.py>
-//! * ℹ️原作者：**Tory Li**
+//! * 🔗参考自: <https://github.com/bowen-xu/PyNARS/blob/72091454adc676fae7d40aad418eb9e8e728c51a/pynars/NARS/DataStructures/MC/EventBuffer.py>
+//!   * `Utils.py`: <https://github.com/bowen-xu/PyNARS/blob/72091454adc676fae7d40aad418eb9e8e728c51a/pynars/NARS/DataStructures/MC/Utils.py>
+//!   * `EventBuffer.py`: <https://github.com/bowen-xu/PyNARS/blob/72091454adc676fae7d40aad418eb9e8e728c51a/pynars/NARS/DataStructures/MC/EventBuffer.py>
+//! * ℹ️原作者: **Tory Li**
 
 use crate::{
     entity::{BudgetValue, Judgement, Punctuation, Sentence, SentenceV1, Stamp, Task},
@@ -11,7 +13,12 @@ use crate::{
 use std::collections::VecDeque;
 
 mod utils {
-    use crate::global::Float;
+    use crate::{
+        entity::{Sentence, Task},
+        global::Float,
+        inference::{Budget, Truth},
+        storage::Memory,
+    };
 
     /// It is not a heap, it is a sorted array by insertion sort.
     /// Since we need to
@@ -118,8 +125,55 @@ mod utils {
             result
         }
     }
+
+    /// When a task is input to a buffer, its budget might be different from the original.
+    /// But this is effected by many factors, and each factor might be further revised.
+    /// Therefore, we restore each factor independently; only when everything is decided, the final budget is given.
+    #[derive(Debug, Clone)]
+    pub struct BufferTask {
+        /// the original task
+        pub task: Task,
+        /// the influence of a channel, currently, all channels have parameter 1 and can't be changed
+        pub channel_parameter: usize,
+        pub preprocess_effect: Float,
+        pub is_component: usize,
+        pub expiration_effect: usize,
+    }
+
+    impl BufferTask {
+        pub fn new(task: Task) -> Self {
+            Self {
+                task,
+                channel_parameter: 1,
+                preprocess_effect: 1.0,
+                expiration_effect: 1,
+                is_component: 0,
+            }
+        }
+
+        pub fn priority(&self) -> Float {
+            self.task.priority().to_float()
+                * self.channel_parameter as Float
+                * self.preprocess_effect
+                * self.expiration_effect as Float
+                * ((2 - self.is_component) as Float / 2.0)
+        }
+    }
+
+    pub fn preprocessing(task: &Task, memory: &Memory) -> Float {
+        let term = task.content();
+        let concept_in_memory = memory.term_to_concept(term);
+        match concept_in_memory {
+            Some(concept) => (task.priority() | concept.priority()).to_float(),
+            None => 1.0 / ((1 + term.complexity()) as Float),
+        }
+    }
+
+    pub fn satisfaction_level(truth_1: &impl Truth, truth_2: &impl Truth) -> Float {
+        (truth_1.frequency() - truth_2.frequency()).to_float().abs()
+    }
 }
-pub use utils::*;
+use utils::*;
 
 #[derive(Debug, Clone)]
 pub struct Anticipation {
