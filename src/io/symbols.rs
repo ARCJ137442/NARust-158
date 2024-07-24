@@ -60,6 +60,8 @@ pub const SET_INT_OPERATOR: &str = "[]"; // 🆕统一到「复合词项」中�
 pub const NEGATION_OPERATOR: &str = "--";
 pub const DISJUNCTION_OPERATOR: &str = "||";
 pub const CONJUNCTION_OPERATOR: &str = "&&";
+pub const SEQUENTIAL_CONJUNCTION_OPERATOR: &str = "&/";
+pub const PARALLEL_CONJUNCTION_OPERATOR: &str = "&|";
 
 // 陈述系词，长度为3
 pub const INHERITANCE_RELATION: &str = "-->";

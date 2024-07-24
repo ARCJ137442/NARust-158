@@ -109,6 +109,8 @@ impl Term {
             NEGATION_OPERATOR => Self::make_negation_arg(argument),
             CONJUNCTION_OPERATOR => Self::make_conjunction_arg(argument),
             DISJUNCTION_OPERATOR => Self::make_disjunction_arg(argument),
+            SEQUENTIAL_CONJUNCTION_OPERATOR => Self::make_sequential_conjunction_arg(argument),
+            PARALLEL_CONJUNCTION_OPERATOR => Self::make_parallel_conjunction_arg(argument),
             // * 🚩其它⇒未知/域外⇒空
             _ => None,
         }
@@ -804,6 +806,33 @@ impl Term {
             // * 🚩其它⇒空（失败）
             _ => None,
         }
+    }
+
+    /* SequentialConjunction */
+
+    fn make_sequential_conjunction_arg(argument: Vec<Term>) -> Option<Term> {
+        // TODO: 后续还可以做「区间合并」等「自动简化」操作
+        Some(Term::new_sequential_conjunction(argument))
+    }
+
+    pub fn make_sequential_conjunction(term1: Term, term2: Term) -> Option<Term> {
+        // TODO: 后续能做「序列简并连接」等操作
+        Self::make_sequential_conjunction_arg(vec![term1, term2])
+    }
+
+    /* ParallelConjunction */
+
+    fn make_parallel_conjunction_arg(argument: Vec<Term>) -> Option<Term> {
+        Self::make_junction_arg(argument, Term::new_parallel_conjunction)
+    }
+
+    pub fn make_parallel_conjunction(term1: Term, term2: Term) -> Option<Term> {
+        Self::make_junction(
+            term1,
+            term2,
+            PARALLEL_CONJUNCTION_OPERATOR,
+            Self::make_parallel_conjunction_arg,
+        )
     }
 
     /* Statement */

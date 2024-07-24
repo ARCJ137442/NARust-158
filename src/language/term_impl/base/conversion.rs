@@ -291,6 +291,12 @@ fn fold_term(term: TermLexical, var_id_map: &mut Vec<String>) -> Result<Term> {
             let inner = fold_inner_lexical(terms.into_iter().next().unwrap(), var_id_map)?;
             Term::new_negation(inner)
         }
+        (SEQUENTIAL_CONJUNCTION_OPERATOR, Compound { terms, .. }) => {
+            Term::new_sequential_conjunction(fold_inner_lexical_vec(terms, var_id_map)?)
+        }
+        (PARALLEL_CONJUNCTION_OPERATOR, Compound { terms, .. }) => {
+            Term::new_parallel_conjunction(fold_inner_lexical_vec(terms, var_id_map)?)
+        }
         // 陈述
         (
             INHERITANCE_RELATION,

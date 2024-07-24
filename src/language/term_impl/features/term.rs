@@ -98,7 +98,10 @@ impl GetCategory for Term {
             | INTERSECTION_EXT_OPERATOR
             | INTERSECTION_INT_OPERATOR
             | CONJUNCTION_OPERATOR
-            | DISJUNCTION_OPERATOR => Compound,
+            | DISJUNCTION_OPERATOR
+            | SEQUENTIAL_CONJUNCTION_OPERATOR
+            | PARALLEL_CONJUNCTION_OPERATOR
+             => Compound,
             // * 🚩其它⇒panic（不应出现）
             _ => panic!("Unexpected compound term identifier: {}", self.identifier),
         }

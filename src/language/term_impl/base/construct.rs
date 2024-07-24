@@ -203,6 +203,23 @@ impl Term {
         Self::new(NEGATION_OPERATOR, TermComponents::new_unary(term))
     }
 
+    /// NAL-7 / 序列合取
+    pub fn new_sequential_conjunction(terms: impl Into<Vec<Term>>) -> Self {
+        Self::new(
+            SEQUENTIAL_CONJUNCTION_OPERATOR,
+            TermComponents::new_multi(terms.into()),
+        )
+    }
+
+    /// NAL-7 / 平行合取
+    /// * 🚩【2024-04-21 13:39:28】使用统一的「无序不重复集合」构造组分
+    pub fn new_parallel_conjunction(terms: impl Into<Vec<Term>>) -> Self {
+        Self::new(
+            PARALLEL_CONJUNCTION_OPERATOR,
+            TermComponents::new_multi_set(terms.into()),
+        )
+    }
+
     // 陈述 //
 
     /// NAL-1 / 继承

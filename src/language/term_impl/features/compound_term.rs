@@ -114,6 +114,8 @@ impl Term {
                 | CONJUNCTION_OPERATOR
                 | DISJUNCTION_OPERATOR
                 | NEGATION_OPERATOR
+                | SEQUENTIAL_CONJUNCTION_OPERATOR
+                | PARALLEL_CONJUNCTION_OPERATOR
         )
     }
 
