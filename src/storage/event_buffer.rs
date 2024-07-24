@@ -285,6 +285,14 @@ impl Slot {
     pub fn random_pop(&mut self) -> Option<(BufferTask, Float)> {
         self.events.random_pop()
     }
+
+    pub fn len_events(&self) -> usize {
+        self.events.len()
+    }
+
+    pub fn is_empty_events(&self) -> bool {
+        self.events.is_empty()
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -514,5 +522,67 @@ impl EventBuffer {
             task,
         );
         Some(predictive_implication)
+    }
+
+    /// 📝复合词项构建
+    ///
+    /// After the initial composition, pick the one with the highest priority in the current slot.
+    /// Compose it with all other events in the current slot and the previous max events.
+    fn compound_composition(&mut self, memory: &Memory) {
+        if self.current_slot().is_empty_events() {
+            return;
+        }
+
+        let (mut current_max, _) = self.current_slot_mut().pop().unwrap();
+        let mut current_remaining = vec![];
+        let mut current_composition = vec![];
+        while !self.current_slot().is_empty_events() {
+            let (mut remaining, _) = self.current_slot_mut().pop().unwrap();
+            remaining.is_component = 1;
+            current_max.is_component = 1;
+            current_remaining.push(remaining);
+            let composition = Self::contemporary_composition([&current_max.task]).unwrap();
+            current_composition.push(composition);
+        }
+
+        let mut previous_max = vec![];
+        let mut previous_composition = vec![];
+        for i in 0..self.current_slot {
+            if !self.slots[i].is_empty_events() {
+                let (temp, _) = self.slots[i].pop().unwrap();
+                previous_max.push(Some(temp));
+                // don't change previous max's "is_component"
+                current_max.is_component = 1;
+                let composition = Self::sequential_composition(
+                    &previous_max.last().unwrap().as_ref().unwrap().task,
+                    self.current_slot - i,
+                    &current_max.task,
+                )
+                .unwrap();
+                previous_composition.push(composition);
+            } else {
+                previous_max.push(None)
+            }
+        }
+
+        // after get all compositions, put everything back
+        for (i, buffer_task) in previous_max.into_iter().enumerate() {
+            if let Some(buffer_task) = buffer_task {
+                let priority = buffer_task.priority();
+                self.slots[i].push(buffer_task, priority);
+            }
+        }
+        let priority = current_max.priority();
+        self.current_slot_mut().push(current_max, priority);
+        for remaining in current_remaining {
+            let priority = remaining.priority();
+            self.current_slot_mut().push(remaining, priority);
+        }
+
+        // add all compositions to the current slot
+        self.push(
+            current_composition.into_iter().chain(previous_composition),
+            memory,
+        )
     }
 }
