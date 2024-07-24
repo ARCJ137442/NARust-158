@@ -6,9 +6,13 @@
 
 use crate::{
     control::DEFAULT_PARAMETERS,
-    entity::{BudgetValue, Judgement, JudgementV1, Punctuation, Sentence, SentenceV1, Stamp, Task},
+    entity::{
+        BudgetValue, Judgement, JudgementV1, Punctuation, Sentence, SentenceV1, Stamp, Task,
+        TruthValue,
+    },
     global::Float,
     inference::{BudgetFunctions, Evidential, Truth, TruthFunctions},
+    io::symbols::{IMPLICATION_RELATION, PREDICTIVE_IMPLICATION_RELATION},
     language::Term,
 };
 use std::collections::VecDeque;
@@ -371,13 +375,11 @@ impl EventBuffer {
     }
 
     /// 📝生成同时性组合：旧任务生成新任务
-    /// * ⚠️【2024-07-24 12:21:38】构造词项时可能失败
+    /// * 🚩【2024-07-24 12:21:38】采用[`Option`]：构造可能失败
     ///
     /// according to the conceptual design, currently only 2-compounds are allowed,
     /// though in the future, we may have compounds with many components,
-    pub fn contemporary_composition<'t>(
-        events: impl IntoIterator<Item = &'t Task>,
-    ) -> Option<Task> {
+    fn contemporary_composition<'t>(events: impl IntoIterator<Item = &'t Task>) -> Option<Task> {
         let events = events.into_iter().collect::<Vec<_>>();
         if events.is_empty() {
             return None;
@@ -399,7 +401,7 @@ impl EventBuffer {
             .min_by(|t1, t2| t1.expectation().total_cmp(&t2.expectation()))?;
 
         // stamp, using stamp-merge function
-        let creation_time = events[0].creation_time(); // 采用第一个的创建时间
+        let creation_time = events[0].creation_time(); // ? 【2024-07-24 15:11:08】这实际上在PyNARS是 // 采用第一个的创建时间没有的
         let stamp = events
             .iter()
             .cloned()
@@ -429,5 +431,88 @@ impl EventBuffer {
         // task
         let task = Task::from_input(sentence.into(), budget);
         Some(task)
+    }
+
+    /// 📝生成序列性组合
+    /// * 🚩【2024-07-24 15:16:25】采用[`Option`]：构造可能失败
+    fn sequential_composition(event_1: &Task, interval: usize, event_2: &Task) -> Option<Task> {
+        // according to the conceptual design, we currently only have "event_1, interval, event_2" schema,
+        // though in the future this may also change, but it is too early to decide here
+        let interval = Term::make_interval(interval);
+        let term = Term::make_sequential_conjunction([
+            event_1.clone_content(),
+            interval,
+            event_2.clone_content(),
+        ])?;
+        // in some cases, the interval needs not to be displayer in Narsese
+        // let term = Term::make_sequential_conjunction(event_1.clone_content(), event_2.clone_content())?
+        let truth = event_2.as_judgement().map(TruthValue::from)?;
+        // decrease the confidence of a compound based on the length of the interval
+        // truth.c *= 1 / int(interval)
+        // truth.c *= 0.7 + 0.3 * (0.9 - (0.9 / (self.current_slot * 5)) * interval)
+
+        let creation_time = event_1.creation_time(); // ? 【2024-07-24 15:11:08】这实际上在PyNARS是没有的
+        let stamp = Stamp::from_merge_unchecked(
+            event_1,
+            event_2,
+            creation_time,
+            DEFAULT_PARAMETERS.maximum_stamp_length,
+        );
+
+        let budget = event_1.merge(event_2);
+
+        // sentence
+        let sentence = JudgementV1::new(term, truth, stamp, true);
+
+        // task
+        let task = Task::from_input(sentence.into(), budget);
+        Some(task)
+    }
+
+    /// * 🚩【2024-07-24 15:16:25】采用[`Option`]：构造可能失败
+    fn generate_prediction_util(
+        event_1: &Task,
+        interval: usize,
+        event_2: &Task,
+    ) -> Option<PredictiveImplication> {
+        let copula = match interval {
+            // currently, this is only allowed in the global buffer,
+            // but only for events from different resources
+            0 => IMPLICATION_RELATION,
+            _ => PREDICTIVE_IMPLICATION_RELATION,
+        };
+        // If you want to include "interval" as a term, you just need to change "term" on the next line.
+        let term = Term::make_statement_relation(
+            copula,
+            event_1.clone_content(),
+            event_2.clone_content(),
+        )?;
+
+        // truth, a default truth, with only one positive example
+        // ? 是否要视作是「沿用配置中的『默认真值』」
+        let truth = TruthValue::from_floats(
+            DEFAULT_PARAMETERS.default_judgement_frequency,
+            DEFAULT_PARAMETERS.default_judgement_confidence,
+            false,
+        );
+
+        // stamp, using event_2's stamp
+        let stamp = Stamp::from_evidential(event_2);
+
+        // budget, using budget-merge function
+        let budget = event_1.merge(event_2);
+
+        // sentence
+        let sentence = JudgementV1::new(term, truth, stamp, true);
+
+        // task
+        let task = Task::from_input(sentence.into(), budget);
+        let predictive_implication = PredictiveImplication::new(
+            event_1.clone_content(),
+            interval,
+            event_2.clone_content(),
+            task,
+        );
+        Some(predictive_implication)
     }
 }

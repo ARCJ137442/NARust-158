@@ -71,6 +71,7 @@ pub const PROPERTY_RELATION: &str = "--]";
 pub const INSTANCE_PROPERTY_RELATION: &str = "{-]";
 pub const IMPLICATION_RELATION: &str = "==>";
 pub const EQUIVALENCE_RELATION: &str = "<=>";
+pub const PREDICTIVE_IMPLICATION_RELATION: &str = "=/>";
 
 // 「经验行」前缀
 pub const INPUT_LINE: &str = "IN";

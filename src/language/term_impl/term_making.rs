@@ -45,6 +45,14 @@ impl Term {
         Term::from_var_similar(from.identifier(), id)
     }
 
+    /* Variable */
+
+    /// 制作「间隔」
+    #[inline]
+    pub fn make_interval(interval: impl Into<usize>) -> Term {
+        Term::new_interval(interval)
+    }
+
     /* CompoundTerm */
 
     /// 📄OpenNARS `public static Term makeCompoundTerm(CompoundTerm compound, ArrayList<Term> components)`
