@@ -1,4 +1,6 @@
-use std::fmt::Display;
+//! 模仿复刻自PyNARS/`EventBuffer.py`
+//! * 🔗参考自：<https://github.com/bowen-xu/PyNARS/blob/72091454adc676fae7d40aad418eb9e8e728c51a/pynars/NARS/DataStructures/MC/EventBuffer.py>
+//! * ℹ️原作者：**Tory Li**
 
 use crate::{
     entity::{BudgetValue, Judgement, Punctuation, Sentence, SentenceV1, Stamp, Task},
@@ -6,6 +8,118 @@ use crate::{
     inference::{Truth, TruthFunctions},
     language::Term,
 };
+use std::collections::VecDeque;
+
+mod utils {
+    use crate::global::Float;
+
+    /// It is not a heap, it is a sorted array by insertion sort.
+    /// Since we need to
+    /// 1) access the largest item,
+    /// 2) access the smallest item,
+    /// 3) access an item in the middle.
+    #[derive(Debug, Clone)]
+    pub struct PriorityQueue<T> {
+        vec: Vec<(T, Float)>,
+        size: usize,
+    }
+
+    impl<T> PriorityQueue<T> {
+        pub fn new(size: usize) -> Self {
+            Self {
+                vec: Vec::with_capacity(size),
+                size,
+            }
+        }
+
+        pub fn len(&self) -> usize {
+            self.vec.len()
+        }
+
+        pub fn is_empty(&self) -> bool {
+            self.vec.is_empty()
+        }
+
+        /// Add a new one, regardless whether there are duplicates.
+        pub fn push(&mut self, item: T, priority: Float) {
+            let element = (item, priority);
+            let mut index = self.vec.len();
+            for i in 0..self.vec.len() {
+                if priority <= self.vec[i].1 {
+                    index = i;
+                    break;
+                }
+            }
+            if index == self.vec.len() {
+                self.vec.push(element);
+            } else {
+                self.vec.insert(index, element);
+            }
+            if self.vec.len() > self.size {
+                self.vec.remove(0);
+            }
+        }
+
+        /// Replacement.
+        pub fn edit(&mut self, item: &T, identifier: impl Fn(&T, &T) -> bool) {
+            let mut found = None;
+            for i in 0..self.vec.len() {
+                if identifier(&self.vec[i].0, item) {
+                    let value = self.vec.remove(i);
+                    let _ = found.insert(value);
+                    break;
+                }
+            }
+            if let Some((item, priority)) = found {
+                self.push(item, priority);
+            }
+        }
+
+        /// Pop the highest.
+        pub fn pop(&mut self) -> Option<(T, Float)> {
+            self.vec.pop()
+        }
+
+        /// Based on the priority (not budget.priority), randomly pop one buffer task.
+        /// The higher the priority, the higher the probability to be popped.
+        ///
+        /// Design this function is mainly for the prediction generation in the conceptual design.
+        ///
+        /// It only gives the item, not the value.
+        pub fn random_pop(&mut self) -> Option<(T, Float)> {
+            if self.vec.is_empty() {
+                return None;
+            }
+            for i in (0..self.len()).rev() {
+                if rand::random::<Float>() < self.vec[i].1 {
+                    return Some(self.vec.remove(i));
+                }
+            }
+            None
+        }
+
+        /// ! 此方法和PyNARS不完全一致
+        /// * 📌对于PyNARS中「间隔」的展示，完全可以放在`identifier`参数中
+        ///
+        /// Show each item in the priority queue.
+        /// Since it may contain items other than BufferTasks,
+        /// you can design you own identifier to show what you want to show.
+        pub fn show<D>(&self, identifier: impl Fn(&T) -> D) -> String
+        where
+            D: std::fmt::Display,
+        {
+            let mut vec_to_show = self.vec.iter().collect::<Vec<_>>();
+            vec_to_show.sort_by(|(_, p_a), (_, p_b)| p_a.total_cmp(p_b));
+            let mut result = String::new();
+            for (item, priority) in vec_to_show.iter() {
+                result += &format!("{} | {}", priority, identifier(item));
+                result += "\n";
+            }
+            result
+        }
+    }
+}
+pub use utils::*;
 
 #[derive(Debug, Clone)]
 pub struct Anticipation {
@@ -65,91 +179,6 @@ impl PredictiveImplication {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct PriorityQueue<T> {
-    vec: Vec<(T, Float)>,
-    size: usize,
-}
-
-impl<T> PriorityQueue<T> {
-    pub fn new(size: usize) -> Self {
-        Self {
-            vec: Vec::with_capacity(size),
-            size,
-        }
-    }
-
-    pub fn len(&self) -> usize {
-        self.vec.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.vec.is_empty()
-    }
-
-    pub fn push(&mut self, item: T, priority: Float) {
-        let element = (item, priority);
-        let mut index = self.vec.len();
-        for i in 0..self.vec.len() {
-            if priority <= self.vec[i].1 {
-                index = i;
-                break;
-            }
-        }
-        if index == self.vec.len() {
-            self.vec.push(element);
-        } else {
-            self.vec.insert(index, element);
-        }
-        if self.vec.len() > self.size {
-            self.vec.remove(0);
-        }
-    }
-
-    pub fn edit(&mut self, item: &T, identifier: impl Fn(&T, &T) -> bool) {
-        let mut found = None;
-        for i in 0..self.vec.len() {
-            if identifier(&self.vec[i].0, item) {
-                let value = self.vec.remove(i);
-                let _ = found.insert(value);
-                break;
-            }
-        }
-        if let Some((item, priority)) = found {
-            self.push(item, priority);
-        }
-    }
-
-    pub fn pop(&mut self) -> Option<(T, Float)> {
-        self.vec.pop()
-    }
-
-    pub fn random_pop(&mut self) -> Option<(T, Float)> {
-        if self.vec.is_empty() {
-            return None;
-        }
-        for i in (0..self.len()).rev() {
-            if rand::random::<Float>() < self.vec[i].1 {
-                return Some(self.vec.remove(i));
-            }
-        }
-        None
-    }
-
-    /// ! 此方法和PyNARS不一样
-    pub fn show(&self) -> String
-    where
-        T: std::fmt::Debug,
-    {
-        let mut result = String::new();
-        for (i, (item, priority)) in self.vec.iter().enumerate() {
-            result += &format!("{}: {:?} ({})", i, item, priority);
-            result += "\n";
-        }
-        result
-    }
-}
-
 /// 📝时间窗口
 #[derive(Debug, Clone)]
 struct Slot {
@@ -184,6 +213,58 @@ impl Slot {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct EventBuffer {
-    // TODO: 【2024-07-24 01:15:01】待复刻 @ https://github.com/bowen-xu/PyNARS/blob/72091454adc676fae7d40aad418eb9e8e728c51a/pynars/NARS/DataStructures/MC/EventBuffer.py#L70
+    num_events: usize,
+    num_anticipations: usize,
+    num_operations: usize,
+    slots: VecDeque<Slot>,
+    current_slot: usize,
+    predictive_implications: PriorityQueue<PredictiveImplication>,
+    // reactions
+    n: usize,
+}
+
+impl EventBuffer {
+    pub fn new(
+        num_slot: usize,
+        num_events: usize,
+        num_anticipations: usize,
+        num_operations: usize,
+        num_predictive_implications: usize,
+        n: usize, // default: 1
+    ) -> Self {
+        Self {
+            num_events,
+            num_anticipations,
+            num_operations,
+            slots: VecDeque::with_capacity(1 + 2 * num_slot),
+            current_slot: num_slot,
+            predictive_implications: PriorityQueue::new(num_predictive_implications),
+            n,
+        }
+    }
+
+    pub fn with_n_1(
+        num_slot: usize,
+        num_events: usize,
+        num_anticipations: usize,
+        num_operations: usize,
+        num_predictive_implications: usize,
+    ) -> Self {
+        Self::new(
+            num_slot,
+            num_events,
+            num_anticipations,
+            num_operations,
+            num_predictive_implications,
+            1,
+        )
+    }
+
+    pub fn push(&mut self, tasks: impl IntoIterator<Item = Task>) {
+        for task in tasks {
+            // TODO
+        }
+    }
 }
