@@ -584,11 +584,10 @@ impl EventBuffer {
             return;
         }
 
-        let (mut current_max, _) = self.current_slot_mut().pop().unwrap(); // TODO: 【2024-07-24 16:03:04】后续可以while let
+        let (mut current_max, _) = self.current_slot_mut().pop().unwrap();
         let mut current_remaining = vec![];
         let mut current_composition = vec![];
-        while !self.current_slot().is_empty_events() {
-            let (mut remaining, _) = self.current_slot_mut().pop().unwrap(); // TODO: 【2024-07-24 16:03:04】后续可以while let
+        while let Some((mut remaining, _)) = self.current_slot_mut().pop() {
             remaining.is_component = 1;
             current_max.is_component = 1;
             current_remaining.push(remaining);
@@ -599,8 +598,7 @@ impl EventBuffer {
         let mut previous_max = vec![];
         let mut previous_composition = vec![];
         for i in 0..self.current_slot {
-            if !self.slots[i].is_empty_events() {
-                let (temp, _) = self.slots[i].pop().unwrap(); // TODO: 【2024-07-24 16:03:04】后续可以while let
+            if let Some((temp, _)) = self.slots[i].pop() {
                 previous_max.push(Some(temp));
                 // don't change previous max's "is_component"
                 current_max.is_component = 1;
@@ -666,9 +664,7 @@ impl EventBuffer {
             };
 
         let mut checked_buffer_tasks = vec![];
-        while !self.current_slot().is_empty_events() {
-            let (mut buffer_task, _) = self.current_slot_mut().pop().unwrap(); // TODO: 【2024-07-24 16:03:04】后续可以while let
-
+        while let Some((mut buffer_task, _)) = self.current_slot_mut().pop() {
             // ! ❌【2024-07-24 17:42:30】此处必须用`self.slots[self.current_slot]`，避免借用整个`self`
             for anticipation in &mut self.slots[self.current_slot].anticipations {
                 // it is possible for an event satisfying multiple anticipations,
