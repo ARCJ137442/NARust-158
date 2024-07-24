@@ -815,9 +815,9 @@ impl Term {
         Some(Term::new_sequential_conjunction(argument))
     }
 
-    pub fn make_sequential_conjunction(term1: Term, term2: Term) -> Option<Term> {
+    pub fn make_sequential_conjunction(terms: impl Into<Vec<Term>>) -> Option<Term> {
         // TODO: 后续能做「序列简并连接」等操作
-        Self::make_sequential_conjunction_arg(vec![term1, term2])
+        Self::make_sequential_conjunction_arg(terms.into())
     }
 
     /* ParallelConjunction */
@@ -826,13 +826,8 @@ impl Term {
         Self::make_junction_arg(argument, Term::new_parallel_conjunction)
     }
 
-    pub fn make_parallel_conjunction(term1: Term, term2: Term) -> Option<Term> {
-        Self::make_junction(
-            term1,
-            term2,
-            PARALLEL_CONJUNCTION_OPERATOR,
-            Self::make_parallel_conjunction_arg,
-        )
+    pub fn make_parallel_conjunction(terms: impl Into<Vec<Term>>) -> Option<Term> {
+        Self::make_parallel_conjunction_arg(terms.into())
     }
 
     /* Statement */

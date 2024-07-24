@@ -5,9 +5,10 @@
 //! * ℹ️原作者: **Tory Li**
 
 use crate::{
-    entity::{BudgetValue, Judgement, Punctuation, Sentence, SentenceV1, Stamp, Task},
+    control::DEFAULT_PARAMETERS,
+    entity::{BudgetValue, Judgement, JudgementV1, Punctuation, Sentence, SentenceV1, Stamp, Task},
     global::Float,
-    inference::{Truth, TruthFunctions},
+    inference::{BudgetFunctions, Evidential, Truth, TruthFunctions},
     language::Term,
 };
 use std::collections::VecDeque;
@@ -142,10 +143,16 @@ mod utils {
 
     impl BufferTask {
         pub fn new(task: Task) -> Self {
+            Self::with_preprocess_effect(task, 1.0)
+        }
+
+        /// 🆕
+        /// * 🎯无需「在构造后赋值」减少借用冲突
+        pub fn with_preprocess_effect(task: Task, preprocess_effect: Float) -> Self {
             Self {
                 task,
                 channel_parameter: 1,
-                preprocess_effect: 1.0,
+                preprocess_effect,
                 expiration_effect: 1,
                 is_component: 0,
             }
@@ -157,6 +164,13 @@ mod utils {
                 * self.preprocess_effect
                 * self.expiration_effect as Float
                 * ((2 - self.is_component) as Float / 2.0)
+        }
+
+        /// 🆕解包出[`Task`]
+        /// * 🎯从「缓冲区任务」解包回「任务」
+        /// * ⚠️解包时丢失其它信息
+        pub fn unwrap_to_task(self) -> Task {
+            self.task
         }
     }
 
@@ -174,6 +188,8 @@ mod utils {
     }
 }
 use utils::*;
+
+use super::Memory;
 
 #[derive(Debug, Clone)]
 pub struct Anticipation {
@@ -236,7 +252,7 @@ impl PredictiveImplication {
 /// 📝时间窗口
 #[derive(Debug, Clone)]
 struct Slot {
-    events: PriorityQueue<Task>,
+    events: PriorityQueue<BufferTask>,
     anticipations: Vec<Anticipation>,
     num_anticipations: usize,
     operations: Vec<()>,
@@ -254,15 +270,15 @@ impl Slot {
         }
     }
 
-    pub fn push(&mut self, item: Task, priority: Float) {
+    pub fn push(&mut self, item: BufferTask, priority: Float) {
         self.events.push(item, priority);
     }
 
-    pub fn pop(&mut self) -> Option<(Task, Float)> {
+    pub fn pop(&mut self) -> Option<(BufferTask, Float)> {
         self.events.pop()
     }
 
-    pub fn random_pop(&mut self) -> Option<(Task, Float)> {
+    pub fn random_pop(&mut self) -> Option<(BufferTask, Float)> {
         self.events.random_pop()
     }
 }
@@ -288,11 +304,16 @@ impl EventBuffer {
         num_predictive_implications: usize,
         n: usize, // default: 1
     ) -> Self {
+        let n_slots = 1 + 2 * num_slot;
+        let slots = (0..n_slots)
+            .into_iter()
+            .map(|_| Slot::new(num_events, num_anticipations, num_operations))
+            .collect();
         Self {
             num_events,
             num_anticipations,
             num_operations,
-            slots: VecDeque::with_capacity(1 + 2 * num_slot),
+            slots,
             current_slot: num_slot,
             predictive_implications: PriorityQueue::new(num_predictive_implications),
             n,
@@ -316,9 +337,97 @@ impl EventBuffer {
         )
     }
 
-    pub fn push(&mut self, tasks: impl IntoIterator<Item = Task>) {
+    /// 🆕获取「当前时间窗」
+    fn current_slot(&self) -> &Slot {
+        &self.slots[self.current_slot]
+    }
+    fn current_slot_mut(&mut self) -> &mut Slot {
+        &mut self.slots[self.current_slot]
+    }
+
+    pub fn push(&mut self, tasks: impl IntoIterator<Item = Task>, memory: &Memory) {
         for task in tasks {
-            // TODO
+            // 先计算效果参数
+            let preprocess_effect = preprocessing(&task, memory);
+            let buffer_task = BufferTask::with_preprocess_effect(task, preprocess_effect);
+            // 计算优先级
+            let priority = buffer_task.priority();
+            // 推送到当前时间窗
+            self.current_slot_mut().push(buffer_task, priority);
         }
+    }
+
+    pub fn pop(&mut self) -> Vec<Task> {
+        (0..self.n) // 重复n次尝试
+            .filter_map(|_| {
+                // 每次尝试弹出「当前时间窗」的一个任务
+                self.current_slot_mut()
+                    .pop()
+                    // 弹出后解包
+                    .map(|(b_task, _)| b_task.unwrap_to_task())
+            })
+            // 所有非空结果放入数组中
+            .collect()
+    }
+
+    /// 📝生成同时性组合：旧任务生成新任务
+    /// * ⚠️【2024-07-24 12:21:38】构造词项时可能失败
+    ///
+    /// according to the conceptual design, currently only 2-compounds are allowed,
+    /// though in the future, we may have compounds with many components,
+    pub fn contemporary_composition<'t>(
+        events: impl IntoIterator<Item = &'t Task>,
+    ) -> Option<Task> {
+        let events = events.into_iter().collect::<Vec<_>>();
+        if events.is_empty() {
+            return None;
+        }
+
+        // term
+        let each_compound_term = events
+            .iter()
+            .cloned()
+            .map(Task::clone_content)
+            .collect::<Vec<_>>();
+        let term = Term::make_parallel_conjunction(each_compound_term)?; // 平行合取
+
+        // truth, using the truth with the lowest expectation
+        let truth = events
+            .iter()
+            .map(|&event| event.as_judgement().unwrap())
+            // * 🚩全序排序取最小值（可能为空⇒无任务产生）
+            .min_by(|t1, t2| t1.expectation().total_cmp(&t2.expectation()))?;
+
+        // stamp, using stamp-merge function
+        let creation_time = events[0].creation_time(); // 采用第一个的创建时间
+        let stamp = events
+            .iter()
+            .cloned()
+            // 先变成时间戳
+            .map(Stamp::from_evidential)
+            // 全部合并在一起
+            .reduce(|accumulated, evidential| {
+                Stamp::from_merge_unchecked(
+                    &accumulated,
+                    &evidential,
+                    creation_time,
+                    // 采用默认长度
+                    DEFAULT_PARAMETERS.maximum_stamp_length,
+                )
+            })?;
+
+        // budget, using budget-merge function
+        let budget = events
+            .iter()
+            .cloned()
+            .map(BudgetValue::from)
+            .reduce(|accumulated, budget| accumulated.merge(&budget))?;
+
+        // sentence
+        let sentence = JudgementV1::new(term, truth, stamp, true);
+
+        // task
+        let task = Task::from_input(sentence.into(), budget);
+        Some(task)
     }
 }
