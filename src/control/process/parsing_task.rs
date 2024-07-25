@@ -2,7 +2,7 @@
 //! * 🎯结合推理器自身信息，解析外部传入的「词法Narsese任务」
 
 use crate::{
-    control::Reasoner,
+    control::{Parameters, Reasoner},
     entity::{BudgetValue, Punctuation, SentenceV1, ShortFloat, Stamp, Task, TruthValue},
     global::ClockTime,
     inference::BudgetFunctions,
@@ -13,13 +13,11 @@ use narsese::lexical::{Sentence as LexicalSentence, Task as LexicalTask};
 
 /// 为「推理器」扩展功能
 impl Reasoner {
-    /// 模拟`StringParser.parseTask`
-    /// * 🚩直接模仿`parseTask`而非`parseExperience`
-    /// * 📌结合自身信息的「词法折叠」
-    /// * 📝OpenNARS在解析时可能会遇到「新词项⇒新建概念」的情形
-    ///   * 🚩因此需要`&mut self`
-    pub fn parse_task(
-        &self,
+    /// 🆕完整参数，不依赖推理器的「任务解析」
+    /// * 🎯外部代码需要用于解析
+    pub fn parse_task_full(
+        parameters: &Parameters,
+        stamp_time: ClockTime,
         narsese: LexicalTask,
         stamp_current_serial: ClockTime,
     ) -> Result<Task> {
@@ -43,7 +41,6 @@ impl Reasoner {
         // * 🚩解析语句：解析「语句」新有的内容，再通过解析出的词项组装
 
         // 时间戳
-        let stamp_time = self.time();
         let stamp = Stamp::from_lexical(stamp, stamp_current_serial, stamp_time)?;
 
         // 标点
@@ -55,12 +52,12 @@ impl Reasoner {
             Judgement => {
                 // * 🚩生成默认真值与默认预算值
                 let truth_default_values = [
-                    ShortFloat::from_float(self.parameters.default_judgement_frequency),
-                    ShortFloat::from_float(self.parameters.default_judgement_confidence),
+                    ShortFloat::from_float(parameters.default_judgement_frequency),
+                    ShortFloat::from_float(parameters.default_judgement_confidence),
                 ];
 
                 // * 🚩解析真值
-                let truth_is_analytic = self.parameters.default_truth_analytic;
+                let truth_is_analytic = parameters.default_truth_analytic;
                 let truth =
                     TruthValue::from_lexical(truth, truth_default_values, truth_is_analytic)?;
 
@@ -90,8 +87,8 @@ impl Reasoner {
         let [priority, durability, quality] = match (punctuation, truth_revisable) {
             // * 🚩判断
             (Judgement, Some((truth, _))) => [
-                ShortFloat::from_float(self.parameters.default_judgement_priority),
-                ShortFloat::from_float(self.parameters.default_judgement_durability),
+                ShortFloat::from_float(parameters.default_judgement_priority),
+                ShortFloat::from_float(parameters.default_judgement_durability),
                 BudgetValue::truth_to_quality(&truth),
             ],
             (Judgement, None) => {
@@ -99,8 +96,8 @@ impl Reasoner {
             }
             // * 🚩问题
             (Question, _) => [
-                ShortFloat::from_float(self.parameters.default_question_priority),
-                ShortFloat::from_float(self.parameters.default_question_durability),
+                ShortFloat::from_float(parameters.default_question_priority),
+                ShortFloat::from_float(parameters.default_question_durability),
                 ShortFloat::ONE,
             ],
         };
@@ -111,5 +108,18 @@ impl Reasoner {
 
         // 返回
         Ok(task)
+    }
+
+    /// 模拟`StringParser.parseTask`
+    /// * 🚩直接模仿`parseTask`而非`parseExperience`
+    /// * 📌结合自身信息的「词法折叠」
+    /// * 📝OpenNARS在解析时可能会遇到「新词项⇒新建概念」的情形
+    ///   * 🚩因此需要`&mut self`
+    pub fn parse_task(
+        &self,
+        narsese: LexicalTask,
+        stamp_current_serial: ClockTime,
+    ) -> Result<Task> {
+        Self::parse_task_full(&self.parameters, self.time(), narsese, stamp_current_serial)
     }
 }

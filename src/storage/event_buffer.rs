@@ -1007,3 +1007,111 @@ pub struct BufferCycleParameters {
     pub threshold_c: ShortFloat,
     pub default_cooldown: usize,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{control::Reasoner, global::ClockTime, util::ToDisplayAndBrief};
+    use narsese::conversion::string::impl_lexical::format_instances::FORMAT_ASCII;
+
+    fn parse_task(s: impl AsRef<str>, stamp_time: ClockTime) -> Task {
+        let task = FORMAT_ASCII
+            .parse(s.as_ref())
+            .unwrap()
+            .try_into_task_compatible()
+            .unwrap();
+        Reasoner::parse_task_full(&DEFAULT_PARAMETERS, stamp_time, task, stamp_time).unwrap()
+    }
+    fn parse_task_inc(s: impl AsRef<str>, clock: &mut ClockTime) -> Task {
+        parse_task(s, {
+            *clock += 1;
+            *clock - 1
+        })
+    }
+
+    fn parse_tasks<'s, S: AsRef<str> + 's>(
+        ss: impl IntoIterator<Item = S> + 's,
+        clock: &'s mut ClockTime,
+    ) -> impl Iterator<Item = Task> + 's {
+        ss.into_iter().map(|s| parse_task_inc(s, clock))
+    }
+
+    fn test_setup() -> (BufferCycleParameters, EventBuffer, Memory, ClockTime) {
+        let cycle_parameters = BufferCycleParameters {
+            max_events_per_slot: 5,
+            threshold_f: ShortFloat::from_float(0.8),
+            threshold_c: ShortFloat::from_float(0.9),
+            default_cooldown: 10,
+        };
+        // 参考自 <https://github.com/ARCJ137442/PyNARS/blob/7a28ad83550b2d28f860f4362994c0a2d686298b/pynars/NARS/DataStructures/MC/Console.py#L148>
+        let buffer = EventBuffer::new(2, 50, 50, 5, 50, 2);
+        let memory = Memory::new(DEFAULT_PARAMETERS);
+        let clock = 1;
+        (cycle_parameters, buffer, memory, clock)
+    }
+
+    #[test]
+    fn test_push() {
+        let (_, mut buffer, memory, mut clock) = test_setup();
+        let tasks = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        let tasks = parse_tasks(tasks.chars().map(|c| c.to_string() + "."), &mut clock);
+        buffer.push(tasks, &memory);
+        dbg!(buffer);
+    }
+
+    #[test]
+    fn test_cycle_1_per() {
+        let (cycle_parameters, mut buffer, memory, mut clock) = test_setup();
+        let tasks = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        let tasks = parse_tasks(tasks.chars().map(|c| c.to_string() + "."), &mut clock);
+        for task in tasks {
+            buffer.buffer_cycle(
+                [task], // ! 📌【2024-07-25 17:38:52】单个任务会直接被pop忽略？
+                &memory,
+                |task| println!("output: {}", task.to_display_long()),
+                |task| println!("popped: {}", task.to_display_long()),
+                &cycle_parameters,
+            )
+        }
+        dbg!(buffer);
+    }
+
+    #[test]
+    fn test_cycle_multi_single() {
+        let (cycle_parameters, mut buffer, memory, mut clock) = test_setup();
+        let tasks = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        let tasks = parse_tasks(tasks.chars().map(|c| c.to_string() + "."), &mut clock);
+        for task in tasks {
+            buffer.buffer_cycle(
+                [task.clone(), task],
+                &memory,
+                |task| println!("output: {}", task.to_display_long()),
+                |task| println!("popped: {}", task.to_display_long()),
+                &cycle_parameters,
+            )
+        }
+        // dbg!(buffer);
+    }
+
+    #[test]
+    fn test_cycle_multi_multi() {
+        let (cycle_parameters, mut buffer, memory, mut clock) = test_setup();
+        let tasks1 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        let tasks2 = "abcdefghijklmnopqrstuvwxyz";
+        let tasks1 = tasks1.chars().map(|c| c.to_string() + ".");
+        let tasks2 = tasks2.chars().map(|c| c.to_string() + ".");
+        let tasks = tasks1.zip(tasks2);
+        for (task1, task2) in tasks {
+            let task1 = parse_task_inc(task1, &mut clock);
+            let task2 = parse_task_inc(task2, &mut clock);
+            buffer.buffer_cycle(
+                [task1.clone(), task2.clone(), task1, task2],
+                &memory,
+                |task| println!("output: {}", task.to_display_long()),
+                |task| println!("popped: {}", task.to_display_long()),
+                &cycle_parameters,
+            )
+        }
+        // dbg!(buffer);
+    }
+}

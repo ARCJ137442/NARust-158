@@ -469,22 +469,27 @@ impl GetCapacity for Term {
             WORD | PLACEHOLDER | VAR_INDEPENDENT | VAR_DEPENDENT | VAR_QUERY => Atom,
             // * 🚩一元：否定
             NEGATION_OPERATOR => Unary,
-            // * 🚩二元序列：差集、继承、蕴含 | ❌不包括「实例」「属性」「实例属性」
+            // * 🚩二元序列：差集、继承、蕴含、预测性蕴含 | ❌不包括「实例」「属性」「实例属性」
             DIFFERENCE_EXT_OPERATOR
             | DIFFERENCE_INT_OPERATOR
             | INHERITANCE_RELATION
-            | IMPLICATION_RELATION => BinaryVec,
+            | IMPLICATION_RELATION
+            | PREDICTIVE_IMPLICATION_RELATION => BinaryVec,
             // * 🚩二元集合：相似、等价
             SIMILARITY_RELATION | EQUIVALENCE_RELATION => BinarySet,
-            // * 🚩多元序列：乘积、像
-            PRODUCT_OPERATOR | IMAGE_EXT_OPERATOR | IMAGE_INT_OPERATOR => Vec,
-            // * 🚩多元集合：词项集、交集、合取、析取
+            // * 🚩多元序列：乘积、像、序列合取
+            PRODUCT_OPERATOR
+            | IMAGE_EXT_OPERATOR
+            | IMAGE_INT_OPERATOR
+            | SEQUENTIAL_CONJUNCTION_OPERATOR => Vec,
+            // * 🚩多元集合：词项集、交集、合取、析取、平行合取
             SET_EXT_OPERATOR
             | SET_INT_OPERATOR
             | INTERSECTION_EXT_OPERATOR
             | INTERSECTION_INT_OPERATOR
             | CONJUNCTION_OPERATOR
-            | DISJUNCTION_OPERATOR => Set,
+            | DISJUNCTION_OPERATOR
+            | PARALLEL_CONJUNCTION_OPERATOR => Set,
             // * 🚩其它⇒panic（不应出现）
             _ => panic!("Unexpected compound term identifier: {}", self.identifier),
         }

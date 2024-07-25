@@ -53,7 +53,7 @@ impl Term {
 
     /// NAL-7 / 间隔
     pub(crate) fn new_interval(n_time: impl Into<usize>) -> Self {
-        Self::new(VAR_QUERY, TermComponents::Interval(n_time.into()))
+        Self::new(INTERVAL, TermComponents::Interval(n_time.into()))
     }
 
     /// 从旧的原子词项构造，但使用新的名称
