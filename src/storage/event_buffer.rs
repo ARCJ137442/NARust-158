@@ -847,4 +847,14 @@ impl EventBuffer {
             self.current_slot_mut().push_with_its_priority(each);
         }
     }
+
+    /// 📝预测修正
+    fn prediction_revision(
+        mut existed_prediction: PredictiveImplication,
+        new_prediction: &PredictiveImplication,
+    ) -> PredictiveImplication {
+        existed_prediction.task = revision(&existed_prediction.task, &new_prediction.task);
+        existed_prediction.expiration = existed_prediction.expiration.saturating_sub(1); // = max(0, existed_prediction.expiration - 1);
+        existed_prediction
+    }
 }
