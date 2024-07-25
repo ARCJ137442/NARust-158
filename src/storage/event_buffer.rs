@@ -815,4 +815,21 @@ impl EventBuffer {
             }
         }
     }
+
+    /// 📝本地执行
+    /// 1. 检查预期
+    /// 2. 基于预期生成预测性蕴含
+    /// 3. 输出预测性蕴含
+    fn local_evaluation(
+        &mut self,
+        memory: &Memory,
+        output_task: impl FnMut(Task),
+        threshold_f: &ShortFloat,
+        threshold_c: &ShortFloat,
+        default_cooldown: usize,
+    ) {
+        self.check_anticipation(memory);
+        self.predictive_implication_application(memory);
+        self.output_predictive_implication(output_task, threshold_f, threshold_c, default_cooldown);
+    }
 }
