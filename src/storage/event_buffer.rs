@@ -478,7 +478,7 @@ impl EventBuffer {
         }
     }
 
-    pub fn pop(&mut self) -> Vec<Task> {
+    pub fn pop(&mut self, popped_task: impl FnMut(Task)) {
         (0..self.n) // 重复n次尝试
             .filter_map(|_| {
                 // 每次尝试弹出「当前时间窗」的一个任务
@@ -488,7 +488,7 @@ impl EventBuffer {
                     .map(|(b_task, _)| b_task.unwrap_to_task())
             })
             // 所有非空结果放入数组中
-            .collect()
+            .for_each(popped_task)
     }
 
     /// 📝生成同时性组合：旧任务生成新任务
@@ -966,8 +966,9 @@ impl EventBuffer {
         tasks: impl IntoIterator<Item = Task>,
         memory: &Memory,
         output_task: impl FnMut(Task),
+        popped_task: impl FnMut(Task),
         cycle_parameters: &BufferCycleParameters, // * ✨缓冲区循环参数
-    ) -> Vec<Task> {
+    ) {
         // put all tasks to the current slot
         self.push(tasks, memory);
 
@@ -990,13 +991,10 @@ impl EventBuffer {
         self.prediction_generation(cycle_parameters.max_events_per_slot, memory);
 
         // 弹出旧任务
-        let ret = self.pop();
+        self.pop(popped_task);
 
         // 时间窗口轮替
         self.slots_cycle();
-
-        // 返回弹出的任务
-        ret
     }
 }
 
