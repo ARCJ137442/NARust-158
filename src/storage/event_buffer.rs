@@ -249,6 +249,7 @@ mod utils {
     /// 🆕专用于「事件缓冲区」的「修正」规则
     /// * 🎯与记忆区无关，也不支持「反馈到链接」功能
     /// * ⚠️【2024-07-24 16:08:20】目前不支持目标推理
+    /// * 🚩【2024-07-25 21:39:42】有可能修正失败
     ///
     /// ```nal
     /// S. %f1;c1%
@@ -256,7 +257,7 @@ mod utils {
     /// |-
     /// S. %F_rev%
     /// ```
-    pub fn revision(task: &Task, belief: &Task) -> Task {
+    pub fn revision(task: &Task, belief: &Task) -> Option<Task> {
         let truth1 = task.as_judgement().unwrap();
         let truth2 = belief.as_judgement().unwrap();
         /* if Enable.temporal_reasoning:
@@ -272,12 +273,12 @@ mod utils {
         // stamp: Stamp = deepcopy(task.sentence.stamp) # Stamp(Global.time, task.sentence.stamp.t_occurrence, None, (j1.stamp.evidential_base | j2.stamp.evidential_base))
         // stamp.evidential_base.extend(premise2.evidential_base)
         let creation_time = task.creation_time(); // ? 【2024-07-24 15:11:08】这实际上在PyNARS是没有的
-        let stamp = Stamp::from_merge_unchecked(
+        let stamp = Stamp::from_merge(
             task,
             belief,
             creation_time,
             DEFAULT_PARAMETERS.maximum_stamp_length,
-        );
+        )?;
 
         // if task.is_judgement:
         // task = Task(Judgement(term, stamp, truth), budget)
@@ -287,10 +288,11 @@ mod utils {
         //     raise "Invalid case."
         let sentence = JudgementV1::new(term, truth, stamp, true);
 
-        Task::from_input(sentence.into(), budget)
+        let task = Task::from_input(sentence.into(), budget);
+        Some(task)
     }
 }
-use nar_dev_utils::list;
+use nar_dev_utils::{list, unwrap_or_return};
 use utils::*;
 
 /// 📝预测性蕴含（缓冲区专用）
@@ -498,7 +500,7 @@ impl EventBuffer {
     /// though in the future, we may have compounds with many components,
     fn contemporary_composition<'t>(events: impl IntoIterator<Item = &'t Task>) -> Option<Task> {
         let events = events.into_iter().collect::<Vec<_>>();
-        if events.is_empty() {
+        if events.len() < 2 {
             return None;
         }
 
@@ -649,8 +651,13 @@ impl EventBuffer {
             remaining.is_component = 1;
             current_max.is_component = 1;
             current_remaining.push(remaining);
-            let composition = Self::contemporary_composition([&current_max.task]).unwrap();
-            current_composition.push(composition);
+            if let Some(composition) = Self::contemporary_composition([
+                &current_max.task,
+                &current_remaining[current_remaining.len() - 1].task,
+            ]) {
+                // * 🚩【2024-07-25 21:35:50】若组合成功，才返回
+                current_composition.push(composition);
+            }
         }
 
         let mut previous_max = vec![];
@@ -709,7 +716,7 @@ impl EventBuffer {
                         false,
                     ),
                 );
-                let revised = revision(&each.task, &belief);
+                let revised = unwrap_or_return!(?revision(&each.task, &belief));
                 each.task = revised;
                 let new_priority = each.task.as_judgement().unwrap().expectation()
                     * preprocessing(&each.task, memory);
@@ -726,7 +733,10 @@ impl EventBuffer {
                 // e.g., A, +1 =/> B, A =/> B
                 if anticipation.task.content() == buffer_task.task.content() {
                     anticipation.matched = true;
-                    let revised_new_task = revision(&anticipation.task, &buffer_task.task);
+                    let revised_new_task = unwrap_or_return! {
+                        ?revision(&anticipation.task, &buffer_task.task)
+                        => continue
+                    };
                     buffer_task.task = revised_new_task;
                     let satisfaction = 1.0
                         - satisfaction_level(
@@ -879,13 +889,14 @@ impl EventBuffer {
     }
 
     /// 📝预测修正
+    /// * 🚩【2024-07-25 21:42:23】产生的预期可能因为「证据重复」而落空
     fn prediction_revision(
         mut existed_prediction: PredictiveImplication,
         new_prediction: &PredictiveImplication,
-    ) -> PredictiveImplication {
-        existed_prediction.task = revision(&existed_prediction.task, &new_prediction.task);
+    ) -> Option<PredictiveImplication> {
+        existed_prediction.task = revision(&existed_prediction.task, &new_prediction.task)?;
         existed_prediction.expiration = existed_prediction.expiration.saturating_sub(1); // = max(0, existed_prediction.expiration - 1);
-        existed_prediction
+        Some(existed_prediction)
     }
 
     /// 📝预测生成
@@ -931,7 +942,9 @@ impl EventBuffer {
                         None
                     };
                     if let Some(existed) = existed {
-                        tmp2 = Self::prediction_revision(existed, &tmp2);
+                        if let Some(revised) = Self::prediction_revision(existed, &tmp2) {
+                            tmp2 = revised;
+                        }
                     }
                     let new_priority = tmp2.task.unwrap_judgement().expectation()
                         * preprocessing(&tmp2.task, memory);
@@ -1044,7 +1057,7 @@ mod tests {
             default_cooldown: 10,
         };
         // 参考自 <https://github.com/ARCJ137442/PyNARS/blob/7a28ad83550b2d28f860f4362994c0a2d686298b/pynars/NARS/DataStructures/MC/Console.py#L148>
-        let buffer = EventBuffer::new(2, 50, 50, 5, 50, 2);
+        let buffer = EventBuffer::new(2, 50, 50, 5, 50, 1);
         let memory = Memory::new(DEFAULT_PARAMETERS);
         let clock = 1;
         (cycle_parameters, buffer, memory, clock)
