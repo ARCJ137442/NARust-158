@@ -945,4 +945,13 @@ impl EventBuffer {
             }
         }
     }
+
+    /// 📝时间窗口轮替
+    fn slots_cycle(&mut self) {
+        // 最前边的窗口删除
+        self.slots.pop_front();
+        // 最后边增加新窗口
+        let new_slot = Slot::new(self.num_events, self.num_anticipations, self.num_operations);
+        self.slots.push_back(new_slot);
+    }
 }
