@@ -346,6 +346,15 @@ impl Slot {
         self.events.push(item, priority);
     }
 
+    /// 🆕根据被[`push`](Self::push)进的「缓冲区任务」计算其优先级
+    /// * 🎯避免借用问题，简化操作
+    pub fn push_with_its_priority(&mut self, item: BufferTask) {
+        // 计算优先级
+        let priority = item.priority();
+        // 按所计算的优先级push
+        self.events.push(item, priority);
+    }
+
     pub fn pop(&mut self) -> Option<(BufferTask, Float)> {
         self.events.pop()
     }
@@ -434,10 +443,8 @@ impl EventBuffer {
             // 先计算效果参数
             let preprocess_effect = preprocessing(&task, memory);
             let buffer_task = BufferTask::with_preprocess_effect(task, preprocess_effect);
-            // 计算优先级
-            let priority = buffer_task.priority();
             // 推送到当前时间窗
-            self.current_slot_mut().push(buffer_task, priority);
+            self.current_slot_mut().push_with_its_priority(buffer_task);
         }
     }
 
@@ -638,15 +645,12 @@ impl EventBuffer {
         // after get all compositions, put everything back
         for (i, buffer_task) in previous_max.into_iter().enumerate() {
             if let Some(buffer_task) = buffer_task {
-                let priority = buffer_task.priority();
-                self.slots[i].push(buffer_task, priority);
+                self.slots[i].push_with_its_priority(buffer_task);
             }
         }
-        let priority = current_max.priority();
-        self.current_slot_mut().push(current_max, priority);
+        self.current_slot_mut().push_with_its_priority(current_max);
         for remaining in current_remaining {
-            let priority = remaining.priority();
-            self.current_slot_mut().push(remaining, priority);
+            self.current_slot_mut().push_with_its_priority(remaining);
         }
 
         // add all compositions to the current slot
@@ -725,8 +729,7 @@ impl EventBuffer {
 
         // put all buffer tasks back, some evaluations may change
         for each in checked_buffer_tasks {
-            let priority = each.priority();
-            self.current_slot_mut().push(each, priority);
+            self.current_slot_mut().push_with_its_priority(each);
         }
     }
 
@@ -831,5 +834,17 @@ impl EventBuffer {
         self.check_anticipation(memory);
         self.predictive_implication_application(memory);
         self.output_predictive_implication(output_task, threshold_f, threshold_c, default_cooldown);
+    }
+
+    /// 📝基于记忆区的执行
+    fn memory_based_evaluation(&mut self, memory: &Memory) {
+        let mut evaluated_buffer_tasks = vec![];
+        while let Some((mut buffer_task, _)) = self.current_slot_mut().pop() {
+            buffer_task.preprocess_effect = preprocessing(&buffer_task.task, memory);
+            evaluated_buffer_tasks.push(buffer_task);
+        }
+        for each in evaluated_buffer_tasks {
+            self.current_slot_mut().push_with_its_priority(each);
+        }
     }
 }
