@@ -18,15 +18,15 @@ use crate::{
 use std::collections::VecDeque;
 
 mod utils {
-    use std::ops::{Index, IndexMut};
-
     use crate::{
         control::DEFAULT_PARAMETERS,
         entity::{BudgetValue, Judgement, JudgementV1, Sentence, Stamp, Task, TruthValue},
         global::Float,
         inference::{Budget, BudgetInference, Evidential, Truth, TruthFunctions},
+        language::Term,
         storage::Memory,
     };
+    use std::ops::{Index, IndexMut};
 
     pub type PqItem<T> = (T, Float);
     /// It is not a heap, it is a sorted array by insertion sort.
@@ -101,12 +101,12 @@ mod utils {
         }
 
         /// Pop the highest.
-        pub fn pop(&mut self) -> Option<(T, Float)> {
+        pub fn pop(&mut self) -> Option<PqItem<T>> {
             self.vec.pop()
         }
 
         /// 🆕在「预测生成」阶段，要拿出指定索引的元素
-        pub fn pop_at(&mut self, index: usize) -> (T, Float) {
+        pub fn pop_at(&mut self, index: usize) -> PqItem<T> {
             self.vec.remove(index)
         }
 
@@ -116,7 +116,7 @@ mod utils {
         /// Design this function is mainly for the prediction generation in the conceptual design.
         ///
         /// It only gives the item, not the value.
-        pub fn random_pop(&mut self) -> Option<(T, Float)> {
+        pub fn random_pop(&mut self) -> Option<PqItem<T>> {
             if self.vec.is_empty() {
                 return None;
             }
@@ -128,25 +128,26 @@ mod utils {
             None
         }
 
-        /// ! 此方法和PyNARS不完全一致
-        /// * 📌对于PyNARS中「间隔」的展示，完全可以放在`identifier`参数中
-        ///
-        /// Show each item in the priority queue.
-        /// Since it may contain items other than BufferTasks,
-        /// you can design you own identifier to show what you want to show.
-        pub fn show<D>(&self, identifier: impl Fn(&T) -> D) -> String
-        where
-            D: std::fmt::Display,
-        {
-            let mut vec_to_show = self.vec.iter().collect::<Vec<_>>();
-            vec_to_show.sort_by(|(_, p_a), (_, p_b)| p_a.total_cmp(p_b));
-            let mut result = String::new();
-            for (item, priority) in vec_to_show.iter() {
-                result += &format!("{} | {}", priority, identifier(item));
-                result += "\n";
-            }
-            result
-        }
+        // ! 🚩【2024-07-25 16:17:49】暂不使用
+        // /// ! 此方法和PyNARS不完全一致
+        // /// * 📌对于PyNARS中「间隔」的展示，完全可以放在`identifier`参数中
+        // ///
+        // /// Show each item in the priority queue.
+        // /// Since it may contain items other than BufferTasks,
+        // /// you can design you own identifier to show what you want to show.
+        // pub fn show<D>(&self, identifier: impl Fn(&T) -> D) -> String
+        // where
+        //     D: std::fmt::Display,
+        // {
+        //     let mut vec_to_show = self.vec.iter().collect::<Vec<_>>();
+        //     vec_to_show.sort_by(|(_, p_a), (_, p_b)| p_a.total_cmp(p_b));
+        //     let mut result = String::new();
+        //     for (item, priority) in vec_to_show.iter() {
+        //         result += &format!("{} | {}", priority, identifier(item));
+        //         result += "\n";
+        //     }
+        //     result
+        // }
     }
 
     /// 🆕从优先级中拿到元素
@@ -181,13 +182,9 @@ mod utils {
     }
 
     impl BufferTask {
-        pub fn new(task: Task) -> Self {
-            Self::with_preprocess_effect(task, 1.0)
-        }
-
-        /// 🆕
+        /// 🆕取代原class`BufferTask`的构造函数
         /// * 🎯无需「在构造后赋值」减少借用冲突
-        pub fn with_preprocess_effect(task: Task, preprocess_effect: Float) -> Self {
+        pub fn new(task: Task, preprocess_effect: Float) -> Self {
             Self {
                 task,
                 channel_parameter: 1,
@@ -226,17 +223,27 @@ mod utils {
         (truth_1.frequency() - truth_2.frequency()).to_float().abs()
     }
 
-    /// 🆕从旧任务构建【内容、预算值完全相同】的新任务，**只有真值不同**
-    /// * 🎯在「预测性蕴含结论」与「检查预期」中用到
-    pub fn same_task_with_different_truth(task: &Task, truth: TruthValue) -> Task {
-        // * 🚩复制语句，仅修改其中的「真值」并锁定「标点」
+    /// 🆕从旧任务构建【预算值完全相同】的新任务，**只有词项和真值不同**
+    /// * 🎯在「预测性蕴含结论」中用到
+    pub fn same_task_with_different_content_and_truth(
+        task: &Task,
+        content: Term,
+        truth: TruthValue,
+    ) -> Task {
+        // * 🚩复制语句，仅修改其中的「词项」「真值」并锁定「标点」
         let sentence = JudgementV1::new(
-            task.clone_content(),
+            content,
             truth,
             Stamp::from_evidential(task),
             task.as_judgement().unwrap().revisable(),
         );
         Task::from_input(sentence.into(), BudgetValue::from(task))
+    }
+
+    /// 🆕从旧任务构建【内容、预算值完全相同】的新任务，**只有真值不同**
+    /// * 🎯在「预测性蕴含结论」与「检查预期」中用到
+    pub fn same_task_with_different_truth(task: &Task, truth: TruthValue) -> Task {
+        same_task_with_different_content_and_truth(task, task.clone_content(), truth)
     }
 
     /// 🆕专用于「事件缓冲区」的「修正」规则
@@ -286,23 +293,7 @@ mod utils {
 use nar_dev_utils::list;
 use utils::*;
 
-#[derive(Debug, Clone)]
-pub struct Anticipation {
-    matched: bool,
-    task: Task,
-    prediction: PredictiveImplication,
-}
-
-impl Anticipation {
-    pub fn new(task: Task, prediction: PredictiveImplication) -> Self {
-        Self {
-            matched: false,
-            task,
-            prediction,
-        }
-    }
-}
-
+/// 📝预测性蕴含（缓冲区专用）
 #[derive(Debug, Clone)]
 pub struct PredictiveImplication {
     condition: Term,
@@ -341,8 +332,26 @@ impl PredictiveImplication {
         }
         Some((
             self.interval,
-            same_task_with_different_truth(&self.task, truth),
+            same_task_with_different_content_and_truth(&self.task, self.conclusion.clone(), truth),
         ))
+    }
+}
+
+/// 📝预期 @ 缓冲区
+#[derive(Debug, Clone)]
+pub struct Anticipation {
+    matched: bool,
+    task: Task,
+    prediction: PredictiveImplication,
+}
+
+impl Anticipation {
+    pub fn new(task: Task, prediction: PredictiveImplication) -> Self {
+        Self {
+            matched: false,
+            task,
+            prediction,
+        }
     }
 }
 
@@ -351,23 +360,24 @@ impl PredictiveImplication {
 struct Slot {
     events: PriorityQueue<BufferTask>,
     anticipations: Vec<Anticipation>,
-    num_anticipations: usize,
-    operations: Vec<()>,
-    num_operations: usize,
+    // * 🚩【2024-07-25 16:19:16】取消暂未实装的字段
+    // num_anticipations: usize,
+    // operations: Vec<()>,
+    // num_operations: usize,
 }
 
 impl Slot {
-    pub fn new(num_events: usize, num_anticipations: usize, num_operations: usize) -> Self {
+    pub fn new(num_events: usize, num_anticipations: usize, _num_operations: usize) -> Self {
         Self {
             events: PriorityQueue::new(num_events),
             anticipations: Vec::with_capacity(num_anticipations),
-            num_anticipations,
-            operations: Vec::with_capacity(num_operations),
-            num_operations,
+            // num_anticipations,
+            // operations: Vec::with_capacity(num_operations),
+            // num_operations,
         }
     }
 
-    pub fn push(&mut self, item: BufferTask, priority: Float) {
+    pub fn push_event(&mut self, item: BufferTask, priority: Float) {
         self.events.push(item, priority);
     }
 
@@ -377,19 +387,15 @@ impl Slot {
         // 计算优先级
         let priority = item.priority();
         // 按所计算的优先级push
-        self.events.push(item, priority);
+        self.push_event(item, priority);
     }
 
-    pub fn pop(&mut self) -> Option<(BufferTask, Float)> {
+    pub fn pop(&mut self) -> Option<PqItem<BufferTask>> {
         self.events.pop()
     }
 
     pub fn random_pop(&mut self) -> Option<BufferTask> {
         self.events.random_pop().map(|(task, _)| task)
-    }
-
-    pub fn len_events(&self) -> usize {
-        self.events.len()
     }
 
     pub fn is_empty_events(&self) -> bool {
@@ -424,7 +430,6 @@ impl EventBuffer {
     ) -> Self {
         let n_slots = 1 + 2 * num_slot;
         let slots = (0..n_slots)
-            .into_iter()
             .map(|_| Slot::new(num_events, num_anticipations, num_operations))
             .collect();
         Self {
@@ -467,7 +472,7 @@ impl EventBuffer {
         for task in tasks {
             // 先计算效果参数
             let preprocess_effect = preprocessing(&task, memory);
-            let buffer_task = BufferTask::with_preprocess_effect(task, preprocess_effect);
+            let buffer_task = BufferTask::new(task, preprocess_effect);
             // 推送到当前时间窗
             self.current_slot_mut().push_with_its_priority(buffer_task);
         }
