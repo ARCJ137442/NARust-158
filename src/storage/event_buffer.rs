@@ -18,6 +18,8 @@ use crate::{
 use std::collections::VecDeque;
 
 mod utils {
+    use std::ops::{Index, IndexMut};
+
     use crate::{
         control::DEFAULT_PARAMETERS,
         entity::{BudgetValue, Judgement, JudgementV1, Sentence, Stamp, Task, TruthValue},
@@ -103,6 +105,11 @@ mod utils {
             self.vec.pop()
         }
 
+        /// 🆕在「预测生成」阶段，要拿出指定索引的元素
+        pub fn pop_at(&mut self, index: usize) -> (T, Float) {
+            self.vec.remove(index)
+        }
+
         /// Based on the priority (not budget.priority), randomly pop one buffer task.
         /// The higher the priority, the higher the probability to be popped.
         ///
@@ -139,6 +146,23 @@ mod utils {
                 result += "\n";
             }
             result
+        }
+    }
+
+    /// 🆕从优先级中拿到元素
+    /// * ⚠️不包括其优先级
+    impl<T> Index<usize> for PriorityQueue<T> {
+        type Output = T;
+        fn index(&self, index: usize) -> &Self::Output {
+            &self.vec[index].0
+        }
+    }
+
+    /// 🆕从优先级中拿到元素
+    /// * ⚠️不包括其优先级
+    impl<T> IndexMut<usize> for PriorityQueue<T> {
+        fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+            &mut self.vec[index].0
         }
     }
 
@@ -259,6 +283,7 @@ mod utils {
         Task::from_input(sentence.into(), budget)
     }
 }
+use nar_dev_utils::list;
 use utils::*;
 
 #[derive(Debug, Clone)]
@@ -359,8 +384,8 @@ impl Slot {
         self.events.pop()
     }
 
-    pub fn random_pop(&mut self) -> Option<(BufferTask, Float)> {
-        self.events.random_pop()
+    pub fn random_pop(&mut self) -> Option<BufferTask> {
+        self.events.random_pop().map(|(task, _)| task)
     }
 
     pub fn len_events(&self) -> usize {
@@ -784,10 +809,10 @@ impl EventBuffer {
             }
         }
         for each in implications {
-            let priority = each.task.unwrap_judgement().expectation()
+            let new_priority = each.task.unwrap_judgement().expectation()
                 * preprocessing(&each.task, memory)
                 * (1.0 / (1 + each.expiration) as Float);
-            self.predictive_implications.push(each, priority);
+            self.predictive_implications.push(each, new_priority);
         }
     }
 
@@ -856,5 +881,68 @@ impl EventBuffer {
         existed_prediction.task = revision(&existed_prediction.task, &new_prediction.task);
         existed_prediction.expiration = existed_prediction.expiration.saturating_sub(1); // = max(0, existed_prediction.expiration - 1);
         existed_prediction
+    }
+
+    /// 📝预测生成
+    ///
+    /// For each slot, randomly pop "max events per slot" buffer tasks to generate predictions.
+    /// Currently, concurrent predictive implications (==>) are not supported.
+    fn prediction_generation(&mut self, max_events_per_slot: usize, memory: &Memory) {
+        // get all events needed for prediction generation
+        let mut selected_buffer_tasks = list![
+            (list![
+                task
+                for _ in (0..max_events_per_slot)
+                if let Some(task) = (self.slots[i].random_pop())
+            ])
+            for i in (0..(self.current_slot + 1))
+        ];
+
+        // for i, each_selected_buffer_tasks in enumerate(selected_buffer_tasks):
+        //     print("selected_buffer_tasks", i,
+        //           [each_event.task if each_event is not None else "None" for each_event in each_selected_buffer_tasks])
+        // print("===")
+
+        // generate predictions based on intervals (=/>)
+        for i in 0..self.current_slot {
+            for each_current_event in &selected_buffer_tasks[selected_buffer_tasks.len() - 1] {
+                for each_previous_event in &selected_buffer_tasks[i] {
+                    let tmp2 = Self::generate_prediction_util(
+                        &each_previous_event.task,
+                        self.current_slot - i,
+                        &each_current_event.task,
+                    );
+                    let mut tmp2 = match tmp2 {
+                        Some(tmp2) => tmp2,
+                        None => continue,
+                    };
+                    let existed = 'gen: {
+                        for j in 0..self.predictive_implications.len() {
+                            let prediction = &self.predictive_implications[j];
+                            if prediction.task.content() == tmp2.task.content() {
+                                break 'gen Some(self.predictive_implications.pop_at(j).0);
+                            }
+                        }
+                        None
+                    };
+                    if let Some(existed) = existed {
+                        tmp2 = Self::prediction_revision(existed, &tmp2);
+                    }
+                    let new_priority = tmp2.task.unwrap_judgement().expectation()
+                        * preprocessing(&tmp2.task, memory);
+                    self.predictive_implications.push(tmp2, new_priority);
+                }
+            }
+        }
+
+        // after the prediction generation, put the randomly selected buffer tasks back
+        for (i, layer) in selected_buffer_tasks
+            .drain(0..=self.current_slot) // ! 🚩【2024-07-25 16:03:07】此处使用`drain`取数组切片的部分
+            .enumerate()
+        {
+            for each in layer {
+                self.slots[i].push_with_its_priority(each);
+            }
+        }
     }
 }
