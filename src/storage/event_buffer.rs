@@ -954,4 +954,53 @@ impl EventBuffer {
         let new_slot = Slot::new(self.num_events, self.num_anticipations, self.num_operations);
         self.slots.push_back(new_slot);
     }
+
+    /// 📝事件缓冲区循环
+    pub fn buffer_cycle(
+        &mut self,
+        tasks: impl IntoIterator<Item = Task>,
+        memory: &Memory,
+        output_task: impl FnMut(Task),
+        cycle_parameters: &BufferCycleParameters, // * ✨缓冲区循环参数
+    ) -> Vec<Task> {
+        // put all tasks to the current slot
+        self.push(tasks, memory);
+
+        // 组合复合词项
+        self.compound_composition(memory);
+
+        // 本地执行（此时输出新任务）
+        self.local_evaluation(
+            memory,
+            output_task,
+            &cycle_parameters.threshold_f,
+            &cycle_parameters.threshold_c,
+            cycle_parameters.default_cooldown,
+        );
+
+        // 基于记忆区的执行
+        self.memory_based_evaluation(memory);
+
+        // 生成新预测
+        self.prediction_generation(cycle_parameters.max_events_per_slot, memory);
+
+        // 弹出旧任务
+        let ret = self.pop();
+
+        // 时间窗口轮替
+        self.slots_cycle();
+
+        // 返回弹出的任务
+        ret
+    }
+}
+
+/// 用于简化「事件缓冲区循环」
+/// * 🎯用作[`EventBuffer::buffer_cycle`]的参数
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BufferCycleParameters {
+    pub max_events_per_slot: usize,
+    pub threshold_f: ShortFloat,
+    pub threshold_c: ShortFloat,
+    pub default_cooldown: usize,
 }
