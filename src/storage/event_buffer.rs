@@ -3,10 +3,12 @@
 //!   * `Utils.py`: <https://github.com/bowen-xu/PyNARS/blob/72091454adc676fae7d40aad418eb9e8e728c51a/pynars/NARS/DataStructures/MC/Utils.py>
 //!   * `EventBuffer.py`: <https://github.com/bowen-xu/PyNARS/blob/72091454adc676fae7d40aad418eb9e8e728c51a/pynars/NARS/DataStructures/MC/EventBuffer.py>
 //! * ℹ️原作者: **Tory Li**
+//!
+//! ! ⚠️【2024-07-25 15:15:11】目前不包含Python源码中任何有关"cheating"的内容
 
 use crate::{
     control::DEFAULT_PARAMETERS,
-    entity::{BudgetValue, JudgementV1, Sentence, Stamp, Task, TruthValue},
+    entity::{BudgetValue, JudgementV1, Sentence, ShortFloat, Stamp, Task, TruthValue},
     global::Float,
     inference::{BudgetFunctions, Evidential, Truth, TruthFunctions},
     io::symbols::{IMPLICATION_RELATION, PREDICTIVE_IMPLICATION_RELATION},
@@ -54,8 +56,11 @@ mod utils {
 
         /// 🆕像数组一样迭代内部元素
         /// * 🎯封装接口，并用于「预测性蕴含应用」
-        pub fn iter(&self) -> impl Iterator<Item = &'_ PqItem<T>> {
+        pub fn iter_vec(&self) -> impl Iterator<Item = &'_ PqItem<T>> {
             self.vec.iter()
+        }
+        pub fn iter_mut_vec(&mut self) -> impl Iterator<Item = &'_ mut PqItem<T>> {
+            self.vec.iter_mut()
         }
 
         /// Add a new one, regardless whether there are duplicates.
@@ -358,7 +363,7 @@ impl Slot {
     }
 
     pub fn iter_events(&self) -> impl Iterator<Item = &'_ PqItem<BufferTask>> {
-        self.events.iter()
+        self.events.iter_vec()
     }
 }
 
@@ -780,6 +785,34 @@ impl EventBuffer {
                 * preprocessing(&each.task, memory)
                 * (1.0 / (1 + each.expiration) as Float);
             self.predictive_implications.push(each, priority);
+        }
+    }
+
+    /// 📝预测蕴含输出
+    /// * 🚩【2024-07-25 15:13:52】泛化整个函数的作用：不一定要放进「记忆区」中
+    ///
+    /// when a predictive implication reaches a relatively high truth value, it will be forwarded to the memory
+    ///   (not the next level)
+    /// this does not mean it is removed from the predictive implication pq
+    #[doc(alias = "to_memory_predictive_implication")]
+    fn output_predictive_implication(
+        &mut self,
+        mut output_task: impl FnMut(Task),
+        threshold_f: &ShortFloat,
+        threshold_c: &ShortFloat,
+        default_cooldown: usize,
+    ) {
+        for (each, _) in self.predictive_implications.iter_mut_vec() {
+            let [task_f, task_c] = &each.task.unwrap_judgement().fc();
+            if task_f >= threshold_f && task_c >= threshold_c {
+                match each.to_memory_cooldown {
+                    0 => {
+                        output_task(each.task.clone());
+                        each.to_memory_cooldown = default_cooldown;
+                    }
+                    _ => each.to_memory_cooldown -= 1,
+                }
+            }
         }
     }
 }
