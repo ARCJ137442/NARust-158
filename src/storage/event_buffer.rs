@@ -6,10 +6,7 @@
 
 use crate::{
     control::DEFAULT_PARAMETERS,
-    entity::{
-        BudgetValue, Judgement, JudgementV1, Punctuation, Sentence, SentenceV1, Stamp, Task,
-        TruthValue,
-    },
+    entity::{BudgetValue, JudgementV1, Sentence, Stamp, Task, TruthValue},
     global::Float,
     inference::{BudgetFunctions, Evidential, Truth, TruthFunctions},
     io::symbols::{IMPLICATION_RELATION, PREDICTIVE_IMPLICATION_RELATION},
@@ -21,14 +18,13 @@ use std::collections::VecDeque;
 mod utils {
     use crate::{
         control::DEFAULT_PARAMETERS,
-        entity::{
-            BudgetValue, Judgement, JudgementV1, Punctuation, Sentence, Stamp, Task, TruthValue,
-        },
+        entity::{BudgetValue, Judgement, JudgementV1, Sentence, Stamp, Task, TruthValue},
         global::Float,
         inference::{Budget, BudgetInference, Evidential, Truth, TruthFunctions},
         storage::Memory,
     };
 
+    pub type PqItem<T> = (T, Float);
     /// It is not a heap, it is a sorted array by insertion sort.
     /// Since we need to
     /// 1) access the largest item,
@@ -36,7 +32,7 @@ mod utils {
     /// 3) access an item in the middle.
     #[derive(Debug, Clone)]
     pub struct PriorityQueue<T> {
-        vec: Vec<(T, Float)>,
+        vec: Vec<PqItem<T>>,
         size: usize,
     }
 
@@ -54,6 +50,12 @@ mod utils {
 
         pub fn is_empty(&self) -> bool {
             self.vec.is_empty()
+        }
+
+        /// 🆕像数组一样迭代内部元素
+        /// * 🎯封装接口，并用于「预测性蕴含应用」
+        pub fn iter(&self) -> impl Iterator<Item = &'_ PqItem<T>> {
+            self.vec.iter()
         }
 
         /// Add a new one, regardless whether there are duplicates.
@@ -261,6 +263,16 @@ pub struct Anticipation {
     prediction: PredictiveImplication,
 }
 
+impl Anticipation {
+    pub fn new(task: Task, prediction: PredictiveImplication) -> Self {
+        Self {
+            matched: false,
+            task,
+            prediction,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct PredictiveImplication {
     condition: Term,
@@ -343,6 +355,10 @@ impl Slot {
 
     pub fn is_empty_events(&self) -> bool {
         self.events.is_empty()
+    }
+
+    pub fn iter_events(&self) -> impl Iterator<Item = &'_ PqItem<BufferTask>> {
+        self.events.iter()
     }
 }
 
@@ -706,6 +722,64 @@ impl EventBuffer {
         for each in checked_buffer_tasks {
             let priority = each.priority();
             self.current_slot_mut().push(each, priority);
+        }
+    }
+
+    /// 📝预测性蕴含应用
+    ///
+    /// Check all predictive implications, whether some of them can fire.
+    /// If so, calculate the corresponding task of the conclusion and create it as an anticipation in the corresponding
+    /// slot in the future.
+    /// If some implications cannot fire, increase the expiration of them.
+    fn predictive_implication_application(&mut self, memory: &Memory) {
+        let mut implications = vec![];
+        while let Some((implication, _)) = self.predictive_implications.pop() {
+            /// 临时用结构体，表示「预测应用」的结果
+            enum Application {
+                Applied(usize, Task, PredictiveImplication),
+                NotApplied(PredictiveImplication),
+            }
+            use Application::*;
+            let applied = 'apply: {
+                for (event, _) in self.current_slot().iter_events() {
+                    if &implication.condition != event.task.content() {
+                        continue;
+                    }
+                    // 🚩第一个相等⇒得出结论
+                    match implication.get_conclusion(&event.task) {
+                        Some((interval, conclusion)) => {
+                            break 'apply Applied(interval, conclusion, implication);
+                        }
+                        /* if interval is None:
+                        break */
+                        None => {
+                            break 'apply NotApplied(implication);
+                        }
+                    };
+                }
+                NotApplied(implication)
+            };
+            match applied {
+                Applied(interval, conclusion, mut implication) => {
+                    implication.expiration = implication.expiration.saturating_sub(1); // 减到0为止
+                    implications.push(implication.clone()); // ? 【2024-07-25 15:11:02】因借用问题，这里需要复制；但问题是 是否一定要复制？复制后是否会效果不同
+                    let anticipation = Anticipation::new(conclusion, implication);
+                    self.slots[self.current_slot + interval]
+                        .anticipations
+                        .push(anticipation);
+                }
+                // if not applied
+                NotApplied(mut implication) => {
+                    implication.expiration += 1;
+                    implications.push(implication)
+                }
+            }
+        }
+        for each in implications {
+            let priority = each.task.unwrap_judgement().expectation()
+                * preprocessing(&each.task, memory)
+                * (1.0 / (1 + each.expiration) as Float);
+            self.predictive_implications.push(each, priority);
         }
     }
 }
