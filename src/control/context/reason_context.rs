@@ -217,14 +217,15 @@ pub trait ReasonContextWithLinks: ReasonContext {
     fn current_task_link_mut(&mut self) -> &mut TaskLink;
 }
 
-/// 重置全局状态
-/// * 🚩重置「全局随机数生成器」
-/// * 📌【2024-06-26 23:36:06】目前计划做一个全局的「伪随机数生成器初始化」
-///
-#[doc(alias = "init")]
-pub fn init_global_reason_parameters() {
-    eprintln!("// TODO: 功能实装")
-}
+// ! ❌【2024-07-31 17:48:49】现弃用「全局伪随机数生成器」的想法：不利于线程安全、已采用「基于推理器的随机数生成器」方法
+// /// 重置全局状态
+// /// * 🚩重置「全局随机数生成器」
+// /// * 📌【2024-06-26 23:36:06】目前计划做一个全局的「伪随机数生成器初始化」
+// ///
+// #[doc(alias = "init")]
+// pub fn init_global_reason_parameters() {
+//     eprintln!("// TODO: 功能实装")
+// }
 
 /// 🆕内置公开结构体，用于公共读取
 #[derive(Debug)]
