@@ -1,4 +1,5 @@
 use anyhow::Result;
+use nar_dev_utils::ResultBoost;
 use narsese::conversion::string::impl_lexical::format_instances::FORMAT_ASCII;
 use narust_158::{
     control::DEFAULT_PARAMETERS,
@@ -56,9 +57,23 @@ fn shell(
         if input.is_empty() {
             continue;
         }
-        match Cmd::parse(input) {
-            Ok(cmd) => runtime.input_cmd(cmd)?,
-            Err(err) => eprintln!("NAVM cmd parse error: {err}"),
+        let cmd = 'cmd: {
+            // 纯数字⇒尝试默认成`CYC`指令
+            if let Ok(n) = input.parse::<usize>() {
+                break 'cmd Some(Cmd::CYC(n));
+            }
+            // 若能解析成词法Narsese任务⇒尝试默认成`NSE`指令
+            if let Ok(Ok(task)) = FORMAT_ASCII
+                .parse(input)
+                .map(|value| value.try_into_task_compatible())
+            {
+                break 'cmd Some(Cmd::NSE(task));
+            }
+            // 最后再考虑作为NAVM指令解析
+            Cmd::parse(input).ok_or_run(|err| eprintln!("NAVM cmd parse error: {err}"))
+        };
+        if let Some(cmd) = cmd {
+            runtime.input_cmd(cmd)?;
         }
         // out
         while let Some(output) = runtime.try_fetch_output()? {
@@ -144,9 +159,10 @@ pub fn set_max_volume(vm: &mut impl VmRuntime) -> Result<()> {
 
 pub fn main() -> Result<()> {
     // * 🚩创建
-    let mut runtime = create_runtime()?;
+    let runtime = create_runtime()?;
     // * 🚩音量
-    set_max_volume(&mut runtime)?;
+    // * 🚩【2024-07-31 23:20:33】现不再默认最大音量
+    // set_max_volume(&mut runtime)?;
     // * 🚩交互
     shell(runtime, shell_iter_stdin())?;
     Ok(())
