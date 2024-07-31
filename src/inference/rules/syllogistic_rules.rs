@@ -16,6 +16,8 @@ use ReasonDirection::*;
 
 /// 存储规则表之外的结构与方法
 mod utils {
+    use super::{StatementRef, Term};
+
     /// 🆕三段论位置
     /// * 🎯用于表征[`RuleTables::index_to_figure`]推导出的「三段论子类型」
     /// * 📝OpenNARS中是在「三段论推理」的「陈述🆚陈述」中表示「位置关系」
@@ -62,6 +64,17 @@ mod utils {
         }
     }
     use SyllogismPosition::*;
+
+    /// 以此扩展到「陈述」的功能
+    impl StatementRef<'_> {
+        /// 根据「三段论位置」扩展获取「三段论位置」对应的「词项」
+        pub fn get_at_position(&self, position: SyllogismPosition) -> &Term {
+            match position {
+                Subject => self.subject(),
+                Predicate => self.predicate(),
+            }
+        }
+    }
 
     /// 三段论图式
     /// * 🎯模拟「三段论推理」中「公共项在两陈述的位置」的四种情况
@@ -124,6 +137,8 @@ pub use utils::*;
 /// 规则分派
 mod dispatch {
     use super::*;
+    use syllogistic_figures::*;
+    use variable_process::{unify_find_i, unify_find_q};
 
     /// 索引⇒图式
     fn index_to_figure<T, U>(link1: &impl TLink<T>, link2: &impl TLink<U>) -> SyllogismFigure {
@@ -206,7 +221,6 @@ mod dispatch {
         let mut b_term = cast_statement(belief_sentence.clone_content());
         let rng_seed = context.shuffle_rng_seed();
         let rng_seed2 = context.shuffle_rng_seed();
-        use syllogistic_figures::*;
         match figure {
             // * 🚩主项×主项 <A --> B> × <A --> C>
             // induction
@@ -267,7 +281,7 @@ mod dispatch {
                     .apply_to_term(&mut term1, &mut term2);
                 if unified_q {
                     // * 🚩成功统一 ⇒ 匹配反向
-                    // TODO
+                    match_reverse(context);
                 }
                 // * 🚩未有统一 ⇒ 演绎+举例
                 else {
@@ -301,11 +315,111 @@ mod dispatch {
         }
     }
 
+    /// The task and belief match reversely
+    /// * 📄<A --> B> + <B --> A>
+    ///   * inferToSym: <A --> B>. => <A <-> B>.
+    ///   * conversion: <A --> B>? => <A --> B>.
+    ///
+    /// @param context Reference to the derivation context
+    fn match_reverse(context: &mut ReasonContextConcept) {
+        // TODO
+    }
+
     /// 非对称×对称
     fn asymmetric_symmetric(
         asymmetric: impl Sentence,
         symmetric: impl Sentence,
         figure: SyllogismFigure,
+        context: &mut ReasonContextConcept,
+    ) {
+        // * 🚩非对称🆚对称
+        let mut asy_s = cast_statement(asymmetric.clone_content());
+        let mut sym_s = cast_statement(symmetric.clone_content());
+        let rng_seed = context.shuffle_rng_seed();
+        let rng_seed2 = context.shuffle_rng_seed();
+        use SyllogismPosition::*;
+
+        // * 🚩尝试获取各大「共同项」与「其它项」的位置
+        let ([common_position_asy, common_position_sym], switch_order) = match figure {
+            // * 🚩主项×主项 <A --> B> × <A <-> C>
+            // * 🚩取其中两个不同的谓项 B + C
+            // * 🚩最后类比传参：`analogy(term2, term1, ...)`
+            SS => ([Subject, Subject], true),
+            // * 🚩主项×谓项 <A --> B> × <C <-> A>
+            // * 🚩取其中两个不同的主项 B + C
+            // * 🚩最后类比传参：`analogy(term2, term1, ...)`
+            SP => ([Subject, Predicate], true),
+            // * 🚩谓项×主项 <A --> B> × <B <-> C>
+            // * 🚩取其中两个不同的主项 A + C
+            // * 🚩最后类比传参：`analogy(term1, term2, ...)`
+            PS => ([Predicate, Subject], false),
+            // * 🚩谓项×谓项 <A --> B> × <C <-> B>
+            // * 🚩取其中两个不同的主项 A + C
+            // * 🚩最后类比传参：`analogy(term1, term2, ...)`
+            PP => ([Predicate, Predicate], false),
+        };
+
+        // * 🚩先尝试统一独立变量
+        let unified_i = unify_find_i(
+            asy_s.get_ref().get_at_position(common_position_asy),
+            sym_s.get_ref().get_at_position(common_position_sym),
+            rng_seed,
+        )
+        .apply_to(
+            asy_s.mut_ref().into_compound_ref(),
+            sym_s.mut_ref().into_compound_ref(),
+        );
+        // * 🚩不能统一变量⇒终止
+        if !unified_i {
+            return;
+        }
+        let [term1_position, term2_position] = [
+            common_position_asy.opposite(),
+            common_position_sym.opposite(),
+        ];
+        // * 🚩再根据「是否可统一查询变量」做分派（可统一⇒已经统一了
+        let unified_q = unify_find_q(
+            asy_s.get_ref().get_at_position(term1_position),
+            sym_s.get_ref().get_at_position(term2_position),
+            rng_seed2,
+        )
+        .apply_to(
+            asy_s.mut_ref().into_compound_ref(),
+            sym_s.mut_ref().into_compound_ref(),
+        );
+        // * 🚩能统一 ⇒ 继续分派
+        if unified_q {
+            match_asy_sym(asymmetric, symmetric, context);
+        }
+        // * 🚩未有统一 ⇒ 类比
+        else {
+            // 获取并拷贝相应位置的词项
+            let [term1, term2] = [
+                asy_s.get_ref().get_at_position(term1_position).clone(),
+                sym_s.get_ref().get_at_position(term2_position).clone(),
+            ];
+            // 转换顺序：true => [C, B], false => [B, C]
+            let [term1, term2] = match switch_order {
+                true => [term2, term1],
+                false => [term1, term2],
+            };
+            analogy(term1, term2, asymmetric, symmetric, context);
+        }
+    }
+
+    /// 非对称×对称
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// Inheritance/Implication matches Similarity/Equivalence
+    ///
+    /// @param asym    A Inheritance/Implication sentence
+    /// @param sym     A Similarity/Equivalence sentence
+    /// @param figure  location of the shared term
+    /// @param context Reference to the derivation context
+    fn match_asy_sym(
+        asymmetric: impl Sentence,
+        symmetric: impl Sentence,
         context: &mut ReasonContextConcept,
     ) {
         // TODO
@@ -336,7 +450,6 @@ mod dispatch {
     ///
     /// 演绎&举例
     /// * 📝一个强推理，一个弱推理
-    ///
     fn ded_exe(
         sub: Term,
         pre: Term,
@@ -383,6 +496,7 @@ mod dispatch {
         }
 
         // * 🚩归因 & 归纳 & 比较
+        // TODO: 【2024-07-31 11:38:26】可配置推理规则
         abduction(
             sub.clone(),
             pre.clone(),
@@ -533,6 +647,58 @@ fn comparison(
     let budget = match context.reason_direction() {
         Forward => context.budget_forward(truth.as_ref()),
         Backward => context.budget_backward(belief),
+    };
+    // * 🚩结论
+    context.double_premise_task(content, truth, budget);
+}
+
+/// {<S ==> P>, <M <=> P>} |- <S ==> P>
+/// * 📌类比
+/// * 📝【2024-07-02 13:27:22】弱推理🆚强推理、前向推理🆚反向推理 不是一个事儿
+fn analogy(
+    sub: Term,
+    pre: Term,
+    asymmetric: impl Sentence,
+    symmetric: impl Sentence,
+    context: &mut ReasonContextConcept,
+) {
+    // * 🚩验明合法性
+    if StatementRef::invalid_statement(&sub, &pre) {
+        return;
+    }
+    // * 🚩提取参数
+    let task_rc = context.current_task();
+    let task = task_rc.get_();
+    let direction = context.reason_direction();
+    let task_content = task.content();
+    // * 🚩词项
+    // * 📝取「反对称」那个词项的系词
+    let asymmetric_statement = asymmetric.content().as_statement().unwrap();
+    let content = unwrap_or_return!(?Term::make_statement(&asymmetric_statement, sub, pre));
+
+    // * 🚩真值
+    let truth = match direction {
+        Forward => Some(
+            asymmetric
+                .unwrap_judgement()
+                .analogy(symmetric.unwrap_judgement()),
+        ),
+        Backward => None,
+    };
+    // * 🚩预算
+    let is_commutative = task_content.is_commutative();
+    drop(task);
+    drop(task_rc);
+    let budget = match direction {
+        Forward => context.budget_forward(truth.as_ref()),
+        Backward => {
+            match is_commutative {
+                // * 🚩可交换⇒弱推理
+                true => context.budget_backward_weak(asymmetric.unwrap_judgement()),
+                // * 🚩不可交换⇒强推理
+                false => context.budget_backward(symmetric.unwrap_judgement()),
+            }
+        }
     };
     // * 🚩结论
     context.double_premise_task(content, truth, budget);
