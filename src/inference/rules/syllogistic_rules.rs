@@ -369,7 +369,8 @@ mod dispatch {
 
         // * 🚩尝试获取各大「共同项」与「其它项」的位置
         // * 📝外部传入的「三段论图式」即「共同项的位置」，「其它项」即各处「共同项」的反向
-        let [common_position_asy, common_position_sym] = figure;
+        let [[common_pos_asy, common_pos_sym], [other_pos_asy, other_pos_sym]] =
+            figure.and_opposite();
         let switch_order = match figure {
             // * 🚩主项×主项 <A --> B> × <A <-> C>
             // * 🚩取其中两个不同的谓项 B + C
@@ -391,8 +392,8 @@ mod dispatch {
 
         // * 🚩先尝试统一独立变量
         let unified_i = unify_find_i(
-            asy_s.get_ref().get_at_position(common_position_asy),
-            sym_s.get_ref().get_at_position(common_position_sym),
+            asy_s.get_ref().get_at_position(common_pos_asy),
+            sym_s.get_ref().get_at_position(common_pos_sym),
             rng_seed,
         )
         .apply_to(
@@ -403,14 +404,10 @@ mod dispatch {
         if !unified_i {
             return;
         }
-        let [term1_position, term2_position] = [
-            common_position_asy.opposite(),
-            common_position_sym.opposite(),
-        ];
         // * 🚩再根据「是否可统一查询变量」做分派（可统一⇒已经统一了
         let unified_q = unify_find_q(
-            asy_s.get_ref().get_at_position(term1_position),
-            sym_s.get_ref().get_at_position(term2_position),
+            asy_s.get_ref().get_at_position(other_pos_asy),
+            sym_s.get_ref().get_at_position(other_pos_sym),
             rng_seed2,
         )
         .apply_to(
@@ -425,8 +422,8 @@ mod dispatch {
         else {
             // 获取并拷贝相应位置的词项
             let [term_asy, term_sym] = [
-                asy_s.get_ref().get_at_position(term1_position).clone(),
-                sym_s.get_ref().get_at_position(term2_position).clone(),
+                asy_s.get_ref().get_at_position(other_pos_asy).clone(),
+                sym_s.get_ref().get_at_position(other_pos_sym).clone(),
             ];
             // 转换顺序：true => [C, B], false => [B, C]
             let [term1, term2] = match switch_order {
