@@ -268,11 +268,13 @@ impl Unification {
     }
 
     /// 同[`Self::apply_to`]，但允许应用在任何词项中
+    /// * 🚩一律返回「是否已归一化」
+    ///   * ⚠️对「单个复合词项」仍可能应用归一化失败：与「应用到哪儿」无关
     pub fn apply_to_term(&self, parent1: &mut Term, parent2: &mut Term) -> bool {
-        // * 🚩只有俩词项是复合词项时，才
+        // * 🚩只有俩词项是复合词项时，才进行应用
         match [parent1.as_compound_mut(), parent2.as_compound_mut()] {
             [Some(parent1), Some(parent2)] => self.apply_to(parent1, parent2),
-            _ => false,
+            _ => self.has_unification,
         }
     }
 }

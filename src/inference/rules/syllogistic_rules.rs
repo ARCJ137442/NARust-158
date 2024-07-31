@@ -81,12 +81,20 @@ mod utils {
         }
 
         /// 根据「三段论位置」从参数中选取一个参数
-        /// * 🎯在「陈述解包」的过程中使用
-        pub fn select<T>(self, [subject, predicate]: [T; 2]) -> T {
+        /// * 🎯在「陈述选择」的过程中使用，同时需要前后两项
+        /// * 🚩数组的第一项即为「选中项」
+        pub fn select_and_other<T>(self, [subject, predicate]: [T; 2]) -> [T; 2] {
             match self {
-                Subject => subject,
-                Predicate => predicate,
+                Subject => [subject, predicate],
+                Predicate => [predicate, subject],
             }
+        }
+
+        /// 根据「三段论位置」从参数中选取一个参数
+        /// * 🎯在「陈述解包」的过程中使用
+        pub fn select<T>(self, sub_pre: [T; 2]) -> T {
+            let [selected, _] = self.select_and_other(sub_pre);
+            selected
         }
     }
     use SyllogismPosition::*;
@@ -184,7 +192,7 @@ pub use utils::*;
 mod dispatch {
     use super::*;
     use syllogistic_figures::*;
-    use variable_process::{unify_find_i, unify_find_q};
+    use variable_process::{has_unification_q, unify_find_i, unify_find_q};
 
     /// 索引⇒图式
     fn index_to_figure<T, U>(link1: &impl TLink<T>, link2: &impl TLink<U>) -> SyllogismFigure {
@@ -270,12 +278,11 @@ mod dispatch {
 
         // * 🚩尝试获取各大「共同项」与「其它项」的位置
         // * 📝外部传入的「三段论图式」即「共同项的位置」，「其它项」即各处「共同项」的反向
-        let [[common_position_t, common_position_b], [other_position_t, other_position_b]] =
-            figure.and_opposite();
+        let [[common_pos_t, common_pos_b], [other_pos_t, other_pos_b]] = figure.and_opposite();
         // * 🚩先尝试统一独立变量
-        let unified_i = variable_process::unify_find_i(
-            t_term.get_ref().get_at_position(common_position_t),
-            b_term.get_ref().get_at_position(common_position_b),
+        let unified_i = unify_find_i(
+            t_term.get_ref().get_at_position(common_pos_t),
+            b_term.get_ref().get_at_position(common_pos_b),
             rng_seed,
         )
         .apply_to(
@@ -291,8 +298,8 @@ mod dispatch {
             return;
         }
         // * 🚩取其中两个不同的项 | 需要在后续「条件类比」中重复使用
-        let term_t = other_position_t.select(t_term.clone().unwrap_components());
-        let term_b = other_position_b.select(b_term.clone().unwrap_components());
+        let term_t = other_pos_t.select(t_term.clone().unwrap_components());
+        let term_b = other_pos_b.select(b_term.clone().unwrap_components());
         let [sub, pre] = match figure {
             // * 📌主项 ⇒ sub来自信念，pre来自任务
             SS | SP => [term_b, term_t],
@@ -332,7 +339,7 @@ mod dispatch {
                 // * 🚩尝试统一查询变量
                 // * ⚠️【2024-07-14 03:13:32】不同@OpenNARS：无需再应用到整个词项——后续已经不再需要t_term与b_term
                 // * ⚠️【2024-07-31 21:37:10】激进改良：无需应用变量替换，只需考虑「是否可替换」
-                let unified_q = variable_process::has_unification_q(&sub, &pre, rng_seed2);
+                let unified_q = has_unification_q(&sub, &pre, rng_seed2);
                 match unified_q {
                     // * 🚩成功统一 ⇒ 匹配反向
                     true => match_reverse(task_sentence, belief_sentence, context),
@@ -480,7 +487,28 @@ mod dispatch {
         figure: SyllogismFigure,
         context: &mut ReasonContextConcept,
     ) {
-        // TODO
+        // * 🚩对称🆚对称
+        let mut t_term = cast_statement(task_sentence.clone_content());
+        let mut b_term = cast_statement(belief_sentence.clone_content());
+        let [pos_t, pos_b] = figure;
+        let [common_t, common_b] = [
+            pos_t.select(t_term.sub_pre()),
+            pos_b.select(b_term.sub_pre()),
+        ];
+        let rng_seed = context.shuffle_rng_seed();
+        // * 🚩尝试以不同方式统一独立变量 @ 公共词项
+        let unified = unify_find_i(common_b, common_t, rng_seed).apply_to(
+            t_term.mut_ref().into_compound_ref(),
+            b_term.mut_ref().into_compound_ref(),
+        );
+        // * 🚩成功统一 ⇒ 相似传递
+        if unified {
+            let [other_t, other_b] = [
+                pos_t.opposite().select(t_term.unwrap_components()),
+                pos_b.opposite().select(b_term.unwrap_components()),
+            ];
+            resemblance(other_b, other_t, &belief_sentence, &task_sentence, context);
+        }
     }
 
     /// 分离（可带变量）
@@ -929,6 +957,42 @@ fn converted_judgment(
     context.single_premise_task_full(content, Punctuation::Judgement, Some(new_truth), new_budget)
 }
 
+/// 相似传递
+///
+/// # 📄OpenNARS
+///
+/// `{<S <=> M>, <M <=> P>} |- <S <=> P>`
+fn resemblance(
+    sub: Term,
+    pre: Term,
+    belief: &impl Judgement,
+    task: &impl Sentence,
+    context: &mut ReasonContextConcept,
+) {
+    // * 🚩合法性
+    if StatementRef::invalid_statement(&sub, &pre) {
+        return;
+    }
+    // * 🚩提取参数
+    let direction = context.reason_direction();
+    // * 🚩词项
+    let content = unwrap_or_return!(
+        ?Term::make_statement(belief.content(), sub, pre)
+    );
+    // * 🚩真值
+    let truth = match direction {
+        Forward => Some(belief.resemblance(task.unwrap_judgement())),
+        Backward => None,
+    };
+    // * 🚩预算
+    let budget = match direction {
+        Forward => context.budget_forward(truth.as_ref()),
+        Backward => context.budget_backward(belief),
+    };
+    // * 🚩结论
+    context.double_premise_task(content, truth, budget);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1273,6 +1337,25 @@ mod tests {
             cyc 10
             "
             => ANSWER "<A <=> B>" in outputs
+        }
+
+        resemblance: {
+            "
+            nse <A <-> B>.
+            nse <B <-> C>.
+            cyc 10
+            "
+            => OUT "<A <-> C>" in outputs
+        }
+
+        resemblance_answer: {
+            "
+            nse <A <-> B>.
+            nse <B <-> C>.
+            nse <A <-> C>?
+            cyc 20
+            "
+            => ANSWER "<A <-> C>" in outputs
         }
     }
 }

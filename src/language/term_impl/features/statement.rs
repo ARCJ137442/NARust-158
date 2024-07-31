@@ -615,6 +615,15 @@ impl Statement {
         self.term.as_statement_mut().unwrap()
     }
 
+    /// 🆕同时快捷获取`[主项, 谓项]`
+    /// * 🚩【2024-07-31 22:24:07】现场解包[`StatementRef`]中的引用，避免「临时对象dropped」
+    pub fn sub_pre(&self) -> [&Term; 2] {
+        let StatementRef {
+            subject, predicate, ..
+        } = self.get_ref();
+        [subject, predicate]
+    }
+
     /// 解包为内部元素（主项、谓项）
     /// * 🎯用于「推理规则」中的新词项生成
     pub fn unwrap_components(self) -> [Term; 2] {
