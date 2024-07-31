@@ -159,7 +159,7 @@ impl Reasoner {
     /// * ⚠️【2024-07-02 18:32:42】现在具有筛选性
     ///   * 🚩只有「音量在最小值以上」才报告输出
     pub fn report_comment(&mut self, message: impl ToString) {
-        if self.silence_value >= util_outputs::COMMENT_VOLUME_THRESHOLD {
+        if self.volume >= util_outputs::COMMENT_VOLUME_THRESHOLD {
             self.report(util_outputs::output_comment(message));
         }
     }

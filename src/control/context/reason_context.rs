@@ -47,11 +47,19 @@ pub trait ReasonContext {
         self.parameters().maximum_stamp_length
     }
 
-    /// 获取「静默值」
+    /// 获取「音量百分比」
     /// * 🎯在「推理上下文」中无需获取「推理器」`getReasoner`
+    /// * 📌音量越大，允许的输出越多
     /// * ️📝可空性：非空
     /// * 📝可变性：只读
-    fn silence_percent(&self) -> Float;
+    fn volume_percent(&self) -> Float;
+
+    /// 获取「静默百分比」
+    /// * 📌静默百分比越大，音量越小，输出越少
+    /// * 🚩默认为「1-音量百分比」
+    fn silence_percent(&self) -> Float {
+        1.0 - self.volume_percent()
+    }
 
     /// 获取「打乱用随机数生成器」
     fn shuffle_rng_seed(&mut self) -> u64 {
@@ -88,7 +96,7 @@ pub trait ReasonContext {
     ///   * 🚩只有「音量在最小值以上」才报告输出
     fn report_comment(&mut self, message: impl ToString) {
         // * 🚩音量阈值
-        if self.silence_percent() >= util_outputs::COMMENT_VOLUME_THRESHOLD_PERCENT {
+        if self.volume_percent() >= util_outputs::COMMENT_VOLUME_THRESHOLD_PERCENT {
             self.report(util_outputs::output_comment(message));
         }
     }
@@ -241,9 +249,9 @@ pub struct ReasonContextCore<'this> {
     /// * 🎯与「记忆区」解耦
     time: ClockTime,
 
-    /// 缓存的「静默值」
+    /// 缓存的「音量」
     /// * 🚩【2024-05-30 09:02:10】现仅在构造时赋值，其余情况不变
-    silence_value: usize,
+    volume: usize,
 
     /// 当前概念
     ///
@@ -259,7 +267,7 @@ impl<'this> ReasonContextCore<'this> {
     pub fn new<'p: 'this>(reasoner: &'p mut Reasoner, current_concept: Concept) -> Self {
         Self {
             time: reasoner.time(),
-            silence_value: reasoner.silence_value(),
+            volume: reasoner.volume(),
             current_concept,
             reasoner,
         }
@@ -292,8 +300,8 @@ impl ReasonContextCore<'_> {
         &self.reasoner.parameters
     }
 
-    pub fn silence_percent(&self) -> Float {
-        self.silence_value as Float / 100.0
+    pub fn volume_percent(&self) -> Float {
+        self.volume as Float / 100.0
     }
 
     pub fn current_concept(&self) -> &Concept {
@@ -392,8 +400,8 @@ macro_rules! __delegate_from_core {
             self.core.parameters()
         }
 
-        fn silence_percent(&self) -> Float {
-            self.core.silence_percent()
+        fn volume_percent(&self) -> Float {
+            self.core.volume_percent()
         }
 
         fn num_new_tasks(&self) -> usize {

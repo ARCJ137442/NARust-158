@@ -234,8 +234,8 @@ impl Reasoner {
 
     /// 处理指令[`Cmd::VOL`]
     fn cmd_vol(&mut self, volume: usize) {
-        self.report_info(format!("volume: {} => {volume}", self.silence_value));
-        self.silence_value = volume;
+        self.report_info(format!("volume: {} => {volume}", self.volume));
+        self.volume = volume;
     }
 
     /// 处理指令[`Cmd::EXI`]

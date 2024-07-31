@@ -262,7 +262,7 @@ impl ReasonContextDirect<'_> {
             let link = TermLink::from_template(component.clone(), template, sub_budget);
             self.outs.report_comment(
                 format!("Term-link built @ {self_term}: {}", link.to_display_long()),
-                self.silence_percent(),
+                self.volume_percent(),
             );
             let self_concept = unwrap_or_return!(?self.key_to_concept_mut(concept_key) => continue);
             self_concept.put_in_term_link(link); // this termLink to that
@@ -276,7 +276,7 @@ impl ReasonContextDirect<'_> {
                     &*component,
                     link.to_display_long()
                 ),
-                self.silence_percent(),
+                self.volume_percent(),
             );
             let component_concept =
                 unwrap_or_return!(?self.get_concept_or_create(&component) => continue);
