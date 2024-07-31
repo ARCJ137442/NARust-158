@@ -123,7 +123,7 @@ pub trait Sentence: ToDisplayAndBrief + Evidential {
         }
     }
     /// `as_judgement`的快捷解包
-    /// * 🎯推理规则中对「正向推理⇒任务有真值」的使用
+    /// * 🎯推理规则中对「前向推理⇒任务有真值」的使用
     fn unwrap_judgement(&self) -> &Self::Judgement {
         // * 🚩【2024-07-09 13:17:25】现在直接复用一个函数
         self.as_judgement().unwrap()

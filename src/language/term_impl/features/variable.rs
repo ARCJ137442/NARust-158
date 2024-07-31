@@ -68,6 +68,7 @@ impl Term {
     ///
     /// * ✅【2024-06-19 02:06:12】跟随最新改版更新，删去字段并铺开实现此功能
     /// * ♻️【2024-06-26 02:07:27】重构修正：禁止「占位符」作为「常量词项」
+    /// * ♻️【2024-07-31 21:41:49】修正：不再将查询变量计入「常量词项」
     ///
     /// # 📄OpenNARS
     ///
@@ -78,7 +79,7 @@ impl Term {
     /// - (for `CompoundTerm`) check if the term contains free variable
     #[inline(always)]
     pub fn is_constant(&self) -> bool {
-        !self.is_placeholder() && !self.contains_sole_variable()
+        !self.instanceof_variable() && !self.is_placeholder() && !self.contains_sole_variable()
     }
 
     /// 🆕检查自身是否包含有「孤立非查询变量」
