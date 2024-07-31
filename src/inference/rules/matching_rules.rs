@@ -198,6 +198,16 @@ mod tests {
             ",
             expect_narsese_term!(ANSWER "<A --> B>" in outputs),
         );
+        vm.input_fetch_print_expect(
+            "
+            res
+            nse <A --> B>.
+            cyc 5
+            nse <A --> ?1>?
+            cyc 50
+            ",
+            expect_narsese_term!(ANSWER "<A --> B>" in outputs),
+        );
     }
 
     /// 稳定性

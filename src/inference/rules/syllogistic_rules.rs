@@ -293,7 +293,7 @@ mod dispatch {
         // * 🚩取其中两个不同的项 | 需要在后续「条件类比」中重复使用
         let term_t = other_position_t.select(t_term.clone().unwrap_components());
         let term_b = other_position_b.select(b_term.clone().unwrap_components());
-        let [mut sub, mut pre] = match figure {
+        let [sub, pre] = match figure {
             // * 📌主项 ⇒ sub来自信念，pre来自任务
             SS | SP => [term_b, term_t],
             // * 📌谓项 ⇒ sub来自任务，pre来自信念
@@ -331,11 +331,11 @@ mod dispatch {
             SP | PS => {
                 // * 🚩尝试统一查询变量
                 // * ⚠️【2024-07-14 03:13:32】不同@OpenNARS：无需再应用到整个词项——后续已经不再需要t_term与b_term
-                let unified_q = variable_process::unify_find_q(&sub, &pre, rng_seed2)
-                    .apply_to_term(&mut sub, &mut pre);
+                // * ⚠️【2024-07-31 21:37:10】激进改良：无需应用变量替换，只需考虑「是否可替换」
+                let unified_q = variable_process::has_unification_q(&sub, &pre, rng_seed2);
                 match unified_q {
                     // * 🚩成功统一 ⇒ 匹配反向
-                    true => match_reverse(context),
+                    true => match_reverse(task_sentence, belief_sentence, context),
                     // * 🚩未有统一 ⇒ 演绎+举例 | 顺序已在先前决定（要换早换了）
                     false => ded_exe(sub, pre, task_sentence, belief_sentence, context),
                 }
@@ -349,8 +349,17 @@ mod dispatch {
     ///   * conversion: <A --> B>? => <A --> B>.
     ///
     /// @param context Reference to the derivation context
-    fn match_reverse(context: &mut ReasonContextConcept) {
-        // TODO
+    fn match_reverse(
+        task_sentence: impl Sentence,
+        belief_sentence: impl Judgement,
+        context: &mut ReasonContextConcept,
+    ) {
+        match context.reason_direction() {
+            // * 🚩前向推理⇒判断句⇒尝试合并成对称形式（继承⇒相似，蕴含⇒等价）
+            Forward => infer_to_sym(task_sentence.unwrap_judgement(), &belief_sentence, context),
+            // * 🚩反向推理⇒疑问句⇒尝试执行转换规则
+            Backward => conversion(&belief_sentence, context),
+        }
     }
 
     /// 非对称×对称
@@ -448,7 +457,20 @@ mod dispatch {
         symmetric: impl Sentence,
         context: &mut ReasonContextConcept,
     ) {
-        // TODO
+        match context.reason_direction() {
+            // * 🚩前向推理⇒尝试合并到非对称形式（相似⇒继承，等价⇒蕴含）
+            // * 🚩若「当前任务」是「判断」，则两个都会是「判断」
+            Forward => infer_to_asy(
+                asymmetric.unwrap_judgement(),
+                symmetric.unwrap_judgement(),
+                context,
+            ),
+            // * 🚩反向推理：尝试「继承⇄相似」「蕴含⇄等价」
+            Backward => {
+                let task_sentence = &context.current_task().get_().sentence_clone(); // ! 复制以避免借用问题
+                convert_relation(task_sentence.unwrap_question(), context)
+            }
+        }
     }
 
     /// 对称×对称
@@ -468,6 +490,7 @@ mod dispatch {
         index: usize,
         context: &mut ReasonContextConcept,
     ) {
+        // TODO
     }
 
     /// ```nal
@@ -752,6 +775,158 @@ fn conditional_abd(
 ) -> bool {
     // TODO: 🚩待实现
     false
+}
+
+/// {<S --> P>, <P --> S} |- <S <-> p>
+/// Produce Similarity/Equivalence from a pair of reversed
+/// Inheritance/Implication
+/// * 📝非对称⇒对称（前向推理）
+fn infer_to_sym(
+    judgement1: &impl Judgement,
+    judgement2: &impl Judgement,
+    context: &mut ReasonContextConcept,
+) {
+    // * 🚩词项 * //
+    let [sub, pre] = cast_statement(judgement1.content().clone()).unwrap_components();
+    let content = unwrap_or_return!(
+        ?Term::make_statement_symmetric(judgement1.content(), sub, pre)
+    );
+
+    // * 🚩真值 * //
+    let truth = judgement1.intersection(judgement2);
+
+    // * 🚩预算 * //
+    let budget = context.budget_forward(&truth);
+
+    // * 🚩结论 * //
+    context.double_premise_task(content, Some(truth), budget);
+}
+
+/// * 📝对称⇒非对称（前向推理）
+///
+/// # 📄OpenNARS
+///
+/// {<S <-> P>, <P --> S>} |- <S --> P> Produce an Inheritance/Implication
+/// from a Similarity/Equivalence and a reversed Inheritance/Implication
+///
+/// @param asym    The asymmetric premise
+/// @param sym     The symmetric premise
+/// @param context Reference to the derivation context
+fn infer_to_asy(asy: &impl Judgement, sym: &impl Judgement, context: &mut ReasonContextConcept) {
+    // * 🚩词项 * //
+    // * 🚩提取 | 📄<S --> P> => S, P
+    // * 🚩构建新的相反陈述 | 📄S, P => <P --> S>
+    let [sub, pre] = cast_statement(asy.content().clone()).unwrap_components();
+    let content = unwrap_or_return!(
+        ?Term::make_statement(asy.content(), sub, pre)
+    );
+
+    // * 🚩真值 * //
+    let truth = sym.reduce_conjunction(asy);
+
+    // * 🚩预算 * //
+    let budget = context.budget_forward(&truth);
+
+    // * 🚩结论 * //
+    context.double_premise_task(content, Some(truth), budget);
+}
+
+/// * 📝转换（反向推理，但使用前向预算值）
+///
+/// # 📄OpenNARS
+///
+/// {<P --> S>} |- <S --> P> Produce an Inheritance/Implication from a
+/// reversed Inheritance/Implication
+///
+/// @param context Reference to the derivation context
+fn conversion(belief: &impl Judgement, context: &mut ReasonContextConcept) {
+    // * 🚩真值 * //
+    let truth = belief.conversion();
+
+    // * 🚩预算 * //
+    let budget = context.budget_forward(&truth);
+
+    // * 🚩转发到统一的逻辑
+    converted_judgment(truth, budget, context);
+}
+
+/// * 📝非对称⇔对称
+///
+/// # 📄OpenNARS
+///
+/// {<S --> P>} |- <S <-> P>
+/// {<S <-> P>} |- <S --> P> Switch between
+/// Inheritance/Implication and Similarity/Equivalence
+///
+/// @param context Reference to the derivation context
+fn convert_relation(task_question: &impl Question, context: &mut ReasonContextConcept) {
+    // * 🚩真值 * //
+    // * 🚩基于「当前信念」
+    let belief = unwrap_or_return!(
+        ?context.current_belief()
+    );
+    let truth = match task_question.content().is_commutative() {
+        // * 🚩可交换（相似/等价）⇒归纳
+        true => belief.analytic_abduction(ShortFloat::ONE),
+        // * 🚩不可交换（继承/蕴含）⇒演绎
+        false => belief.analytic_deduction(ShortFloat::ONE),
+    };
+    // * 🚩预算 * //
+    let budget = context.budget_forward(&truth);
+    // * 🚩继续向下分派函数
+    converted_judgment(truth, budget, context);
+}
+
+/// # 📄OpenNARS
+///
+/// Convert judgment into different relation
+///
+/// called in MatchingRules
+fn converted_judgment(
+    new_truth: TruthValue,
+    new_budget: BudgetValue,
+    context: &mut ReasonContextConcept,
+) {
+    // * 🚩词项 * //
+    let task_content = cast_statement(context.current_task().get_().content().clone());
+    let belief_content = cast_statement(
+        context
+            .current_belief()
+            .expect("概念推理一定有当前信念")
+            .content()
+            .clone(),
+    );
+    let copula = task_content.identifier().to_string();
+    let [sub_t, pre_t] = task_content.unwrap_components();
+    let [sub_b, pre_b] = belief_content.unwrap_components();
+    // * 🚩创建内容 | ✅【2024-06-10 10:26:14】已通过「长期稳定性」验证与原先逻辑的稳定
+    let [sub, pre] = match [sub_t.contain_var_q(), pre_t.contain_var_q()] {
+        // * 🚩谓项有查询变量⇒用「信念主项/信念谓项」替换
+        [_, true] => {
+            let eq_sub_t = sub_t == sub_b; // ! 欠一致：后初始化的要用到先初始化的，导致需要提取变量
+            [
+                sub_t,
+                match eq_sub_t {
+                    true => pre_b,
+                    false => sub_b,
+                },
+            ]
+        }
+        // * 🚩主项有查询变量⇒用「信念主项/信念谓项」替换
+        [true, _] => [
+            match pre_t == sub_b {
+                true => pre_b,
+                false => sub_b,
+            },
+            pre_t,
+        ],
+        // * 🚩否则：直接用「任务主项&任务谓项」替换
+        _ => [sub_t, pre_t],
+    };
+    let content = unwrap_or_return!(?Term::make_statement_relation(&copula, sub, pre));
+
+    // * 🚩结论 * //
+    context.single_premise_task_full(content, Punctuation::Judgement, Some(new_truth), new_budget)
 }
 
 #[cfg(test)]
@@ -1044,6 +1219,60 @@ mod tests {
             cyc 20
             "
             => ANSWER "<C --> B>" in outputs
+        }
+
+        conversion: {
+            "
+            nse <A --> B>.
+            nse <B --> A>?
+            cyc 10
+            "
+            => ANSWER "<B --> A>" in outputs
+        }
+
+        infer_to_asy: {
+            "
+            nse <A <-> B>.
+            nse <A --> B>?
+            cyc 10
+            "
+            => ANSWER "<A --> B>" in outputs
+        }
+
+        infer_to_sym: {
+            "
+            nse <A --> B>.
+            nse <A <-> B>?
+            cyc 10
+            "
+            => ANSWER "<A <-> B>" in outputs
+        }
+
+        conversion_high: {
+            "
+            nse <A ==> B>.
+            nse <B ==> A>?
+            cyc 10
+            "
+            => ANSWER "<B ==> A>" in outputs
+        }
+
+        infer_to_asy_high: {
+            "
+            nse <A <=> B>.
+            nse <A ==> B>?
+            cyc 10
+            "
+            => ANSWER "<A ==> B>" in outputs
+        }
+
+        infer_to_sym_high: {
+            "
+            nse <A ==> B>.
+            nse <A <=> B>?
+            cyc 10
+            "
+            => ANSWER "<A <=> B>" in outputs
         }
     }
 }
