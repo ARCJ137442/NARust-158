@@ -18,6 +18,21 @@ use ReasonDirection::*;
 mod utils {
     use super::{StatementRef, Term};
 
+    pub trait Opposite {
+        /// 调转到「相反方向」「相反位置」
+        /// * 🎯抽象自各个「三段论位置」
+        /// * 🎯为「三段论图式」添加方法
+        fn opposite(self) -> Self;
+
+        /// 返回自身与「自身的相反位置」
+        fn and_opposite(self) -> [Self; 2]
+        where
+            Self: Clone,
+        {
+            [self.clone(), self.opposite()]
+        }
+    }
+
     /// 🆕三段论位置
     /// * 🎯用于表征[`RuleTables::index_to_figure`]推导出的「三段论子类型」
     /// * 📝OpenNARS中是在「三段论推理」的「陈述🆚陈述」中表示「位置关系」
@@ -36,15 +51,17 @@ mod utils {
         Predicate = 1,
     }
 
-    impl SyllogismPosition {
+    impl Opposite for SyllogismPosition {
         /// 🆕调转到相反位置
-        pub fn opposite(self) -> Self {
+        fn opposite(self) -> Self {
             match self {
                 Subject => Predicate,
                 Predicate => Subject,
             }
         }
+    }
 
+    impl SyllogismPosition {
         /// 🆕从「数组索引」中来
         /// * 🎯[`RuleTables::__index_to_figure`]
         /// * 🚩核心：0→主项，1→谓项，整体`<主项 --> 谓项>`
@@ -61,6 +78,15 @@ mod utils {
         /// * 🚩直接构造二元组
         pub fn build_figure(self, other: Self) -> SyllogismFigure {
             [self, other]
+        }
+
+        /// 根据「三段论位置」从参数中选取一个参数
+        /// * 🎯在「陈述解包」的过程中使用
+        pub fn select<T>(self, [subject, predicate]: [T; 2]) -> T {
+            match self {
+                Subject => subject,
+                Predicate => predicate,
+            }
         }
     }
     use SyllogismPosition::*;
@@ -96,6 +122,14 @@ mod utils {
     /// location of the shared term
     pub type SyllogismFigure = [SyllogismPosition; 2];
 
+    impl Opposite for SyllogismFigure {
+        /// 🆕调转到相反位置：内部俩均如此
+        fn opposite(self) -> Self {
+            let [subject, predicate] = self;
+            [subject.opposite(), predicate.opposite()]
+        }
+    }
+
     /// 存储「三段论图式」常量
     /// * 🎯可完全引用，可简短使用
     ///   * ⚡长度与OpenNARS的`11`、`12`相近
@@ -130,6 +164,18 @@ mod utils {
         Predicate = 1,
         /// 整个词项（整体）
         Whole = -1,
+    }
+
+    impl Opposite for SyllogismSide {
+        /// 🆕调转到相反位置
+        fn opposite(self) -> Self {
+            use SyllogismSide::*;
+            match self {
+                Subject => Predicate,
+                Predicate => Subject,
+                Whole => Whole, // * 📌整体反过来还是整体
+            }
+        }
     }
 }
 pub use utils::*;
@@ -221,31 +267,44 @@ mod dispatch {
         let mut b_term = cast_statement(belief_sentence.clone_content());
         let rng_seed = context.shuffle_rng_seed();
         let rng_seed2 = context.shuffle_rng_seed();
+
+        // * 🚩尝试获取各大「共同项」与「其它项」的位置
+        // * 📝外部传入的「三段论图式」即「共同项的位置」，「其它项」即各处「共同项」的反向
+        let [[common_position_t, common_position_b], [other_position_t, other_position_b]] =
+            figure.and_opposite();
+        // * 🚩先尝试统一独立变量
+        let unified_i = variable_process::unify_find_i(
+            t_term.get_ref().get_at_position(common_position_t),
+            b_term.get_ref().get_at_position(common_position_b),
+            rng_seed,
+        )
+        .apply_to(
+            t_term.mut_ref().into_compound_ref(),
+            b_term.mut_ref().into_compound_ref(),
+        );
+        // * 🚩不能统一变量⇒终止
+        if !unified_i {
+            return;
+        }
+        // * 🚩统一后内容相等⇒终止
+        if t_term == b_term {
+            return;
+        }
+        // * 🚩取其中两个不同的项
+        let term_t = other_position_t.select(t_term.unwrap_components());
+        let term_b = other_position_b.select(b_term.unwrap_components());
+        let [mut term1, mut term2] = match figure {
+            // * 📌主项 ⇒ term1来自信念，term2来自任务
+            SS | SP => [term_b, term_t],
+            // * 📌谓项 ⇒ term1来自任务，term2来自信念
+            PS | PP => [term_t, term_b],
+        };
+
+        // 再分派特有逻辑
         match figure {
             // * 🚩主项×主项 <A --> B> × <A --> C>
             // induction
             SS => {
-                // * 🚩先尝试统一独立变量
-                let unified_i = variable_process::unify_find_i(
-                    t_term.get_ref().subject(),
-                    b_term.get_ref().subject(),
-                    rng_seed,
-                )
-                .apply_to(
-                    t_term.mut_ref().into_compound_ref(),
-                    b_term.mut_ref().into_compound_ref(),
-                );
-                // * 🚩不能统一变量⇒终止
-                if !unified_i {
-                    return;
-                }
-                // * 🚩统一后内容相等⇒终止
-                if t_term == b_term {
-                    return;
-                }
-                // * 🚩取其中两个不同的谓项 B + C
-                let ([_, term2], [_, term1]) =
-                    (t_term.unwrap_components(), b_term.unwrap_components());
                 // * 🚩构造复合词项
                 // TODO
                 // * 🚩归因+归纳+比较
@@ -254,27 +313,6 @@ mod dispatch {
             // * 🚩主项×谓项 <A --> B> × <C --> A>
             // deduction
             SP => {
-                // * 🚩先尝试统一独立变量
-                let unified_i = variable_process::unify_find_i(
-                    t_term.get_ref().subject(),
-                    b_term.get_ref().predicate(),
-                    rng_seed,
-                )
-                .apply_to(
-                    t_term.mut_ref().into_compound_ref(),
-                    b_term.mut_ref().into_compound_ref(),
-                );
-                // * 🚩不能统一变量⇒终止
-                if !unified_i {
-                    return;
-                }
-                // * 🚩统一后内容相等⇒终止
-                if t_term == b_term {
-                    return;
-                }
-                // * 🚩取其中两个不同的主项和谓项 C + B
-                let ([_, mut term2], [mut term1, _]) =
-                    (t_term.unwrap_components(), b_term.unwrap_components());
                 // * 🚩尝试统一查询变量
                 // * ⚠️【2024-07-14 03:13:32】不同@OpenNARS：无需再应用到整个词项——后续已经不再需要t_term与b_term
                 let unified_q = variable_process::unify_find_q(&term1, &term2, rng_seed2)
@@ -291,11 +329,6 @@ mod dispatch {
             // * 🚩谓项×主项 <A --> B> × <B --> C>
             // exemplification
             PS => {
-                // * 🚩先尝试统一独立变量
-                // * 📝统一之后，原先的变量就丢弃了
-                // * 🚩不能统一变量⇒终止
-                // * 🚩统一后内容相等⇒终止
-                // * 🚩取其中两个不同的主项和谓项 A + C
                 // * 🚩尝试统一查询变量
                 // * 🚩成功统一 ⇒ 匹配反向
                 // * 🚩未有统一 ⇒ 演绎+举例
@@ -303,10 +336,6 @@ mod dispatch {
             // * 🚩谓项×谓项 <A --> B> × <C --> B>
             // abduction
             PP => {
-                // * 🚩先尝试统一独立变量
-                // * 🚩不能统一变量⇒终止
-                // * 🚩统一后内容相等⇒终止
-                // * 🚩取其中两个不同的主项和谓项 A + C
                 // * 🚩先尝试进行「条件归纳」，有结果⇒返回
                 // if conditional abduction, skip the following
                 // * 🚩尝试构建复合词项
@@ -337,26 +366,27 @@ mod dispatch {
         let mut sym_s = cast_statement(symmetric.clone_content());
         let rng_seed = context.shuffle_rng_seed();
         let rng_seed2 = context.shuffle_rng_seed();
-        use SyllogismPosition::*;
 
         // * 🚩尝试获取各大「共同项」与「其它项」的位置
-        let ([common_position_asy, common_position_sym], switch_order) = match figure {
+        // * 📝外部传入的「三段论图式」即「共同项的位置」，「其它项」即各处「共同项」的反向
+        let [common_position_asy, common_position_sym] = figure;
+        let switch_order = match figure {
             // * 🚩主项×主项 <A --> B> × <A <-> C>
             // * 🚩取其中两个不同的谓项 B + C
             // * 🚩最后类比传参：`analogy(term2, term1, ...)`
-            SS => ([Subject, Subject], true),
+            SS => true,
             // * 🚩主项×谓项 <A --> B> × <C <-> A>
             // * 🚩取其中两个不同的主项 B + C
             // * 🚩最后类比传参：`analogy(term2, term1, ...)`
-            SP => ([Subject, Predicate], true),
+            SP => true,
             // * 🚩谓项×主项 <A --> B> × <B <-> C>
             // * 🚩取其中两个不同的主项 A + C
             // * 🚩最后类比传参：`analogy(term1, term2, ...)`
-            PS => ([Predicate, Subject], false),
+            PS => false,
             // * 🚩谓项×谓项 <A --> B> × <C <-> B>
             // * 🚩取其中两个不同的主项 A + C
             // * 🚩最后类比传参：`analogy(term1, term2, ...)`
-            PP => ([Predicate, Predicate], false),
+            PP => false,
         };
 
         // * 🚩先尝试统一独立变量
@@ -394,14 +424,14 @@ mod dispatch {
         // * 🚩未有统一 ⇒ 类比
         else {
             // 获取并拷贝相应位置的词项
-            let [term1, term2] = [
+            let [term_asy, term_sym] = [
                 asy_s.get_ref().get_at_position(term1_position).clone(),
                 sym_s.get_ref().get_at_position(term2_position).clone(),
             ];
             // 转换顺序：true => [C, B], false => [B, C]
             let [term1, term2] = match switch_order {
-                true => [term2, term1],
-                false => [term1, term2],
+                true => [term_sym, term_asy],
+                false => [term_asy, term_sym],
             };
             analogy(term1, term2, asymmetric, symmetric, context);
         }
@@ -873,5 +903,7 @@ mod tests {
             "
             => ANSWER "<B <-> C>" in outputs
         }
+
+        // TODO: 类比
     }
 }
