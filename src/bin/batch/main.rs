@@ -37,8 +37,11 @@ fn batch(
             None => return Ok(()),
             // 异常结束
             Some(Err(e)) => return Err(e),
-            // 正常获取但continue
-            Some(Ok(None)) => continue,
+            // EOF
+            Some(Ok(None)) => {
+                eprintln!("Program exited with EOF.");
+                break Ok(());
+            }
             // 正常获取
             Some(Ok(Some(input))) => input,
         };
@@ -80,6 +83,8 @@ pub fn batch_iter_stdin() -> impl Iterator<Item = Result<Option<String>>> {
             Err(e) => return Some(Err(e.into())),
         };
         if bytes == 0 {
+            // * 🚩【2024-07-31 23:33:20】此处实乃EOF也
+            // * 🔗参考「Rust如何检测EOF」：https://stackoverflow.com/questions/27475113/how-to-check-for-eof-with-read-line
             return Some(Ok(None));
         }
         // clear
