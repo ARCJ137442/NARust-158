@@ -290,13 +290,13 @@ mod dispatch {
         if t_term == b_term {
             return;
         }
-        // * 🚩取其中两个不同的项
-        let term_t = other_position_t.select(t_term.unwrap_components());
-        let term_b = other_position_b.select(b_term.unwrap_components());
-        let [mut term1, mut term2] = match figure {
-            // * 📌主项 ⇒ term1来自信念，term2来自任务
+        // * 🚩取其中两个不同的项 | 需要在后续「条件类比」中重复使用
+        let term_t = other_position_t.select(t_term.clone().unwrap_components());
+        let term_b = other_position_b.select(b_term.clone().unwrap_components());
+        let [mut sub, mut pre] = match figure {
+            // * 📌主项 ⇒ sub来自信念，pre来自任务
             SS | SP => [term_b, term_t],
-            // * 📌谓项 ⇒ term1来自任务，term2来自信念
+            // * 📌谓项 ⇒ sub来自任务，pre来自信念
             PS | PP => [term_t, term_b],
         };
 
@@ -308,38 +308,37 @@ mod dispatch {
                 // * 🚩构造复合词项
                 // TODO
                 // * 🚩归因+归纳+比较
-                abd_ind_com(term1, term2, task_sentence, belief_sentence, context);
-            }
-            // * 🚩主项×谓项 <A --> B> × <C --> A>
-            // deduction
-            SP => {
-                // * 🚩尝试统一查询变量
-                // * ⚠️【2024-07-14 03:13:32】不同@OpenNARS：无需再应用到整个词项——后续已经不再需要t_term与b_term
-                let unified_q = variable_process::unify_find_q(&term1, &term2, rng_seed2)
-                    .apply_to_term(&mut term1, &mut term2);
-                if unified_q {
-                    // * 🚩成功统一 ⇒ 匹配反向
-                    match_reverse(context);
-                }
-                // * 🚩未有统一 ⇒ 演绎+举例
-                else {
-                    ded_exe(term1, term2, task_sentence, belief_sentence, context);
-                }
-            }
-            // * 🚩谓项×主项 <A --> B> × <B --> C>
-            // exemplification
-            PS => {
-                // * 🚩尝试统一查询变量
-                // * 🚩成功统一 ⇒ 匹配反向
-                // * 🚩未有统一 ⇒ 演绎+举例
+                abd_ind_com(sub, pre, task_sentence, belief_sentence, context);
             }
             // * 🚩谓项×谓项 <A --> B> × <C --> B>
             // abduction
             PP => {
                 // * 🚩先尝试进行「条件归纳」，有结果⇒返回
-                // if conditional abduction, skip the following
+                let applied = conditional_abd(sub.clone(), pre.clone(), t_term, b_term, context);
+                if applied {
+                    // if conditional abduction, skip the following
+                    return;
+                }
                 // * 🚩尝试构建复合词项
+                // TODO
                 // * 🚩归因+归纳+比较
+                abd_ind_com(sub, pre, task_sentence, belief_sentence, context);
+            }
+            // * 🚩主项×谓项 <A --> B> × <C --> A>
+            // * 🚩谓项×主项 <A --> B> × <B --> C>
+            // * 📝【2024-07-31 19:52:56】sub、pre已经在先前「三段论图式选取」过程中确定，此两种形式均一致
+            // deduction | exemplification
+            SP | PS => {
+                // * 🚩尝试统一查询变量
+                // * ⚠️【2024-07-14 03:13:32】不同@OpenNARS：无需再应用到整个词项——后续已经不再需要t_term与b_term
+                let unified_q = variable_process::unify_find_q(&sub, &pre, rng_seed2)
+                    .apply_to_term(&mut sub, &mut pre);
+                match unified_q {
+                    // * 🚩成功统一 ⇒ 匹配反向
+                    true => match_reverse(context),
+                    // * 🚩未有统一 ⇒ 演绎+举例 | 顺序已在先前决定（要换早换了）
+                    false => ded_exe(sub, pre, task_sentence, belief_sentence, context),
+                }
             }
         }
     }
@@ -731,6 +730,30 @@ fn analogy(
     context.double_premise_task(content, truth, budget);
 }
 
+/// * 📝条件归因，消去S3、P，可能构造<S1 ==> S2>也可能构造<S2 ==> S1>
+/// * 🚩返回「是否应用成功」，用于规则表分派
+///
+/// # 📄OpenNARS
+///
+/// {<(&&, S2, S3) ==> P>, <(&&, S1, S3) ==> P>} |- <S1 ==> S2>
+///
+/// @param cond1   The condition of the first premise
+/// @param cond2   The condition of the second premise
+/// @param st1     The first premise
+/// @param st2     The second premise
+/// @param context Reference to the derivation context
+/// @return Whether there are derived tasks
+fn conditional_abd(
+    sub: Term,
+    pre: Term,
+    t_term: Statement,
+    b_term: Statement,
+    context: &mut ReasonContextConcept,
+) -> bool {
+    // TODO: 🚩待实现
+    false
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -825,6 +848,15 @@ mod tests {
             => ANSWER "<A --> C>" in outputs
         }
 
+        deduction_backward: {
+            "
+            nse <A --> B>.
+            nse <?1 --> B>?
+            cyc 10
+            "
+            => OUT "<?1 --> A>" in outputs
+        }
+
         exemplification: {
             "
             nse <A --> B>.
@@ -832,6 +864,15 @@ mod tests {
             cyc 10
             "
             => OUT "<C --> A>" in outputs
+        }
+
+        exemplification_backward: {
+            "
+            nse <A --> B>.
+            nse <?1 --> B>?
+            cyc 10
+            "
+            => OUT "<A --> ?1>" in outputs
         }
 
         exemplification_answer: {
@@ -844,7 +885,7 @@ mod tests {
             => ANSWER "<C --> A>" in outputs
         }
 
-        abduction: {
+        abduction_sub: {
             "
             nse <A --> B>.
             nse <A --> C>.
@@ -853,7 +894,7 @@ mod tests {
             => OUT "<B --> C>" in outputs
         }
 
-        abduction_answer: {
+        abduction_answer_sub: {
             "
             nse <A --> B>.
             nse <A --> C>.
@@ -863,7 +904,35 @@ mod tests {
             => ANSWER "<B --> C>" in outputs
         }
 
-        induction: {
+        abduction_backward_sub: {
+            "
+            nse <A --> B>.
+            nse <A --> {?1}>?
+            cyc 20
+            "
+            => OUT "<B --> {?1}>" in outputs
+        }
+
+        abduction_pre: {
+            "
+            nse <B --> A>.
+            nse <C --> A>.
+            cyc 10
+            "
+            => OUT "<C --> B>" in outputs
+        }
+
+        abduction_answer_pre: {
+            "
+            nse <B --> A>.
+            nse <C --> A>.
+            nse <C --> B>?
+            cyc 20
+            "
+            => ANSWER "<C --> B>" in outputs
+        }
+
+        induction_sub: {
             "
             nse <A --> B>.
             nse <A --> C>.
@@ -872,7 +941,7 @@ mod tests {
             => OUT "<C --> B>" in outputs
         }
 
-        induction_answer: {
+        induction_answer_sub: {
             "
             nse <A --> B>.
             nse <A --> C>.
@@ -882,7 +951,26 @@ mod tests {
             => ANSWER "<C --> B>" in outputs
         }
 
-        comparison: {
+        induction_pre: {
+            "
+            nse <B --> A>.
+            nse <C --> A>.
+            cyc 10
+            "
+            => OUT "<B --> C>" in outputs
+        }
+
+        induction_answer_pre: {
+            "
+            nse <B --> A>.
+            nse <C --> A>.
+            nse <B --> C>?
+            cyc 20
+            "
+            => ANSWER "<B --> C>" in outputs
+        }
+
+        comparison_sub: {
             "
             nse <A --> B>.
             nse <A --> C>.
@@ -891,7 +979,7 @@ mod tests {
             => OUT "<B <-> C>" in outputs
         }
 
-        comparison_answer: {
+        comparison_answer_sub: {
             "
             nse <A --> B>.
             nse <A --> C>.
@@ -901,6 +989,61 @@ mod tests {
             => ANSWER "<B <-> C>" in outputs
         }
 
-        // TODO: 类比
+        comparison_pre: {
+            "
+            nse <B --> A>.
+            nse <C --> A>.
+            cyc 10
+            "
+            => OUT "<B <-> C>" in outputs
+        }
+
+        comparison_answer_pre: {
+            "
+            nse <B --> A>.
+            nse <C --> A>.
+            nse <B <-> C>?
+            cyc 20
+            "
+            => ANSWER "<B <-> C>" in outputs
+        }
+
+        analogy_sub: {
+            "
+            nse <A --> B>.
+            nse <C <-> A>.
+            cyc 10
+            "
+            => OUT "<C --> B>" in outputs
+        }
+
+        analogy_answer_sub: {
+            "
+            nse <A --> B>.
+            nse <C <-> A>.
+            nse <C --> B>?
+            cyc 20
+            "
+            => ANSWER "<C --> B>" in outputs
+        }
+
+        analogy_pre: {
+            "
+            nse <A --> B>.
+            nse <C <-> A>.
+            cyc 10
+            "
+            => OUT "<C --> B>" in outputs
+        }
+
+        analogy_answer_pre: {
+            "
+            nse <A --> B>.
+            nse <C <-> A>.
+            nse <C --> B>?
+            cyc 20
+            "
+            => ANSWER "<C --> B>" in outputs
+        }
     }
 }
