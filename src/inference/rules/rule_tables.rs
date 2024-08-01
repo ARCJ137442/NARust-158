@@ -8,8 +8,8 @@
 
 use crate::{
     control::{ReasonContext, ReasonContextConcept, ReasonContextWithLinks},
-    entity::{Sentence, TLink, TLinkType},
-    inference::{syllogisms, SyllogismPosition},
+    entity::{Judgement, Sentence, TLink, TLinkType},
+    inference::{syllogisms, PremiseSource, SyllogismPosition, SyllogismSide},
     language::{CompoundTerm, Statement, Term},
     util::RefCount,
 };
@@ -55,9 +55,9 @@ pub fn reason(context: &mut ReasonContextConcept) {
     let task = task_rc.get_();
     let task_sentence = task.sentence_clone(); // 复制语句以避免借用问题
     let belief = context.current_belief().cloned(); // 复制语句以避免借用问题
-    let mut concept_term = context.current_concept().term().clone(); // cloning for substitution
-    let mut task_term = task.content().clone(); // cloning for substitution
-    let mut belief_term = context.current_belief_link().target().clone(); // cloning for substitution
+    let concept_term = context.current_concept().term().clone(); // cloning for substitution
+    let task_term = task.content().clone(); // cloning for substitution
+    let belief_term = context.current_belief_link().target().clone(); // cloning for substitution
     drop(task);
     drop(task_rc);
 
@@ -81,28 +81,33 @@ pub fn reason(context: &mut ReasonContextConcept) {
         // * 📄T="(&&,<#1 --> object>,<#1 --> (/,made_of,_,plastic)>)"
         // * + B="object"
         // * @ C="(&&,<#1 --> object>,<#1 --> (/,made_of,_,plastic)>)"
-        [SELF, Component] => {
-            compound_and_self(cast_compound(task_term), belief_term, true, context)
-        }
+        [SELF, Component] => compound_and_self(
+            cast_compound(task_term),
+            belief_term,
+            super::syllogistic_rules::PremiseSource::Task,
+            context,
+        ),
 
         // * 📄T="<<$1 --> [aggressive]> ==> <$1 --> murder>>"
         // * + B="[aggressive]"
         // * @ C="<<$1 --> [aggressive]> ==> <$1 --> murder>>"
-        [SELF, Compound] => {
-            compound_and_self(cast_compound(belief_term), task_term, false, context)
-        }
+        [SELF, Compound] => compound_and_self(
+            cast_compound(belief_term),
+            task_term,
+            super::syllogistic_rules::PremiseSource::Belief,
+            context,
+        ),
 
         // * 📄T="<{tim} --> (/,livingIn,_,{graz})>"
         // * + B="{tim}"
         // * @ C="<{tim} --> (/,livingIn,_,{graz})>"
         [SELF, ComponentStatement] => {
             if let Some(belief) = belief {
-                // SyllogisticRules.detachment(task, belief, bIndex, context);
                 super::syllogistic_rules::detachment(
                     &task_sentence,
                     &belief,
-                    super::syllogistic_rules::HighOrderPosition::Task,
-                    SyllogismPosition::from_index(b_index.expect("一定有索引")),
+                    super::syllogistic_rules::PremiseSource::Task,
+                    SyllogismPosition::from_index(b_index.unwrap()),
                     context,
                 )
             }
@@ -113,12 +118,11 @@ pub fn reason(context: &mut ReasonContextConcept) {
         // * @ C=T
         [SELF, CompoundStatement] => {
             if let Some(belief) = belief {
-                // SyllogisticRules.detachment(belief, task, bIndex, context);
                 super::syllogistic_rules::detachment(
                     &task_sentence,
                     &belief,
-                    super::syllogistic_rules::HighOrderPosition::Belief,
-                    SyllogismPosition::from_index(b_index.expect("一定有索引")),
+                    super::syllogistic_rules::PremiseSource::Belief,
+                    SyllogismPosition::from_index(b_index.unwrap()),
                     context,
                 )
             }
@@ -130,10 +134,15 @@ pub fn reason(context: &mut ReasonContextConcept) {
         [SELF, ComponentCondition] => {
             if let Some(belief) = belief {
                 // * 📝「复合条件」一定有两层，就处在作为「前件」的「条件」中
-                /* SyllogisticRules.conditionalDedInd(
-                (Implication) taskTerm, bLink.getIndex(1),
-                beliefTerm, tIndex,
-                context); */
+                super::syllogistic_rules::conditional_ded_ind(
+                    cast_statement(task_term),
+                    *b_link.get_index(1).unwrap(),
+                    belief_term,
+                    belief,
+                    crate::inference::PremiseSource::Task,
+                    SyllogismSide::from_index(t_index),
+                    context,
+                )
             }
         }
 
@@ -147,10 +156,15 @@ pub fn reason(context: &mut ReasonContextConcept) {
             // * * belief="<(&&,<$1 --> flyer>,<(*,$1,worms) --> food>) ==> <$1 --> bird>>"
             if let Some(belief) = belief {
                 // * 📝「复合条件」一定有两层，就处在作为「前件」的「条件」中
-                /* SyllogisticRules.conditionalDedInd(
-                (Implication) beliefTerm, bLink.getIndex(1),
-                taskTerm, tIndex,
-                context); */
+                super::syllogistic_rules::conditional_ded_ind(
+                    cast_statement(belief_term),
+                    *b_link.get_index(1).unwrap(),
+                    task_term,
+                    belief,
+                    crate::inference::PremiseSource::Belief,
+                    SyllogismSide::from_index(t_index),
+                    context,
+                )
             }
         }
 
@@ -166,12 +180,11 @@ pub fn reason(context: &mut ReasonContextConcept) {
         // * 📄T="(&&,<cup --> #1>,<toothbrush --> #1>)"
         // * + B="<cup --> [bendable]>"
         // * @ C="cup"
-        [Compound, Compound] => {
-            /* compoundAndCompound(
-            (CompoundTerm) taskTerm,
-            (CompoundTerm) beliefTerm,
-            context); */
-        }
+        [Compound, Compound] => compound_and_compound(
+            cast_compound(task_term),
+            cast_compound(belief_term),
+            context,
+        ),
 
         [Compound, ComponentStatement] => {}
 
@@ -179,12 +192,15 @@ pub fn reason(context: &mut ReasonContextConcept) {
         // * 📄T="(&&,<{tim} --> #1>,<{tom} --> #1>)"
         // * + B="<{tom} --> murder>"
         // * @ C="{tom}"
-        [Compound, CompoundStatement] => {
-            /* compoundAndStatement(
-            (CompoundTerm) taskTerm, tIndex,
-            (Statement) beliefTerm, bIndex,
-            beliefTerm, context); */
-        }
+        [Compound, CompoundStatement] => compound_and_statement(
+            task_term == belief_term,
+            super::syllogistic_rules::PremiseSource::Task,
+            cast_compound(task_term),
+            t_index.unwrap(),
+            cast_statement(belief_term),
+            SyllogismPosition::from_index(b_index.unwrap()),
+            context,
+        ),
 
         [Compound, ComponentCondition] => {}
 
@@ -192,11 +208,16 @@ pub fn reason(context: &mut ReasonContextConcept) {
         // * + B="<(&&,<$1-->[aggressive]>,<$1-->(/,livingIn,_,{graz})>)==><$1-->murder>>"
         // * @ C="(/,livingIn,_,{graz})"
         [Compound, CompoundCondition] => {
-            /* reason_compoundAndCompoundCondition(
-            context,
-            task, (CompoundTerm) taskTerm,
-            belief, (Implication) beliefTerm,
-            bIndex); */
+            if let Some(belief) = belief {
+                compound_and_compound_condition(
+                    task_sentence,
+                    belief,
+                    cast_compound(task_term),
+                    cast_statement(belief_term),
+                    SyllogismPosition::from_index(b_index.unwrap()),
+                    context,
+                )
+            }
         }
 
         // * 📝【2024-07-10 22:37:22】OpenNARS均不存在
@@ -208,23 +229,28 @@ pub fn reason(context: &mut ReasonContextConcept) {
         // * 📄T="<{tim} --> (/,livingIn,_,{graz})>"
         // * + B="tim"
         // * @ C="{tim}"
-        [CompoundStatement, Component] => {
-            /* componentAndStatement(
-            (CompoundTerm) conceptTerm, bIndex,
-            (Statement) taskTerm,
-            tIndex,
-            context); */
-        }
+        [CompoundStatement, Component] => component_and_statement(
+            task_term == belief_term,
+            true,
+            cast_compound(concept_term),
+            b_index.unwrap(),
+            cast_statement(task_term),
+            SyllogismPosition::from_index(t_index.unwrap()),
+            context,
+        ),
 
         // * 📄T="<{tim} --> (/,livingIn,_,{graz})>"
         // * + B="{tim}"
         // * @ C="tim"
-        [CompoundStatement, Compound] => {
-            /* compoundAndStatement(
-            (CompoundTerm) beliefTerm, bIndex,
-            (Statement) taskTerm, tIndex,
-            beliefTerm, context); */
-        }
+        [CompoundStatement, Compound] => compound_and_statement(
+            task_term == belief_term,
+            super::syllogistic_rules::PremiseSource::Belief,
+            cast_compound(belief_term.clone()),
+            b_index.unwrap(),
+            cast_statement(task_term),
+            SyllogismPosition::from_index(t_index.unwrap()),
+            context,
+        ),
 
         [CompoundStatement, ComponentStatement] => {}
 
@@ -234,7 +260,6 @@ pub fn reason(context: &mut ReasonContextConcept) {
         [CompoundStatement, CompoundStatement] => {
             if let Some(belief) = belief {
                 syllogisms(
-                    /* t_link, b_link, */
                     cast_statement(task_term),
                     cast_statement(belief_term),
                     t_index.expect("T链接索引越界@三段论推理"),
@@ -252,12 +277,17 @@ pub fn reason(context: &mut ReasonContextConcept) {
         // * @ C="(/,livingIn,_,{graz})"
         [CompoundStatement, CompoundCondition] => {
             if let Some(belief) = belief {
-                /* conditionalDedIndWithVar(
-                // * 🚩获取「信念链」内部指向的复合词项
-                // * 📝「复合条件」一定有两层，就处在作为「前件」的「条件」中
-                (Implication) beliefTerm, bLink.getIndex(1),
-                (Statement) taskTerm,
-                tIndex, context); */
+                conditional_ded_ind_with_var(
+                    PremiseSource::Belief,
+                    // * 🚩获取「信念链」内部指向的复合词项
+                    // * 📝「复合条件」一定有两层，就处在作为「前件」的「条件」中
+                    cast_statement(belief_term),
+                    b_link.get_index(1).cloned().unwrap(),
+                    cast_statement(task_term),
+                    SyllogismPosition::from_index(t_index.unwrap()),
+                    belief,
+                    context,
+                )
             }
         }
 
@@ -273,7 +303,15 @@ pub fn reason(context: &mut ReasonContextConcept) {
         // * + B="(/,livingIn,_,{graz})"
         // * @ C="{graz}"
         [CompoundCondition, Compound] => {
-            if let Some(belief) = belief { /* detachmentWithVar(task, belief, tIndex, context); */ }
+            if let Some(belief) = belief {
+                super::syllogistic_rules::detachment_with_var(
+                    task_sentence,
+                    belief,
+                    super::syllogistic_rules::PremiseSource::Task,
+                    SyllogismPosition::from_index(t_index.unwrap()),
+                    context,
+                )
+            }
         }
 
         [CompoundCondition, ComponentStatement] => {}
@@ -283,10 +321,15 @@ pub fn reason(context: &mut ReasonContextConcept) {
         // * @ C="sunglasses"
         [CompoundCondition, CompoundStatement] => {
             if let Some(belief) = belief {
-                /* compoundConditionAndCompoundStatement(
-                context,
-                task, (Implication) taskTerm, tIndex,
-                belief, (Statement) beliefTerm, bIndex); */
+                compound_condition_and_compound_statement(
+                    task_sentence,
+                    cast_statement(task_term),
+                    SyllogismPosition::from_index(t_index.unwrap()),
+                    belief,
+                    cast_statement(belief_term),
+                    SyllogismPosition::from_index(b_index.unwrap()),
+                    context,
+                )
             }
         }
 
@@ -296,13 +339,120 @@ pub fn reason(context: &mut ReasonContextConcept) {
     }
 }
 
+/// 分派：复合词项与其元素
+///
+/// # 📄OpenNARS
+///
+/// Inference between a compound term and a component of it
 fn compound_and_self(
     compound: CompoundTerm,
     component: Term,
-    is_compound_from_task: bool,
+    where_compound_from: super::syllogistic_rules::PremiseSource,
     context: &mut ReasonContextConcept,
 ) {
-    context.report_comment(format!("TODO @ compound_and_self: \ncompound={compound}\ncomponent={component}\nis_compound_from_task={is_compound_from_task}"))
+    // TODO
+    context.report_comment(format!("TODO @ compound_and_self: \ncompound={compound}\ncomponent={component}\nwhere_compound_from={where_compound_from:?}"))
+}
+
+/// 分派：复合词项与复合词项
+///
+/// # 📄OpenNARS
+///
+/// Inference between two compound terms
+fn compound_and_compound(
+    task_term: CompoundTerm,
+    belief_term: CompoundTerm,
+    context: &mut ReasonContextConcept,
+) {
+    // * 🚩非同类⇒返回
+    if !task_term.is_same_type(&belief_term) {
+        return;
+    }
+    use super::syllogistic_rules::PremiseSource::*;
+    use std::cmp::Ordering::*;
+    match task_term
+        .get_ref()
+        .size()
+        .cmp(&belief_term.get_ref().size())
+    {
+        // * 🚩任务词项 > 信念词项 ⇒ 以「任务词项」为整体
+        Greater => compound_and_self(task_term, belief_term.into(), Task, context),
+        // * 🚩任务词项 < 信念词项 ⇒ 以「信念词项」为整体
+        Less => compound_and_self(belief_term, task_term.into(), Belief, context),
+        // * 🚩其它情况 ⇒ 返回
+        _ => {}
+    }
+}
+
+/// 分派：复合词项与陈述
+///
+/// # 📄OpenNARS
+///
+/// Inference between a compound term and a statement
+fn compound_and_statement(
+    statement_equals_belief: bool,
+    compound_from: super::syllogistic_rules::PremiseSource,
+    compound: CompoundTerm,
+    index: usize,
+    statement: Statement,
+    side: SyllogismPosition,
+    context: &mut ReasonContextConcept,
+) {
+    // TODO
+}
+
+/// 分派：复合词项与陈述
+///
+/// # 📄OpenNARS
+///
+/// Inference between a compound term and a statement
+fn component_and_statement(
+    statement_equals_belief: bool,
+    compound_from_concept: bool,
+    compound: CompoundTerm,
+    index: usize,
+    statement: Statement,
+    side: SyllogismPosition,
+    context: &mut ReasonContextConcept,
+) {
+    // TODO
+}
+
+/// 分派：复合词项×复合条件
+fn compound_and_compound_condition(
+    task_sentence: impl Sentence,
+    belief: impl Judgement,
+    task_term: CompoundTerm,
+    belief_term: Statement,
+    b_index: SyllogismPosition,
+    context: &mut ReasonContextConcept,
+) {
+    // TODO
+}
+
+/// 分派：条件演绎/归纳 & 变量
+fn conditional_ded_ind_with_var(
+    conditional_from: PremiseSource,
+    conditional: Statement,
+    index: usize,
+    statement: Statement,
+    side: SyllogismPosition,
+    belief: impl Judgement,
+    context: &mut ReasonContextConcept,
+) {
+    // TODO
+}
+
+fn compound_condition_and_compound_statement(
+    task_sentence: impl Sentence,
+    task_term: Statement,
+    t_side: SyllogismPosition,
+    belief: crate::entity::JudgementV1,
+    belief_term: Statement,
+    b_side: SyllogismPosition,
+    context: &mut ReasonContextConcept,
+) {
+    // TODO
 }
 
 /// 一些通用函数

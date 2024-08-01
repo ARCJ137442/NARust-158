@@ -174,6 +174,20 @@ mod utils {
         Whole = -1,
     }
 
+    impl SyllogismSide {
+        /// 🆕从可用的「数组索引」中来
+        /// * 🚩核心：Some(0)→主项，Some(1)→谓项，None→整体`<主项 --> 谓项>`
+        pub fn from_index(index: Option<usize>) -> Self {
+            use SyllogismSide::*;
+            match index {
+                Some(0) => Subject,
+                Some(1) => Predicate,
+                None => Whole,
+                _ => panic!("无效索引"),
+            }
+        }
+    }
+
     impl Opposite for SyllogismSide {
         /// 🆕调转到相反位置
         fn opposite(self) -> Self {
@@ -186,13 +200,37 @@ mod utils {
         }
     }
 
+    // TODO: 转移到更通用的「规则表」中
     /// 分离规则中「高阶语句」的位置
     /// * 📄任务句
     /// * 📄信念句
     #[derive(Debug, Clone, Copy)]
-    pub enum HighOrderPosition {
+    pub enum PremiseSource {
         Task,
         Belief,
+    }
+
+    impl PremiseSource {
+        /// 交换「任务⇄信念」
+        pub fn swap(self) -> Self {
+            use PremiseSource::*;
+            match self {
+                Task => Belief,
+                Belief => Task,
+            }
+        }
+
+        /// 在「任务」「信念」中选择
+        /// * 🚩传入`[任务, 信念]`，始终返回`[任务/信念, 信念/任务]`
+        ///   * 「任务」 ⇒ `[任务, 信念]`
+        ///   * 「信念」 ⇒ `[信念, 任务]`
+        pub fn select<T>(self, [task_thing, belief_thing]: [T; 2]) -> [T; 2] {
+            use PremiseSource::*;
+            match self {
+                Task => [task_thing, belief_thing],
+                Belief => [belief_thing, task_thing],
+            }
+        }
     }
 }
 pub use utils::*;
@@ -260,7 +298,7 @@ mod dispatch {
                 detachment_with_var(
                     task_sentence, // ! 📌【2024-08-01 18:26:04】需要传递所有权：直接统一语句中的变量
                     belief, // ! 📌【2024-08-01 18:26:04】需要传递所有权：直接统一语句中的变量
-                    HighOrderPosition::Belief,
+                    PremiseSource::Belief,
                     SyllogismPosition::from_index(b_index),
                     context,
                 )
@@ -270,7 +308,7 @@ mod dispatch {
                 detachment_with_var(
                     task_sentence, // ! 📌【2024-08-01 18:26:04】需要传递所有权：直接统一语句中的变量
                     belief, // ! 📌【2024-08-01 18:26:04】需要传递所有权：直接统一语句中的变量
-                    HighOrderPosition::Task,
+                    PremiseSource::Task,
                     SyllogismPosition::from_index(t_index),
                     context,
                 )
@@ -525,18 +563,18 @@ mod dispatch {
     }
 
     /// 分离（可带变量）
-    fn detachment_with_var(
+    pub fn detachment_with_var(
         mut task_sentence: impl Sentence,
         mut belief: impl Judgement,
-        high_order_position: HighOrderPosition,
+        high_order_position: PremiseSource,
         position_sub_in_hi: SyllogismPosition,
         context: &mut ReasonContextConcept,
     ) {
         // * 🚩提取元素
         let [term_t, term_b] = [task_sentence.content(), belief.content()];
         let (main_statement, sub_content) = match high_order_position {
-            HighOrderPosition::Task => (term_t.as_statement().unwrap(), term_b),
-            HighOrderPosition::Belief => (term_b.as_statement().unwrap(), term_t),
+            PremiseSource::Task => (term_t.as_statement().unwrap(), term_b),
+            PremiseSource::Belief => (term_b.as_statement().unwrap(), term_t),
         };
         let component = position_sub_in_hi.select(main_statement.sub_pre()); // * 🚩前件
 
@@ -561,8 +599,8 @@ mod dispatch {
             variable_process::unify_find_i(component, sub_content, context.shuffle_rng_seed());
         let [term_mut_t, term_mut_b] = [task_sentence.content_mut(), belief.content_mut()]; // 获取可变引用并统一
         let [main_content_mut, sub_content_mut] = match high_order_position {
-            HighOrderPosition::Task => [term_mut_t, term_mut_b],
-            HighOrderPosition::Belief => [term_mut_b, term_mut_t],
+            PremiseSource::Task => [term_mut_t, term_mut_b],
+            PremiseSource::Belief => [term_mut_b, term_mut_t],
         };
         let unified_i = unification_i.apply_to_term(main_content_mut, sub_content_mut);
         // * 🚩统一成功⇒分离
@@ -579,8 +617,8 @@ mod dispatch {
         // * 🚩重新提取
         let [term_t, term_b] = [task_sentence.content(), belief.content()];
         let (main_statement, sub_content) = match high_order_position {
-            HighOrderPosition::Task => (term_t.as_statement().unwrap(), term_b),
-            HighOrderPosition::Belief => (term_b.as_statement().unwrap(), term_t),
+            PremiseSource::Task => (term_t.as_statement().unwrap(), term_b),
+            PremiseSource::Belief => (term_b.as_statement().unwrap(), term_t),
         };
         // ! ⚠️【2024-06-10 17:52:44】「当前任务」与「主陈述」可能不一致：主陈述可能源自「当前信念」
         // * * 当前任务="<(*,{tom},(&,glasses,[black])) --> own>."
@@ -889,6 +927,25 @@ fn conditional_abd(
     false
 }
 
+/// * 📝条件演绎/条件归纳
+///
+/// ```nal
+/// {<(&&, S1, S2, S3) ==> P>, S1} |- <(&&, S2, S3) ==> P>
+/// {<(&&, S2, S3) ==> P>, <S1 ==> S2>} |- <(&&, S1, S3) ==> P>
+/// {<(&&, S1, S3) ==> P>, <S1 ==> S2>} |- <(&&, S2, S3) ==> P>
+/// ```
+pub fn conditional_ded_ind(
+    conditional: Statement,
+    index_in_condition: usize,
+    premise2: Term,
+    belief: impl Judgement,
+    conditional_position: PremiseSource,
+    side: SyllogismSide,
+    context: &mut ReasonContextConcept,
+) {
+    // TODO: 🚩待实现
+}
+
 /// {<S --> P>, <P --> S} |- <S <-> p>
 /// Produce Similarity/Equivalence from a pair of reversed
 /// Inheritance/Implication
@@ -1081,14 +1138,14 @@ fn resemblance(
 pub fn detachment(
     task_sentence: &impl Sentence,
     belief: &impl Judgement,
-    high_order_position: HighOrderPosition,
+    high_order_position: PremiseSource,
     position_sub_in_hi: SyllogismPosition,
     context: &mut ReasonContextConcept,
 ) {
     // * 🚩合法性
     let high_order_statement = match high_order_position {
-        HighOrderPosition::Task => task_sentence.content(),
-        HighOrderPosition::Belief => belief.content(),
+        PremiseSource::Task => task_sentence.content(),
+        PremiseSource::Belief => belief.content(),
     };
     if !(high_order_statement.instanceof_implication()
         || high_order_statement.instanceof_equivalence())
@@ -1104,8 +1161,8 @@ pub fn detachment(
     let direction = context.reason_direction();
     // * 🚩词项
     let sub_content = match high_order_position {
-        HighOrderPosition::Task => belief.content(),
-        HighOrderPosition::Belief => task_sentence.content(),
+        PremiseSource::Task => belief.content(),
+        PremiseSource::Belief => task_sentence.content(),
     };
     use SyllogismPosition::*;
     let content = match position_sub_in_hi {
@@ -1130,11 +1187,11 @@ pub fn detachment(
         Forward => {
             // 提取主句、副句
             let [main_sentence_truth, sub_sentence_truth] = match high_order_position {
-                HighOrderPosition::Task => [
+                PremiseSource::Task => [
                     TruthValue::from(task_sentence.unwrap_judgement()),
                     TruthValue::from(belief),
                 ],
-                HighOrderPosition::Belief => [
+                PremiseSource::Belief => [
                     TruthValue::from(belief),
                     TruthValue::from(task_sentence.unwrap_judgement()),
                 ],
