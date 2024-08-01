@@ -249,7 +249,7 @@ pub fn reason(context: &mut ReasonContextConcept) {
                     cast_statement(task_term),
                     cast_statement(belief_term),
                     t_index.expect("T链接索引越界@三段论推理"),
-                    b_index.expect("T链接索引越界@三段论推理"),
+                    b_index.expect("B链接索引越界@三段论推理"),
                     belief,
                     context,
                 )

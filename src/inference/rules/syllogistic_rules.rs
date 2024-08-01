@@ -433,10 +433,8 @@ pub fn detachment(
     context: &mut ReasonContextConcept,
 ) {
     // * 🚩合法性
-    let high_order_statement = match high_order_position {
-        PremiseSource::Task => task_sentence.content(),
-        PremiseSource::Belief => belief.content(),
-    };
+    let [high_order_statement, _] =
+        high_order_position.select([task_sentence.content(), belief.content()]); // 按位置选取高阶陈述
     if !(high_order_statement.instanceof_implication()
         || high_order_statement.instanceof_equivalence())
     {
@@ -450,10 +448,7 @@ pub fn detachment(
     let [sub, pre] = high_order_statement.unwrap_components();
     let direction = context.reason_direction();
     // * 🚩词项
-    let sub_content = match high_order_position {
-        PremiseSource::Task => belief.content(),
-        PremiseSource::Belief => task_sentence.content(),
-    };
+    let [_, sub_content] = high_order_position.select([task_sentence.content(), belief.content()]); // 选取另一侧的子内容
     use SyllogismPosition::*;
     let content = match position_sub_in_hi {
         // * 🚩主项&相等⇒取出
@@ -476,16 +471,10 @@ pub fn detachment(
     let truth = match direction {
         Forward => {
             // 提取主句、副句
-            let [main_sentence_truth, sub_sentence_truth] = match high_order_position {
-                PremiseSource::Task => [
-                    TruthValue::from(task_sentence.unwrap_judgement()),
-                    TruthValue::from(belief),
-                ],
-                PremiseSource::Belief => [
-                    TruthValue::from(belief),
-                    TruthValue::from(task_sentence.unwrap_judgement()),
-                ],
-            };
+            let [main_sentence_truth, sub_sentence_truth] = high_order_position.select([
+                TruthValue::from(task_sentence.unwrap_judgement()),
+                TruthValue::from(belief),
+            ]);
             // 计算真值
             Some(match (high_order_symmetric, position_sub_in_hi) {
                 // * 🚩等价⇒类比

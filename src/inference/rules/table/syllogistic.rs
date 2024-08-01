@@ -346,10 +346,8 @@ pub fn detachment_with_var(
 ) {
     // * 🚩提取元素
     let [term_t, term_b] = [task_sentence.content(), belief.content()];
-    let (main_statement, sub_content) = match high_order_position {
-        PremiseSource::Task => (term_t.as_statement().unwrap(), term_b),
-        PremiseSource::Belief => (term_b.as_statement().unwrap(), term_t),
-    };
+    let [main_statement, sub_content] = high_order_position.select([term_t, term_b]); // 先选中高阶陈述（任务⇒顺序不变，信念⇒顺序反转）
+    let main_statement = main_statement.as_statement().unwrap();
     let component = position_sub_in_hi.select(main_statement.sub_pre()); // * 🚩前件
 
     // * 🚩非继承或否定⇒提前结束
@@ -371,11 +369,8 @@ pub fn detachment_with_var(
     // * 🚩若非常量（有变量） ⇒ 尝试统一独立变量
     let unification_i =
         variable_process::unify_find_i(component, sub_content, context.shuffle_rng_seed());
-    let [term_mut_t, term_mut_b] = [task_sentence.content_mut(), belief.content_mut()]; // 获取可变引用并统一
-    let [main_content_mut, sub_content_mut] = match high_order_position {
-        PremiseSource::Task => [term_mut_t, term_mut_b],
-        PremiseSource::Belief => [term_mut_b, term_mut_t],
-    };
+    let [main_content_mut, sub_content_mut] =
+        high_order_position.select([task_sentence.content_mut(), belief.content_mut()]); // 选取可变引用并统一
     let unified_i = unification_i.apply_to_term(main_content_mut, sub_content_mut);
     // * 🚩统一成功⇒分离
     if unified_i {
@@ -390,10 +385,8 @@ pub fn detachment_with_var(
 
     // * 🚩重新提取
     let [term_t, term_b] = [task_sentence.content(), belief.content()];
-    let (main_statement, sub_content) = match high_order_position {
-        PremiseSource::Task => (term_t.as_statement().unwrap(), term_b),
-        PremiseSource::Belief => (term_b.as_statement().unwrap(), term_t),
-    };
+    let [main_statement, sub_content] = high_order_position.select([term_t, term_b]); // 选高阶陈述（任务⇒顺序不变，信念⇒顺序反转）
+    let main_statement = main_statement.as_statement().unwrap();
     // ! ⚠️【2024-06-10 17:52:44】「当前任务」与「主陈述」可能不一致：主陈述可能源自「当前信念」
     // * * 当前任务="<(*,{tom},(&,glasses,[black])) --> own>."
     // * * 主陈述="<<$1 --> (/,livingIn,_,{graz})> ==> <(*,$1,sunglasses) --> own>>"

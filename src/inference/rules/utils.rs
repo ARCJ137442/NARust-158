@@ -39,19 +39,13 @@ pub enum PremiseSource {
 }
 
 impl PremiseSource {
-    /// 交换「任务⇄信念」
-    pub fn swap(self) -> Self {
-        use PremiseSource::*;
-        match self {
-            Task => Belief,
-            Belief => Task,
-        }
-    }
-
     /// 在「任务」「信念」中选择
+    /// * 📌选取原则：**根据内容选中的**永远在**第一个**
     /// * 🚩传入`[任务, 信念]`，始终返回`[任务/信念, 信念/任务]`
     ///   * 「任务」 ⇒ `[任务, 信念]`
     ///   * 「信念」 ⇒ `[信念, 任务]`
+    /// * ✅【2024-08-01 21:27:43】正向选择、反向选择可直接`let [X, _] = ...`与`let [_, X] = ...`搞定
+    ///   * 📌【2024-08-01 21:28:22】无需「选择反转」
     pub fn select<T>(self, [task_thing, belief_thing]: [T; 2]) -> [T; 2] {
         use PremiseSource::*;
         match self {
