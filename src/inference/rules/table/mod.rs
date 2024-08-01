@@ -1,76 +1,26 @@
 //! 🎯复刻OpenNARS `nars.inference.RuleTables`
 //! * 📌「概念推理」的入口函数
 //! * 📝规则分派的起始点
+//! * 🎯负责所有规则的分派入口
+//! * 🚩直接调用所有具体规则，或调用子分派（如 三段论规则的分派）
+//!   * 📌核心：不直接涉及「导出结论」
 //!
 //! ## Logs
 //!
 //! * ♻️【2024-07-10 21:44:07】开始根据改版OpenNARS重写
+//! * ♻️【2024-08-01 21:02:11】开始再重构「分派部分」与「规则部分」
 
 use crate::{
-    control::{ReasonContext, ReasonContextConcept, ReasonContextWithLinks},
-    entity::{Judgement, Sentence, TLink, TLinkType},
-    inference::{syllogisms, SyllogismPosition, SyllogismSide},
+    control::*,
+    entity::*,
+    inference::rules::utils::*,
     language::{CompoundTerm, Statement, Term},
     util::RefCount,
 };
 
-mod utils {
-
-    /// 分离规则中「高阶语句」的位置
-    /// * 📄任务句
-    /// * 📄信念句
-    #[derive(Debug, Clone, Copy)]
-    pub enum PremiseSource {
-        Task,
-        Belief,
-    }
-
-    impl PremiseSource {
-        /// 交换「任务⇄信念」
-        pub fn swap(self) -> Self {
-            use PremiseSource::*;
-            match self {
-                Task => Belief,
-                Belief => Task,
-            }
-        }
-
-        /// 在「任务」「信念」中选择
-        /// * 🚩传入`[任务, 信念]`，始终返回`[任务/信念, 信念/任务]`
-        ///   * 「任务」 ⇒ `[任务, 信念]`
-        ///   * 「信念」 ⇒ `[信念, 任务]`
-        pub fn select<T>(self, [task_thing, belief_thing]: [T; 2]) -> [T; 2] {
-            use PremiseSource::*;
-            match self {
-                Task => [task_thing, belief_thing],
-                Belief => [belief_thing, task_thing],
-            }
-        }
-    }
-}
-pub use utils::*;
-
-/// 在断言的情况下，从[`Term`]中提取[`CompoundTerm`]
-/// * 🎯对标OpenNARS`(CompoundTerm) term`的转换
-pub(super) fn cast_compound(term: Term) -> CompoundTerm {
-    // * 🚩调试时假定复合词项
-    debug_assert!(
-        term.is_compound(),
-        "强制转换失败：词项\"{term}\"必须是复合词项"
-    );
-    term.try_into().expect("必定是复合词项")
-}
-
-/// 在断言的情况下，从[`Term`]中提取[`Statement`]
-/// * 🎯对标OpenNARS`(Statement) term`的转换
-pub(super) fn cast_statement(term: Term) -> Statement {
-    // * 🚩调试时假定复合词项
-    debug_assert!(
-        term.is_statement(),
-        "强制转换失败：词项\"{term}\"必须是复合词项"
-    );
-    term.try_into().expect("必定是复合词项")
-}
+// 三段论规则分派
+mod syllogistic;
+use syllogistic::*;
 
 /// 模拟`RuleTables.reason`
 /// * 📌规则表入口
@@ -175,7 +125,7 @@ pub fn reason(context: &mut ReasonContextConcept) {
                     *b_link.get_index(1).unwrap(),
                     belief_term,
                     belief,
-                    crate::inference::PremiseSource::Task,
+                    PremiseSource::Task,
                     SyllogismSide::from_index(t_index),
                     context,
                 )
@@ -197,7 +147,7 @@ pub fn reason(context: &mut ReasonContextConcept) {
                     *b_link.get_index(1).unwrap(),
                     task_term,
                     belief,
-                    crate::inference::PremiseSource::Belief,
+                    PremiseSource::Belief,
                     SyllogismSide::from_index(t_index),
                     context,
                 )
@@ -340,7 +290,7 @@ pub fn reason(context: &mut ReasonContextConcept) {
         // * @ C="{graz}"
         [CompoundCondition, Compound] => {
             if let Some(belief) = belief {
-                super::syllogistic_rules::detachment_with_var(
+                detachment_with_var(
                     task_sentence,
                     belief,
                     PremiseSource::Task,
