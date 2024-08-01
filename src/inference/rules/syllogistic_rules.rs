@@ -374,8 +374,6 @@ mod dispatch {
     /// * 📄<A --> B> + <B --> A>
     ///   * inferToSym: <A --> B>. => <A <-> B>.
     ///   * conversion: <A --> B>? => <A --> B>.
-    ///
-    /// @param context Reference to the derivation context
     fn match_reverse(
         task_sentence: impl Sentence,
         belief_sentence: impl Judgement,
@@ -474,11 +472,6 @@ mod dispatch {
     /// # 📄OpenNARS
     ///
     /// Inheritance/Implication matches Similarity/Equivalence
-    ///
-    /// @param asym    A Inheritance/Implication sentence
-    /// @param sym     A Similarity/Equivalence sentence
-    /// @param figure  location of the shared term
-    /// @param context Reference to the derivation context
     fn match_asy_sym(
         asymmetric: impl Sentence,
         symmetric: impl Sentence,
@@ -884,14 +877,7 @@ fn analogy(
 ///
 /// # 📄OpenNARS
 ///
-/// {<(&&, S2, S3) ==> P>, <(&&, S1, S3) ==> P>} |- <S1 ==> S2>
-///
-/// @param cond1   The condition of the first premise
-/// @param cond2   The condition of the second premise
-/// @param st1     The first premise
-/// @param st2     The second premise
-/// @param context Reference to the derivation context
-/// @return Whether there are derived tasks
+/// `{<(&&, S2, S3) ==> P>, <(&&, S1, S3) ==> P>} |- <S1 ==> S2>`
 fn conditional_abd(
     sub: Term,
     pre: Term,
@@ -934,10 +920,6 @@ fn infer_to_sym(
 ///
 /// {<S <-> P>, <P --> S>} |- <S --> P> Produce an Inheritance/Implication
 /// from a Similarity/Equivalence and a reversed Inheritance/Implication
-///
-/// @param asym    The asymmetric premise
-/// @param sym     The symmetric premise
-/// @param context Reference to the derivation context
 fn infer_to_asy(asy: &impl Judgement, sym: &impl Judgement, context: &mut ReasonContextConcept) {
     // * 🚩词项 * //
     // * 🚩提取 | 📄<S --> P> => S, P
@@ -963,8 +945,6 @@ fn infer_to_asy(asy: &impl Judgement, sym: &impl Judgement, context: &mut Reason
 ///
 /// {<P --> S>} |- <S --> P> Produce an Inheritance/Implication from a
 /// reversed Inheritance/Implication
-///
-/// @param context Reference to the derivation context
 fn conversion(belief: &impl Judgement, context: &mut ReasonContextConcept) {
     // * 🚩真值 * //
     let truth = belief.conversion();
@@ -983,8 +963,6 @@ fn conversion(belief: &impl Judgement, context: &mut ReasonContextConcept) {
 /// {<S --> P>} |- <S <-> P>
 /// {<S <-> P>} |- <S --> P> Switch between
 /// Inheritance/Implication and Similarity/Equivalence
-///
-/// @param context Reference to the derivation context
 fn convert_relation(task_question: &impl Question, context: &mut ReasonContextConcept) {
     // * 🚩真值 * //
     // * 🚩基于「当前信念」
