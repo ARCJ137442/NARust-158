@@ -1593,6 +1593,42 @@ mod tests {
             => ANSWER "A" in outputs
         }
 
-        // TODO: 【2024-08-01 18:56:53】带变量分离
+        detachment_var: {
+            "
+            nse <<$1 --> A> ==> <$1 --> B>>.
+            nse <C --> A>.
+            cyc 10
+            "
+            => OUT "<C --> B>" in outputs
+        }
+
+        detachment_var_answer: {
+            "
+            nse <<$1 --> A> ==> <$1 --> B>>.
+            nse <C --> A>.
+            nse <C --> B>?
+            cyc 20
+            "
+            => ANSWER "<C --> B>" in outputs
+        }
+
+        detachment_var_weak: {
+            "
+            nse <<$1 --> A> ==> <$1 --> B>>.
+            nse <C --> B>.
+            cyc 10
+            "
+            => OUT "<C --> A>" in outputs
+        }
+
+        detachment_var_answer_weak: {
+            "
+            nse <<$1 --> A> ==> <$1 --> B>>.
+            nse <C --> B>.
+            nse <C --> A>?
+            cyc 20
+            "
+            => ANSWER "<C --> A>" in outputs
+        }
     }
 }
