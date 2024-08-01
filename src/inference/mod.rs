@@ -85,10 +85,20 @@ pub(super) mod test_inference {
         launcher.launch().expect("推理器虚拟机 启动失败")
     }
 
+    /// 设置虚拟机到「最大音量」
+    /// * 🎯使虚拟机得以输出尽可能详尽的信息
+    pub fn set_max_volume(vm: &mut impl VmRuntime) {
+        vm.input_cmd(Cmd::VOL(100)).expect("输入指令失败");
+        let _ = vm.try_fetch_output(); // 📌丢掉其输出
+    }
+
     /// 从「推理引擎」创建虚拟机
     /// * 📜使用默认参数
+    /// * 🚩【2024-08-01 14:34:19】默认最大音量
     pub fn create_vm_from_engine(engine: InferenceEngine) -> Runtime {
-        create_vm(DEFAULT_PARAMETERS, engine)
+        let mut vm = create_vm(DEFAULT_PARAMETERS, engine);
+        set_max_volume(&mut vm);
+        vm
     }
 
     /// 增强虚拟机运行时的特征
