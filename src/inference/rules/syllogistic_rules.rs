@@ -844,7 +844,7 @@ fn infer_to_asy(asy: &impl Judgement, sym: &impl Judgement, context: &mut Reason
     // * 🚩词项 * //
     // * 🚩提取 | 📄<S --> P> => S, P
     // * 🚩构建新的相反陈述 | 📄S, P => <P --> S>
-    let [sub, pre] = cast_statement(asy.content().clone()).unwrap_components();
+    let [pre, sub] = cast_statement(asy.content().clone()).unwrap_components();
     let content = unwrap_or_return!(
         ?Term::make_statement(asy.content(), sub, pre)
     );
