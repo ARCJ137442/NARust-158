@@ -199,39 +199,6 @@ mod utils {
             }
         }
     }
-
-    // TODO: 转移到更通用的「规则表」中
-    /// 分离规则中「高阶语句」的位置
-    /// * 📄任务句
-    /// * 📄信念句
-    #[derive(Debug, Clone, Copy)]
-    pub enum PremiseSource {
-        Task,
-        Belief,
-    }
-
-    impl PremiseSource {
-        /// 交换「任务⇄信念」
-        pub fn swap(self) -> Self {
-            use PremiseSource::*;
-            match self {
-                Task => Belief,
-                Belief => Task,
-            }
-        }
-
-        /// 在「任务」「信念」中选择
-        /// * 🚩传入`[任务, 信念]`，始终返回`[任务/信念, 信念/任务]`
-        ///   * 「任务」 ⇒ `[任务, 信念]`
-        ///   * 「信念」 ⇒ `[信念, 任务]`
-        pub fn select<T>(self, [task_thing, belief_thing]: [T; 2]) -> [T; 2] {
-            use PremiseSource::*;
-            match self {
-                Task => [task_thing, belief_thing],
-                Belief => [belief_thing, task_thing],
-            }
-        }
-    }
 }
 pub use utils::*;
 

@@ -9,10 +9,46 @@
 use crate::{
     control::{ReasonContext, ReasonContextConcept, ReasonContextWithLinks},
     entity::{Judgement, Sentence, TLink, TLinkType},
-    inference::{syllogisms, PremiseSource, SyllogismPosition, SyllogismSide},
+    inference::{syllogisms, SyllogismPosition, SyllogismSide},
     language::{CompoundTerm, Statement, Term},
     util::RefCount,
 };
+
+mod utils {
+
+    /// 分离规则中「高阶语句」的位置
+    /// * 📄任务句
+    /// * 📄信念句
+    #[derive(Debug, Clone, Copy)]
+    pub enum PremiseSource {
+        Task,
+        Belief,
+    }
+
+    impl PremiseSource {
+        /// 交换「任务⇄信念」
+        pub fn swap(self) -> Self {
+            use PremiseSource::*;
+            match self {
+                Task => Belief,
+                Belief => Task,
+            }
+        }
+
+        /// 在「任务」「信念」中选择
+        /// * 🚩传入`[任务, 信念]`，始终返回`[任务/信念, 信念/任务]`
+        ///   * 「任务」 ⇒ `[任务, 信念]`
+        ///   * 「信念」 ⇒ `[信念, 任务]`
+        pub fn select<T>(self, [task_thing, belief_thing]: [T; 2]) -> [T; 2] {
+            use PremiseSource::*;
+            match self {
+                Task => [task_thing, belief_thing],
+                Belief => [belief_thing, task_thing],
+            }
+        }
+    }
+}
+pub use utils::*;
 
 /// 在断言的情况下，从[`Term`]中提取[`CompoundTerm`]
 /// * 🎯对标OpenNARS`(CompoundTerm) term`的转换
@@ -84,7 +120,7 @@ pub fn reason(context: &mut ReasonContextConcept) {
         [SELF, Component] => compound_and_self(
             cast_compound(task_term),
             belief_term,
-            super::syllogistic_rules::PremiseSource::Task,
+            PremiseSource::Task,
             context,
         ),
 
@@ -94,7 +130,7 @@ pub fn reason(context: &mut ReasonContextConcept) {
         [SELF, Compound] => compound_and_self(
             cast_compound(belief_term),
             task_term,
-            super::syllogistic_rules::PremiseSource::Belief,
+            PremiseSource::Belief,
             context,
         ),
 
@@ -106,7 +142,7 @@ pub fn reason(context: &mut ReasonContextConcept) {
                 super::syllogistic_rules::detachment(
                     &task_sentence,
                     &belief,
-                    super::syllogistic_rules::PremiseSource::Task,
+                    PremiseSource::Task,
                     SyllogismPosition::from_index(b_index.unwrap()),
                     context,
                 )
@@ -121,7 +157,7 @@ pub fn reason(context: &mut ReasonContextConcept) {
                 super::syllogistic_rules::detachment(
                     &task_sentence,
                     &belief,
-                    super::syllogistic_rules::PremiseSource::Belief,
+                    PremiseSource::Belief,
                     SyllogismPosition::from_index(b_index.unwrap()),
                     context,
                 )
@@ -194,7 +230,7 @@ pub fn reason(context: &mut ReasonContextConcept) {
         // * @ C="{tom}"
         [Compound, CompoundStatement] => compound_and_statement(
             task_term == belief_term,
-            super::syllogistic_rules::PremiseSource::Task,
+            PremiseSource::Task,
             cast_compound(task_term),
             t_index.unwrap(),
             cast_statement(belief_term),
@@ -244,7 +280,7 @@ pub fn reason(context: &mut ReasonContextConcept) {
         // * @ C="tim"
         [CompoundStatement, Compound] => compound_and_statement(
             task_term == belief_term,
-            super::syllogistic_rules::PremiseSource::Belief,
+            PremiseSource::Belief,
             cast_compound(belief_term.clone()),
             b_index.unwrap(),
             cast_statement(task_term),
@@ -307,7 +343,7 @@ pub fn reason(context: &mut ReasonContextConcept) {
                 super::syllogistic_rules::detachment_with_var(
                     task_sentence,
                     belief,
-                    super::syllogistic_rules::PremiseSource::Task,
+                    PremiseSource::Task,
                     SyllogismPosition::from_index(t_index.unwrap()),
                     context,
                 )
@@ -347,7 +383,7 @@ pub fn reason(context: &mut ReasonContextConcept) {
 fn compound_and_self(
     compound: CompoundTerm,
     component: Term,
-    where_compound_from: super::syllogistic_rules::PremiseSource,
+    where_compound_from: PremiseSource,
     context: &mut ReasonContextConcept,
 ) {
     // TODO
@@ -368,8 +404,8 @@ fn compound_and_compound(
     if !task_term.is_same_type(&belief_term) {
         return;
     }
-    use super::syllogistic_rules::PremiseSource::*;
     use std::cmp::Ordering::*;
+    use PremiseSource::*;
     match task_term
         .get_ref()
         .size()
@@ -391,7 +427,7 @@ fn compound_and_compound(
 /// Inference between a compound term and a statement
 fn compound_and_statement(
     statement_equals_belief: bool,
-    compound_from: super::syllogistic_rules::PremiseSource,
+    compound_from: PremiseSource,
     compound: CompoundTerm,
     index: usize,
     statement: Statement,
