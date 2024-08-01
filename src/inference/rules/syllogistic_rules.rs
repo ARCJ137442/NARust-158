@@ -185,6 +185,15 @@ mod utils {
             }
         }
     }
+
+    /// 分离规则中「高阶语句」的位置
+    /// * 📄任务句
+    /// * 📄信念句
+    #[derive(Debug, Clone, Copy)]
+    pub enum HighOrderPosition {
+        Task,
+        Belief,
+    }
 }
 pub use utils::*;
 
@@ -247,13 +256,24 @@ mod dispatch {
                 context,
             ),
             // * 🚩分离：继承 + | 继承 × 蕴含/等价
-            [INHERITANCE_RELATION, IMPLICATION_RELATION]
-            | [INHERITANCE_RELATION, EQUIVALENCE_RELATION] => {
-                detachment_with_var(belief, task_sentence, b_index, context)
+            [INHERITANCE_RELATION, IMPLICATION_RELATION | EQUIVALENCE_RELATION] => {
+                detachment_with_var(
+                    task_sentence, // ! 📌【2024-08-01 18:26:04】需要传递所有权：直接统一语句中的变量
+                    belief, // ! 📌【2024-08-01 18:26:04】需要传递所有权：直接统一语句中的变量
+                    HighOrderPosition::Belief,
+                    SyllogismPosition::from_index(b_index),
+                    context,
+                )
             }
             // * 🚩分离：蕴含 + | 蕴含/等价 × 继承
             [IMPLICATION_RELATION | EQUIVALENCE_RELATION, INHERITANCE_RELATION] => {
-                detachment_with_var(task_sentence, belief, t_index, context)
+                detachment_with_var(
+                    task_sentence, // ! 📌【2024-08-01 18:26:04】需要传递所有权：直接统一语句中的变量
+                    belief, // ! 📌【2024-08-01 18:26:04】需要传递所有权：直接统一语句中的变量
+                    HighOrderPosition::Task,
+                    SyllogismPosition::from_index(t_index),
+                    context,
+                )
             }
             // * 🚩无果匹配：相似×高阶 | 高阶×相似
             [SIMILARITY_RELATION, IMPLICATION_RELATION | EQUIVALENCE_RELATION]
@@ -513,12 +533,90 @@ mod dispatch {
 
     /// 分离（可带变量）
     fn detachment_with_var(
-        high_order_sentence: impl Sentence,
-        sub_sentence: impl Sentence,
-        index: usize,
+        mut task_sentence: impl Sentence,
+        mut belief: impl Judgement,
+        high_order_position: HighOrderPosition,
+        position_sub_in_hi: SyllogismPosition,
         context: &mut ReasonContextConcept,
     ) {
-        // TODO
+        // * 🚩提取元素
+        let [term_t, term_b] = [task_sentence.content(), belief.content()];
+        let (main_statement, sub_content) = match high_order_position {
+            HighOrderPosition::Task => (term_t.as_statement().unwrap(), term_b),
+            HighOrderPosition::Belief => (term_b.as_statement().unwrap(), term_t),
+        };
+        let component = position_sub_in_hi.select(main_statement.sub_pre()); // * 🚩前件
+
+        // * 🚩非继承或否定⇒提前结束
+        if !(component.instanceof_inheritance() || component.instanceof_negation()) {
+            return;
+        }
+
+        // * 🚩常量词项（没有变量）⇒直接分离
+        if component.is_constant() {
+            return detachment(
+                &task_sentence,
+                &belief,
+                high_order_position,
+                position_sub_in_hi,
+                context,
+            );
+        }
+
+        // * 🚩若非常量（有变量） ⇒ 尝试统一独立变量
+        let unification_i =
+            variable_process::unify_find_i(component, sub_content, context.shuffle_rng_seed());
+        let [term_mut_t, term_mut_b] = [task_sentence.content_mut(), belief.content_mut()]; // 获取可变引用并统一
+        let [main_content_mut, sub_content_mut] = match high_order_position {
+            HighOrderPosition::Task => [term_mut_t, term_mut_b],
+            HighOrderPosition::Belief => [term_mut_b, term_mut_t],
+        };
+        let unified_i = unification_i.apply_to_term(main_content_mut, sub_content_mut);
+        // * 🚩统一成功⇒分离
+        if unified_i {
+            return detachment(
+                &task_sentence, // ! 这时应该统一了变量
+                &belief,        // ! 这时应该统一了变量
+                high_order_position,
+                position_sub_in_hi,
+                context,
+            );
+        }
+
+        // * 🚩重新提取
+        let [term_t, term_b] = [task_sentence.content(), belief.content()];
+        let (main_statement, sub_content) = match high_order_position {
+            HighOrderPosition::Task => (term_t.as_statement().unwrap(), term_b),
+            HighOrderPosition::Belief => (term_b.as_statement().unwrap(), term_t),
+        };
+        // ! ⚠️【2024-06-10 17:52:44】「当前任务」与「主陈述」可能不一致：主陈述可能源自「当前信念」
+        // * * 当前任务="<(*,{tom},(&,glasses,[black])) --> own>."
+        // * * 主陈述="<<$1 --> (/,livingIn,_,{graz})> ==> <(*,$1,sunglasses) --> own>>"
+        // * * 当前信念="<<$1 --> (/,livingIn,_,{graz})> ==> <(*,$1,sunglasses) --> own>>."
+        // * 🚩当前为正向推理（任务、信念皆判断），且主句的后项是「陈述」⇒尝试引入变量
+        let direction = context.reason_direction();
+        let main_predicate_is_statement = main_statement.predicate.instanceof_statement();
+        if direction == Forward && main_predicate_is_statement {
+            // ? 💫【2024-06-10 17:50:36】此处逻辑尚未能完全理解
+            if main_statement.instanceof_implication() {
+                let s2 = main_statement.predicate.as_statement().unwrap();
+                let content_subject = sub_content.as_statement().unwrap().subject;
+                if s2.subject == content_subject {
+                    // * 📄【2024-06-10 17:46:02】一例：
+                    // * Task@838 "<<toothbrush --> $1> ==> <cup --> $1>>.
+                    // * // from task: $0.80;0.80;0.95$ <toothbrush --> [bendable]>. %1.00;0.90%
+                    // * // from belief: <cup --> [bendable]>. %1.00;0.90% {460 : 37} "
+                    // * content="<cup --> toothbrush>"
+                    // * s2="<cup --> $1>"
+                    // * mainStatement="<<toothbrush --> $1> ==> <cup --> $1>>"
+                    // TODO: 变量内引入
+                }
+                // TODO: 变量引入 同主项/谓项
+            }
+            if main_statement.instanceof_equivalence() {
+                // TODO: 变量引入 同主项/谓项
+            }
+        }
     }
 
     /// ```nal
@@ -993,6 +1091,105 @@ fn resemblance(
     context.double_premise_task(content, truth, budget);
 }
 
+/// ```nal
+/// {<<M --> S> ==> <M --> P>>, <M --> S>} |- <M --> P>
+/// {<<M --> S> ==> <M --> P>>, <M --> P>} |- <M --> S>
+/// {<<M --> S> <=> <M --> P>>, <M --> S>} |- <M --> P>
+/// {<<M --> S> <=> <M --> P>>, <M --> P>} |- <M --> S>
+/// ```
+///
+/// * 📝分离规则
+/// * 🚩由规则表直接分派
+pub fn detachment(
+    task_sentence: &impl Sentence,
+    belief: &impl Judgement,
+    high_order_position: HighOrderPosition,
+    position_sub_in_hi: SyllogismPosition,
+    context: &mut ReasonContextConcept,
+) {
+    // * 🚩合法性
+    let high_order_statement = match high_order_position {
+        HighOrderPosition::Task => task_sentence.content(),
+        HighOrderPosition::Belief => belief.content(),
+    };
+    if !(high_order_statement.instanceof_implication()
+        || high_order_statement.instanceof_equivalence())
+    {
+        return;
+    }
+
+    // * 🚩提取参数
+    let high_order_statement = cast_statement(high_order_statement.clone());
+
+    let high_order_symmetric = high_order_statement.is_commutative(); // * 📌用于替代OpenNARS源码后边的「是否为等价」（除了那里其它地方用不到，后边直接unwrap）
+    let [sub, pre] = high_order_statement.unwrap_components();
+    let direction = context.reason_direction();
+    // * 🚩词项
+    let sub_content = match high_order_position {
+        HighOrderPosition::Task => belief.content(),
+        HighOrderPosition::Belief => task_sentence.content(),
+    };
+    use SyllogismPosition::*;
+    let content = match position_sub_in_hi {
+        // * 🚩主项&相等⇒取出
+        Subject if *sub_content == sub => pre,
+        // * 🚩谓项&相等⇒取出
+        Predicate if *sub_content == pre => sub,
+        // * 🚩其它⇒无效
+        _ => return,
+    };
+    if let Some(statement) = content.as_statement() {
+        // * 📄【2024-06-15 11:39:40】可能存在「变量统一」后词项无效的情况
+        // * * main"<<bird --> bird> ==> <bird --> swimmer>>"
+        // * * content"<bird --> bird>"
+        // * * sub"<bird --> swimmer>"
+        if statement.invalid() {
+            return;
+        }
+    }
+    // * 🚩真值
+    let truth = match direction {
+        Forward => {
+            // 提取主句、副句
+            let [main_sentence_truth, sub_sentence_truth] = match high_order_position {
+                HighOrderPosition::Task => [
+                    TruthValue::from(task_sentence.unwrap_judgement()),
+                    TruthValue::from(belief),
+                ],
+                HighOrderPosition::Belief => [
+                    TruthValue::from(belief),
+                    TruthValue::from(task_sentence.unwrap_judgement()),
+                ],
+            };
+            // 计算真值
+            Some(match (high_order_symmetric, position_sub_in_hi) {
+                // * 🚩等价⇒类比
+                (true, _) => sub_sentence_truth.analogy(&main_sentence_truth),
+                // * 🚩非对称 & 主词 ⇒ 演绎
+                (_, Subject) => main_sentence_truth.deduction(&sub_sentence_truth),
+                // * 🚩其它 ⇒ 归纳
+                (_, Predicate) => sub_sentence_truth.abduction(&main_sentence_truth),
+            })
+        }
+        // * 🚩反向推理⇒空
+        Backward => None,
+    };
+
+    // * 🚩预算
+    let budget = match direction {
+        Forward => context.budget_forward(&truth.unwrap()), // 前向推理一定产生了真值
+        Backward => match (high_order_symmetric, position_sub_in_hi) {
+            // * 🚩等价 | 其它 ⇒ 反向
+            (true, _) | (_, Predicate) => context.budget_backward(belief),
+            // * 🚩非对称 & 主词 ⇒ 反向弱
+            (_, Subject) => context.budget_backward_weak(belief),
+        },
+    };
+
+    // * 🚩结论
+    context.double_premise_task(content, truth, budget);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1357,5 +1554,45 @@ mod tests {
             "
             => ANSWER "<A <-> C>" in outputs
         }
+
+        detachment: {
+            "
+            nse <A ==> B>.
+            nse A.
+            cyc 10
+            "
+            => OUT "B" in outputs
+        }
+
+        detachment_answer: {
+            "
+            nse <A ==> B>.
+            nse A.
+            nse B?
+            cyc 20
+            "
+            => ANSWER "B" in outputs
+        }
+
+        detachment_weak: {
+            "
+            nse <A ==> B>.
+            nse B.
+            cyc 10
+            "
+            => OUT "A" in outputs
+        }
+
+        detachment_answer_weak: {
+            "
+            nse <A ==> B>.
+            nse B.
+            nse A?
+            cyc 20
+            "
+            => ANSWER "A" in outputs
+        }
+
+        // TODO: 【2024-08-01 18:56:53】带变量分离
     }
 }

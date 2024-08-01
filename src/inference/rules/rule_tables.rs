@@ -9,7 +9,7 @@
 use crate::{
     control::{ReasonContext, ReasonContextConcept, ReasonContextWithLinks},
     entity::{Sentence, TLink, TLinkType},
-    inference::syllogisms,
+    inference::{syllogisms, SyllogismPosition},
     language::{CompoundTerm, Statement, Term},
     util::RefCount,
 };
@@ -98,6 +98,13 @@ pub fn reason(context: &mut ReasonContextConcept) {
         [SELF, ComponentStatement] => {
             if let Some(belief) = belief {
                 // SyllogisticRules.detachment(task, belief, bIndex, context);
+                super::syllogistic_rules::detachment(
+                    &task_sentence,
+                    &belief,
+                    super::syllogistic_rules::HighOrderPosition::Task,
+                    SyllogismPosition::from_index(b_index.expect("一定有索引")),
+                    context,
+                )
             }
         }
 
@@ -107,6 +114,13 @@ pub fn reason(context: &mut ReasonContextConcept) {
         [SELF, CompoundStatement] => {
             if let Some(belief) = belief {
                 // SyllogisticRules.detachment(belief, task, bIndex, context);
+                super::syllogistic_rules::detachment(
+                    &task_sentence,
+                    &belief,
+                    super::syllogistic_rules::HighOrderPosition::Belief,
+                    SyllogismPosition::from_index(b_index.expect("一定有索引")),
+                    context,
+                )
             }
         }
 

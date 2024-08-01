@@ -328,6 +328,7 @@ impl Term {
     /// Commutative CompoundTerms: Sets, Intersections
     /// Commutative Statements: Similarity, Equivalence (except the one with a temporal order)
     /// Commutative CompoundStatements: Disjunction, Conjunction (except the one with a temporal order)
+    #[doc(alias = "is_symmetric")]
     pub fn is_commutative(&self) -> bool {
         matches!(
             self.identifier.as_str(),

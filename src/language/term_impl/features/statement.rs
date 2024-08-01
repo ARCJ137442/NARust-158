@@ -267,6 +267,11 @@ impl<'s> StatementRef<'s> {
         self.predicate
     }
 
+    /// 🆕主项-谓项 二元数组
+    pub fn sub_pre(&self) -> [&Term; 2] {
+        [self.subject, self.predicate]
+    }
+
     /// 📄OpenNARS `invalidStatement`
     /// * ⚠️必须是「陈述」才能调用
     /// * 🎯检查「无效陈述」
