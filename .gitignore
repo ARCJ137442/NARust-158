@@ -1,2 +1,8 @@
 # 构建目标
 /target
+
+# 测试用文件
+*.test.*
+
+# 无用日志
+debug.log
