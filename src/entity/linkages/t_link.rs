@@ -76,8 +76,11 @@ impl TLinkType {
             Compound => Component,
             ComponentStatement => ComponentStatement,
             CompoundStatement => ComponentStatement,
+            CompoundCondition => ComponentCondition,
             // * 🚩其它的默认逻辑：返回自身 | 这也是其所用之处的默认情况
-            _ => self,
+            // ! 🤦【2024-08-05 01:44:56】血泪教训：别盲目兼容
+            //   * 📝不然这「默认兼容情况」就可能有「漏网之鱼」
+            _ => panic!("不支持的转换：{self:?}"),
         }
     }
 }
