@@ -110,7 +110,7 @@ pub fn reason(context: &mut ReasonContextConcept) {
         [SELF, ComponentCondition] => {
             if let Some(belief) = belief {
                 // * 📝「复合条件」一定有两层，就处在作为「前件」的「条件」中
-                syllogistic_rules::conditional_ded_ind(
+                syllogistic_rules::conditional_deduction_induction(
                     cast_statement(task_term),
                     *b_link.get_index(1).unwrap(),
                     belief_term,
@@ -132,7 +132,7 @@ pub fn reason(context: &mut ReasonContextConcept) {
             // * * belief="<(&&,<$1 --> flyer>,<(*,$1,worms) --> food>) ==> <$1 --> bird>>"
             if let Some(belief) = belief {
                 // * 📝「复合条件」一定有两层，就处在作为「前件」的「条件」中
-                syllogistic_rules::conditional_ded_ind(
+                syllogistic_rules::conditional_deduction_induction(
                     cast_statement(belief_term),
                     *b_link.get_index(1).unwrap(),
                     task_term,
@@ -407,6 +407,7 @@ fn compound_and_compound_condition(
 }
 
 /// 分派：条件演绎/归纳 & 变量
+/// * 📄条件演绎换条件、条件归纳
 fn conditional_ded_ind_with_var(
     conditional_from: PremiseSource,
     conditional: Statement,

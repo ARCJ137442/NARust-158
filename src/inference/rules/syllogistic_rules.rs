@@ -336,16 +336,138 @@ pub fn conditional_abduction(
 /// {<(&&, S2, S3) ==> P>, <S1 ==> S2>} |- <(&&, S1, S3) ==> P>
 /// {<(&&, S1, S3) ==> P>, <S1 ==> S2>} |- <(&&, S2, S3) ==> P>
 /// ```
-pub fn conditional_ded_ind(
+pub fn conditional_deduction_induction(
     conditional: Statement,
     index_in_condition: usize,
     premise2: Term,
     belief: impl Judgement,
-    conditional_position: PremiseSource,
+    _conditional_position: PremiseSource, // ! 📝【2024-08-05 01:15:51】暂时用不着：「当前任务是否为条件句」不重要
     side: SyllogismSide,
     context: &mut ReasonContextConcept,
 ) {
-    // TODO: 🚩待实现
+    use SyllogismSide::*;
+    let rng_seed = context.shuffle_rng_seed();
+    let rng_seed2 = context.shuffle_rng_seed();
+    let rng_seed3 = context.shuffle_rng_seed();
+
+    // * 🚩提取参数 * //
+    let task_truth = context
+        .current_task()
+        .get_()
+        .as_judgement()
+        .map(TruthValue::from);
+    let conditional_task =
+        variable_process::has_unification_i(&premise2, belief.content(), rng_seed);
+    let direction = context.reason_direction();
+    let deduction = side != Subject;
+
+    // * 🚩词项 * //
+    // * 🚩获取公共项
+    /* 📝此处「互斥性选择」对应以下逻辑：
+    if (side == 0) { // * 在主项
+        commonComponent = ((Statement) premise2).getSubject();
+        newComponent = ((Statement) premise2).getPredicate();
+    } else if (side == 1) { // * 在谓项
+        commonComponent = ((Statement) premise2).getPredicate();
+        newComponent = ((Statement) premise2).getSubject();
+    } else { // * 整个词项
+        commonComponent = premise2;
+        newComponent = null;
+    } */
+    let [common_component, new_component] = side.select_exclusive(&premise2);
+    let common_component = common_component.expect("应该有提取到");
+    // * 🚩获取「条件句」的条件
+    let old_condition = unwrap_or_return!(
+        ?conditional.get_ref().subject.as_compound_type(CONJUNCTION_OPERATOR)
+    );
+    // * 🚩根据「旧条件」选取元素（或应用「变量统一」）
+    let index_2 = old_condition.index_of_component(common_component);
+    let index_in_old_condition;
+    let conditional_unified; // 经过（潜在的）「变量统一」之后的「前提1」
+    if let Some(index_2) = index_2 {
+        index_in_old_condition = index_2;
+        conditional_unified = conditional.clone();
+    } else {
+        // * 🚩尝试数次匹配，将其中的变量归一化
+        // * 📝两次尝试的变量类型相同，但应用的位置不同
+        index_in_old_condition = index_in_condition;
+        let condition_to_unify = unwrap_or_return!(
+            ?old_condition.component_at(index_in_old_condition)
+        );
+        let unification_i =
+            variable_process::unify_find_i(condition_to_unify, common_component, rng_seed2);
+        if unification_i.has_unification {
+            let mut to_be_apply = conditional.clone();
+            unification_i
+                .unify_map_1
+                .apply_to(to_be_apply.mut_ref().into_compound_ref());
+            conditional_unified = to_be_apply;
+        } else if common_component.is_same_type(&old_condition) {
+            let common_component_component = unwrap_or_return!(
+                ?common_component
+                    .as_compound()
+                    .unwrap()
+                    .component_at(index_in_old_condition)
+            );
+            // * 🚩尝试寻找并应用变量归一化 @ 共同子项
+            let unification_i = variable_process::unify_find_i(
+                condition_to_unify,
+                common_component_component,
+                rng_seed3,
+            );
+            if unification_i.has_unification {
+                let mut to_be_apply = conditional.clone();
+                unification_i
+                    .unify_map_1
+                    .apply_to(to_be_apply.mut_ref().into_compound_ref());
+                conditional_unified = to_be_apply;
+            } else {
+                return;
+            }
+        } else {
+            return;
+        }
+    }
+    // * 🚩构造「新条件」
+    let new_condition = match old_condition.inner == common_component {
+        true => None,
+        false => old_condition.set_component(index_in_old_condition, new_component.cloned()),
+    };
+    // * 🚩根据「新条件」构造新词项
+    let copula = conditional_unified.identifier().to_owned();
+    let [_, predicate] = conditional_unified.unwrap_components();
+    let content = match new_condition {
+        Some(new_condition) => {
+            unwrap_or_return!(?Term::make_statement_relation(copula, new_condition, predicate))
+        }
+        None => predicate,
+    };
+
+    // * 🚩真值 * //
+    let truth = match direction {
+        Forward => Some(match deduction {
+            true => task_truth.unwrap().deduction(&belief),
+            // * 🚩演绎 ⇒ 演绎
+            false => match conditional_task {
+                // * 🚩任务是条件句 ⇒ 归纳（任务→信念，就是反过来的归因）
+                true => belief.induction(&task_truth.unwrap()),
+                // * 🚩其它 ⇒ 归纳（信念⇒任务）
+                false => task_truth.unwrap().induction(&belief),
+            },
+        }),
+        Backward => None,
+    };
+
+    // * 🚩预算 * //
+    let budget = match direction {
+        // * 🚩前向
+        Forward => context.budget_forward(&truth.unwrap()),
+        // * 🚩反向⇒弱推理
+        Backward => context.budget_backward_weak(&belief),
+    };
+
+    // * 🚩结论 * //
+    context.double_premise_task(content, truth, budget);
 }
 
 /// {<S --> P>, <P --> S} |- <S <-> p>
@@ -490,7 +612,7 @@ pub fn converted_judgment(
         // * 🚩否则：直接用「任务主项&任务谓项」替换
         _ => [sub_t, pre_t],
     };
-    let content = unwrap_or_return!(?Term::make_statement_relation(&copula, sub, pre));
+    let content = unwrap_or_return!(?Term::make_statement_relation(copula, sub, pre));
 
     // * 🚩结论 * //
     context.single_premise_task_full(content, Punctuation::Judgement, Some(new_truth), new_budget)
@@ -1097,6 +1219,64 @@ mod tests {
             cyc 20
             "
             => ANSWER "<S2 ==> S1>" in outputs
+        }
+
+        conditional_deduction_reduce: {
+            "
+            nse <(&&, S1, S2, S3) ==> P>.
+            nse S1.
+            cyc 10
+            "
+            => OUT "<(&&, S2, S3) ==> P>" in outputs
+        }
+
+        conditional_deduction_reduce_answer: {
+            "
+            nse <(&&, S1, S2, S3) ==> P>.
+            nse S1.
+            nse <(&&, S2, S3) ==> P>?
+            cyc 20
+            "
+            => ANSWER "<(&&, S2, S3) ==> P>" in outputs
+        }
+
+        // ! ❌【2024-08-05 01:53:39】测试失败
+        conditional_deduction_replace: {
+            "
+            nse <(&&, S2, S3) ==> P>.
+            nse <S1 ==> S2>.
+            cyc 100
+            "
+            => OUT "<(&&, S1, S3) ==> P>" in outputs
+        }
+
+        conditional_deduction_replace_answer: {
+            "
+            nse <(&&, S2, S3) ==> P>.
+            nse <S1 ==> S2>.
+            nse <(&&, S1, S3) ==> P>?
+            cyc 200
+            "
+            => ANSWER "<(&&, S1, S3) ==> P>" in outputs
+        }
+
+        conditional_induction: {
+            "
+            nse <(&&, S1, S3) ==> P>.
+            nse <S1 ==> S2>.
+            cyc 100
+            "
+            => OUT "<(&&, S2, S3) ==> P>" in outputs
+        }
+
+        conditional_induction_answer: {
+            "
+            nse <(&&, S1, S3) ==> P>.
+            nse <S1 ==> S2>.
+            nse <(&&, S2, S3) ==> P>?
+            cyc 200
+            "
+            => ANSWER "<(&&, S2, S3) ==> P>" in outputs
         }
     }
 }

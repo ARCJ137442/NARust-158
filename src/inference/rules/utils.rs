@@ -223,6 +223,34 @@ impl SyllogismSide {
             _ => panic!("无效索引"),
         }
     }
+
+    /* /// 尝试以此「选择」一个词项
+    /// * 🚩主项/谓项⇒尝试as为一个陈述并选择之
+    /// * 🚩整体⇒返回`Some(自身)`
+    /// * 📌【2024-08-04 23:56:16】目前仅选择「陈述引用」
+    pub fn select(self, term: &Term) -> Option<&Term> {
+        use SyllogismSide::*;
+        match self {
+            Subject => term.as_statement().map(|s| s.subject),
+            Predicate => term.as_statement().map(|s| s.predicate),
+            Whole => Some(term),
+        }
+    } */
+
+    /// 互斥性选择
+    /// * 🚩主项/谓项⇒尝试as为一个陈述并选择之，返回 `[谓项,主项]`/`[谓项,主项]`
+    /// * 🚩整体⇒返回`[Some(自身), None]`
+    /// * 📌【2024-08-04 23:56:16】目前仅选择「陈述引用」
+    /// * 🎯
+    pub fn select_exclusive(self, term: &Term) -> [Option<&Term>; 2] {
+        use SyllogismSide::*;
+        match (self, term.as_statement()) {
+            (Subject, Some(s)) => [Some(s.subject), Some(s.predicate)], // 互斥性引用
+            (Predicate, Some(s)) => [Some(s.predicate), Some(s.subject)], // 互斥性引用
+            (Whole, _) => [Some(term), None],                           // 整体⇒聚集于一处
+            _ => [None, None],                                          // 无效情况
+        }
+    }
 }
 
 impl Opposite for SyllogismSide {
