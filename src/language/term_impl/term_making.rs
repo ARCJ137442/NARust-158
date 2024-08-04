@@ -824,13 +824,17 @@ impl Term {
     /* Statement */
 
     /// 从一个「陈述系词」中构造
-    pub fn make_statement_relation(copula: &str, subject: Term, predicate: Term) -> Option<Term> {
+    pub fn make_statement_relation(
+        copula: impl AsRef<str>,
+        subject: Term,
+        predicate: Term,
+    ) -> Option<Term> {
         // * 🚩无效⇒制作失败
         if StatementRef::invalid_statement(&subject, &predicate) {
             return None;
         }
         // * 🚩按照「陈述系词」分派
-        match copula {
+        match copula.as_ref() {
             INHERITANCE_RELATION => Self::make_inheritance(subject, predicate),
             SIMILARITY_RELATION => Self::make_similarity(subject, predicate),
             INSTANCE_RELATION => Self::make_instance(subject, predicate),
@@ -846,23 +850,12 @@ impl Term {
     /// * 🎯推理规则
     /// * 🚩【2024-07-08 11:45:32】放宽对「词项类型」的限制
     ///   * 📌实际上只需识别标识符
+    /// * ♻️【2024-08-05 00:58:29】直接使用[`Self::make_statement_relation`]
+    ///   * 📌目前保持「依照『模板词项』的标识符制作陈述」的语义
+    ///   * ✅由此也兼容了「实例/属性/实例属性」等外部系词
     pub fn make_statement(template: &Term, subject: Term, predicate: Term) -> Option<Term> {
-        // * 🚩无效⇒制作失败
-        if StatementRef::invalid_statement(&subject, &predicate) {
-            return None;
-        }
-        // * 🚩按照「陈述系词」分派
-        match template.identifier() {
-            INHERITANCE_RELATION => Self::make_inheritance(subject, predicate),
-            SIMILARITY_RELATION => Self::make_similarity(subject, predicate),
-            IMPLICATION_RELATION => Self::make_implication(subject, predicate),
-            EQUIVALENCE_RELATION => Self::make_equivalence(subject, predicate),
-            // ! ↓这三者不会在实际中出现
-            // INSTANCE_RELATION => Self::make_instance(subject, predicate),
-            // PROPERTY_RELATION => Self::make_property(subject, predicate),
-            // INSTANCE_PROPERTY_RELATION => Self::make_instance_property(subject, predicate),
-            _ => None,
-        }
+        // * 🚩直接是`make_statement_relation`的链接
+        Term::make_statement_relation(template.identifier(), subject, predicate)
     }
 
     /// 📄OpenNARS `Statement.makeSym`
@@ -1057,15 +1050,11 @@ impl CompoundTermRef<'_> {
     /// * 🚩若要替换上的词项为空（⚠️t可空），则与「删除元素」等同
     /// * ⚠️结果可空
     #[must_use]
-    pub fn set_component(
-        compound: CompoundTermRef,
-        index: usize,
-        term: Option<Term>,
-    ) -> Option<Term> {
-        let mut list = compound.clone_components();
+    pub fn set_component(self, index: usize, term: Option<Term>) -> Option<Term> {
+        let mut list = self.clone_components();
         list.remove(index);
         if let Some(term) = term {
-            match (compound.is_same_type(&term), term.as_compound()) {
+            match (self.is_same_type(&term), term.as_compound()) {
                 // * 🚩同类⇒所有元素并入 | (*, 1, a)[1] = (*, 2, 3) => (*, 1, 2, 3)
                 (
                     true,
@@ -1083,7 +1072,7 @@ impl CompoundTermRef<'_> {
             }
         }
         // * 🚩以当前词项为模板构造新词项
-        Term::make_compound_term(compound, list)
+        Term::make_compound_term(self, list)
     }
 }
 #[cfg(test)]

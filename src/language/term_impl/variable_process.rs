@@ -316,6 +316,16 @@ fn apply_unify_one(mut unified_in: CompoundTermRefMut, substitution: &VarSubstit
     unified_in.rename_variables();
 }
 
+/// 🆕将上述方法放在映射表的方法上
+impl VarSubstitution {
+    /// 将映射表的替换模式应用到「复合词项可变引用」上
+    /// * 🎯用于「只需单个替换」的情况
+    ///   * 📄首先出自「条件演绎/归纳」
+    pub fn apply_to(&self, to: CompoundTermRefMut) {
+        apply_unify_one(to, self)
+    }
+}
+
 /// 多值输出：寻找「归一替换」的中间结果
 /// ! ❌【2024-07-09 21:14:17】暂且不复刻`unifyApplied`：自成体系但不完整，需要结合`applyUnifyToNew`等「函数式方法」
 pub type AppliedCompounds = [Term; 2];

@@ -214,8 +214,7 @@ fn replaced_transformed_content(
                     indexes.len() == 4,
                     "【2024-07-03 21:55:34】此处原意是「四层、条件、在条件项中」"
                 );
-                let new_condition =
-                    CompoundTermRef::set_component(conditional, indexes[1], Some(new_inheritance))?;
+                let new_condition = conditional.set_component(indexes[1], Some(new_inheritance))?;
                 Term::make_statement(&statement, new_condition, statement.predicate.clone())
             }
             _ => {
