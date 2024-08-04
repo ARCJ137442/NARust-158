@@ -8,8 +8,15 @@
 //! * ♻️【2024-07-11 00:07:52】开始根据改版OpenNARS重写
 
 use crate::{
-    control::*, entity::*, inference::rules::cast_statement, inference::rules::utils::*,
-    inference::*, language::*, util::*,
+    control::*,
+    entity::*,
+    inference::{
+        rules::{cast_statement, utils::*},
+        *,
+    },
+    io::symbols::CONJUNCTION_OPERATOR,
+    language::*,
+    util::*,
 };
 use nar_dev_utils::unwrap_or_return;
 use ReasonDirection::*;
@@ -201,16 +208,111 @@ pub fn analogy(
 ///
 /// # 📄OpenNARS
 ///
-/// `{<(&&, S2, S3) ==> P>, <(&&, S1, S3) ==> P>} |- <S1 ==> S2>`
-pub fn conditional_abd(
-    sub: Term,
-    pre: Term,
-    t_term: Statement,
-    b_term: Statement,
+/// `{<(&&, S2, S3) ==> P>, <(&&, S1, S3) ==> P>} |- {<S1 ==> S2>, <S2 ==> S1>}`
+pub fn conditional_abduction(
+    condition_t: &Term,
+    condition_b: &Term,
+    statement_t: &Statement,
+    statement_b: &Statement,
     context: &mut ReasonContextConcept,
 ) -> bool {
-    // TODO: 🚩待实现
-    false
+    // * 🚩检验合法性 * //
+    if !statement_t.instanceof_implication() || !statement_b.instanceof_implication() {
+        return false;
+    }
+    // * 📝此中的「条件」可以是单独的词项，也可以是一个合取
+    // * 【2024-08-04 22:05:53】或许就直接拿「单独词项/合取词项」来表达？
+    let [conjunction_t, conjunction_b] = match [
+        condition_t.as_compound_type(CONJUNCTION_OPERATOR),
+        condition_b.as_compound_type(CONJUNCTION_OPERATOR),
+    ] {
+        // OpenNARS原意：除了「俩都不是合取」的情况，都通过（允许不是合取）
+        /* [Some(conjunction_t), Some(conjunction_b)] => [conjunction_t, conjunction_b],
+        _ => return false, */
+        [None, None] => return false,
+        options => options,
+    };
+
+    // * 🚩提取参数 * //
+    let task_truth = TruthValue::from(context.current_task().get_().unwrap_judgement());
+    let belief = TruthValue::from(unwrap_or_return!(
+        ?context.current_belief() => false
+    ));
+    let direction = context.reason_direction();
+
+    // * 🚩预置词项：分别消去彼此间的「内含条件」
+    let reduced_t =
+        // if ((cond1 instanceof Conjunction) &&
+        // !Variable.containVarDep(cond1.getName())) {
+        // * 🚩逻辑：若为合取，尝试消去元素并制作新词项；制作新词项失败时，亦为None
+        conjunction_t.and_then(|conjunction_t| conjunction_t.reduce_components(condition_b));
+    let reduced_b =
+        // if ((cond2 instanceof Conjunction) &&
+        // !Variable.containVarDep(cond2.getName())) {
+        // * 🚩逻辑：若为合取，尝试消去元素并制作新词项；制作新词项失败时，亦为None
+        conjunction_b.and_then(|conjunction_b| conjunction_b.reduce_components(condition_t));
+
+    // * 🚩都消没了⇒推理失败
+    if reduced_t.is_none() && reduced_b.is_none() {
+        return false;
+    }
+
+    // * 🚩利用「左右共通逻辑」把代码简化到一个闭包中，后续只需「往返调用」即可
+    //   * ℹ️闭包捕获「推理上下文」作为参数
+    //   * 📝利用「带标签代码块」做逻辑控制
+    let mut derive = |other_statement,
+                      [self_condition, other_condition]: [&Option<Term>; 2],
+                      [self_truth, other_truth]: [&TruthValue; 2]| 'derive: {
+        // * 🚩前提条件 * //
+        // OpenNARS源码@信念端：`if (term2 != null)`
+        let self_condition = unwrap_or_return! {
+            ?self_condition => break 'derive false // 💭若条件没提取出来，还是算了
+        };
+        // * 🚩词项 * //
+        let content = match other_condition {
+            // * 🚩仍然是条件句
+            // OpenNARS源码@信念端：`makeStatement(st1, term1, term2)`
+            Some(other_condition) => unwrap_or_return!(
+                ?Term::make_statement(other_statement, other_condition.clone(), self_condition.clone())
+                => break 'derive false // 💭制作失败就别求得出啥结论了
+            ),
+            // * 🚩只剩下条件
+            None => self_condition.clone(),
+        };
+        // * 🚩真值 * //
+        let truth = match direction {
+            // * 🚩类比
+            Forward => Some(other_truth.abduction(self_truth)),
+            Backward => None,
+        };
+        // * 🚩预算 * //
+        let budget = match direction {
+            Forward => context.budget_forward(truth.as_ref()),
+            // * 🚩反向 ⇒ 弱 | 此处的真值恒取自于信念
+            Backward => context.budget_backward_weak(&belief),
+        };
+        // * 🚩结论 * //
+        context.double_premise_task(content, truth, budget);
+        // * 🚩匹配成功
+        true
+    };
+    // * 🚩往返调用
+    let [derived_t, derived_b] = [
+        // 任务→信念
+        derive(
+            statement_b,
+            [&reduced_t, &reduced_b],
+            [&task_truth, &belief],
+        ),
+        // 信念→任务
+        derive(
+            statement_t,
+            [&reduced_b, &reduced_t],
+            [&belief, &task_truth],
+        ),
+    ];
+    // * 🚩其中一个匹配成功才算成功 | ⚠️不同于OpenNARS，此处更为精确
+    derived_t || derived_b
 }
 
 /// * 📝条件演绎/条件归纳
@@ -943,6 +1045,44 @@ mod tests {
             cyc 20
             "
             => ANSWER "<C --> A>" in outputs
+        }
+
+        conditional_abduction: {
+            "
+            nse <(&&, S2, S3) ==> P>.
+            nse <(&&, S1, S3) ==> P>.
+            cyc 10
+            "
+            => OUT "<S1 ==> S2>" in outputs
+        }
+
+        conditional_abduction_answer: {
+            "
+            nse <(&&, S2, S3) ==> P>.
+            nse <(&&, S1, S3) ==> P>.
+            nse <S1 ==> S2>?
+            cyc 20
+            "
+            => ANSWER "<S1 ==> S2>" in outputs
+        }
+
+        conditional_abduction_rev: {
+            "
+            nse <(&&, S2, S3) ==> P>.
+            nse <(&&, S1, S3) ==> P>.
+            cyc 10
+            "
+            => OUT "<S2 ==> S1>" in outputs
+        }
+
+        conditional_abduction_rev_answer: {
+            "
+            nse <(&&, S2, S3) ==> P>.
+            nse <(&&, S1, S3) ==> P>.
+            nse <S2 ==> S1>?
+            cyc 20
+            "
+            => ANSWER "<S2 ==> S1>" in outputs
         }
     }
 }

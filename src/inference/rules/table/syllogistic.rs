@@ -131,9 +131,11 @@ fn asymmetric_asymmetric(
         return;
     }
     // * 🚩取其中两个不同的项 | 需要在后续「条件类比」中重复使用
-    let term_t = other_pos_t.select(t_term.clone().unwrap_components());
-    let term_b = other_pos_b.select(b_term.clone().unwrap_components());
-    let [sub, pre] = match figure {
+    let term_t = other_pos_t.select(t_term.sub_pre());
+    let term_b = other_pos_b.select(b_term.sub_pre());
+    // * 📝构造一个闭包，随时根据图式生成（用于NAL-1推理的）主项、谓项
+    //   * 📌原因：先执行的「构造复合词项」「条件归纳」可能要使用term_t、term_b
+    let lower_level_composition = |term_t, term_b| match figure {
         // * 📌主项 ⇒ sub来自信念，pre来自任务
         SS | SP => [term_b, term_t],
         // * 📌谓项 ⇒ sub来自任务，pre来自信念
@@ -148,13 +150,22 @@ fn asymmetric_asymmetric(
             // * 🚩构造复合词项
             // TODO
             // * 🚩归因+归纳+比较
-            abd_ind_com(sub, pre, task_sentence, belief_sentence, context);
+            let [sub, pre] = lower_level_composition(term_t, term_b);
+            abd_ind_com(
+                sub.clone(),
+                pre.clone(),
+                task_sentence,
+                belief_sentence,
+                context,
+            );
         }
         // * 🚩谓项×谓项 <A --> B> × <C --> B>
         // abduction
         PP => {
             // * 🚩先尝试进行「条件归纳」，有结果⇒返回
-            let applied = conditional_abd(sub.clone(), pre.clone(), t_term, b_term, context);
+            let [[condition_t, _], [condition_b, _]] = [t_term.sub_pre(), b_term.sub_pre()];
+            let applied =
+                conditional_abduction(condition_t, condition_b, &t_term, &b_term, context);
             if applied {
                 // if conditional abduction, skip the following
                 return;
@@ -162,7 +173,14 @@ fn asymmetric_asymmetric(
             // * 🚩尝试构建复合词项
             // TODO
             // * 🚩归因+归纳+比较
-            abd_ind_com(sub, pre, task_sentence, belief_sentence, context);
+            let [term_1, term_2] = lower_level_composition(term_t, term_b);
+            abd_ind_com(
+                term_1.clone(),
+                term_2.clone(),
+                task_sentence,
+                belief_sentence,
+                context,
+            );
         }
         // * 🚩主项×谓项 <A --> B> × <C --> A>
         // * 🚩谓项×主项 <A --> B> × <B --> C>
@@ -172,7 +190,8 @@ fn asymmetric_asymmetric(
             // * 🚩尝试统一查询变量
             // * ⚠️【2024-07-14 03:13:32】不同@OpenNARS：无需再应用到整个词项——后续已经不再需要t_term与b_term
             // * ⚠️【2024-07-31 21:37:10】激进改良：无需应用变量替换，只需考虑「是否可替换」
-            let unified_q = has_unification_q(&sub, &pre, rng_seed2);
+            let [sub, pre] = lower_level_composition(term_t, term_b);
+            let unified_q = has_unification_q(sub, pre, rng_seed2);
             match unified_q {
                 // * 🚩成功统一 ⇒ 匹配反向
                 true => match_reverse(task_sentence, belief_sentence, context),
@@ -423,15 +442,16 @@ pub fn detachment_with_var(
 ///
 /// 演绎&举例
 /// * 📝一个强推理，一个弱推理
+/// * 🚩【2024-08-04 21:52:34】仅传入引用，仅在需要时拷贝
 fn ded_exe(
-    sub: Term,
-    pre: Term,
+    sub: &Term,
+    pre: &Term,
     task_sentence: impl Sentence,
     belief_sentence: impl Judgement,
     context: &mut ReasonContextConcept,
 ) {
     // * 🚩陈述有效才行
-    if StatementRef::invalid_statement(&sub, &pre) {
+    if StatementRef::invalid_statement(sub, pre) {
         return;
     }
 
