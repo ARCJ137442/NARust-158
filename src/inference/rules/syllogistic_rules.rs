@@ -234,8 +234,12 @@ pub fn conditional_abduction(
     };
 
     // * 🚩提取参数 * //
-    let task_truth = TruthValue::from(context.current_task().get_().unwrap_judgement());
-    let belief = TruthValue::from(unwrap_or_return!(
+    let task_truth = context
+        .current_task()
+        .get_()
+        .as_judgement()
+        .map(TruthValue::from);
+    let belief_truth = TruthValue::from(unwrap_or_return!(
         ?context.current_belief() => false
     ));
     let direction = context.reason_direction();
@@ -252,17 +256,18 @@ pub fn conditional_abduction(
         // * 🚩逻辑：若为合取，尝试消去元素并制作新词项；制作新词项失败时，亦为None
         conjunction_b.and_then(|conjunction_b| conjunction_b.reduce_components(condition_t));
 
-    // * 🚩都消没了⇒推理失败
+    // * 📌【2024-08-04 23:34:14】后续取逻辑或，此处费事再判断一次
+    /* // * 🚩都消没了⇒推理失败
     if reduced_t.is_none() && reduced_b.is_none() {
         return false;
-    }
+    } */
 
     // * 🚩利用「左右共通逻辑」把代码简化到一个闭包中，后续只需「往返调用」即可
-    //   * ℹ️闭包捕获「推理上下文」作为参数
+    //   * ℹ️闭包捕获「推理上下文」作为参数，在调用时无需重复声明与附带
     //   * 📝利用「带标签代码块」做逻辑控制
     let mut derive = |other_statement,
                       [self_condition, other_condition]: [&Option<Term>; 2],
-                      [self_truth, other_truth]: [&TruthValue; 2]| 'derive: {
+                      [self_truth, other_truth]: [&Option<TruthValue>; 2]| 'derive: {
         // * 🚩前提条件 * //
         // OpenNARS源码@信念端：`if (term2 != null)`
         let self_condition = unwrap_or_return! {
@@ -282,14 +287,23 @@ pub fn conditional_abduction(
         // * 🚩真值 * //
         let truth = match direction {
             // * 🚩类比
-            Forward => Some(other_truth.abduction(self_truth)),
+            Forward => {
+                // 解包两个真值
+                // * 📝不知从任务来，还是从信念来；至少在正向推理时都在
+                let [self_truth, other_truth] = [
+                    unwrap_or_return!(?self_truth => break 'derive false),
+                    unwrap_or_return!(?other_truth => break 'derive false),
+                ];
+                // 计算 @ 归因
+                Some(other_truth.abduction(self_truth))
+            }
             Backward => None,
         };
         // * 🚩预算 * //
         let budget = match direction {
             Forward => context.budget_forward(truth.as_ref()),
             // * 🚩反向 ⇒ 弱 | 此处的真值恒取自于信念
-            Backward => context.budget_backward_weak(&belief),
+            Backward => context.budget_backward_weak(&belief_truth),
         };
         // * 🚩结论 * //
         context.double_premise_task(content, truth, budget);
@@ -302,13 +316,13 @@ pub fn conditional_abduction(
         derive(
             statement_b,
             [&reduced_t, &reduced_b],
-            [&task_truth, &belief],
+            [&task_truth, &Some(belief_truth)],
         ),
         // 信念→任务
         derive(
             statement_t,
             [&reduced_b, &reduced_t],
-            [&belief, &task_truth],
+            [&Some(belief_truth), &task_truth],
         ),
     ];
     // * 🚩其中一个匹配成功才算成功 | ⚠️不同于OpenNARS，此处更为精确
