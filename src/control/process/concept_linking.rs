@@ -256,12 +256,16 @@ impl ReasonContextDirect<'_> {
                 continue;
             }
             // * 🚩仅在「元素词项所对应概念」存在时
-            let component = template.target();
+            let component = &*template.target();
 
             // * 🚩建立双向链接：整体⇒元素
             let link = TermLink::from_template(component.clone(), template, sub_budget);
             self.outs.report_comment(
-                format!("Term-link built @ {self_term}: {}", link.to_display_long()),
+                format!(
+                    "Term-link built @ '{self_term}' ~ '{component}' #{:?}: {}",
+                    link.link_type(),
+                    link.to_display_long()
+                ),
                 self.volume_percent(),
             );
             let self_concept = unwrap_or_return!(?self.key_to_concept_mut(concept_key) => continue);
@@ -272,14 +276,14 @@ impl ReasonContextDirect<'_> {
             let link = TermLink::from_template(self_term.clone(), template, sub_budget);
             self.outs.report_comment(
                 format!(
-                    "Term-link built @ {}: {}",
-                    &*component,
+                    "Term-link built @ '{component}' ~> '{self_term}' #{:?}: {}",
+                    link.link_type(),
                     link.to_display_long()
                 ),
                 self.volume_percent(),
             );
             let component_concept =
-                unwrap_or_return!(?self.get_concept_or_create(&component) => continue);
+                unwrap_or_return!(?self.get_concept_or_create(component) => continue);
             component_concept.put_in_term_link(link);
 
             // * 🚩对复合子项 继续深入递归
