@@ -13,7 +13,6 @@ use crate::{
 };
 use nar_dev_utils::unwrap_or_return;
 use ReasonDirection::*;
-use SyllogismPosition::*;
 
 /// 📝根据复合词项与索引，确定「是否在构建时交换」
 ///
@@ -72,8 +71,9 @@ pub fn structural_compose_both(
     // * 🚩词项 * //
     let copula = statement.identifier().to_owned();
     let [statement_sub, statement_pre] = statement.unwrap_components();
+    let sub_pre = [&statement_sub, &statement_pre];
     let mut components = compound.get_ref().clone_components();
-    let other_statement_component = side.opposite().select([&statement_sub, &statement_pre]);
+    let [term_self_side, other_statement_component] = side.select_and_other(sub_pre); // 同侧词项 & 异侧词项
     if components.contains(other_statement_component) {
         // * 📝复合词项包含陈述的另一侧词项 ⇒ 中止
         // * 📄compound = "(*,{tom},(&,glasses,[black]))" @ 1 => "(&,glasses,[black])"
@@ -82,37 +82,21 @@ pub fn structural_compose_both(
         // * * ⇒不处理（❓为何如此）
         return;
     }
-    /* if match side {
-        Subject => components.contains(statement_predicate),
-        Predicate => components.contains(statement_subject),
-    } {
-        return;
-    } */
-    let [sub, pre] = match side {
-        Subject if components.contains(&statement_sub) => [
-            // * 🚩主项：原来的复合词项
+    // 先决条件：是否包含同侧词项
+    let [sub, pre] = match components.contains(term_self_side) {
+        true => side.select_and_other([
+            // * 🚩主项/谓项：原来的复合词项
             compound.get_ref().inner.clone(),
-            // * 🚩谓项：替换后的复合词项
+            // * 🚩谓项/主项：替换后的复合词项
             {
-                components[index] = statement_pre;
+                let term_opposite = side.opposite().select([statement_sub, statement_pre]); // 提取出异侧词项
+                components[index] = term_opposite; // 将对应位置换成异侧词项
                 unwrap_or_return!(
                     ?Term::make_compound_term(compound.get_ref(), components)
                 )
             },
-        ],
-        Predicate if components.contains(&statement_pre) => [
-            // * 🚩主项：替换后的复合词项
-            {
-                components[index] = statement_sub;
-                unwrap_or_return!(
-                    ?Term::make_compound_term(compound.get_ref(), components)
-                )
-            },
-            // * 🚩谓项：原来的复合词项
-            compound.get_ref().inner.clone(),
-        ],
-        // TODO: 【2024-08-05 17:47:15】后续或可简化
-        _ => [statement_sub, statement_pre],
+        ]),
+        false => [statement_sub, statement_pre],
     };
     // * 📄compound = "(&,[yellow],{Birdie})" @ 0 => "[yellow]"
     // * * statement = "<{Tweety} --> [yellow]>" @ 1
