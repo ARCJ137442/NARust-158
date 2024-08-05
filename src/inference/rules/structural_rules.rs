@@ -137,6 +137,77 @@ pub fn structural_compose_both(
     context.single_premise_task_structural(content, truth, budget);
 }
 
+/// * 📝双侧解构
+///
+/// ```nal
+/// {<(S&T) --> (P&T)>, S@(S&T)} |- <S --> P>
+/// ```
+pub fn structural_decompose_both(
+    statement: Statement,
+    index: usize,
+    context: &mut ReasonContextConcept,
+) {
+    // * 🚩词项 * //
+    let (sub, copula, pre) = statement.unwrap();
+    // * 📌必须是「同类复合词项」才有可能解构
+    if !sub.is_same_type(&pre) {
+        return;
+    }
+    let [sub, pre]: [CompoundTerm; 2] = match [sub.try_into(), pre.try_into()] {
+        [Ok(sub), Ok(pre)] => [sub, pre],
+        _ => return,
+    };
+    // * 📌必须是「同尺寸复合词项」且「索引在界内」
+    let [sub_size, pre_size] = [sub.get_ref().size(), pre.get_ref().size()];
+    if !(sub_size == pre_size && index < sub_size) {
+        return;
+    }
+    // * 🚩取其中索引所在的词项，按顺序制作相同系词的陈述
+    let at_index = |compound: CompoundTermRef| compound.component_at(index).unwrap().clone(); // ! 上边已判断在界内
+    let sub_inner = at_index(sub.get_ref());
+    let pre_inner = at_index(pre.get_ref());
+
+    // * 🚩尝试调换顺序
+    let [content_sub, content_pre] = switch_by_order(sub.get_ref(), index, [sub_inner, pre_inner]);
+    let content =
+        unwrap_or_return!(?Term::make_statement_relation(copula, content_sub, content_pre));
+
+    // * 🚩预筛
+    let direction = context.reason_direction();
+    let task_is_judgement = context.current_task().get_().is_judgement();
+    let task_truth = context
+        .current_task()
+        .get_()
+        .as_judgement()
+        .map(TruthValue::from);
+    if !(direction == Forward) // ? 💭【2024-08-05 23:37:40】这个「前向推理又是判断」似乎不可能发生
+        && !sub.get_ref().instanceof_product()
+        && sub.get_ref().size() > 1
+        && task_is_judgement
+    {
+        return;
+    }
+
+    // * 🚩真值 * //
+    let truth = match direction {
+        // * 🚩前向推理⇒直接用任务的真值
+        Forward => task_truth.map(|truth| truth.identity()),
+        // * 🚩反向推理⇒空
+        Backward => None,
+    };
+
+    // * 🚩预算 * //
+    let budget = match direction {
+        // * 🚩前向推理⇒复合前向
+        Forward => context.budget_compound_forward(truth.as_ref(), &content),
+        // * 🚩反向推理⇒复合反向
+        Backward => context.budget_compound_backward(&content),
+    };
+
+    // * 🚩结论 * //
+    context.single_premise_task_structural(content, truth, budget);
+}
+
 #[cfg(test)]
 mod tests {
     use crate::expectation_tests;
@@ -339,6 +410,193 @@ mod tests {
             "
             => ANSWER r"<(\,R,_,B) --> (\,R,_,A)>" in outputs
         }
-        // TODO: 更多测试
+
+        decompose_both_int_ext: {
+            "
+            nse <(&,A,C) --> (&,B,C)>.
+            cyc 20
+            "
+            => OUT "<A --> B>" in outputs
+        }
+
+        decompose_both_int_ext_answer: {
+            "
+            nse <(&,A,C) --> (&,B,C)>.
+            nse <A --> B>?
+            cyc 30
+            "
+            => ANSWER "<A --> B>" in outputs
+        }
+
+        decompose_both_int_int: {
+            "
+            nse <(|,A,C) --> (|,B,C)>.
+            cyc 20
+            "
+            => OUT "<A --> B>" in outputs
+        }
+
+        decompose_both_int_int_answer: {
+            "
+            nse <(|,A,C) --> (|,B,C)>.
+            nse <A --> B>?
+            cyc 30
+            "
+            => ANSWER "<A --> B>" in outputs
+        }
+
+        decompose_both_diff_ext: {
+            "
+            nse <(-,A,C) --> (-,B,C)>.
+            cyc 20
+            "
+            => OUT "<A --> B>" in outputs
+        }
+
+        decompose_both_diff_ext_answer: {
+            "
+            nse <(-,A,C) --> (-,B,C)>.
+            nse <A --> B>?
+            cyc 30
+            "
+            => ANSWER "<A --> B>" in outputs
+        }
+
+        decompose_both_diff_ext_rev: {
+            "
+            nse <(-,C,B) --> (-,C,A)>.
+            cyc 20
+            "
+            => OUT "<A --> B>" in outputs
+        }
+
+        decompose_both_diff_ext_rev_answer: {
+            "
+            nse <(-,C,B) --> (-,C,A)>.
+            nse <A --> B>?
+            cyc 30
+            "
+            => ANSWER "<A --> B>" in outputs
+        }
+
+        decompose_both_diff_int: {
+            "
+            nse <(~,A,C) --> (~,B,C)>.
+            cyc 20
+            "
+            => OUT "<A --> B>" in outputs
+        }
+
+        decompose_both_diff_int_answer: {
+            "
+            nse <(~,A,C) --> (~,B,C)>.
+            nse <A --> B>?
+            cyc 30
+            "
+            => ANSWER "<A --> B>" in outputs
+        }
+
+        decompose_both_diff_int_rev: {
+            "
+            nse <(~,C,B) --> (~,C,A)>.
+            cyc 20
+            "
+            => OUT "<A --> B>" in outputs
+        }
+
+        decompose_both_diff_int_rev_answer: {
+            "
+            nse <(~,C,B) --> (~,C,A)>.
+            nse <A --> B>?
+            cyc 30
+            "
+            => ANSWER "<A --> B>" in outputs
+        }
+
+        decompose_both_product: {
+            "
+            nse <(*,C,A) --> (*,C,B)>.
+            cyc 20
+            "
+            => OUT "<A --> B>" in outputs
+        }
+
+        decompose_both_product_answer: {
+            "
+            nse <(*,C,A) --> (*,C,B)>.
+            nse <A --> B>?
+            cyc 30
+            "
+            => ANSWER "<A --> B>" in outputs
+        }
+
+        decompose_both_image_ext_1: { // ? ❓【2024-08-05 22:36:17】为何这里要反过来？仍然不明确
+            "
+            nse <(/,R,_,A) --> (/,S,_,A)>.
+            cyc 20
+            "
+            => OUT "<R --> S>" in outputs
+        }
+
+        decompose_both_image_ext_1_answer: { // ? ❓【2024-08-05 22:36:17】为何这里要反过来？仍然不明确
+            "
+            nse <(/,R,_,A) --> (/,S,_,A)>.
+            nse <R --> S>?
+            cyc 30
+            "
+            => ANSWER "<R --> S>" in outputs
+        }
+
+        decompose_both_image_ext_2: {
+            "
+            nse <(/,R,_,B) --> (/,R,_,A)>.
+            cyc 20
+            "
+            => OUT "<A --> B>" in outputs
+        }
+
+        decompose_both_image_ext_2_answer: {
+            "
+            nse <(/,R,_,B) --> (/,R,_,A)>.
+            nse <A --> B>?
+            cyc 30
+            "
+            => ANSWER "<A --> B>" in outputs
+        }
+
+        decompose_both_image_int_1: { // ? ❓【2024-08-05 22:36:17】为何这里要反过来？仍然不明确
+            r"
+            nse <(\,R,_,A) --> (\,S,_,A)>.
+            cyc 20
+            "
+            => OUT r"<R --> S>" in outputs
+        }
+
+        decompose_both_image_int_1_answer: { // ? ❓【2024-08-05 22:36:17】为何这里要反过来？仍然不明确
+            r"
+            nse <(\,R,_,A) --> (\,S,_,A)>.
+            nse <R --> S>?
+            cyc 30
+            "
+            => ANSWER r"<R --> S>" in outputs
+        }
+
+        decompose_both_image_int_2: {
+            r"
+            nse <(\,R,_,B) --> (\,R,_,A)>.
+            cyc 20
+            "
+            => OUT r"<A --> B>" in outputs
+        }
+
+        decompose_both_image_int_2_answer: {
+            r"
+            nse <(\,R,_,B) --> (\,R,_,A)>.
+            nse <A --> B>?
+            cyc 30
+            "
+            => ANSWER r"<A --> B>" in outputs
+        }
+
     }
 }

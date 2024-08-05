@@ -7,6 +7,7 @@ use crate::{
     control::*,
     entity::*,
     inference::rules::{utils::*, *},
+    io::symbols::{IMPLICATION_RELATION, INHERITANCE_RELATION, SIMILARITY_RELATION},
     language::{variable_process, CompoundTerm, Statement, Term},
     util::RefCount,
 };
@@ -430,7 +431,44 @@ fn component_and_statement(
     side: SyllogismPosition,
     context: &mut ReasonContextConcept,
 ) {
-    // TODO
+    // if (context.getCurrentTask().isStructural()) return;
+    match statement.identifier() {
+        // * 🚩陈述是「继承」
+        INHERITANCE_RELATION => {
+            // * 🚩集合消去
+            // TODO: StructuralRules.structuralDecomposeOne(compound, index, statement, context);
+            // * 🚩尝试两侧都消去：只要不是外延集/内涵集 都可以
+            match compound.instanceof_set() {
+                // * 🚩集合⇒特殊处理
+                // * 📝外延集性质：一元集合⇒最小外延 | 内涵集性质：一元集合⇒最小内涵
+                // * <A --> {B}> |- <A <-> {B}>
+                true => (), // TODO: StructuralRules.transformSetRelation(compound, statement, side, context);
+                // * 🚩默认⇒两侧消去
+                // {(C-B) --> (C-A), A @ (C-A)} |- A --> B
+                false => structural_decompose_both(statement, index, context),
+            }
+        }
+        // * 🚩陈述是「相似」⇒总是要两侧消去
+        SIMILARITY_RELATION => {
+            // {(C-B) <-> (C-A), A @ (C-A)} |- A <-> B
+            structural_decompose_both(statement, index, context);
+            // * 🚩外延集/内涵集⇒尝试转换集合关系
+            if compound.instanceof_set() {
+                // * 🚩外延集性质：一元集合⇒最小外延 | 内涵集性质：一元集合⇒最小内涵
+                // * <A <-> {B}> |- <A --> {B}>
+                // TODO: StructuralRules.transformSetRelation(compound, statement, side, context);
+            }
+        }
+        // * 🚩蕴含×否定⇒逆否
+        IMPLICATION_RELATION if compound.instanceof_negation() => {
+            // TODO: 逆否
+            /* match index {
+                0 => {}
+                _ => {}
+            } */
+        }
+        _ => {}
+    }
 }
 
 /// 分派：复合词项×复合条件
