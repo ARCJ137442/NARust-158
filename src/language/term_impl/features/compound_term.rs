@@ -133,7 +133,28 @@ impl Term {
         }
     }
 
-    /// 🆕用于判断词项是否为「指定类型的复合词项」
+    /// 🆕用于判断词项是否为复合词项
+    /// * 📌包括陈述
+    /// * 🚩模式匹配后返回一个[`Option`]，只在其为「符合指定类型的词项」时为[`Some`]
+    /// * 🚩返回标识符与内部所有元素的所有权
+    #[must_use]
+    pub fn unwrap_compound_id_components(self) -> Option<(String, Box<[Term]>)> {
+        matches_or! {
+            ?self,
+            // * 🚩匹配到如下结构⇒返回Some，否则返回None
+            Term {
+                // * 🚩标识符
+                identifier,
+                // * 🚩内容为「复合词项」
+                components: TermComponents::Compound(terms),
+                ..
+            }
+            // * 🚩返回内容
+            => (identifier, terms)
+        }
+    }
+
+    /// 🆕用于判断词项是否为复合词项
     /// * 📌包括陈述
     /// * 🚩模式匹配后返回一个[`Option`]，只在其为「符合指定类型的词项」时为[`Some`]
     /// * 🚩返回内部所有元素的所有权

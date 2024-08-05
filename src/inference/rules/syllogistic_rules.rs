@@ -439,8 +439,7 @@ pub fn conditional_deduction_induction(
         false => old_condition.set_component(index_in_old_condition, new_component.cloned()),
     };
     // * 🚩根据「新条件」构造新词项
-    let copula = conditional_unified.identifier().to_owned();
-    let [_, predicate] = conditional_unified.unwrap_components();
+    let (_, copula, predicate) = conditional_unified.unwrap();
     let content = match new_condition {
         Some(new_condition) => {
             unwrap_or_return!(?Term::make_statement_relation(copula, new_condition, predicate))
@@ -541,8 +540,7 @@ pub fn conditional_analogy(
         true => None,
         false => old_condition.set_component(index_in_condition, new_component.cloned()),
     };
-    let copula = belief_equivalence.identifier().to_owned();
-    let [_, premise1_predicate] = belief_equivalence.unwrap_components();
+    let (_, copula, premise1_predicate) = belief_equivalence.unwrap();
     let content = match new_condition {
         Some(new_condition) => unwrap_or_return!(
             ?Term::make_statement_relation(copula, new_condition, premise1_predicate)
@@ -688,8 +686,7 @@ pub fn converted_judgment(
             .content()
             .clone(),
     );
-    let copula = task_content.identifier().to_string();
-    let [sub_t, pre_t] = task_content.unwrap_components();
+    let (sub_t, copula, pre_t) = task_content.unwrap();
     let [sub_b, pre_b] = belief_content.unwrap_components();
     // * 🚩创建内容 | ✅【2024-06-10 10:26:14】已通过「长期稳定性」验证与原先逻辑的稳定
     let [sub, pre] = match [sub_t.contain_var_q(), pre_t.contain_var_q()] {

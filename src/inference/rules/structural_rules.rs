@@ -69,8 +69,7 @@ pub fn structural_compose_both(
     }
 
     // * 🚩词项 * //
-    let copula = statement.identifier().to_owned();
-    let [statement_sub, statement_pre] = statement.unwrap_components();
+    let (statement_sub, copula, statement_pre) = statement.unwrap();
     let sub_pre = [&statement_sub, &statement_pre];
     let mut components = compound.get_ref().clone_components();
     let [term_self_side, other_statement_component] = side.select_and_other(sub_pre); // 同侧词项 & 异侧词项
