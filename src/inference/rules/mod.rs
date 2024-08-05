@@ -18,11 +18,11 @@ nar_dev_utils::mods! {
     // 三段论规则 `SyllogisticRules`
     use syllogistic_rules;
 
-    // // 组合规则 `CompositionalRules`
-    // use compositional_rules;
+    // 组合规则 `CompositionalRules`
+    use compositional_rules;
 
-    // // 结构规则 `StructuralRules`
-    // use structural_rules;
+    // 结构规则 `StructuralRules`
+    use structural_rules;
 
     // 🆕匹配规则 `MatchingRules`
     pub use matching_rules;
