@@ -72,7 +72,7 @@ pub(super) mod test_inference {
         ($type:ident $term:literal in outputs) => {
             |o| matches!(
                 o,
-                Output::$type { narsese,.. }
+                navm::output::Output::$type { narsese,.. }
                 // * 🚩【2024-07-15 00:04:43】此处使用了「词法Narsese」的内部分派
                 if narsese.as_ref().is_some_and(|narsese| *narsese::api::GetTerm::get_term(narsese) == narsese::lexical_nse_term!(@PARSE $term))
             )
@@ -211,6 +211,70 @@ pub(super) mod test_inference {
             .find(|&output| matches!(output.get_narsese().map(GetTerm::get_term), Some(term) if *term == expected) )
             .expect("没有找到期望的输出")
     }
+
+    /// 概念推理专用测试引擎
+    /// * 🚩【2024-07-14 23:51:32】禁掉了转换推理
+    pub const ENGINE_REASON: InferenceEngine = InferenceEngine::new(
+        process_direct,
+        transform_task,
+        InferenceEngine::VOID.matching_f(),
+        reason,
+    );
+
+    /// 「预期测试」函数
+    pub fn expectation_test(inputs: impl AsRef<str>, expectation: impl Fn(&Output) -> bool) {
+        let mut vm = create_vm_from_engine(ENGINE_REASON);
+        // * 🚩OUT
+        vm.input_fetch_print_expect(
+            inputs.as_ref(),
+            // * 🚩检查其中是否有导出
+            expectation,
+        );
+    }
+
+    /// 一个「单输出预期」测试
+    #[macro_export]
+    macro_rules! expectation_test {
+        (
+            $(#[$attr:meta])*
+            $name:ident :
+            $inputs:expr
+            => $($expectations:tt)*
+        ) => {
+            $(#[$attr])*
+            #[test]
+            fn $name() {
+                $crate::inference::test_inference::expectation_test(
+                    $inputs,
+                    // * 🚩检查其中是否有预期输出
+                    $crate::expect_narsese_term!($($expectations)*),
+                )
+            }
+        };
+    }
+
+    /// 一组「单输出预期」测试
+    #[macro_export]
+    macro_rules! expectation_tests {
+        (
+            $(
+                $(#[$attr:meta])*
+                $name:ident : {
+                    $inputs:expr
+                    => $($expectations:tt)*
+                }
+            )*
+        ) => {
+            $(
+                $crate::expectation_test! {
+                    $(#[$attr])*
+                    $name :
+                        $inputs
+                        => $($expectations)*
+                }
+            )*
+        };
+    }
 }
 
 /// 总体性测试
@@ -218,8 +282,8 @@ pub(super) mod test_inference {
 ///   * 🎯不在运行时panic
 #[cfg(test)]
 mod tests {
-    use super::test_inference::*;
     use super::*;
+    use crate::inference::test_inference::{create_vm_from_engine, VmRuntimeBoost};
     use crate::{ok, util::AResult};
 
     /// 引擎dev

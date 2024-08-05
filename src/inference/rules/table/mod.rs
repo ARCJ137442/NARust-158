@@ -14,18 +14,4 @@ mod syllogistic;
 mod entry;
 pub use entry::*;
 
-/// 一些通用函数
-#[cfg(test)]
-pub(super) mod tests {
-    use super::*;
-    use crate::inference::{process_direct, transform_task, InferenceEngine};
-
-    /// 概念推理专用测试引擎
-    /// * 🚩【2024-07-14 23:51:32】禁掉了转换推理
-    pub const ENGINE_REASON: InferenceEngine = InferenceEngine::new(
-        process_direct,
-        transform_task,
-        InferenceEngine::VOID.matching_f(),
-        reason,
-    );
-}
+// ! ℹ️【2024-08-05 18:47:31】有关「辅助测试用代码」如「预期测试宏」均放到`inference`的根模块下

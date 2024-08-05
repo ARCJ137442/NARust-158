@@ -275,3 +275,5 @@ impl Opposite for SyllogismSide {
         }
     }
 }
+
+// ! ℹ️【2024-08-05 18:47:31】有关「辅助测试用代码」如「预期测试宏」均放到`inference`的根模块下

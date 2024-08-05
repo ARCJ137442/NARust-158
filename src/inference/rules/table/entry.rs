@@ -10,6 +10,7 @@ use crate::{
     language::{variable_process, CompoundTerm, Statement, Term},
     util::RefCount,
 };
+use nar_dev_utils::unwrap_or_return;
 
 /// 模拟`RuleTables.reason`
 /// * 📌规则表入口
@@ -78,7 +79,7 @@ pub fn reason(context: &mut ReasonContextConcept) {
         // * @ C="<{tim} --> (/,livingIn,_,{graz})>"
         [SELF, ComponentStatement] => {
             if let Some(belief) = belief {
-                syllogistic_rules::detachment(
+                detachment(
                     &task_sentence,
                     &belief,
                     PremiseSource::Task,
@@ -93,7 +94,7 @@ pub fn reason(context: &mut ReasonContextConcept) {
         // * @ C=T
         [SELF, CompoundStatement] => {
             if let Some(belief) = belief {
-                syllogistic_rules::detachment(
+                detachment(
                     &task_sentence,
                     &belief,
                     PremiseSource::Belief,
@@ -109,7 +110,7 @@ pub fn reason(context: &mut ReasonContextConcept) {
         [SELF, ComponentCondition] => {
             if let Some(belief) = belief {
                 // * 📝「复合条件」一定有两层，就处在作为「前件」的「条件」中
-                syllogistic_rules::conditional_deduction_induction(
+                conditional_deduction_induction(
                     cast_statement(task_term),
                     *b_link.get_index(1).unwrap(),
                     belief_term,
@@ -131,7 +132,7 @@ pub fn reason(context: &mut ReasonContextConcept) {
             // * * belief="<(&&,<$1 --> flyer>,<(*,$1,worms) --> food>) ==> <$1 --> bird>>"
             if let Some(belief) = belief {
                 // * 📝「复合条件」一定有两层，就处在作为「前件」的「条件」中
-                syllogistic_rules::conditional_deduction_induction(
+                conditional_deduction_induction(
                     cast_statement(belief_term),
                     *b_link.get_index(1).unwrap(),
                     task_term,
@@ -373,7 +374,46 @@ fn compound_and_statement(
     side: SyllogismPosition,
     context: &mut ReasonContextConcept,
 ) {
-    // TODO
+    let component = unwrap_or_return!(?compound.get_ref().component_at(index));
+    // ! ⚠️可能与「当前概念」的词项不一致：元素"{tom}"🆚概念"tom"
+    let task_is_judgement = context.current_task().get_().is_judgement();
+    // * 🚩均为陈述，且为同一类型⇒组合规则
+    if component.is_same_type(&statement) {
+        // TODO: 组合规则
+        // * 其内元素是「合取」且有「当前信念」
+        // * 🚩先尝试消去非独变量 #
+        // * 🚩能消去⇒三段论消元
+        // ? 【2024-06-10 19:38:32】为何要如此
+        // * 🚩不能消去，但任务是判断句⇒内部引入变量
+        // && !compound.containComponent(component)) {
+        // * 🚩是疑问句，且能消去查询变量⇒解构出元素作为结论
+    }
+    // if (!task.isStructural() && task.isJudgment()) {
+    // * 🚩类型不同 且为双判断⇒结构规则
+    else if task_is_judgement {
+        let can_compose_both;
+        // * 🚩涉及的陈述是「继承」
+        if statement.instanceof_inheritance() {
+            // * 🚩单侧组合
+            // TODO: StructuralRules.structuralComposeOne(compound, index, statement, context);
+            // if (!(compound instanceof SetExt) && !(compound instanceof SetInt)) {
+            // * 🚩若能双侧组合⇒双侧组合
+            can_compose_both = !(compound.instanceof_set() || compound.instanceof_negation());
+            if can_compose_both {
+                // {A --> B, A @ (A&C)} |- (A&C) --> (B&C)
+                structural_compose_both(compound, index, statement, side, context);
+            }
+            // * 🚩涉及的陈述是「相似」，但涉及的另一复合词项不是「合取」
+            // * 📝「相似」只能双侧组合，可以组合出除「合取」之外的结论
+        } else if statement.instanceof_similarity() {
+            // * 🚩尝试双侧组合
+            can_compose_both = !compound.instanceof_conjunction();
+            if can_compose_both {
+                // {A <-> B, A @ (A&C)} |- (A&C) <-> (B&C)
+                structural_compose_both(compound, index, statement, side, context);
+            }
+        }
+    }
 }
 
 /// 分派：复合词项与陈述

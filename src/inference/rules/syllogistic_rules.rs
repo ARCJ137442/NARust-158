@@ -847,76 +847,7 @@ pub fn detachment(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::inference::test_inference::{create_vm_from_engine, VmRuntimeBoost};
-    use narsese::api::GetTerm;
-    use narsese::lexical_nse_term;
-    use navm::output::Output;
-    use rules::tests::ENGINE_REASON;
-
-    macro_rules! expect_narsese_term {
-        // * 🚩模式：【类型】 【内容】 in 【输出】
-        ($type:ident $term:literal in outputs) => {
-            |o| matches!(
-                o,
-                Output::$type { narsese,.. }
-                // * 🚩【2024-07-15 00:04:43】此处使用了「词法Narsese」的内部分派
-                if *narsese.as_ref().unwrap().get_term() == lexical_nse_term!(@PARSE $term)
-            )
-        };
-    }
-
-    fn expectation_test(inputs: impl AsRef<str>, expectation: impl Fn(&Output) -> bool) {
-        let mut vm = create_vm_from_engine(ENGINE_REASON);
-        // * 🚩OUT
-        vm.input_fetch_print_expect(
-            inputs.as_ref(),
-            // * 🚩检查其中是否有导出
-            expectation,
-        );
-    }
-
-    /// 一个「单输出预期」测试
-    macro_rules! expectation_test {
-        (
-            $(#[$attr:meta])*
-            $name:ident :
-            $inputs:expr
-            => $($expectations:tt)*
-        ) => {
-            $(#[$attr])*
-            #[test]
-            fn $name() {
-                expectation_test(
-                    $inputs,
-                    // * 🚩检查其中是否有预期输出
-                    expect_narsese_term!($($expectations)*),
-                )
-            }
-        };
-    }
-
-    /// 一组「单输出预期」测试
-    macro_rules! expectation_tests {
-        (
-            $(
-                $(#[$attr:meta])*
-                $name:ident : {
-                    $inputs:expr
-                    => $($expectations:tt)*
-                }
-            )*
-        ) => {
-            $(
-                expectation_test! {
-                    $(#[$attr])*
-                    $name :
-                        $inputs
-                        => $($expectations)*
-                }
-            )*
-        };
-    }
+    use crate::expectation_tests;
 
     expectation_tests! {
         deduction: {

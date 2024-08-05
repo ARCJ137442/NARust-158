@@ -10,7 +10,9 @@
 
 use crate::{
     control::{util_outputs, Parameters, Reasoner},
-    entity::{Concept, JudgementV1, Punctuation, RCTask, Sentence, Task, TaskLink, TermLink},
+    entity::{
+        Concept, JudgementV1, Punctuation, RCTask, Sentence, ShortFloat, Task, TaskLink, TermLink,
+    },
     global::{ClockTime, Float},
     language::Term,
     storage::Memory,
@@ -45,6 +47,14 @@ pub trait ReasonContext {
 
     fn max_evidence_base_length(&self) -> usize {
         self.parameters().maximum_stamp_length
+    }
+
+    /// 🆕访问「当前超参数」中的「单前提推理依赖度」
+    /// * 🎯结构规则中的「单前提推理」情形
+    /// * 🚩返回短浮点类型
+    #[doc(alias = "reliance")]
+    fn reasoning_reliance(&self) -> ShortFloat {
+        ShortFloat::from_float(self.parameters().reliance)
     }
 
     /// 获取「音量百分比」
