@@ -330,6 +330,8 @@ pub fn conditional_abduction(
 }
 
 /// * 📝条件演绎/条件归纳
+/// * ♻️【2024-08-05 15:31:25】不再直接传入「信念」句：可能其中的内容是旧的
+///   * ⚠️在调用此方法前，有可能经过了「变量归一化」的过程
 ///
 /// ```nal
 /// {<(&&, S1, S2, S3) ==> P>, S1} |- <(&&, S2, S3) ==> P>
@@ -340,8 +342,8 @@ pub fn conditional_deduction_induction(
     conditional: Statement,
     index_in_condition: usize,
     premise2: Term,
-    belief: impl Judgement,
-    _conditional_position: PremiseSource, // ! 📝【2024-08-05 01:15:51】暂时用不着：「当前任务是否为条件句」不重要
+    belief_truth: &impl Truth,
+    conditional_from: PremiseSource, // ! 📝【2024-08-05 01:15:51】暂时用不着：「当前任务是否为条件句」不重要
     side: SyllogismSide,
     context: &mut ReasonContextConcept,
 ) {
@@ -354,8 +356,12 @@ pub fn conditional_deduction_induction(
         .get_()
         .as_judgement()
         .map(TruthValue::from);
+    // * 🚩若条件句来自任务，则取premise2作为「信念内容」；否则取来自信念的conditional
+    // * ✅【2024-08-05 15:29:10】经测试基本成功
+    // println!("{unified_belief_content} 🆚 {}", belief.content());
+    let [_, unified_belief_content] = conditional_from.select([&*conditional, &premise2]);
     let conditional_task =
-        variable_process::has_unification_i(&premise2, belief.content(), rng_seed);
+        variable_process::has_unification_i(&premise2, unified_belief_content, rng_seed);
     let direction = context.reason_direction();
     let deduction = side != Subject;
 
@@ -444,13 +450,13 @@ pub fn conditional_deduction_induction(
     // * 🚩真值 * //
     let truth = match direction {
         Forward => Some(match deduction {
-            true => task_truth.unwrap().deduction(&belief),
+            true => task_truth.unwrap().deduction(belief_truth),
             // * 🚩演绎 ⇒ 演绎
             false => match conditional_task {
                 // * 🚩任务是条件句 ⇒ 归纳（任务→信念，就是反过来的归因）
-                true => belief.induction(&task_truth.unwrap()),
+                true => belief_truth.induction(&task_truth.unwrap()),
                 // * 🚩其它 ⇒ 归纳（信念⇒任务）
-                false => task_truth.unwrap().induction(&belief),
+                false => task_truth.unwrap().induction(belief_truth),
             },
         }),
         Backward => None,
@@ -461,7 +467,7 @@ pub fn conditional_deduction_induction(
         // * 🚩前向
         Forward => context.budget_forward(&truth.unwrap()),
         // * 🚩反向⇒弱推理
-        Backward => context.budget_backward_weak(&belief),
+        Backward => context.budget_backward_weak(belief_truth),
     };
 
     // * 🚩结论 * //
@@ -1238,7 +1244,6 @@ mod tests {
             => ANSWER "<(&&, S2, S3) ==> P>" in outputs
         }
 
-        // ! ❌【2024-08-05 01:53:39】测试失败
         conditional_deduction_replace: {
             "
             nse <(&&, S2, S3) ==> P>.
