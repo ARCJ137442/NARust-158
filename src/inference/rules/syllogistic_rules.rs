@@ -409,9 +409,9 @@ pub fn conditional_deduction_induction(
         } else if common_component.is_same_type(&old_condition) {
             let common_component_component = unwrap_or_return!(
                 ?common_component
-                    .as_compound()
-                    .unwrap()
-                    .component_at(index_in_old_condition)
+                .as_compound()
+                .unwrap()
+                .component_at(index_in_old_condition)
             );
             // * 🚩尝试寻找并应用变量归一化 @ 共同子项
             let unification_i = variable_process::unify_find_i(
@@ -458,6 +458,104 @@ pub fn conditional_deduction_induction(
                 // * 🚩其它 ⇒ 归纳（信念⇒任务）
                 false => task_truth.unwrap().induction(belief_truth),
             },
+        }),
+        Backward => None,
+    };
+
+    // * 🚩预算 * //
+    let budget = match direction {
+        // * 🚩前向
+        Forward => context.budget_forward(&truth.unwrap()),
+        // * 🚩反向⇒弱推理
+        Backward => context.budget_backward_weak(belief_truth),
+    };
+
+    // * 🚩结论 * //
+    context.double_premise_task(content, truth, budget);
+}
+
+/// {<(&&, S1, S2) <=> P>, (&&, S1, S2)} |- P
+/// * 📝条件类比
+/// * 💭【2024-07-09 18:18:41】实际上是死代码
+///   * 📄禁用「等价⇒复合条件」后，「等价」不再能自`compoundAndCompoundCondition`分派
+///   * 📌【2024-08-05 15:57:25】替代式推理路径：等价→蕴含 + 条件演绎/条件归纳
+pub fn conditional_analogy(
+    mut belief_equivalence: Statement, // 前提1
+    index_in_condition: usize,
+    mut task_implication: Statement, // 前提2
+    common_term_side: SyllogismSide,
+    belief_truth: &impl Truth,
+    context: &mut ReasonContextConcept,
+) {
+    let [rng_seed1, rng_seed2, rng_seed3] = context.shuffle_rng_seeds();
+    // * 🚩提取参数 * //
+    let task_truth: Option<TruthValue> = context
+        .current_task()
+        .get_()
+        .as_judgement()
+        .map(TruthValue::from);
+    let direction = context.reason_direction();
+    let conditional_task =
+        variable_process::has_unification_i(&task_implication, &belief_equivalence, rng_seed1);
+
+    // * 🚩词项 * //
+    let [common_component, _] = common_term_side.select_exclusive(&task_implication);
+    let common_component = common_component.expect("应该有提取到");
+    // * 🚩尝试消解条件中的变量，匹配数次未果则返回
+    let old_condition = unwrap_or_return!(
+        ?belief_equivalence.get_ref().subject.as_compound_type(CONJUNCTION_OPERATOR)
+    );
+    let common_in_condition = old_condition.component_at(index_in_condition).unwrap();
+    let unification_d =
+        variable_process::unify_find_d(common_in_condition, common_component, rng_seed2);
+    let unification = if unification_d.has_unification {
+        unification_d
+    } else if common_component.is_same_type(&old_condition) {
+        let common_inner = common_component
+            .as_compound()
+            .unwrap()
+            .component_at(index_in_condition)
+            .unwrap();
+        let unification_d =
+            variable_process::unify_find_d(common_in_condition, common_inner, rng_seed3);
+        if unification_d.has_unification {
+            unification_d
+        } else {
+            return; // 失败⇒中止
+        }
+    } else {
+        return; // 失败⇒中止
+    };
+    unification.apply_to(
+        belief_equivalence.mut_ref().into_compound_ref(),
+        task_implication.mut_ref().into_compound_ref(),
+    );
+    // 构造新条件词项
+    let [common_component, new_component] = common_term_side.select_exclusive(&task_implication);
+    let common_component = common_component.expect("应该有提取到");
+    let old_condition = unwrap_or_return!(
+        ?belief_equivalence.get_ref().subject.as_compound_type(CONJUNCTION_OPERATOR)
+    );
+    let new_condition = match *old_condition == *common_component {
+        true => None,
+        false => old_condition.set_component(index_in_condition, new_component.cloned()),
+    };
+    let copula = belief_equivalence.identifier().to_owned();
+    let [_, premise1_predicate] = belief_equivalence.unwrap_components();
+    let content = match new_condition {
+        Some(new_condition) => unwrap_or_return!(
+            ?Term::make_statement_relation(copula, new_condition, premise1_predicate)
+        ),
+        None => premise1_predicate,
+    };
+
+    // * 🚩真值 * //
+    let truth = match direction {
+        Forward => Some(match conditional_task {
+            // * 🚩条件性任务 ⇒ 比较
+            true => task_truth.unwrap().comparison(belief_truth),
+            // * 🚩其它 ⇒ 类比
+            false => task_truth.unwrap().analogy(belief_truth),
         }),
         Backward => None,
     };

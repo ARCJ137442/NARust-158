@@ -189,7 +189,7 @@ pub fn reason(context: &mut ReasonContextConcept) {
                     belief,
                     cast_compound(task_term),
                     cast_statement(belief_term),
-                    SyllogismPosition::from_index(b_index.unwrap()),
+                    b_index.unwrap(),
                     context,
                 )
             }
@@ -397,12 +397,53 @@ fn component_and_statement(
 fn compound_and_compound_condition(
     task_sentence: impl Sentence,
     belief: impl Judgement,
-    task_term: CompoundTerm,
-    belief_term: Statement,
-    b_index: SyllogismPosition,
+    mut task_term: CompoundTerm,
+    mut belief_term: Statement,
+    b_index: usize,
     context: &mut ReasonContextConcept,
 ) {
-    // TODO
+    let rng_seed = context.shuffle_rng_seeds();
+    if belief_term.instanceof_implication() {
+        // * 🚩尝试统一其中的独立变量
+        let can_detach =
+            variable_process::unify_find_i(belief_term.get_ref().subject, &task_term, rng_seed)
+                .apply_to(
+                    belief_term.mut_ref().into_compound_ref(),
+                    task_term.mut_ref(),
+                );
+        match can_detach {
+            // * 🚩成功统一 ⇒ 应用「条件分离」规则
+            true => detachment_with_var(
+                task_sentence,
+                belief,
+                PremiseSource::Belief,
+                SyllogismPosition::from_index(b_index),
+                context,
+            ),
+            // * 🚩未能统一 ⇒ 应用「条件 演绎/归纳」规则
+            false => conditional_deduction_induction(
+                belief_term,
+                b_index, // * 📝Rust允许直接用`as`将枚举转换为数值
+                task_term.into(),
+                &belief,
+                PremiseSource::Belief,
+                SyllogismSide::Whole,
+                context,
+            ),
+        }
+    }
+    // * 🚩此处需要限制「任务词项」是「蕴含」
+    else if belief_term.instanceof_equivalence() && task_term.instanceof_implication() {
+        // * 🚩条件类比
+        conditional_analogy(
+            belief_term,
+            b_index,
+            cast_statement(task_term.into()), // 复合词项强转为陈述
+            SyllogismSide::Whole,
+            &belief,
+            context,
+        );
+    }
 }
 
 /// 分派：条件演绎/归纳 & 变量
