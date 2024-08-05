@@ -253,6 +253,17 @@ impl SyllogismSide {
     }
 }
 
+/// 从「三段论位置」到「三段论某侧」
+/// * 📝兼容性转换
+impl From<SyllogismPosition> for SyllogismSide {
+    fn from(value: SyllogismPosition) -> Self {
+        match value {
+            Subject => Self::Subject,
+            Predicate => Self::Predicate,
+        }
+    }
+}
+
 impl Opposite for SyllogismSide {
     /// 🆕调转到相反位置
     fn opposite(self) -> Self {

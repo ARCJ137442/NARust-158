@@ -62,8 +62,21 @@ pub trait ReasonContext {
     }
 
     /// 获取「打乱用随机数生成器」
-    fn shuffle_rng_seed(&mut self) -> u64 {
-        self.reasoner_mut().shuffle_rng.next_u64()
+    /// * ✨基于特征[`ContextRngSeedGen`]支持一次多个
+    /// * 🎯用于「随要随取」获取不定数目的随机种子
+    /// * ♻️【2024-08-05 15:04:49】出于类型兼容（省方法）的考虑，将其从「一个简单生成函数」扩宽为「多类型兼容」的特征函数
+    ///   * 📝Rust知识点：闭包、泛型函数、特征方法、特征实现
+    #[inline]
+    fn shuffle_rng_seeds<T: ContextRngSeedGen>(&mut self) -> T {
+        // 获取内部随机数生成器的引用
+        // * 🚩尽可能缩小闭包捕获的值范围
+        let rng = &mut self.reasoner_mut().shuffle_rng;
+        // 生成一个闭包，捕获self而不直接使用self
+        // * ✅避免传入`self`导致的`Sized`编译问题
+        let generate = || rng.next_u64();
+        // 使用这个可重复闭包，结合T的各类实现，允许扩展各种随机数生成方式
+        // * ✅包括「单个值」与「多个值」
+        T::generate_seed_from_context(generate)
     }
 
     /// 复刻自改版`DerivationContext.noNewTask`
@@ -424,4 +437,56 @@ macro_rules! __delegate_from_core {
             self.core.current_concept_mut()
         }
     };
+}
+
+/// 目前基于[`rand`] crate 确认的随机种子类型
+pub type RngSeed = u64;
+
+/// 上下文随机数生成
+/// * 🎯用于「随机种子生成时支持一个或多个」
+/// * 🚩实现者必须是随机种子本身，或【能容纳随机种子】的容器
+///   * ⚠️返回`Self`，做不了特征对象
+pub trait ContextRngSeedGen: Sized {
+    /// 从「推理上下文」（给的闭包）中生成一个【填充满随机种子】的自身类型值
+    fn generate_seed_from_context(generate: impl FnMut() -> RngSeed) -> Self;
+}
+
+/// 对随机种子类型实现：直接生成一个
+impl ContextRngSeedGen for RngSeed {
+    #[inline(always)]
+    fn generate_seed_from_context(mut generate: impl FnMut() -> RngSeed) -> Self {
+        generate()
+    }
+}
+
+/// 对随机种子的数组实现：逐个生成一系列的随机种子
+impl<const N: usize> ContextRngSeedGen for [u64; N] {
+    /// * 💭【2024-08-05 14:34:45】性能问题暂时不用担忧：函数内联后，编译器能自动优化
+    ///
+    /// ## 📝Rust笔记：给定内容定长数组的初始化
+    ///
+    /// ! ⚠️【2024-08-05 14:40:15】目前Rust没有safe的办法「申请到空间后直接按逻辑填充」，总是需要先初始填充个空值
+    ///
+    /// 以下的代码无效：只会生成一个值，并拷贝到其余的值
+    ///
+    /// ```rs,no-doctest
+    /// fn main() {
+    ///     let mut i = 1;
+    ///     dbg!([{i += 1; i}; 10]);
+    /// }
+    /// ```
+    ///
+    /// ℹ️【2024-08-05 14:46:30】ℹ或许其它一些参考资料有效，但目前暂无引入其它crate的想法，故搁置
+    /// * 🔗有关「数组序列初始化」的讨论：<https://www.reddit.com/r/rust/comments/ns1zu3/initarray_a_crate_to_initialize_arrays_itemwise/>
+    /// * 📦一个大致可行的crate `array-init`：<https://crates.io/crates/array-init>
+    #[inline]
+    fn generate_seed_from_context(mut generate: impl FnMut() -> u64) -> Self {
+        // 初始化一个数组（优化的点即源自于此）
+        let mut result = [0; N];
+        for value_ref in result.iter_mut() {
+            // 不管索引如何，直接遍历可变迭代器，获取随机种子并填充
+            *value_ref = generate();
+        }
+        result
+    }
 }

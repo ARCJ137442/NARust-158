@@ -25,7 +25,7 @@ use nar_dev_utils::unwrap_or_return;
 /// The task and belief have the same content
 pub fn match_task_and_belief(context: &mut ReasonContextConcept) {
     // * 🚩保证提取出「当前信念」
-    let shuffle_rng_seed = context.shuffle_rng_seed(); // 提前生成随机种子
+    let shuffle_rng_seed = context.shuffle_rng_seeds(); // 提前生成随机种子
     let current_belief = unwrap_or_return!(?context.current_belief());
     let current_task_rc = context.current_task();
     let current_task = current_task_rc.get_();

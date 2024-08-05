@@ -346,9 +346,7 @@ pub fn conditional_deduction_induction(
     context: &mut ReasonContextConcept,
 ) {
     use SyllogismSide::*;
-    let rng_seed = context.shuffle_rng_seed();
-    let rng_seed2 = context.shuffle_rng_seed();
-    let rng_seed3 = context.shuffle_rng_seed();
+    let [rng_seed, rng_seed2, rng_seed3] = context.shuffle_rng_seeds();
 
     // * 🚩提取参数 * //
     let task_truth = context

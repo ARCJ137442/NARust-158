@@ -106,8 +106,7 @@ fn asymmetric_asymmetric(
     // * 🚩非对称🆚非对称
     let mut t_term = cast_statement(task_sentence.clone_content());
     let mut b_term = cast_statement(belief_sentence.clone_content());
-    let rng_seed = context.shuffle_rng_seed();
-    let rng_seed2 = context.shuffle_rng_seed();
+    let [rng_seed, rng_seed2] = context.shuffle_rng_seeds();
 
     // * 🚩尝试获取各大「共同项」与「其它项」的位置
     // * 📝外部传入的「三段论图式」即「共同项的位置」，「其它项」即各处「共同项」的反向
@@ -229,8 +228,7 @@ fn asymmetric_symmetric(
     // * 🚩非对称🆚对称
     let mut asy_s = cast_statement(asymmetric.clone_content());
     let mut sym_s = cast_statement(symmetric.clone_content());
-    let rng_seed = context.shuffle_rng_seed();
-    let rng_seed2 = context.shuffle_rng_seed();
+    let [rng_seed, rng_seed2] = context.shuffle_rng_seeds();
 
     // * 🚩尝试获取各大「共同项」与「其它项」的位置
     // * 📝外部传入的「三段论图式」即「共同项的位置」，「其它项」即各处「共同项」的反向
@@ -339,7 +337,7 @@ fn symmetric_symmetric(
         pos_t.select(t_term.sub_pre()),
         pos_b.select(b_term.sub_pre()),
     ];
-    let rng_seed = context.shuffle_rng_seed();
+    let rng_seed = context.shuffle_rng_seeds();
     // * 🚩尝试以不同方式统一独立变量 @ 公共词项
     let unified = unify_find_i(common_b, common_t, rng_seed).apply_to(
         t_term.mut_ref().into_compound_ref(),
@@ -387,7 +385,7 @@ pub fn detachment_with_var(
 
     // * 🚩若非常量（有变量） ⇒ 尝试统一独立变量
     let unification_i =
-        variable_process::unify_find_i(component, sub_content, context.shuffle_rng_seed());
+        variable_process::unify_find_i(component, sub_content, context.shuffle_rng_seeds());
     let [main_content_mut, sub_content_mut] =
         high_order_position.select([task_sentence.content_mut(), belief.content_mut()]); // 选取可变引用并统一
     let unified_i = unification_i.apply_to_term(main_content_mut, sub_content_mut);
