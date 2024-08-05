@@ -122,7 +122,6 @@ mod tests {
         expect_narsese_term,
         inference::{process_direct, test_inference::*, InferenceEngine},
     };
-    use navm::output::Output;
 
     /// 引擎
     const ENGINE: InferenceEngine = InferenceEngine::new(

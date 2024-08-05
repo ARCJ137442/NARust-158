@@ -60,12 +60,14 @@ impl Term {
             // * 🚩其它
             return makeCompoundTerm(compound.operator(), components); */
         let term = template.inner;
-        if term.instanceof_image_ext() {
-            Self::make_image_ext_arg(components, template.get_placeholder_index())
-        } else if term.instanceof_image_int() {
-            Self::make_image_int_arg(components, template.get_placeholder_index())
-        } else {
-            Self::make_compound_term_from_identifier(&term.identifier, components)
+        match term.identifier.as_str() {
+            IMAGE_EXT_OPERATOR => {
+                Self::make_image_ext_arg(components, template.get_placeholder_index())
+            }
+            IMAGE_INT_OPERATOR => {
+                Self::make_image_int_arg(components, template.get_placeholder_index())
+            }
+            identifier => Self::make_compound_term_from_identifier(identifier, components),
         }
     }
 
@@ -483,6 +485,10 @@ impl Term {
     /* Image */
 
     /// * 📌作为模板的「像」提供「占位符位置」，但作为「组分」的`argument`可能没有占位符
+    ///   * ⚠️时刻注意OpenNARS内部存储方式的不同
+    ///     * 📄"`(/,neutralization,_,base)` => `[neutralization,base]`+relation_index=0"
+    ///     * 📄"`(/,reaction,acid,_)` => `[acid,reaction]`+relation_index=1"
+    ///   * ❓【2024-08-05 22:59:21】后续是否要完全革新，不按照OpenNARS的构造方式来
     /// * 📄"(/,num,_)", ["0"] => "(/,0,_)"
     /// * 📄"(/,neutralization,_,base)", ["reaction", "base"] => "(/,reaction,_,base)"
     /// * 📄"(/,reaction,acid,_)", ["acid", "neutralization"] => "(/,neutralization,acid,_)"
@@ -494,16 +500,22 @@ impl Term {
     ) -> Option<Term> {
         // * 🚩按占位符位置找到「关系词项」并放在最前边（占位符位置>0）
         debug_assert!(placeholder_index > 0);
-        let relation = argument.remove(placeholder_index - 1);
-        argument.insert(0, relation);
-        // * 🚩再插入占位符
-        // * 🎯处理edge case: "(/,num,_)", ["0"] => "(/,0,_)"
-        if placeholder_index >= argument.len() {
-            argument.push(Term::new_placeholder());
+        // * 🚩【2024-08-05 22:57:53】补丁：若参数表中有占位符，先移除占位符
+        if let Some(old_placeholder_index) = argument.iter().position(|term| term.is_placeholder())
+        {
+            // * 🚩先移除旧位置的占位符
+            argument.remove(old_placeholder_index);
+        } else {
+            // * 🚩OpenNARS旧情况：先将对应位置的词项当作「关系词项」挪到最开头
+            let relation = argument.remove(placeholder_index - 1);
+            argument.insert(0, relation);
         }
-        // * 🚩否则⇒插入
-        else {
-            argument.insert(placeholder_index, Term::new_placeholder());
+        // * 🚩再插入占位符
+        match placeholder_index >= argument.len() {
+            // * 🎯处理edge case: "(/,num,_)", ["0"] => "(/,0,_)"
+            true => argument.push(Term::new_placeholder()),
+            // * 🚩否则⇒插入
+            false => argument.insert(placeholder_index, Term::new_placeholder()),
         }
         // * 🚩制作词项
         make_image_vec(argument)
@@ -517,6 +529,8 @@ impl Term {
         if argument.len() < 2 {
             return None;
         }
+        // ! 📌【2024-08-05 22:08:05】断言：构造的「像」中只能有正好一个占位符
+        debug_assert!(argument.iter().filter(|term| term.is_placeholder()).count() == 1);
         // * 🚩因为「词项中自带占位符」所以无需「特别决定索引」
         new_image(argument).ok()
     }

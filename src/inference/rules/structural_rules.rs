@@ -27,11 +27,12 @@ fn switch_order(compound: CompoundTermRef, index: usize) -> bool {
     // * 💭"<A --> B>" => "<(~, A, C) --> (~, B, C)>"
     // * ✅【2024-07-22 14:51:00】上述例子均以ANSWER验证
     (compound.instanceof_difference() && index == 1)
-        // * 🚩外延像/内涵像 且 索引【不在占位符上】
+        // * 🚩外延像/内涵像 且 索引【不是关系词项】
+        //   * ⚠️【2024-08-05 22:43:23】纠正：索引为关系词项时，不交换
         // * 📄"<A --> B>" => "<(/, R, _, B) --> (/, R, _, A)>"
         // * 💭"<A --> B>" => "<(/, A, _, C) --> (/, B, _, C)>"
         // * ✅【2024-07-22 14:49:59】上述例子均以ANSWER验证
-        || (compound.instanceof_image() && index != compound.get_placeholder_index())
+        || (compound.instanceof_image() && index > 0)
 }
 
 /// 🆕根据「是否在构建时交换」交换两项（一般是词项）
@@ -282,6 +283,78 @@ mod tests {
             cyc 20
             "
             => ANSWER "<(*,C,A) --> (*,C,B)>" in outputs
+        }
+
+        compose_both_image_ext_1: { // ? ❓【2024-08-05 22:36:17】为何这里要反过来？仍然不明确
+            "
+            nse <R --> S>.
+            nse (/,R,_,A).
+            cyc 10
+            "
+            => OUT "<(/,R,_,A) --> (/,S,_,A)>" in outputs
+        }
+
+        compose_both_image_ext_1_answer: { // ? ❓【2024-08-05 22:36:17】为何这里要反过来？仍然不明确
+            "
+            nse <R --> S>.
+            nse <(/,R,_,A) --> (/,S,_,A)>?
+            cyc 20
+            "
+            => ANSWER "<(/,R,_,A) --> (/,S,_,A)>" in outputs
+        }
+
+        compose_both_image_ext_2: {
+            "
+            nse <A --> B>.
+            nse (/,R,_,A).
+            cyc 10
+            "
+            => OUT "<(/,R,_,B) --> (/,R,_,A)>" in outputs
+        }
+
+        compose_both_image_ext_2_answer: {
+            "
+            nse <A --> B>.
+            nse <(/,R,_,B) --> (/,R,_,A)>?
+            cyc 20
+            "
+            => ANSWER "<(/,R,_,B) --> (/,R,_,A)>" in outputs
+        }
+
+        compose_both_image_int_1: { // ? ❓【2024-08-05 22:36:17】为何这里要反过来？仍然不明确
+            r"
+            nse <R --> S>.
+            nse (\,R,_,A).
+            cyc 10
+            "
+            => OUT r"<(\,R,_,A) --> (\,S,_,A)>" in outputs
+        }
+
+        compose_both_image_int_1_answer: { // ? ❓【2024-08-05 22:36:17】为何这里要反过来？仍然不明确
+            r"
+            nse <R --> S>.
+            nse <(\,R,_,A) --> (\,S,_,A)>?
+            cyc 20
+            "
+            => ANSWER r"<(\,R,_,A) --> (\,S,_,A)>" in outputs
+        }
+
+        compose_both_image_int_2: {
+            r"
+            nse <A --> B>.
+            nse (\,R,_,A).
+            cyc 10
+            "
+            => OUT r"<(\,R,_,B) --> (\,R,_,A)>" in outputs
+        }
+
+        compose_both_image_int_2_answer: {
+            r"
+            nse <A --> B>.
+            nse <(\,R,_,B) --> (\,R,_,A)>?
+            cyc 20
+            "
+            => ANSWER r"<(\,R,_,B) --> (\,R,_,A)>" in outputs
         }
         // TODO: 更多测试
     }
