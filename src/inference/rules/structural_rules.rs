@@ -7,11 +7,8 @@ use super::SyllogismPosition;
 use crate::{
     control::*,
     entity::*,
-    inference::{
-        rules::{utils::*, *},
-        BudgetInferenceContext, TruthFunctions,
-    },
-    language::{variable_process, *},
+    inference::{rules::utils::*, BudgetInferenceContext, TruthFunctions},
+    language::*,
     util::RefCount,
 };
 use nar_dev_utils::unwrap_or_return;
@@ -45,9 +42,14 @@ fn switch_by_order<T>(compound: CompoundTermRef, index: usize, [sub, pre]: [T; 2
     }
 }
 
+/// * 📝双侧建构
+///
+/// # 📄OpenNARS
+///
+/// ```nal
 /// {<S --> P>, S@(S&T)} |- <(S&T) --> (P&T)>
 /// {<S --> P>, S@(M-S)} |- <(M-P) --> (M-S)>
-/// * 📝双侧建构
+/// ```
 pub fn structural_compose_both(
     compound: CompoundTerm,
     index: usize,
@@ -183,6 +185,104 @@ mod tests {
             => OUT "<(|,A,C) --> (|,B,C)>" in outputs
         }
 
+        compose_both_int_int_answer: {
+            "
+            nse <A --> B>.
+            nse <(|,A,C) --> (|,B,C)>?
+            cyc 20
+            "
+            => ANSWER "<(|,A,C) --> (|,B,C)>" in outputs
+        }
+
+        compose_both_diff_ext: {
+            "
+            nse <A --> B>.
+            nse (-,A,C).
+            cyc 10
+            "
+            => OUT "<(-,A,C) --> (-,B,C)>" in outputs
+        }
+
+        compose_both_diff_ext_answer: {
+            "
+            nse <A --> B>.
+            nse <(-,A,C) --> (-,B,C)>?
+            cyc 20
+            "
+            => ANSWER "<(-,A,C) --> (-,B,C)>" in outputs
+        }
+
+        compose_both_diff_ext_rev: {
+            "
+            nse <A --> B>.
+            nse (-,C,A).
+            cyc 10
+            "
+            => OUT "<(-,C,B) --> (-,C,A)>" in outputs
+        }
+
+        compose_both_diff_ext_rev_answer: {
+            "
+            nse <A --> B>.
+            nse <(-,C,B) --> (-,C,A)>?
+            cyc 20
+            "
+            => ANSWER "<(-,C,B) --> (-,C,A)>" in outputs
+        }
+
+        compose_both_diff_int: {
+            "
+            nse <A --> B>.
+            nse (~,A,C).
+            cyc 10
+            "
+            => OUT "<(~,A,C) --> (~,B,C)>" in outputs
+        }
+
+        compose_both_diff_int_answer: {
+            "
+            nse <A --> B>.
+            nse <(~,A,C) --> (~,B,C)>?
+            cyc 20
+            "
+            => ANSWER "<(~,A,C) --> (~,B,C)>" in outputs
+        }
+
+        compose_both_diff_int_rev: {
+            "
+            nse <A --> B>.
+            nse (~,C,A).
+            cyc 10
+            "
+            => OUT "<(~,C,B) --> (~,C,A)>" in outputs
+        }
+
+        compose_both_diff_int_rev_answer: {
+            "
+            nse <A --> B>.
+            nse <(~,C,B) --> (~,C,A)>?
+            cyc 20
+            "
+            => ANSWER "<(~,C,B) --> (~,C,A)>" in outputs
+        }
+
+        compose_both_product: {
+            "
+            nse <A --> B>.
+            nse (*,C,A).
+            cyc 10
+            "
+            => OUT "<(*,C,A) --> (*,C,B)>" in outputs
+        }
+
+        compose_both_product_answer: {
+            "
+            nse <A --> B>.
+            nse <(*,C,A) --> (*,C,B)>?
+            cyc 20
+            "
+            => ANSWER "<(*,C,A) --> (*,C,B)>" in outputs
+        }
         // TODO: 更多测试
     }
 }
