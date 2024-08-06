@@ -8,7 +8,7 @@ use crate::{
     entity::*,
     inference::rules::{utils::*, *},
     io::symbols::{IMPLICATION_RELATION, INHERITANCE_RELATION, SIMILARITY_RELATION},
-    language::{variable_process, CompoundTerm, Statement, Term},
+    language::{variable_process, *},
     util::RefCount,
 };
 use nar_dev_utils::unwrap_or_return;
@@ -170,7 +170,6 @@ pub fn reason(context: &mut ReasonContextConcept) {
         // * + B="<{tom} --> murder>"
         // * @ C="{tom}"
         [Compound, CompoundStatement] => compound_and_statement(
-            task_term == belief_term,
             PremiseSource::Task,
             cast_compound(task_term),
             t_index.unwrap(),
@@ -218,7 +217,6 @@ pub fn reason(context: &mut ReasonContextConcept) {
         // * + B="{tim}"
         // * @ C="tim"
         [CompoundStatement, Compound] => compound_and_statement(
-            task_term == belief_term,
             PremiseSource::Belief,
             cast_compound(belief_term.clone()),
             b_index.unwrap(),
@@ -329,7 +327,7 @@ fn compound_and_self(
     if compound.instanceof_junction() {
         // * 🚩有「当前信念」⇒解构出陈述
         if context.has_current_belief() {
-            // TODO: CompositionalRules.decomposeStatement(compound, component, isCompoundFromTask, context);
+            decompose_statement(compound.get_ref(), &component, compound_from, context);
         }
         // * 🚩否，但包含元素⇒取出词项
         else if compound.get_ref().contain_component(&component) {
@@ -341,7 +339,6 @@ fn compound_and_self(
     // * 🚩否定
     // * 📝【2024-07-22 17:40:06】规则表分派不要过于涉及词项处理：是否要「提取否定内部的词项」要由「具体规则函数」决定
     else if compound.instanceof_negation() {
-        // TODO: StructuralRules.transformNegation((Negation) compound, isCompoundFromTask, context);
         transform_negation(compound, compound_from, context)
     }
     // * 🚩其它⇒无结果
@@ -383,11 +380,10 @@ fn compound_and_compound(
 ///
 /// Inference between a compound term and a statement
 fn compound_and_statement(
-    statement_equals_belief: bool,
     compound_from: PremiseSource,
-    compound: CompoundTerm,
+    mut compound: CompoundTerm,
     index: usize,
-    statement: Statement,
+    mut statement: Statement,
     side: SyllogismPosition,
     context: &mut ReasonContextConcept,
 ) {
@@ -396,14 +392,59 @@ fn compound_and_statement(
     let task_is_judgement = context.current_task().get_().is_judgement();
     // * 🚩均为陈述，且为同一类型⇒组合规则
     if component.is_same_type(&statement) {
-        // TODO: 组合规则
         // * 其内元素是「合取」且有「当前信念」
-        // * 🚩先尝试消去非独变量 #
-        // * 🚩能消去⇒三段论消元
-        // ? 【2024-06-10 19:38:32】为何要如此
-        // * 🚩不能消去，但任务是判断句⇒内部引入变量
-        // && !compound.containComponent(component)) {
-        // * 🚩是疑问句，且能消去查询变量⇒解构出元素作为结论
+        if compound.instanceof_conjunction() && context.has_current_belief() {
+            // * 🚩先尝试消去非独变量 #
+            let unified_d =
+                variable_process::unify_find_d(component, &statement, context.shuffle_rng_seeds())
+                    .apply_to(compound.mut_ref(), statement.mut_ref().into_compound_ref());
+            // 重新获取一次共同组分
+            let component = unwrap_or_return!(?compound.get_ref().component_at(index));
+            // * 🚩能消去⇒因变量消元
+            if unified_d {
+                // * 🚩现场计算「是否相等」，需要在「变量统一」后执行
+                let statement_equals_belief = {
+                    // * 🚩复合词项来自任务：`[任务复合, 信念陈述]`；来自信念：`[任务陈述, 信念复合]`
+                    let [_, belief_content] = compound_from
+                        .select([compound.get_ref().inner, statement.get_ref().statement]);
+                    // ? ❓【2024-08-06 20:18:28】是否一定要在此判等？还是直接根据「选中了哪个词项」选择
+                    //   * ⚠️注意：即便选中的陈述不是信念，仍有可能「统一后的词项与信念词项相等」
+                    *statement.get_ref().statement == *belief_content
+                };
+                eliminate_var_dep(
+                    compound.get_ref(),
+                    component,
+                    match statement_equals_belief {
+                        true => PremiseSource::Task,
+                        false => PremiseSource::Belief,
+                    },
+                    context,
+                );
+            }
+            // * 🚩不能消去，但任务是判断句⇒内部引入变量
+            else if task_is_judgement {
+                // && !compound.containComponent(component)) {
+                intro_var_inner(
+                    statement.get_ref(),
+                    component.as_statement().unwrap(),
+                    compound.get_ref(),
+                    context,
+                );
+            }
+            // * 🚩是疑问句，且能消去查询变量⇒解构出元素作为结论
+            else {
+                let unified_q = variable_process::unify_find_q(
+                    component,
+                    &statement,
+                    context.shuffle_rng_seeds(),
+                )
+                .apply_to(compound.mut_ref(), statement.mut_ref().into_compound_ref());
+                if unified_q {
+                    let component = unwrap_or_return!(?compound.get_ref().component_at(index));
+                    decompose_statement(compound.get_ref(), component, compound_from, context);
+                }
+            }
+        }
     }
     // if (!task.isStructural() && task.isJudgment()) {
     // * 🚩类型不同 且为双判断⇒结构规则
@@ -620,6 +661,7 @@ fn conditional_deduction_induction_with_var(
     )
 }
 
+/// 🆕匹配分支：复合条件×复合陈述
 fn compound_condition_and_compound_statement(
     task_sentence: impl Sentence,
     task_term: Statement,

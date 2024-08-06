@@ -68,8 +68,8 @@ pub fn decompose_compound(
 // {(&&, S, P), P} |- S
 /// ```
 pub fn decompose_statement(
-    compound: CompoundTerm,
-    component: Term,
+    compound: CompoundTermRef,
+    component: &Term,
     compound_from: PremiseSource,
     context: &mut ReasonContextConcept,
 ) {
@@ -219,9 +219,9 @@ fn intro_var_outer4(
 /// {<M --> S>, (&&, C, <M --> P>)} |- (&&, C, <<#x --> S> ==> <#x --> P>>)
 /// ```
 pub fn intro_var_inner(
-    premise_1: Statement,
-    premise_2: Statement,
-    old_compound: CompoundTerm,
+    premise_1: StatementRef,
+    premise_2: StatementRef,
+    old_compound: CompoundTermRef,
     context: &mut ReasonContextConcept,
 ) {
     todo!()
@@ -294,8 +294,8 @@ fn second_common_term([term1, term2]: [&Term; 2], side: SyllogismPosition) -> &T
 /// {(&&, <#x() --> S>, <#x() --> P>), <M --> P>} |- <M --> S>
 /// ```
 pub fn eliminate_var_dep(
-    compound: CompoundTerm,
-    component: Term,
+    compound: CompoundTermRef,
+    component: &Term,
     compound_from: PremiseSource,
     context: &mut ReasonContextConcept,
 ) {
