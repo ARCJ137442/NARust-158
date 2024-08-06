@@ -10,6 +10,9 @@
 // 三段论规则分派
 mod syllogistic;
 
+// 组合规则分派
+mod compositional;
+
 // 规则表入口
 mod entry;
 pub use entry::*;
