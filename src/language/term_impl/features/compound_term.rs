@@ -815,6 +815,12 @@ impl CompoundTerm {
         // SAFETY: 在构造时，已经检查了是否为复合词项，因此此处无需检查
         unsafe { self.term.as_compound_mut_unchecked() }
     }
+
+    /// 解包为内部成分（主项、系词、谓项）
+    /// * 🎯用于「推理规则」中的新词项生成
+    pub fn unwrap(self) -> (String, Box<[Term]>) {
+        self.term.unwrap_compound_id_components().unwrap()
+    }
 }
 
 /// 仅有的一处入口：从[词项](Term)构造

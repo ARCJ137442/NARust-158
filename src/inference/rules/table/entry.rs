@@ -393,6 +393,7 @@ fn compound_and_statement(
     // * 🚩类型不同 且为双判断⇒结构规则
     else if task_is_judgement {
         let can_compose_both;
+        let (compound, statement) = (compound.get_ref(), statement.get_ref());
         // * 🚩涉及的陈述是「继承」
         if statement.instanceof_inheritance() {
             // if (!(compound instanceof SetExt) && !(compound instanceof SetInt)) {
@@ -400,7 +401,7 @@ fn compound_and_statement(
             can_compose_both = !(compound.instanceof_set() || compound.instanceof_negation());
             if can_compose_both {
                 // {A --> B, A @ (A&C)} |- (A&C) --> (B&C)
-                structural_compose_both(compound.clone(), index, statement.clone(), side, context);
+                structural_compose_both(compound, index, statement, side, context);
             }
             // * 🚩单侧组合
             structural_compose_one(compound, index, statement, context);
@@ -433,11 +434,12 @@ fn component_and_statement(
     context: &mut ReasonContextConcept,
 ) {
     // if (context.getCurrentTask().isStructural()) return;
+    let (compound, statement) = (compound.get_ref(), statement.get_ref());
     match statement.identifier() {
         // * 🚩陈述是「继承」
         INHERITANCE_RELATION => {
             // * 🚩集合消去
-            // TODO: StructuralRules.structuralDecomposeOne(compound, index, statement, context);
+            structural_decompose_one(compound, index, statement, context);
             // * 🚩尝试两侧都消去：只要不是外延集/内涵集 都可以
             match compound.instanceof_set() {
                 // * 🚩集合⇒特殊处理

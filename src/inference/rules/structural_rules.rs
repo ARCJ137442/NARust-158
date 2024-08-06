@@ -43,7 +43,10 @@ fn switch_by_order<T>(compound: CompoundTermRef, index: usize, [sub, pre]: [T; 2
     }
 }
 
-/// * 📝双侧建构
+/// 双侧建构
+/// * 📝关于「何时传入整个词项，何时传入引用」的处理办法
+///   * 📌【2024-08-06 11:32:03】原则：当【整个流程用不到内部所有字段的所有权】时，采用「选择性拷贝」的方法
+///     * 🚩传参只传引用，只在需要时拷贝——而非传参前整个拷贝（而后边浪费）
 ///
 /// # 📄OpenNARS
 ///
@@ -52,9 +55,9 @@ fn switch_by_order<T>(compound: CompoundTermRef, index: usize, [sub, pre]: [T; 2
 /// {<S --> P>, S@(M-S)} |- <(M-P) --> (M-S)>
 /// ```
 pub fn structural_compose_both(
-    compound: CompoundTerm,
+    compound: CompoundTermRef,
     index: usize,
-    statement: Statement,
+    statement: StatementRef,
     side: SyllogismPosition,
     context: &mut ReasonContextConcept,
 ) {
@@ -64,49 +67,48 @@ pub fn structural_compose_both(
     let indicated = side.select(statement.sub_pre());
     if *compound == *indicated {
         // * 📄compound="(&,glasses,[black])" @ 0 = "glasses"
-        // * * statement="<sunglasses --> (&,glasses,[black])>" @ 1 = compound
-        // * * ⇒不处理（❓为何如此）
+        //   * statement="<sunglasses --> (&,glasses,[black])>" @ 1 = compound
+        //   * ⇒不处理（❓为何如此）
         return;
     }
 
     // * 🚩词项 * //
-    let (statement_sub, copula, statement_pre) = statement.unwrap();
+    let [statement_sub, statement_pre] = statement.sub_pre();
     let sub_pre = [&statement_sub, &statement_pre];
-    let mut components = compound.get_ref().clone_components();
+    let mut components = compound.clone_components();
     let [term_self_side, other_statement_component] = side.select_and_other(sub_pre); // 同侧词项 & 异侧词项
     if components.contains(other_statement_component) {
         // * 📝复合词项包含陈述的另一侧词项 ⇒ 中止
         // * 📄compound = "(*,{tom},(&,glasses,[black]))" @ 1 => "(&,glasses,[black])"
-        // * * statement = "<(&,glasses,sunglasses) --> (&,glasses,[black])>" @ 0
-        // * * components = ["{tom}", "(&,glasses,[black])"]
-        // * * ⇒不处理（❓为何如此）
+        //   * statement = "<(&,glasses,sunglasses) --> (&,glasses,[black])>" @ 0
+        //   * components = ["{tom}", "(&,glasses,[black])"]
+        //   * ⇒不处理（❓为何如此）
         return;
     }
     // 先决条件：是否包含同侧词项
+    let cloned_statement_sub_pre = || [statement_sub.clone(), statement_pre.clone()];
     let [sub, pre] = match components.contains(term_self_side) {
         true => side.select_and_other([
             // * 🚩主项/谓项：原来的复合词项
-            compound.get_ref().inner.clone(),
+            compound.inner.clone(),
             // * 🚩谓项/主项：替换后的复合词项
             {
                 let term_opposite = side.opposite().select([statement_sub, statement_pre]); // 提取出异侧词项
-                components[index] = term_opposite; // 将对应位置换成异侧词项
-                unwrap_or_return!(
-                    ?Term::make_compound_term(compound.get_ref(), components)
-                )
+                components[index] = term_opposite.clone(); // 将对应位置换成异侧词项
+                unwrap_or_return!(?Term::make_compound_term(compound, components))
             },
         ]),
-        false => [statement_sub, statement_pre],
+        false => cloned_statement_sub_pre(),
     };
     // * 📄compound = "(&,[yellow],{Birdie})" @ 0 => "[yellow]"
-    // * * statement = "<{Tweety} --> [yellow]>" @ 1
-    // * * components = ["{Tweety}", "{Birdie}"]
-    // * * subj = "(&,{Tweety},{Birdie})" = null | 空集
-    // * * pred = "(&,[yellow],{Birdie})"
-    // * * ⇒制作失败
+    //   * statement = "<{Tweety} --> [yellow]>" @ 1
+    //   * components = ["{Tweety}", "{Birdie}"]
+    //   * subj = "(&,{Tweety},{Birdie})" = null | 空集
+    //   * pred = "(&,[yellow],{Birdie})"
+    //   * ⇒制作失败
     // * 🚩根据「复合词项&索引」决定是否要「调换关系」
-    let [sub, pre] = switch_by_order(compound.get_ref(), index, [sub, pre]);
-    let content = unwrap_or_return!(?Term::make_statement_relation(copula, sub, pre));
+    let [sub, pre] = switch_by_order(compound, index, [sub, pre]);
+    let content = unwrap_or_return!(?Term::make_statement(&statement, sub, pre));
     let task_truth = context
         .current_task()
         .get_()
@@ -116,7 +118,7 @@ pub fn structural_compose_both(
     // * 🚩真值 * //
     let truth = match direction {
         // * 🚩前向推理
-        Forward => match compound.get_ref().size() {
+        Forward => match compound.size() {
             // * 🚩任务项多于一个元素⇒分析性演绎
             2.. => task_truth.map(|task| task.analytic_deduction(context.reasoning_reliance())),
             // * 🚩其它⇒恒等@当前任务
@@ -138,40 +140,42 @@ pub fn structural_compose_both(
     context.single_premise_task_structural(content, truth, budget);
 }
 
-/// * 📝双侧解构
+/// 双侧解构
+/// * 📝关于「何时传入整个词项，何时传入引用」的处理办法
+///   * 📌【2024-08-06 11:32:03】原则：当【整个流程用不到内部所有字段的所有权】时，采用「选择性拷贝」的方法
+///     * 🚩传参只传引用，只在需要时拷贝——而非传参前整个拷贝（而后边浪费）
 ///
 /// ```nal
 /// {<(S&T) --> (P&T)>, S@(S&T)} |- <S --> P>
 /// ```
 pub fn structural_decompose_both(
-    statement: Statement,
+    statement: StatementRef,
     index: usize,
     context: &mut ReasonContextConcept,
 ) {
     // * 🚩词项 * //
-    let (sub, copula, pre) = statement.unwrap();
+    let [sub, pre] = statement.sub_pre();
     // * 📌必须是「同类复合词项」才有可能解构
-    if !sub.is_same_type(&pre) {
+    if !sub.is_same_type(pre) {
         return;
     }
-    let [sub, pre]: [CompoundTerm; 2] = match [sub.try_into(), pre.try_into()] {
-        [Ok(sub), Ok(pre)] => [sub, pre],
+    let [sub, pre] = match [sub.as_compound(), pre.as_compound()] {
+        [Some(sub), Some(pre)] => [sub, pre],
         _ => return,
     };
     // * 📌必须是「同尺寸复合词项」且「索引在界内」
-    let [sub_size, pre_size] = [sub.get_ref().size(), pre.get_ref().size()];
+    let [sub_size, pre_size] = [sub.size(), pre.size()];
     if !(sub_size == pre_size && index < sub_size) {
         return;
     }
     // * 🚩取其中索引所在的词项，按顺序制作相同系词的陈述
     let at_index = |compound: CompoundTermRef| compound.component_at(index).unwrap().clone(); // ! 上边已判断在界内
-    let sub_inner = at_index(sub.get_ref());
-    let pre_inner = at_index(pre.get_ref());
+    let sub_inner = at_index(sub);
+    let pre_inner = at_index(pre);
 
     // * 🚩尝试调换顺序
-    let [content_sub, content_pre] = switch_by_order(sub.get_ref(), index, [sub_inner, pre_inner]);
-    let content =
-        unwrap_or_return!(?Term::make_statement_relation(copula, content_sub, content_pre));
+    let [content_sub, content_pre] = switch_by_order(sub, index, [sub_inner, pre_inner]);
+    let content = unwrap_or_return!(?Term::make_statement(&statement, content_sub, content_pre));
 
     // * 🚩预筛
     let direction = context.reason_direction();
@@ -182,8 +186,8 @@ pub fn structural_decompose_both(
         .as_judgement()
         .map(TruthValue::from);
     if !(direction == Forward) // ? 💭【2024-08-05 23:37:40】这个「前向推理又是判断」似乎不可能发生
-        && !sub.get_ref().instanceof_product()
-        && sub.get_ref().size() > 1
+        && !sub.instanceof_product()
+        && sub.size() > 1
         && task_is_judgement
     {
         return;
@@ -217,9 +221,9 @@ pub fn structural_decompose_both(
 /// {<S --> P>, P@(P&Q)} |- <S --> (P&Q)>
 /// ```
 pub fn structural_compose_one(
-    compound: CompoundTerm,
+    compound: CompoundTermRef,
     index: usize,
-    statement: Statement,
+    statement: StatementRef,
     context: &mut ReasonContextConcept,
 ) {
     // ! 📝此推理只适用于前向推理（目标推理亦不行，refer@304）
@@ -232,64 +236,174 @@ pub fn structural_compose_one(
     let truth_deduction = task_truth.analytic_deduction(context.reasoning_reliance());
 
     // * 🚩部分计算词项，并向下分派
-    // * * 📄"P@(P&Q)" => "P"
-    // * * 📄"<S --> P>" => subj="S", pred="P"
-    let component = unwrap_or_return!(?compound.get_ref().component_at(index));
-    let [sub, pre] = statement.unwrap_components();
-    let (sub_pre, to_not_ded) = match (*component == sub, *component == pre) {
+    //   * 📄"P@(P&Q)" => "P"
+    //   * 📄"<S --> P>" => subj="S", pred="P"
+    let component = unwrap_or_return!(?compound.component_at(index));
+    let compound = compound.inner.clone();
+    let [sub, pre] = statement.sub_pre();
+    let (sub_pre, to_not_ded) = match [*component == *sub, *component == *pre] {
         // * 🚩复合词项是主项
         // * 📄"S"@"(S&T)" × "<S --> P>"
-        (true, _) => match (compound.identifier(), index) {
+        [true, _] => match (compound.identifier(), index) {
             // * 🚩外延交
             // * 📄"S"@"(S&T)" × "<S --> P>"
-            // * * component=subj="S"
-            // * * compound="(S&T)"
-            // * * pred="P"
-            // * * => "<(S&T) --> P>"
+            //   * component=subj="S"
+            //   * compound="(S&T)"
+            //   * pred="P"
+            //   * => "<(S&T) --> P>"
             (INTERSECTION_EXT_OPERATOR, _)
             // * 🚩外延差@第一项 ⇒ "<(S-T) --> P>"
             // * 📄"S"@"(S-T)" × "<S --> P>"
-            // * * component=subj="S"
-            // * * compound="(S-T)"
-            // * * pred="P"
-            // * * => "<(S-T) --> P>"
-            | (DIFFERENCE_EXT_OPERATOR, 0) => ([compound.into(), pre], false),
+            //   * component=subj="S"
+            //   * compound="(S-T)"
+            //   * pred="P"
+            //   * => "<(S-T) --> P>"
+            | (DIFFERENCE_EXT_OPERATOR, 0) => ([compound, pre.clone()], false),
             // * 🚩内涵差@第二项 ⇒ "<(T~S) --> P>"
             // * 📄"S"@"(T~S)" × "<S --> P>"
-            // * * component=subj="S"
-            // * * compound="(T~S)"
-            // * * pred="P"
-            // * * => "<(T~S) --> P>"
+            //   * component=subj="S"
+            //   * compound="(T~S)"
+            //   * pred="P"
+            //   * => "<(T~S) --> P>"
             // * 📝真值取【否定】
-            (DIFFERENCE_INT_OPERATOR, 1) => ([compound.into(), pre], true),
+            (DIFFERENCE_INT_OPERATOR, 1) => ([compound, pre.clone()], true),
             // 其它
             _ => return,
         },
         // * 🚩复合词项是谓项
         // * 📄"P"@"(P&Q)" × "<S --> P>"
-        (_, true) => match (compound.identifier(), index) {
+        [_, true] => match (compound.identifier(), index) {
             // * 🚩内涵交
             // * 📄"P"@"(P|Q)" × "<S --> P>"
-            // * * component=pred="P"
-            // * * compound="(P|Q)"
-            // * * subj="S"
-            // * * => "<S --> (P|Q)>"
-            (INTERSECTION_INT_OPERATOR, _) => ([sub, compound.into()], false),
-            // * 🚩外延差@第二项
-            // * 📄"P"@"(Q-P)" × "<S --> P>"
-            // * * component=pred="P"
-            // * * compound="(Q-P)"
-            // * * subj="S"
-            // * * => "<S --> (Q-P)>"
-            // * 📝真值取【否定】
-            (DIFFERENCE_EXT_OPERATOR, 1) => ([sub, compound.into()], true),
+            //   * component=pred="P"
+            //   * compound="(P|Q)"
+            //   * subj="S"
+            //   * => "<S --> (P|Q)>"
+            (INTERSECTION_INT_OPERATOR, _)
             // * 🚩内涵差@第一项
             // * 📄"P"@"(P~Q)" × "<S --> P>"
-            // * * component=pred="P"
-            // * * compound="(P~Q)"
+            //   * component=pred="P"
+            //   * compound="(P~Q)"
+            //   * subj="S"
+            //   * => "<S --> (P~Q)>"
+            | (DIFFERENCE_INT_OPERATOR, 0) => ([sub.clone(), compound], false),
+            // * 🚩外延差@第二项
+            // * 📄"P"@"(Q-P)" × "<S --> P>"
+            //   * component=pred="P"
+            //   * compound="(Q-P)"
+            //   * subj="S"
+            //   * => "<S --> (Q-P)>"
+            // * 📝真值取【否定】
+            (DIFFERENCE_EXT_OPERATOR, 1) => ([sub.clone(), compound], true),
+            // 其它
+            _ => return,
+        },
+        _ => return,
+    };
+    // * 🚩统一构造陈述
+    let truth = match to_not_ded {
+        true => truth_deduction.negation(), // 要取否定取否定
+        false => truth_deduction,           // 否则就是原样
+    };
+    structural_statement(sub_pre, truth, context);
+}
+
+/// * 📝单侧解构
+///
+/// # 📄OpenNARS
+///
+/// ```nal
+/// {<(S&T) --> P>, S@(S&T)} |- <S --> P>
+/// ```
+pub fn structural_decompose_one(
+    compound: CompoundTermRef,
+    index: usize,
+    statement: StatementRef,
+    context: &mut ReasonContextConcept,
+) {
+    // ! 📝此推理只适用于前向推理（目标推理亦不行，refer@304）
+    if context.reason_direction() == Backward {
+        return;
+    }
+
+    // * 🚩预先计算真值
+    let task_truth = TruthValue::from(context.current_task().get_().unwrap_judgement());
+    let truth_deduction = task_truth.analytic_deduction(context.reasoning_reliance());
+
+    // * 🚩部分计算词项，并向下分派
+    //   * 📄"S@(S&T)" => "S"
+    //   * 📄"<(S&T) --> P>" => subj="(S&T)", pred="P"
+    let [sub, pre] = statement.sub_pre();
+    let component = unwrap_or_return!(?compound.component_at(index)).clone(); // 只拷贝指定位置的元素
+    let (sub_pre, to_not_ded) = match [*compound == *sub, *compound == *pre] {
+        // * 🚩复合词项是主项
+        // * 📄"P"@"(P&Q)" × "<(P&Q) --> S>"
+        [true, _] => match compound.identifier() {
+            // * 🚩内涵交
+            // * 📄"S"@"(S|T)" × "<(S|T) --> P>"
+            // * * compound=subj="(S|T)"
+            // * * component="S"
+            // * * pred="P"
+            // * * => "<S --> P>"
+            INTERSECTION_INT_OPERATOR => ([component, pre.clone()], false),
+            // * 🚩多元外延集
+            // * 📄"S"@"{S,T}" × "<{S,T} --> P>"
+            // * * compound=subj="{S,T}"
+            // * * component="S"
+            // * * pred="P"
+            // * * => "<{S} --> P>"
+            // * 📌【2024-07-22 16:01:42】此处`makeSet`不会失败（结果非空）
+            SET_EXT_OPERATOR if compound.size() > 1 => (
+                [
+                    unwrap_or_return!(?Term::make_set_ext(component)),
+                    pre.clone(),
+                ],
+                false,
+            ),
+            // * 🚩内涵差
+            // * 📄"S"@"(S~T)" × "<(S~T) --> P>"
+            // * * compound=subj="(S~T)"/"(T~S)"
+            // * * component="S"
+            // * * pred="P"
+            // * * => "<S --> P>"
+            // * 📝真值函数方面：若为「减掉的项」则【取否定】处理
+            DIFFERENCE_INT_OPERATOR => ([component, pre.clone()], index == 1),
+            // 其它
+            _ => return,
+        },
+        // * 🚩复合词项是谓项
+        // * 📄"P"@"(P&Q)" × "<S --> (P&Q)>"
+        [_, true] => match compound.identifier() {
+            // * 🚩外延交
+            // * 📄"S"@"(S&T)" × "<(S&T) --> P>"
+            // * * compound=subj="(S&T)"
+            // * * component="S"
+            // * * pred="P"
+            // * * => "<S --> P>"
+            INTERSECTION_EXT_OPERATOR => ([sub.clone(), component], false),
+            // * 🚩多元内涵集
+            // * 📄"P"@"[P,Q]" × "<S --> [P,Q]>"
+            // * * compound=subj="[S,T]"
+            // * * component="S"
+            // * * pred="P"
+            // * * => "<S --> [P]>"
+            // * 📌【2024-07-22 16:01:42】此处`makeSet`不会失败（结果非空）
+            SET_INT_OPERATOR if compound.size() > 1 => (
+                [
+                    sub.clone(),
+                    unwrap_or_return!(?Term::make_set_int(component)),
+                ],
+                false,
+            ),
+            // * 🚩外延差
+            // * 📄"P"@"(P-Q)" × "<S --> (P-Q)>"
+            // * * compound=pred="(P-Q)"/"(Q-P)"
+            // * * component="P"
             // * * subj="S"
-            // * * => "<S --> (P~Q)>"
-            (DIFFERENCE_INT_OPERATOR, 0) => ([sub, compound.into()], false),
+            // * * => "<S --> P>"
+            // * 📝真值函数方面：若为「减掉的项」则【取否定】处理
+            DIFFERENCE_EXT_OPERATOR => ([sub.clone(), component], index == 1),
+            // 其它
             _ => return,
         },
         _ => return,
@@ -734,7 +848,7 @@ mod tests {
         compose_one_int_int: {
             "
             nse <A --> B>.
-            nse (|,B,C).
+            nse (|,B,C)?
             cyc 10
             "
             => OUT "<A --> (|,B,C)>" in outputs
@@ -743,7 +857,7 @@ mod tests {
         compose_one_diff_ext: {
             "
             nse <A --> B>.
-            nse (-,A,C).
+            nse (-,A,C)?
             cyc 10
             "
             => OUT "<(-,A,C) --> B>" in outputs
@@ -752,7 +866,7 @@ mod tests {
         compose_one_diff_int: {
             "
             nse <A --> B>.
-            nse (~,B,C).
+            nse (~,B,C)?
             cyc 10
             "
             => OUT "<A --> (~,B,C)>" in outputs
@@ -761,7 +875,7 @@ mod tests {
         compose_one_diff_ext_neg: {
             "
             nse <A --> B>. %0%
-            nse (-,C,B).
+            nse (-,C,B)?
             cyc 10
             "
             => OUT "<A --> (-,C,B)>" in outputs
@@ -770,10 +884,90 @@ mod tests {
         compose_one_diff_int_neg: {
             "
             nse <A --> B>. %0%
-            nse (~,C,A).
+            nse (~,C,A)?
             cyc 10
             "
             => OUT "<(~,C,A) --> B>" in outputs
+        }
+
+        decompose_one_int_ext: { // * 📝没有「主项外延交」只有「主项内涵交」
+            "
+            nse <A --> (&,B,C)>.
+            cyc 10
+            "
+            => OUT "<A --> B>" in outputs
+        }
+
+        decompose_one_int_int: { // * 📝没有「谓项内涵交」只有「谓项外延交」
+            "
+            nse <(|,A,C) --> B>.
+            cyc 10
+            "
+            => OUT "<A --> B>" in outputs
+        }
+
+        decompose_one_set_ext_1: {
+            "
+            nse <{A,C} --> B>.
+            cyc 10
+            "
+            => OUT "<{A} --> B>" in outputs
+        }
+
+        decompose_one_set_ext_2: {
+            "
+            nse <{A,C} --> B>.
+            cyc 10
+            "
+            => OUT "<{C} --> B>" in outputs
+        }
+
+        decompose_one_set_int_1: {
+            "
+            nse <A --> [B,C]>.
+            cyc 10
+            "
+            => OUT "<A --> [B]>" in outputs
+        }
+
+        decompose_one_set_int_2: {
+            "
+            nse <A --> [B,C]>.
+            cyc 10
+            "
+            => OUT "<A --> [C]>" in outputs
+        }
+
+        decompose_one_diff_ext: {
+            "
+            nse <A --> (-,B,C)>.
+            cyc 10
+            "
+            => OUT "<A --> B>" in outputs
+        }
+
+        decompose_one_diff_ext_neg: {
+            "
+            nse <A --> (-,B,C)>. %0%
+            cyc 10
+            "
+            => OUT "<A --> C>" in outputs
+        }
+
+        decompose_one_diff_int: {
+            "
+            nse <(~,A,C) --> B>.
+            cyc 10
+            "
+            => OUT "<A --> B>" in outputs
+        }
+
+        decompose_one_diff_int_neg: {
+            "
+            nse <(~,A,C) --> B>. %0%
+            cyc 10
+            "
+            => OUT "<C --> B>" in outputs
         }
     }
 }
