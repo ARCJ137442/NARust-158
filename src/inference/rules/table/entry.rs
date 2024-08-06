@@ -344,6 +344,7 @@ fn compound_and_self(
     // * 📝【2024-07-22 17:40:06】规则表分派不要过于涉及词项处理：是否要「提取否定内部的词项」要由「具体规则函数」决定
     else if compound.instanceof_negation() {
         // TODO: StructuralRules.transformNegation((Negation) compound, isCompoundFromTask, context);
+        transform_negation(compound, compound_from, context)
     }
     // * 🚩其它⇒无结果
 }

@@ -593,6 +593,73 @@ pub fn structural_junction(
     context.single_premise_task_structural(content, truth, budget);
 }
 
+/* --------------- Negation related rules --------------- */
+
+/// * 📝转换「否定」：反推否定、双重否定等
+///
+/// # 📄OpenNARS
+///
+/// ```nal
+/// {A, A@(--, A)} |- (--, A)
+/// ```
+pub fn transform_negation(
+    negation: CompoundTerm,
+    compound_from: PremiseSource,
+    context: &mut ReasonContextConcept,
+) {
+    fn unwrap_negation(negation: CompoundTerm) -> Term {
+        let (_, components) = negation.unwrap();
+        components.into_vec().pop().unwrap() // * 🚩因为`Box<[T]>`没法参与模式匹配，还是只能先转换为`Vec<T>`再办事
+    }
+    // * 🚩词项 * //
+    let content = match compound_from {
+        // * 🚩从「当前任务」来⇒被否定的值
+        // * 📝双重否定⇒肯定
+        // * 📄【2024-06-10 19:57:15】一例：
+        // * compound="(--,(--,A))"
+        // * component="(--,A)"
+        // * conceptTerm="(--,(--,A))"
+        // * currentTask=Task@807 "$0.8000;0.8000;0.9500$ (--,(--,A)). %1.00;0.90%"
+        // * => "(--,A)"
+        PremiseSource::Task => unwrap_negation(negation),
+        // * 🚩其它⇒转换整个否定
+        // * 📄【2024-07-22 17:52:09】一例：
+        // * compound="(--,A)"
+        // * component="A"
+        // * conceptTerm="A"
+        // * currentTask=Task@386 "$1.0000;0.0971;0.1341$ A. %0.90;0.09%"
+        // * => "(--,A)"
+        PremiseSource::Belief => negation.into(),
+    };
+
+    // ? 💭【2024-07-22 17:42:55】具体后续是「先『真值→预算』再『判断→问题』」还是「先『判断→问题』再『真值→预算』」，可以进一步探讨
+    let direction = context.reason_direction();
+    let task_truth = context
+        .current_task()
+        .get_()
+        .as_judgement()
+        .map(TruthValue::from);
+
+    // * 🚩真值 * //
+    let truth = match direction {
+        // * 🚩前向推理⇒否定
+        Forward => task_truth.map(|truth| truth.negation()),
+        // * 🚩反向推理⇒空
+        Backward => None,
+    };
+
+    // * 🚩预算 * //
+    let budget = match direction {
+        // * 🚩前向⇒复合前向
+        Forward => context.budget_compound_forward(truth.as_ref(), &content),
+        // * 🚩反向⇒复合反向
+        Backward => context.budget_compound_backward(&content),
+    };
+
+    // * 🚩结论 * //
+    context.single_premise_task_structural(content, truth, budget);
+}
+
 #[cfg(test)]
 mod tests {
     use crate::expectation_tests;
@@ -1201,6 +1268,23 @@ mod tests {
             cyc 10
             "
             => ANSWER "(||, A, B)" in outputs
+        }
+
+        transform_negation_forward: {
+            "
+            nse (--,A).
+            cyc 10
+            "
+            => OUT "A" in outputs
+        }
+
+        transform_negation_backward: {
+            "
+            nse A. %0%
+            nse (--,A)?
+            cyc 10
+            "
+            => ANSWER "(--,A)" in outputs
         }
     }
 }
