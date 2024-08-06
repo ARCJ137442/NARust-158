@@ -372,6 +372,11 @@ impl<E: Item> Bag<E> {
         )
     }
 
+    /// 🆕迭代内部所有元素
+    pub fn iter(&self) -> impl Iterator<Item = &E> {
+        self.item_map.iter_items()
+    }
+
     /// 模拟`Bag.contains`
     /// * 🎯从模拟`Bag.nameTable.containsValue`派生
     /// * 📜默认使用[`Self::get`]

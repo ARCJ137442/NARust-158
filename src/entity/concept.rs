@@ -240,6 +240,18 @@ impl Concept {
         }
         None
     }
+
+    /// 🆕迭代内部所有可能的「任务」
+    /// * ⚠️不保证内容不重复
+    /// * 🎯呈现推理器内所有现存的「任务」
+    /// * 📄目前参考的点儿
+    ///   * 任务链袋
+    ///   * 问题缓冲区
+    pub fn iter_tasks(&self) -> impl Iterator<Item = &RCTask> {
+        let iter_task_links = self.task_links.iter().map(|link| link.target_rc_ref());
+        let iter_questions = self.questions.iter();
+        iter_task_links.chain(iter_questions)
+    }
 }
 
 impl Budget for Concept {

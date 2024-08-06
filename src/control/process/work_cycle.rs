@@ -15,9 +15,13 @@
 //! * ♻️【2024-06-26 11:59:58】开始根据改版OpenNARS重写
 
 use crate::{
-    control::Reasoner, entity::Task, global::ClockTime, inference::Budget, util::ToDisplayAndBrief,
+    control::Reasoner,
+    entity::{Concept, Task},
+    global::ClockTime,
+    inference::Budget,
+    util::{RefCount, ToDisplayAndBrief},
 };
-use nar_dev_utils::list;
+use nar_dev_utils::{list, JoinTo};
 use navm::cmd::Cmd;
 
 impl Reasoner {
@@ -257,6 +261,9 @@ impl Reasoner {
             // * 🚩普通信息查询
             "memory" => self.report_info(format!("memory: {:?}", self.memory)),
             "reasoner" => self.report_info(format!("reasoner: {self:?}")),
+            // ! ⚠️【2024-08-06 14:15:43】目前对「任务列表」仅能列举出在记忆区中的任务，其中有技术问题
+            "tasks" => self.report_info(format!("tasks in reasoner:\n{}", self.report_tasks())),
+
             // * 🚩具有缩进层级 更详尽的信息
             "#memory" => self.report_info(format!("memory:\n{:#?}", self.memory)),
             "#reasoner" => self.report_info(format!("reasoner:\n{self:#?}")),
@@ -264,6 +271,66 @@ impl Reasoner {
             // * 🚩其它⇒告警
             other => self.report_error(format!("unknown info query: {other:?}")),
         }
+    }
+
+    /// 收集推理器内所有的「任务」
+    /// * 🎯包括如下地方
+    ///   * 新任务列表
+    ///   * 新近任务袋
+    ///   * 任务链目标
+    ///   * 问题表
+    /// * 📌所有收集到的「任务」不会重复
+    ///   * 📝对于[`Rc`]，Rust中使用[`Rc::ptr_eq`]判等
+    ///   * 💡亦可【直接从引用取指针】判等
+    fn collect_tasks_map<T>(&self, map: impl Fn(&Task) -> T) -> Vec<T> {
+        let mut outputs = vec![];
+        // 获取所有引用地址：通过地址判断是否引用到了同一任务
+        let mut target_locations = vec![];
+        /// 判断引用是否唯一
+        fn ref_unique(task_refs: &[*const Task], task_location: *const Task) -> bool {
+            !task_refs
+                .iter()
+                .any(|ptr_location: &*const Task| *ptr_location == task_location)
+        }
+        let mut deal_ref = |task_ref: &Task| {
+            // 取地址
+            let task_location = task_ref as *const Task;
+            // 不能有任何一个引用重复
+            if ref_unique(&target_locations, task_location) {
+                // 加入被记录在案的地址
+                target_locations.push(task_location);
+                // 添加到输出
+                outputs.push(map(task_ref));
+            }
+        };
+
+        // 记忆区的「所有任务」
+        self.memory
+            .iter_concepts()
+            .flat_map(Concept::iter_tasks)
+            .for_each(|task_cell| deal_ref(&task_cell.get_())); // 取引用并添加
+
+        // 新任务列表、新近任务袋中的「所有任务」
+        let new_tasks = self.iter_new_tasks();
+        let novel_tasks = self.iter_novel_tasks();
+        new_tasks.chain(novel_tasks).for_each(deal_ref); // 添加
+
+        // 输出
+        outputs
+    }
+
+    /// 报告推理器内的所有「任务」
+    fn report_tasks(&self) -> String {
+        /// 组织格式
+        fn format_task(task: &Task) -> String {
+            format!("Task#{task:p}: {}", task.to_display_long())
+        }
+        // 开始组织格式化
+        let mut out = String::new();
+        self.collect_tasks_map(format_task)
+            .into_iter()
+            .join_to(&mut out, "\n");
+        out
     }
 
     /// 处理指令[`Cmd::HLP`]

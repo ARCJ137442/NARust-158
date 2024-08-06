@@ -201,6 +201,11 @@ impl Memory {
     pub fn put_back_concept(&mut self, concept: Concept) -> Option<Concept> {
         self.concepts.put_back(concept)
     }
+
+    /// 🆕对外接口：只读迭代内部所有「概念」
+    pub fn iter_concepts(&self) -> impl Iterator<Item = &Concept> {
+        self.concepts.iter()
+    }
 }
 
 impl Default for Memory {
