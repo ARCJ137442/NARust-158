@@ -18,7 +18,7 @@ use crate::{
     entity::{Concept, Sentence, TLink, TLinkType, TaskLink, TermLink},
     util::{RefCount, ToDisplayAndBrief},
 };
-use nar_dev_utils::unwrap_or_return;
+use nar_dev_utils::{unwrap_or_return, JoinTo};
 
 impl Reasoner {
     /// 概念推理
@@ -50,13 +50,13 @@ impl Reasoner {
             }
         };
         // * 📝此处应该是「重置信念链，以便后续拿取词项链做『概念推理』」
-        self.report_comment(format!(
-            "* Selected TaskLink: {}",
-            current_task_link.to_display()
-        ));
 
         // * 🚩若为「转换」类链接⇒转换推理并返回
         if current_task_link.link_type() == TLinkType::Transform {
+            self.report_comment(format!(
+                "* Selected TaskLink to transform: {}",
+                current_task_link.to_display()
+            ));
             self.process_concept_transform(current_concept, current_task_link);
             return None;
         }
@@ -65,6 +65,10 @@ impl Reasoner {
         let belief_links_to_reason: Vec<TermLink> =
             self.choose_term_links_to_reason(&mut current_concept, &mut current_task_link);
         if belief_links_to_reason.is_empty() {
+            self.report_comment(format!(
+                "* Selected TaskLink without reasoning: {}",
+                current_task_link.to_display()
+            ));
             // * 🚩中途返回时要回收
             // ! ❓【2024-05-24 22:55:**】↓这个「当前任务链」不知为何，按理应该放回，但若放回则推不出结果
             // * 🚩【2024-05-24 22:53:16】目前「维持原判」不放回「当前任务链」
@@ -84,6 +88,15 @@ impl Reasoner {
             // 返回空
             return None;
         }
+        // * 🚩报告
+        self.report_comment(format!(
+            "* Selected TaskLink: {}\n  with TermLinks:\n  + {}",
+            current_task_link.to_display(),
+            belief_links_to_reason
+                .iter()
+                .map(ToDisplayAndBrief::to_display)
+                .join_to_new("\n  + ")
+        ));
 
         // * 🚩在最后构造并返回
         let context = ReasonContextConcept::new(
@@ -126,8 +139,6 @@ impl Reasoner {
                 Some(link) => link,
                 None => break,
             };
-            // * 🚩报告
-            self.report_comment(format!("* Selected TermLink: {}", link.to_display()));
             // * 🚩添加
             to_reason_links.push(link);
         }
@@ -180,6 +191,13 @@ impl Reasoner {
             // * 📄OpenNARS 3.1.0的结果：`Answer <{tim} --> murder>. %1.00;0.85%`
             // * 📝目前的结果是：`ANSWER: <{tim} --> murder>. %1.00;0.81% {195 : 5;7}`
 
+            // * 🚩🆕概念推理 触发 报告
+            context.report_comment(format!(
+                "* Reasoning on: {} <~ {} ~> {}",
+                context.current_task().get_().content(),
+                context.current_concept().term(),
+                &*context.current_belief_link().target()
+            ));
             // * 🚩交给推理引擎做「概念推理」
             let reason_f = context.core.reasoner.inference_engine.reason_f();
             reason_f(&mut context);
