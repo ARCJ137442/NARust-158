@@ -324,11 +324,28 @@ pub fn reason(context: &mut ReasonContextConcept) {
 fn compound_and_self(
     compound: CompoundTerm,
     component: Term,
-    where_compound_from: PremiseSource,
+    compound_from: PremiseSource,
     context: &mut ReasonContextConcept,
 ) {
-    // TODO
-    context.report_comment(format!("TODO @ compound_and_self: \ncompound={compound}\ncomponent={component}\nwhere_compound_from={where_compound_from:?}"))
+    // * 🚩合取/析取
+    if compound.instanceof_junction() {
+        // * 🚩有「当前信念」⇒解构出陈述
+        if context.has_current_belief() {
+            // TODO: CompositionalRules.decomposeStatement(compound, component, isCompoundFromTask, context);
+        }
+        // * 🚩否，但包含元素⇒取出词项
+        else if compound.get_ref().contain_component(&component) {
+            structural_junction(compound.get_ref(), &component, compound_from, context);
+        }
+    // } else if ((compound instanceof Negation) &&
+    // !context.getCurrentTask().isStructural()) {
+    }
+    // * 🚩否定
+    // * 📝【2024-07-22 17:40:06】规则表分派不要过于涉及词项处理：是否要「提取否定内部的词项」要由「具体规则函数」决定
+    else if compound.instanceof_negation() {
+        // TODO: StructuralRules.transformNegation((Negation) compound, isCompoundFromTask, context);
+    }
+    // * 🚩其它⇒无结果
 }
 
 /// 分派：复合词项与复合词项

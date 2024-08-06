@@ -526,6 +526,73 @@ pub fn transform_set_relation(
     context.single_premise_task_structural(content, truth, budget);
 }
 
+/* --------------- Disjunction and Conjunction transform --------------- */
+
+/// 有关「合取」与「析取」的转换
+///
+/// # 📄OpenNARS
+///
+/// ```nal
+/// {(&&, A, B), A@(&&, A, B)} |- A, or answer (&&, A, B)? using A
+/// {(||, A, B), A@(||, A, B)} |- A, or answer (||, A, B)? using A
+/// ```
+#[doc(alias = "structural_compound")]
+pub fn structural_junction(
+    compound: CompoundTermRef,
+    component: &Term,
+    compound_from: PremiseSource,
+    context: &mut ReasonContextConcept,
+) {
+    // * 🚩仅「常量词项」
+    if !component.is_constant() {
+        return;
+    }
+
+    let task_truth = context
+        .current_task()
+        .get_()
+        .as_judgement()
+        .map(TruthValue::from);
+    let direction = context.reason_direction();
+
+    // * 🚩词项 * //
+    let content = match compound_from {
+        // * 🚩复合词项从任务中来 ⇒ 元素
+        PremiseSource::Task => component.clone(),
+        // * 🚩信念 ⇒ 整体
+        PremiseSource::Belief => compound.inner.clone(),
+    };
+
+    // * 🚩真值 * //
+    let truth = match direction {
+        // * 🚩前向推理⇒根据「复合词项从任务中来 == 复合词项是合取」决策
+        // * 📝from OpenNARS 3.0.4：前向推理同时对「判断」「目标」成立，因此「任务是判断」的条件可省去
+        Forward => task_truth.map(|truth| {
+            match (compound_from == PremiseSource::Task) == compound.instanceof_conjunction() {
+                // * 🚩满足⇒分析性演绎
+                true => truth.analytic_deduction(context.reasoning_reliance()),
+                // * 🚩满足⇒分析性反演（非⇒演绎⇒非）
+                false => {
+                    dbg!(dbg!(truth.negation()).analytic_deduction(context.reasoning_reliance()))
+                        .negation()
+                }
+            }
+        }),
+        Backward => None,
+    };
+
+    // * 🚩预算 * //
+    let budget = match direction {
+        // * 🚩前向⇒前向
+        Forward => context.budget_forward(truth.as_ref()),
+        // * 🚩反向⇒复合反向
+        Backward => context.budget_compound_backward(&content),
+    };
+
+    // * 🚩结论 * //
+    context.single_premise_task_structural(content, truth, budget);
+}
+
 #[cfg(test)]
 mod tests {
     use crate::expectation_tests;
@@ -1100,6 +1167,40 @@ mod tests {
             cyc 10
             "
             => OUT "<B --> [A]>" in outputs
+        }
+
+        structural_conjunction: {
+            "
+            nse (&&, A, B).
+            cyc 10
+            "
+            => OUT "A" in outputs
+        }
+
+        structural_disjunction: { // * ℹ️OpenNARS中`ANSWER: A. %1.00;0.00% {9 : 2}`，信度为0是正常的
+            "
+            nse (||, A, B).
+            cyc 10
+            "
+            => OUT "A" in outputs
+        }
+
+        structural_conjunction_backward: { // * ℹ️OpenNARS中`ANSWER: (&&, A, B). %1.00;0.00% {9 : 2}`，信度为0是正常的
+            "
+            nse A.
+            nse (&&, A, B)?
+            cyc 10
+            "
+            => ANSWER "(&&, A, B)" in outputs
+        }
+
+        structural_disjunction_backward: {
+            "
+            nse A.
+            nse (||, A, B)?
+            cyc 10
+            "
+            => ANSWER "(||, A, B)" in outputs
         }
     }
 }

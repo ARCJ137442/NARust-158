@@ -30,7 +30,7 @@ pub fn cast_statement(term: Term) -> Statement {
 /// * 📄例如
 ///   * 任务
 ///   * 信念
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PremiseSource {
     /// 任务
     Task,
