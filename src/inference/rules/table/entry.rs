@@ -395,18 +395,19 @@ fn compound_and_statement(
         let can_compose_both;
         // * 🚩涉及的陈述是「继承」
         if statement.instanceof_inheritance() {
-            // * 🚩单侧组合
-            // TODO: StructuralRules.structuralComposeOne(compound, index, statement, context);
             // if (!(compound instanceof SetExt) && !(compound instanceof SetInt)) {
             // * 🚩若能双侧组合⇒双侧组合
             can_compose_both = !(compound.instanceof_set() || compound.instanceof_negation());
             if can_compose_both {
                 // {A --> B, A @ (A&C)} |- (A&C) --> (B&C)
-                structural_compose_both(compound, index, statement, side, context);
+                structural_compose_both(compound.clone(), index, statement.clone(), side, context);
             }
-            // * 🚩涉及的陈述是「相似」，但涉及的另一复合词项不是「合取」
-            // * 📝「相似」只能双侧组合，可以组合出除「合取」之外的结论
-        } else if statement.instanceof_similarity() {
+            // * 🚩单侧组合
+            structural_compose_one(compound, index, statement, context);
+        }
+        // * 🚩涉及的陈述是「相似」，但涉及的另一复合词项不是「合取」
+        // * 📝「相似」只能双侧组合，可以组合出除「合取」之外的结论
+        else if statement.instanceof_similarity() {
             // * 🚩尝试双侧组合
             can_compose_both = !compound.instanceof_conjunction();
             if can_compose_both {

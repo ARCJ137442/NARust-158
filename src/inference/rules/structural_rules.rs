@@ -7,7 +7,8 @@ use super::SyllogismPosition;
 use crate::{
     control::*,
     entity::*,
-    inference::{rules::utils::*, BudgetInferenceContext, TruthFunctions},
+    inference::{rules::utils::*, *},
+    io::symbols::*,
     language::*,
     util::RefCount,
 };
@@ -206,6 +207,127 @@ pub fn structural_decompose_both(
 
     // * 🚩结论 * //
     context.single_premise_task_structural(content, truth, budget);
+}
+
+/// * 📝单侧建构
+///
+/// # 📄OpenNARS
+///
+/// ```nal
+/// {<S --> P>, P@(P&Q)} |- <S --> (P&Q)>
+/// ```
+pub fn structural_compose_one(
+    compound: CompoundTerm,
+    index: usize,
+    statement: Statement,
+    context: &mut ReasonContextConcept,
+) {
+    // ! 📝此推理只适用于前向推理（目标推理亦不行，refer@304）
+    if context.reason_direction() == Backward {
+        return;
+    }
+
+    // * 🚩预先计算真值
+    let task_truth = TruthValue::from(context.current_task().get_().unwrap_judgement());
+    let truth_deduction = task_truth.analytic_deduction(context.reasoning_reliance());
+
+    // * 🚩部分计算词项，并向下分派
+    // * * 📄"P@(P&Q)" => "P"
+    // * * 📄"<S --> P>" => subj="S", pred="P"
+    let component = unwrap_or_return!(?compound.get_ref().component_at(index));
+    let [sub, pre] = statement.unwrap_components();
+    let (sub_pre, to_not_ded) = match (*component == sub, *component == pre) {
+        // * 🚩复合词项是主项
+        // * 📄"S"@"(S&T)" × "<S --> P>"
+        (true, _) => match (compound.identifier(), index) {
+            // * 🚩外延交
+            // * 📄"S"@"(S&T)" × "<S --> P>"
+            // * * component=subj="S"
+            // * * compound="(S&T)"
+            // * * pred="P"
+            // * * => "<(S&T) --> P>"
+            (INTERSECTION_EXT_OPERATOR, _)
+            // * 🚩外延差@第一项 ⇒ "<(S-T) --> P>"
+            // * 📄"S"@"(S-T)" × "<S --> P>"
+            // * * component=subj="S"
+            // * * compound="(S-T)"
+            // * * pred="P"
+            // * * => "<(S-T) --> P>"
+            | (DIFFERENCE_EXT_OPERATOR, 0) => ([compound.into(), pre], false),
+            // * 🚩内涵差@第二项 ⇒ "<(T~S) --> P>"
+            // * 📄"S"@"(T~S)" × "<S --> P>"
+            // * * component=subj="S"
+            // * * compound="(T~S)"
+            // * * pred="P"
+            // * * => "<(T~S) --> P>"
+            // * 📝真值取【否定】
+            (DIFFERENCE_INT_OPERATOR, 1) => ([compound.into(), pre], true),
+            // 其它
+            _ => return,
+        },
+        // * 🚩复合词项是谓项
+        // * 📄"P"@"(P&Q)" × "<S --> P>"
+        (_, true) => match (compound.identifier(), index) {
+            // * 🚩内涵交
+            // * 📄"P"@"(P|Q)" × "<S --> P>"
+            // * * component=pred="P"
+            // * * compound="(P|Q)"
+            // * * subj="S"
+            // * * => "<S --> (P|Q)>"
+            (INTERSECTION_INT_OPERATOR, _) => ([sub, compound.into()], false),
+            // * 🚩外延差@第二项
+            // * 📄"P"@"(Q-P)" × "<S --> P>"
+            // * * component=pred="P"
+            // * * compound="(Q-P)"
+            // * * subj="S"
+            // * * => "<S --> (Q-P)>"
+            // * 📝真值取【否定】
+            (DIFFERENCE_EXT_OPERATOR, 1) => ([sub, compound.into()], true),
+            // * 🚩内涵差@第一项
+            // * 📄"P"@"(P~Q)" × "<S --> P>"
+            // * * component=pred="P"
+            // * * compound="(P~Q)"
+            // * * subj="S"
+            // * * => "<S --> (P~Q)>"
+            (DIFFERENCE_INT_OPERATOR, 0) => ([sub, compound.into()], false),
+            _ => return,
+        },
+        _ => return,
+    };
+    // * 🚩统一构造陈述
+    let truth = match to_not_ded {
+        true => truth_deduction.negation(), // 要取否定取否定
+        false => truth_deduction,           // 否则就是原样
+    };
+    structural_statement(sub_pre, truth, context);
+}
+
+/// * 📝共用函数：根据给定的主项、谓项、任务内容（as模板） 构造新任务
+///
+/// # 📄OpenNARS
+///
+/// Common final operations of the above two methods
+fn structural_statement(
+    [sub, pre]: [Term; 2],
+    truth: TruthValue,
+    context: &mut ReasonContextConcept,
+) {
+    // * 🚩构造新陈述
+    let content = {
+        // * 🚩获取旧任务的陈述内容
+        let task_ref = context.current_task();
+        let task_rc = task_ref.get_();
+        let task_statement = unwrap_or_return!(?task_rc.content().as_statement());
+
+        // * 🚩构造新陈述，同时回收「任务陈述内容」的引用
+        unwrap_or_return!(?Term::make_statement(&task_statement, sub, pre))
+    };
+
+    // * 🚩预算 * //
+    let budget = context.budget_compound_forward(&truth, &content);
+
+    // * 🚩结论 * //
+    context.single_premise_task_structural(content, Some(truth), budget);
 }
 
 #[cfg(test)]
@@ -598,5 +720,60 @@ mod tests {
             => ANSWER r"<A --> B>" in outputs
         }
 
+        // ! 🚩【2024-08-06 10:53:41】后续对「单侧建构/单侧解构」不再附加「ANSWER测试」
+        //   * 📝先前的测试已保证「生成结论后必定有ANSWER」与「能根据疑问句内容（词项链）反推答案」
+        compose_one_int_ext: {
+            "
+            nse <A --> B>.
+            nse (&,A,C)?
+            cyc 10
+            "
+            => OUT "<(&,A,C) --> B>" in outputs
+        }
+
+        compose_one_int_int: {
+            "
+            nse <A --> B>.
+            nse (|,B,C).
+            cyc 10
+            "
+            => OUT "<A --> (|,B,C)>" in outputs
+        }
+
+        compose_one_diff_ext: {
+            "
+            nse <A --> B>.
+            nse (-,A,C).
+            cyc 10
+            "
+            => OUT "<(-,A,C) --> B>" in outputs
+        }
+
+        compose_one_diff_int: {
+            "
+            nse <A --> B>.
+            nse (~,B,C).
+            cyc 10
+            "
+            => OUT "<A --> (~,B,C)>" in outputs
+        }
+
+        compose_one_diff_ext_neg: {
+            "
+            nse <A --> B>. %0%
+            nse (-,C,B).
+            cyc 10
+            "
+            => OUT "<A --> (-,C,B)>" in outputs
+        }
+
+        compose_one_diff_int_neg: {
+            "
+            nse <A --> B>. %0%
+            nse (~,C,A).
+            cyc 10
+            "
+            => OUT "<(~,C,A) --> B>" in outputs
+        }
     }
 }
