@@ -5,7 +5,10 @@
 //! * ♻️【2024-06-26 12:02:36】开始根据改版OpenNARS重写
 
 use super::{ReasonRecorder, ReasonerChannels, ReasonerDerivationData};
-use crate::{control::Parameters, global::ClockTime, inference::InferenceEngine, storage::Memory};
+use crate::{
+    control::Parameters, entity::Task, global::ClockTime, inference::InferenceEngine,
+    storage::Memory,
+};
 use navm::output::Output;
 use rand::{rngs::StdRng, SeedableRng};
 use std::fmt::Debug;
@@ -152,5 +155,17 @@ impl Reasoner {
     /// 从内部「记录器」中拉取一个输出
     pub fn take_output(&mut self) -> Option<Output> {
         self.recorder.take()
+    }
+
+    /// 迭代器：迭代「新任务列表」中的所有任务
+    /// * 🎯用于「呈现任务信息」
+    pub fn iter_new_tasks(&self) -> impl Iterator<Item = &Task> {
+        self.derivation_datas.new_tasks.iter()
+    }
+
+    /// 迭代器：迭代「新任务列表」中的所有任务
+    /// * 🎯用于「呈现任务信息」
+    pub fn iter_novel_tasks(&self) -> impl Iterator<Item = &Task> {
+        self.derivation_datas.novel_tasks.iter()
     }
 }

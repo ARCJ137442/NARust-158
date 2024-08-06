@@ -45,6 +45,12 @@ pub struct TaskLink {
 }
 
 impl TaskLink {
+    /// 直接获取内部链接到的「任务引用」
+    /// * 🎯用于上级「概念」收集所有「任务引用」
+    pub(in crate::entity) fn target_rc_ref(&self) -> &RCTask {
+        &self.inner.target
+    }
+
     pub fn target_rc<'r, 's: 'r>(&'s self) -> impl Deref<Target = RCTask> + 'r {
         // ! 🚩【2024-06-22 12:21:12】要直接引用target字段，不能套两层`impl Deref`
         // * * ️📝会导致「临时变量引用」问题

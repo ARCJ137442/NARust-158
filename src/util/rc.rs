@@ -59,6 +59,11 @@ pub trait RefCount<T>: Sized + Clone {
     {
         self.get_().clone()
     }
+
+    /// 判断是否引用到相同的对象
+    /// * 📌所谓「引用判等」
+    /// * ⚠️比「值相等」更严格，并且与[`Eq`]无强关联
+    fn ref_eq(&self, other: &Self) -> bool;
 }
 
 // impls //
@@ -89,6 +94,11 @@ impl<T> RefCount<T> for RcCell<T> {
     fn n_weak_(&self) -> usize {
         Rc::weak_count(self)
     }
+
+    #[inline(always)]
+    fn ref_eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(self, other)
+    }
 }
 
 /// 对[`Arc<Mutex<T>>`](Arc)实现
@@ -117,6 +127,11 @@ impl<T> RefCount<T> for ArcMutex<T> {
     #[inline(always)]
     fn n_weak_(&self) -> usize {
         Arc::weak_count(self)
+    }
+
+    #[inline(always)]
+    fn ref_eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(self, other)
     }
 }
 

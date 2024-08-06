@@ -107,6 +107,12 @@ impl<E: Item> BagNameTable<E> {
     pub(super) fn iter(&self) -> impl Iterator<Item = (&String, &NameValue<E>)> {
         self.0.iter()
     }
+
+    /// 从0到「层数」遍历所有元素
+    /// * 🎯遍历所有存储的值
+    pub(super) fn iter_items(&self) -> impl Iterator<Item = &E> {
+        self.0.values().map(|(item, _)| item)
+    }
 }
 
 /// 初代「层级映射」实现
