@@ -4,7 +4,9 @@
 use crate::{
     control::*,
     entity::*,
-    inference::rules::{syllogistic_rules, utils::*},
+    inference::rules::{
+        intro_var_inner, intro_var_same_subject_or_predicate, syllogistic_rules, utils::*,
+    },
     io::symbols::*,
     language::{
         variable_process::{has_unification_q, unify_find_i, unify_find_q},
@@ -416,11 +418,39 @@ pub fn detachment_with_var(
     let [term_t, term_b] = [task_sentence.content(), belief.content()];
     let [main_statement, sub_content] = high_order_position.select([term_t, term_b]); // 选高阶陈述（任务⇒顺序不变，信念⇒顺序反转）
     let main_statement = main_statement.as_statement().unwrap();
+    let sub_content = sub_content.as_compound().unwrap();
     // ! ⚠️【2024-06-10 17:52:44】「当前任务」与「主陈述」可能不一致：主陈述可能源自「当前信念」
     // * * 当前任务="<(*,{tom},(&,glasses,[black])) --> own>."
     // * * 主陈述="<<$1 --> (/,livingIn,_,{graz})> ==> <(*,$1,sunglasses) --> own>>"
     // * * 当前信念="<<$1 --> (/,livingIn,_,{graz})> ==> <(*,$1,sunglasses) --> own>>."
     // * 🚩当前为正向推理（任务、信念皆判断），且主句的后项是「陈述」⇒尝试引入变量
+
+    // * 🚩使用一次性闭包代替重复的「引入变量」操作
+    let intro_var_same_s_or_p = |context| {
+        let task_judgement = task_sentence.unwrap_judgement(); // 避免重复借用
+        let component = position_sub_in_hi.select(main_statement.sub_pre());
+        // * 🚩【2024-08-06 20:49:18】此处必须分开
+        //   * ⚠️不能保证俩`impl Judgement`是一样的类型，难以保证类型一致性
+        match high_order_position {
+            PremiseSource::Task => intro_var_same_subject_or_predicate(
+                task_judgement,
+                &belief,
+                component,
+                sub_content,
+                position_sub_in_hi,
+                context,
+            ),
+            PremiseSource::Belief => intro_var_same_subject_or_predicate(
+                &belief,
+                task_judgement,
+                component,
+                sub_content,
+                position_sub_in_hi,
+                context,
+            ),
+        }
+    };
+
     let direction = context.reason_direction();
     let main_predicate_is_statement = main_statement.predicate.instanceof_statement();
     if direction == Forward && main_predicate_is_statement {
@@ -436,12 +466,18 @@ pub fn detachment_with_var(
                 // * content="<cup --> toothbrush>"
                 // * s2="<cup --> $1>"
                 // * mainStatement="<<toothbrush --> $1> ==> <cup --> $1>>"
-                // TODO: 变量内引入
+                intro_var_inner(
+                    sub_content.as_statement().unwrap(),
+                    s2,
+                    main_statement.into_compound_ref(),
+                    context,
+                )
             }
-            // TODO: 变量引入 同主项/谓项
+            intro_var_same_s_or_p(context)
         }
-        if main_statement.instanceof_equivalence() {
-            // TODO: 变量引入 同主项/谓项
+        // * 🚩等价⇒直接引入变量
+        else if main_statement.instanceof_equivalence() {
+            intro_var_same_s_or_p(context)
         }
     }
 }

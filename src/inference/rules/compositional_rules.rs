@@ -27,7 +27,7 @@ pub fn compose_as_set(
     component_b: &Term,
     context: &mut ReasonContextConcept,
 ) {
-    todo!()
+    // TODO
 }
 
 /// * 📌根据主谓项、真值 创建新内容，并导出结论
@@ -35,14 +35,14 @@ pub fn compose_as_set(
 /// # 📄OpenNARS
 ///
 /// Finish composing implication term
-pub fn process_composed(
+fn process_composed(
     task_content: Statement,
     subject: Term,
     predicate: Term,
     truth: TruthValue,
     context: &mut ReasonContextConcept,
 ) {
-    todo!()
+    // TODO
 }
 
 /// # 📄OpenNARS
@@ -58,7 +58,7 @@ pub fn decompose_compound(
     compound_from: PremiseSource,
     context: &mut ReasonContextConcept,
 ) {
-    todo!()
+    // TODO
 }
 
 /// # 📄OpenNARS
@@ -73,7 +73,7 @@ pub fn decompose_statement(
     compound_from: PremiseSource,
     context: &mut ReasonContextConcept,
 ) {
-    todo!()
+    // TODO
 }
 
 /* --------------- rules used for variable introduction --------------- */
@@ -91,12 +91,12 @@ pub fn decompose_statement(
 pub fn intro_var_same_subject_or_predicate(
     original_main_sentence: &impl Judgement,
     sub_sentence: &impl Judgement,
-    component: Term,
-    sub_content: CompoundTerm,
-    index: usize,
+    component: &Term,
+    sub_content: CompoundTermRef,
+    side: SyllogismPosition,
     context: &mut ReasonContextConcept,
 ) {
-    todo!()
+    // TODO
 }
 
 /// Introduce a dependent variable in an outer-layer conjunction
@@ -125,7 +125,7 @@ pub fn intro_var_outer(
     shared_term_i: SyllogismPosition,
     context: &mut ReasonContextConcept,
 ) {
-    todo!()
+    // TODO
 }
 
 /// 🆕以「变量外引入」的内部词项，计算「引入状态」陈述
@@ -162,7 +162,7 @@ fn intro_var_outer1(
     truth_b: &impl Truth,
     context: &mut ReasonContextConcept,
 ) {
-    todo!()
+    // TODO
 }
 
 /// 「变量外引入」规则 结论2
@@ -177,7 +177,7 @@ fn intro_var_outer2(
     truth_b: &impl Truth,
     context: &mut ReasonContextConcept,
 ) {
-    todo!()
+    // TODO
 }
 
 /// 「变量外引入」规则 结论3
@@ -192,7 +192,7 @@ fn intro_var_outer3(
     truth_b: &impl Truth,
     context: &mut ReasonContextConcept,
 ) {
-    todo!()
+    // TODO
 }
 
 /// 「变量外引入」规则 结论4
@@ -207,7 +207,7 @@ fn intro_var_outer4(
     truth_b: &impl Truth,
     context: &mut ReasonContextConcept,
 ) {
-    todo!()
+    // TODO
 }
 
 /// * 📝入口2：变量内引入
@@ -224,12 +224,12 @@ pub fn intro_var_inner(
     old_compound: CompoundTermRef,
     context: &mut ReasonContextConcept,
 ) {
-    todo!()
+    // TODO
 }
 
 /// 🆕以「变量内引入」的内部词项，计算「共有词项」
 /// * 🎯产生的词项（二元组/空）用于生成新结论内容
-pub fn intro_var_commons(premise_1: Statement, premise_2: Statement) -> [Term; 2] {
+fn intro_var_commons(premise_1: Statement, premise_2: Statement) -> [Term; 2] {
     todo!()
 }
 
@@ -252,7 +252,7 @@ fn intro_var_inner1(
     common_term_2: Term,
     context: &mut ReasonContextConcept,
 ) {
-    todo!()
+    // TODO
 }
 
 /// 「变量内引入」规则 结论2
@@ -274,7 +274,7 @@ fn intro_var_inner2(
     common_term_2: Term,
     context: &mut ReasonContextConcept,
 ) {
-    todo!()
+    // TODO
 }
 
 /// # 📄OpenNARS
@@ -299,5 +299,5 @@ pub fn eliminate_var_dep(
     compound_from: PremiseSource,
     context: &mut ReasonContextConcept,
 ) {
-    todo!()
+    // TODO
 }
