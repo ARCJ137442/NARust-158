@@ -14,6 +14,7 @@ use crate::{
 };
 use nar_dev_utils::unwrap_or_return;
 use ReasonDirection::*;
+use SyllogismPosition::*;
 
 /// 📝根据复合词项与索引，确定「是否在构建时交换」
 ///
@@ -444,6 +445,87 @@ fn structural_statement(
     context.single_premise_task_structural(content, Some(truth), budget);
 }
 
+/* -------------------- set transform -------------------- */
+
+/// 外延集、内涵集的「定理」
+/// * 📝NAL中「外延集」「内涵集」可以理解为「概念继承关系的上界/下界」
+///   * 💡整个继承关系可类比性地构造出Hasse图
+/// * 💭实际上只需要「关系反转」即可——如此便可脱离「相似系词」而获得等价效果
+///
+/// # 📄OpenNARS
+///
+/// ```nal
+/// {<S --> {P}>} |- <S <-> {P}>
+/// {<[S] --> P>} |- <[S] <-> P>
+/// ```
+pub fn transform_set_relation(
+    compound: CompoundTermRef,
+    statement: StatementRef,
+    side: SyllogismPosition,
+    context: &mut ReasonContextConcept,
+) {
+    // * 🚩预筛 * //
+    // * 🚩仅一元集
+    if compound.size() > 1 {
+        return;
+    }
+    // * 🚩不处理其它「继承」的情况
+    if statement.instanceof_inheritance() {
+        match (compound.identifier(), side) {
+            // * 📄"<{S} --> X>"
+            // * 📄"<X --> [P]>"
+            (SET_EXT_OPERATOR, Subject) | (SET_INT_OPERATOR, Predicate) => return,
+            _ => {}
+        }
+    }
+
+    // * 🚩词项 * //
+    let [sub, pre] = statement.sub_pre();
+    let [sub, pre] = [sub.clone(), pre.clone()];
+    let content = match statement.identifier() {
+        // * 📄"<S --> {P}>" => "<S <-> {P}>"
+        // * 📄"<[S] --> P>" => "<[S] <-> P>"
+        INHERITANCE_RELATION => Term::make_similarity(sub, pre),
+        _ => match (compound.identifier(), side) {
+            // * 📄"<{S} <-> P>" => "<P --> {S}>"
+            // * 📄"<S <-> [P]>" => "<[P] --> S>"
+            (SET_EXT_OPERATOR, Subject) | (SET_INT_OPERATOR, Predicate) => {
+                Term::make_inheritance(pre, sub)
+            }
+            // * 📄"<S <-> {P}>" => "<S --> {P}>"
+            // * 📄"<[S] <-> P>" => "<[S] --> P>"
+            _ => Term::make_inheritance(sub, pre),
+        },
+    };
+    let content = unwrap_or_return!(?content);
+
+    let task_truth = context
+        .current_task()
+        .get_()
+        .as_judgement()
+        .map(TruthValue::from);
+    let direction = context.reason_direction();
+
+    // * 🚩真值 * //
+    let truth = match direction {
+        // * 🚩前向 ⇒ 恒等
+        Forward => task_truth.map(|truth| truth.identity()),
+        // * 🚩反向 ⇒ 空
+        Backward => None,
+    };
+
+    // * 🚩预算 * //
+    let budget = match direction {
+        // * 🚩前向⇒复合前向
+        Forward => context.budget_compound_forward(truth.as_ref(), &content),
+        // * 🚩反向⇒复合反向
+        Backward => context.budget_compound_backward(&content),
+    };
+
+    // * 🚩结论 * //
+    context.single_premise_task_structural(content, truth, budget);
+}
+
 #[cfg(test)]
 mod tests {
     use crate::expectation_tests;
@@ -718,8 +800,8 @@ mod tests {
         decompose_both_diff_int: {
             "
             nse <(~,A,C) --> (~,B,C)>.
-            cyc 20
-            "
+            cyc 30
+            " // ! ♻️【2024-08-06 12:48:56】此处因为「集合转换」规则，又变慢了
             => OUT "<A --> B>" in outputs
         }
 
@@ -968,6 +1050,56 @@ mod tests {
             cyc 10
             "
             => OUT "<C --> B>" in outputs
+        }
+
+        transform_set_ext: {
+            "
+            nse <A --> {B}>.
+            cyc 10
+            "
+            => OUT "<A <-> {B}>" in outputs
+        }
+
+        transform_set_int: {
+            "
+            nse <[A] --> B>.
+            cyc 10
+            "
+            => OUT "<B <-> [A]>" in outputs // ! 🚩【2024-08-06 12:44:16】要调换顺序：比对时仅比对「词法Narsese」
+        }
+
+        transform_set_ext_sub: {
+            "
+            nse <A <-> {B}>.
+            cyc 10
+            "
+            => OUT "<A --> {B}>" in outputs
+        }
+
+        transform_set_ext_pre: { // ! ❌【2024-08-06 12:47:04】此情形不会被直接触发：相似系词只会将复合词项单排列至一侧
+            "
+            nse <A <-> {B}>.
+            nse <{B} --> A>?
+            cyc 10
+            "
+            => OUT "<{B} --> A>" in outputs
+        }
+
+        transform_set_int_sub: {
+            "
+            nse <[A] <-> B>.
+            cyc 10
+            "
+            => OUT "<[A] --> B>" in outputs
+        }
+
+        transform_set_int_pre: { // ! ❌【2024-08-06 12:47:04】此情形不会被直接触发：相似系词只会将复合词项单排列至一侧
+            "
+            nse <[A] <-> B>.
+            nse <B --> [A]>?
+            cyc 10
+            "
+            => OUT "<B --> [A]>" in outputs
         }
     }
 }

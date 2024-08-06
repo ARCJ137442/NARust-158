@@ -445,7 +445,7 @@ fn component_and_statement(
                 // * 🚩集合⇒特殊处理
                 // * 📝外延集性质：一元集合⇒最小外延 | 内涵集性质：一元集合⇒最小内涵
                 // * <A --> {B}> |- <A <-> {B}>
-                true => (), // TODO: StructuralRules.transformSetRelation(compound, statement, side, context);
+                true => transform_set_relation(compound, statement, side, context),
                 // * 🚩默认⇒两侧消去
                 // {(C-B) --> (C-A), A @ (C-A)} |- A --> B
                 false => structural_decompose_both(statement, index, context),
@@ -459,7 +459,7 @@ fn component_and_statement(
             if compound.instanceof_set() {
                 // * 🚩外延集性质：一元集合⇒最小外延 | 内涵集性质：一元集合⇒最小内涵
                 // * <A <-> {B}> |- <A --> {B}>
-                // TODO: StructuralRules.transformSetRelation(compound, statement, side, context);
+                transform_set_relation(compound, statement, side, context);
             }
         }
         // * 🚩蕴含×否定⇒逆否
