@@ -660,6 +660,75 @@ pub fn transform_negation(
     context.single_premise_task_structural(content, truth, budget);
 }
 
+/// * 📝逆否
+///
+/// # 📄OpenNARS
+///
+/// ```nal
+/// {<A ==> B>, A@(--, A)} |- <(--, B) ==> (--, A)>
+/// ```
+pub fn contraposition(
+    statement: Statement,
+    main_sentence_from: PremiseSource,
+    context: &mut ReasonContextConcept,
+) {
+    let direction = context.reason_direction();
+    let (main_sentence_truth, main_sentence_punctuation) = match main_sentence_from {
+        PremiseSource::Task => {
+            let task_rc = context.current_task();
+            let task = &*task_rc.get_();
+            (
+                task.as_judgement().map(TruthValue::from),
+                task.punctuation(),
+            )
+        }
+        PremiseSource::Belief => {
+            let belief = context.current_belief().unwrap();
+            (
+                belief.as_judgement().map(TruthValue::from),
+                belief.punctuation(),
+            )
+        }
+    };
+    // * 🚩词项 * //
+    let (sub, copula, pre) = statement.unwrap();
+    // * 🚩生成新内容
+    let content = unwrap_or_return!(
+        ?Term::make_statement_relation(
+            copula,                                       // 相同系词
+            unwrap_or_return!(?Term::make_negation(pre)), // 否定 @ 相反位置
+            unwrap_or_return!(?Term::make_negation(sub)),
+        )
+    );
+
+    // * 🚩真值 * //
+    let truth = match direction {
+        Forward => match content.instanceof_implication() {
+            // * 🚩蕴含⇒双重否定
+            true => main_sentence_truth.map(|truth| truth.contraposition()),
+            // * 🚩其它⇒恒等
+            false => main_sentence_truth.map(|truth| truth.identity()),
+        },
+        Backward => None,
+    };
+
+    // * 🚩预算 * //
+    let budget = match direction {
+        // * 🚩前向⇒复合前向
+        Forward => context.budget_compound_forward(truth.as_ref(), &content),
+        // * 🚩反向⇒按照「是否为蕴含」分派
+        Backward => match content.instanceof_implication() {
+            // * 🚩蕴含⇒弱推理
+            true => context.budget_compound_backward_weak(&content),
+            // * 🚩前向⇒复合前向
+            false => context.budget_compound_backward(&content),
+        },
+    };
+
+    // * 🚩结论 * //
+    context.single_premise_task_full(content, main_sentence_punctuation, truth, budget);
+}
+
 #[cfg(test)]
 mod tests {
     use crate::expectation_tests;
@@ -1285,6 +1354,14 @@ mod tests {
             cyc 10
             "
             => ANSWER "(--,A)" in outputs
+        }
+
+        contraposition: {
+            "
+            nse <(--,A) ==> B>.
+            cyc 10
+            "
+            => OUT "<(--,B) ==> A>" in outputs
         }
     }
 }

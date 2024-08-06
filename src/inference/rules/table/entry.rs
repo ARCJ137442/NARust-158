@@ -207,8 +207,6 @@ pub fn reason(context: &mut ReasonContextConcept) {
         // * + B="tim"
         // * @ C="{tim}"
         [CompoundStatement, Component] => component_and_statement(
-            task_term == belief_term,
-            true,
             cast_compound(concept_term),
             b_index.unwrap(),
             cast_statement(task_term),
@@ -443,8 +441,6 @@ fn compound_and_statement(
 ///
 /// Inference between a compound term and a statement
 fn component_and_statement(
-    statement_equals_belief: bool,
-    compound_from_concept: bool,
     compound: CompoundTerm,
     index: usize,
     statement: Statement,
@@ -452,10 +448,10 @@ fn component_and_statement(
     context: &mut ReasonContextConcept,
 ) {
     // if (context.getCurrentTask().isStructural()) return;
-    let (compound, statement) = (compound.get_ref(), statement.get_ref());
     match statement.identifier() {
         // * 🚩陈述是「继承」
         INHERITANCE_RELATION => {
+            let (compound, statement) = (compound.get_ref(), statement.get_ref());
             // * 🚩集合消去
             structural_decompose_one(compound, index, statement, context);
             // * 🚩尝试两侧都消去：只要不是外延集/内涵集 都可以
@@ -471,6 +467,7 @@ fn component_and_statement(
         }
         // * 🚩陈述是「相似」⇒总是要两侧消去
         SIMILARITY_RELATION => {
+            let (compound, statement) = (compound.get_ref(), statement.get_ref());
             // {(C-B) <-> (C-A), A @ (C-A)} |- A <-> B
             structural_decompose_both(statement, index, context);
             // * 🚩外延集/内涵集⇒尝试转换集合关系
@@ -481,13 +478,10 @@ fn component_and_statement(
             }
         }
         // * 🚩蕴含×否定⇒逆否
-        IMPLICATION_RELATION if compound.instanceof_negation() => {
-            // TODO: 逆否
-            /* match index {
-                0 => {}
-                _ => {}
-            } */
-        }
+        IMPLICATION_RELATION if compound.instanceof_negation() => match index {
+            0 => contraposition(statement, PremiseSource::Task, context),
+            _ => contraposition(statement, PremiseSource::Belief, context),
+        },
         _ => {}
     }
 }
@@ -635,5 +629,35 @@ fn compound_condition_and_compound_statement(
     b_side: SyllogismPosition,
     context: &mut ReasonContextConcept,
 ) {
-    // TODO
+    let [task_subject, _] = task_term.sub_pre();
+    // * 🚩「否定」⇒继续作为「元素🆚陈述」处理
+    if task_subject.instanceof_negation() {
+        // 决定参数
+        let negation = cast_compound(task_subject.clone());
+        let (self_side, statement, statement_side) = match task_sentence.is_judgement() {
+            true => (b_side, task_term, t_side),
+            _ => (t_side, belief_term, b_side),
+        };
+        // 统一调用
+        component_and_statement(
+            negation,
+            self_side as usize,
+            statement,
+            statement_side,
+            context,
+        );
+    }
+    // * 🚩一般情况⇒条件演绎/条件归纳
+    else {
+        // * 📌【2024-08-06 15:53:55】因为是「复合条件×复合陈述」，所以任务句肯定是条件句
+        conditional_deduction_induction_with_var(
+            PremiseSource::Task,
+            task_term,
+            t_side as usize,
+            belief_term,
+            b_side,
+            belief,
+            context,
+        )
+    }
 }
