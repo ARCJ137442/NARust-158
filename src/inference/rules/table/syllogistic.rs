@@ -16,6 +16,8 @@ use syllogistic_figures::*;
 use syllogistic_rules::*;
 use ReasonDirection::*;
 
+use super::compositional::compose_compound;
+
 /// 索引⇒图式
 fn index_to_figure<T, U>(link1: &impl TLink<T>, link2: &impl TLink<U>) -> SyllogismFigure {
     let side1 = SyllogismPosition::from_index(*link1.get_index(0).unwrap());
@@ -147,7 +149,12 @@ fn asymmetric_asymmetric(
         // induction
         SS => {
             // * 🚩构造复合词项
-            // TODO
+            compose_compound(
+                t_term.get_ref(),
+                b_term.get_ref(),
+                SyllogismPosition::Subject,
+                context,
+            );
             // * 🚩归因+归纳+比较
             let [sub, pre] = lower_level_composition(term_t, term_b);
             abd_ind_com(
@@ -170,12 +177,17 @@ fn asymmetric_asymmetric(
                 return;
             }
             // * 🚩尝试构建复合词项
-            // TODO
+            compose_compound(
+                t_term.get_ref(),
+                b_term.get_ref(),
+                SyllogismPosition::Predicate,
+                context,
+            );
             // * 🚩归因+归纳+比较
-            let [term_1, term_2] = lower_level_composition(term_t, term_b);
+            let [sub, pre] = lower_level_composition(term_t, term_b);
             abd_ind_com(
-                term_1.clone(),
-                term_2.clone(),
+                sub.clone(),
+                pre.clone(),
                 task_sentence,
                 belief_sentence,
                 context,

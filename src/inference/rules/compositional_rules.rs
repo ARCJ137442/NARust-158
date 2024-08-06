@@ -20,11 +20,11 @@ use SyllogismPosition::*;
 
 /// 🆕作为「集合」操作：交并差
 pub fn compose_as_set(
-    task_content: Statement,
-    shared_term_i: usize,
-    component_common: Term,
-    component_t: Term,
-    component_b: Statement,
+    task_content: StatementRef,
+    shared_term_i: SyllogismPosition,
+    component_common: &Term,
+    component_t: &Term,
+    component_b: &Term,
     context: &mut ReasonContextConcept,
 ) {
     todo!()
@@ -51,9 +51,9 @@ pub fn process_composed(
 /// {<(S|P) ==> M>, <P ==> M>} |- <S ==> M>
 /// ```
 pub fn decompose_compound(
-    compound: CompoundTerm,
-    component: Term,
-    term1: Term,
+    compound: CompoundTermRef,
+    component: &Term,
+    component_common: &Term,
     side: SyllogismPosition,
     compound_from: PremiseSource,
     context: &mut ReasonContextConcept,
@@ -120,9 +120,9 @@ pub fn intro_var_same_subject_or_predicate(
 ///   * => "<<P --> $1> <=> <S --> $1>>"
 ///   * => "(&&,<P --> #1>,<S --> #1>)"
 pub fn intro_var_outer(
-    task_content: Statement,
-    belief_content: Statement,
-    side: SyllogismPosition,
+    task_content: StatementRef,
+    belief_content: StatementRef,
+    shared_term_i: SyllogismPosition,
     context: &mut ReasonContextConcept,
 ) {
     todo!()
