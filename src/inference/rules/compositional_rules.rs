@@ -766,8 +766,7 @@ fn intro_var_inner1(
     let budget = context.budget_forward(&truth);
 
     // * 🚩结论 * //
-    println!("content1 = {content}\n from {premise_1}, {old_compound}");
-    context.double_premise_task_not_revisable(dbg!(content), Some(truth), budget);
+    context.double_premise_task_not_revisable(content, Some(truth), budget);
 }
 
 /// 「变量内引入」规则 结论2
@@ -820,8 +819,7 @@ fn intro_var_inner2(
     let budget = context.budget_forward(&truth);
 
     // * 🚩结论 * //
-    println!("content2 = {content}\n from {premise_1}, {old_compound}");
-    context.double_premise_task(dbg!(content), Some(truth), budget);
+    context.double_premise_task(content, Some(truth), budget);
 }
 
 /// # 📄OpenNARS
