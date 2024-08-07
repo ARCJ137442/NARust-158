@@ -360,8 +360,8 @@ fn symmetric_symmetric(
     // * 🚩成功统一 ⇒ 相似传递
     if unified {
         let [other_t, other_b] = [
-            pos_t.opposite().select_one(t_term.unwrap_components()),
-            pos_b.opposite().select_one(b_term.unwrap_components()),
+            pos_t.select_another(t_term.unwrap_components()),
+            pos_b.select_another(b_term.unwrap_components()),
         ];
         resemblance(other_b, other_t, &belief_sentence, &task_sentence, context);
     }

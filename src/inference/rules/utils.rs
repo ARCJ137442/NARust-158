@@ -25,10 +25,13 @@ pub fn cast_statement(term: Term) -> Statement {
     term.try_into().expect("必定是陈述")
 }
 
-/// * 📌包含两项：对称项/反对称项
+/// * 📌主要包含两项：对称项/反对称项
+///   * 可能有「恒等项」满足「取反等于自身」
+///   * 📄见[`SyllogismSide`]
 /// * 🚩基础行为：两类项可以相互转换——[取反](Dual::opposite)算子
 ///   * 对称项⇒反对称项
 ///   * 反对称项⇒对称项
+///   * 恒等项⇒自身
 pub trait Opposite: Sized {
     /// 调转到「相反方向」「相反位置」
     /// * 🎯抽象自各个「三段论位置」
@@ -59,16 +62,18 @@ pub trait Select {
     fn select<T>(&self, left_right: [T; 2]) -> [T; 2];
 
     /// 选择某一个「对称项」
-    /// * 对称项 ⇒ 前一个
-    /// * 反对称项 ⇒ 后一个
+    /// * 📝此时「对称项」「反对称项」分别充当「左」「右」两个角色
+    ///   * 对称项 ⇒ 前一个
+    ///   * 反对称项 ⇒ 后一个
     fn select_one<T>(&self, left_right: [T; 2]) -> T {
         let [selected, _] = self.select(left_right);
         selected
     }
 
     /// 选择另一个「对称项」
-    /// * 对称项 ⇒ 后一个
-    /// * 反对称项 ⇒ 前一个
+    /// * 📝此时「对称项」「反对称项」将反向选择
+    ///   * 对称项 ⇒ 后一个
+    ///   * 反对称项 ⇒ 前一个
     fn select_another<T>(&self, left_right: [T; 2]) -> T {
         let [_, selected] = self.select(left_right);
         selected
@@ -80,6 +85,9 @@ pub trait Select {
 /// * 📄例如
 ///   * 任务
 ///   * 信念
+/// * 📌二者形成「对偶关系」
+///   * 对称项：[`Self::Task`]
+///   * 反对称项：[`Self::Belief`]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PremiseSource {
     /// 任务
@@ -112,8 +120,11 @@ impl Select for PremiseSource {
 ///     * 📌因此有`SP`或`Subject-Predicate`
 ///     * 📌同时也有了其它三种「三段论图式」
 /// * 🚩两种情况：
-///   * 主项
-///   * 谓项
+///   * [主项](Self::Subject)
+///   * [谓项](Self::Predicate)
+/// * 📌二者形成「对偶关系」
+///   * 对称项：[`Self::Subject`]
+///   * 反对称项：[`Self::Predicate`]
 #[doc(alias = "SyllogismLocation")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum SyllogismPosition {
@@ -260,7 +271,7 @@ impl SyllogismSide {
     /// * 🚩主项/谓项⇒尝试as为一个陈述并选择之，返回 `[谓项,主项]`/`[谓项,主项]`
     /// * 🚩整体⇒返回`[Some(自身), None]`
     /// * 📌【2024-08-04 23:56:16】目前仅选择「陈述引用」
-    /// * 🎯
+    /// * 🎯在「条件三段论」中选择陈述组分
     pub fn select_exclusive(self, term: &Term) -> [Option<&Term>; 2] {
         use SyllogismSide::*;
         match (self, term.as_statement()) {

@@ -57,74 +57,54 @@ pub fn compose_as_set(
     let component_b = || component_b.clone();
     type MakeTermFrom2 = fn(Term, Term) -> Option<Term>;
 
-    // * 🚩根据「共有词项的位置」「任务内容的类型」分派
-    match (shared_term_i, task_content.identifier()) {
+    // * 🚩根据「任务内容的类型」分派
+    //   * ♻️【2024-08-07 16:48:56】现在「共有词项的位置」融入到更细节的`select`方法中
+    match task_content.identifier() {
+        // * 继承 * //
         // * 🚩共有在主项 ⇒ 内涵交，外延交，外延差
-        // * 📄"<M ==> S>", "<M ==> P>"
-        (Subject, INHERITANCE_RELATION) => {
+        //   * 📄"<M --> S>", "<M --> P>"
+        // * 🚩共有在谓项 ⇒ 外延交，内涵交，内涵差
+        //   * 📄"<S --> M>", "<P --> M>"
+        INHERITANCE_RELATION => {
             let [make_term_and, make_term_or]: [MakeTermFrom2; 2] =
                 shared_term_i.select([Term::make_intersection_ext, Term::make_intersection_int]);
-            // * 🚩「或」内涵交
-            term_or = make_term_and(component_t(), component_b());
-            // * 🚩「与」外延交
+            // * 🚩「与」：主⇒外延，谓⇒内涵
             term_and = make_term_or(component_t(), component_b());
-            // * 🚩根据「真值是否负面」决定「差」的真值
+            // * 🚩「或」：主⇒内涵，谓⇒外延
+            term_or = make_term_and(component_t(), component_b());
+            // * 🚩「差」的类型：主⇒外延差，谓⇒内涵差
+            let make_term_dif: MakeTermFrom2 =
+                shared_term_i.select_one([Term::make_difference_ext, Term::make_difference_int]);
+            // * 🚩根据「真值负面情况」（极化情况）决定「差」的真值
+            //   * 📝永远是「正面-负面」
             (term_dif, truth_dif) = match [truth_t.is_positive(), truth_b.is_positive()] {
-                // * 🚩同正/同负 ⇒ 不予生成
+                // * 🚩同正/同负 ⇒ 非极性 ⇒ 不予生成
                 [true, true] | [false, false] => (None, None),
                 // * 🚩任务正，信念负 ⇒ 词项="(任务-信念)"，真值=任务 ∩ ¬信念
+                // * 📝正负流向：任务→信念
                 [true, false] => (
-                    Term::make_difference_ext(component_t(), component_b()),
+                    make_term_dif(component_t(), component_b()),
                     Some(truth_t.intersection(&truth_b.negation())),
                 ),
                 // * 🚩任务负，信念正 ⇒ 词项="(信念-任务)"，真值=信念 ∩ ¬任务
+                // * 📝正负流向：信念→任务
                 [false, true] => (
-                    Term::make_difference_ext(component_b(), component_t()),
+                    make_term_dif(component_b(), component_t()),
                     Some(truth_b.intersection(&truth_t.negation())),
                 ),
             }
         }
-        // * 🚩共有在谓项 ⇒ 内涵交，外延交，内涵差
-        // * 📄"<S ==> M>", "<P ==> M>"
-        (Predicate, INHERITANCE_RELATION) => {
-            let [make_term_and, make_term_or]: [MakeTermFrom2; 2] =
-                shared_term_i.select([Term::make_intersection_ext, Term::make_intersection_int]);
-            // * 🚩「或」外延交
-            term_or = make_term_or(component_t(), component_b());
-            // * 🚩「与」内涵交
-            term_and = make_term_and(component_t(), component_b());
-            // * 🚩根据「真值是否负面」决定「差」的真值
-            (term_dif, truth_dif) = match [truth_t.is_positive(), truth_b.is_positive()] {
-                // * 🚩同正/同负 ⇒ 不予生成
-                [true, true] | [false, false] => (None, None),
-                // * 🚩任务正，信念负 ⇒ 词项="(任务-信念)"，真值=任务 ∩ ¬信念
-                [true, false] => (
-                    Term::make_difference_int(component_t(), component_b()),
-                    Some(truth_t.intersection(&truth_b.negation())),
-                ),
-                // * 🚩任务负，信念正 ⇒ 词项="(信念-任务)"，真值=信念 ∩ ¬任务
-                [false, true] => (
-                    Term::make_difference_int(component_b(), component_t()),
-                    Some(truth_b.intersection(&truth_t.negation())),
-                ),
-            };
-        }
-        (Subject, IMPLICATION_RELATION) => {
+        // * 蕴含 * //
+        // * 🚩共有在主项 ⇒ 合取、析取
+        //   * 📄"<M ==> S>", "<M ==> P>"
+        // * 🚩共有在谓项 ⇒ 析取、合取
+        //   * 📄"<S ==> M>", "<P ==> M>"
+        IMPLICATION_RELATION => {
             let [make_term_and, make_term_or]: [MakeTermFrom2; 2] =
                 shared_term_i.select([Term::make_conjunction, Term::make_disjunction]);
-            // * 🚩「与」合取
+            // * 🚩「与」主⇒合取，谓⇒析取
             term_and = make_term_and(component_t(), component_b());
-            // * 🚩「或」析取
-            term_or = make_term_or(component_t(), component_b());
-            // * 🚩没有「差」
-            (term_dif, truth_dif) = (None, None);
-        }
-        (Predicate, IMPLICATION_RELATION) => {
-            let [make_term_and, make_term_or]: [MakeTermFrom2; 2] =
-                shared_term_i.select([Term::make_conjunction, Term::make_disjunction]);
-            // * 🚩「与」析取
-            term_and = make_term_and(component_t(), component_b());
-            // * 🚩「或」合取
+            // * 🚩「或」主⇒析取，谓⇒合取
             term_or = make_term_or(component_t(), component_b());
             // * 🚩没有「差」
             (term_dif, truth_dif) = (None, None);
@@ -132,7 +112,6 @@ pub fn compose_as_set(
         // * 🚩其它情况都没有⇒直接返回
         _ => return,
     }
-    // TODO: 根据高度的对偶性，再度简化此处代码（用好`SyllogismPosition.select`）
 
     // 下面开始统一构造结论
     let component_common = || component_common.clone();

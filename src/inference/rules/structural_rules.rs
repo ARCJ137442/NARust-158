@@ -94,7 +94,7 @@ pub fn structural_compose_both(
             compound.inner.clone(),
             // * 🚩谓项/主项：替换后的复合词项
             {
-                let term_opposite = side.opposite().select_one([statement_sub, statement_pre]); // 提取出异侧词项
+                let term_opposite = side.select_another([statement_sub, statement_pre]); // 提取出异侧词项
                 components[index] = term_opposite.clone(); // 将对应位置换成异侧词项
                 unwrap_or_return!(?Term::make_compound_term(compound, components))
             },
