@@ -884,15 +884,54 @@ pub fn eliminate_var_dep(
     context: &mut ReasonContextConcept,
 ) {
     // * 🚩提取参数 * //
+    let truth_t = context
+        .current_task()
+        .get_()
+        .as_judgement()
+        .map(TruthValue::from);
+    let truth_b = TruthValue::from(context.current_belief().unwrap());
+    let direction = context.reason_direction();
+
     // * 🚩词项 * //
+    let content = unwrap_or_return!(
+        ?compound.reduce_components(component)
+    );
+    // * 🚩是陈述且无效⇒驳回
+    if content
+        .as_statement()
+        .as_ref()
+        .is_some_and(StatementRef::invalid)
+    {
+        return;
+    }
+
     // * 🚩真值 * //
-    // * 🚩复合词项来自任务 ⇒ 任务，信念
-    // * 🚩否则 ⇒ 信念，任务
+    let truth = match direction {
+        Forward => Some({
+            // * 🚩根据「复合词项来自任务」选择顺序
+            //   * 📄任务 ⇒ `[任务, 信念]`
+            //   * 📄否则 ⇒ `[信念, 任务]`
+            let [truth_1, truth_2] = compound_from.select([truth_t.unwrap(), truth_b]);
+            truth_1.anonymous_analogy(&truth_2)
+        }),
+        Backward => None,
+    };
+
     // * 🚩预算 * //
-    // * 🚩复合词项来自任务 ⇒ 反向
-    // * 🚩其它 ⇒ 反向弱推理
-    // * 🚩前向推理
+    let budget = match direction {
+        // * 🚩前向推理
+        Forward => context.budget_compound_forward(truth.as_ref(), &content),
+        // * 🚩反向推理⇒根据「复合词项来自任务」选择预算函数
+        Backward => match compound_from {
+            //   * 📄任务 ⇒ 反向
+            PremiseSource::Task => context.budget_backward(&truth_b),
+            //   * 📄信念 ⇒ 反向弱
+            PremiseSource::Belief => context.budget_backward_weak(&truth_b),
+        },
+    };
+
     // * 🚩结论 * //
+    context.double_premise_task(content, truth, budget);
 }
 
 #[cfg(test)]
@@ -1288,6 +1327,15 @@ mod tests {
             cyc 20
             " // 似乎跟预期中 "<(&&,<#x --> S>,C) ==> <#x --> P>>" 不一致
             => OUT "<<$1 --> S> ==> (&&,C,<$1 --> P>)>" in outputs
+        }
+
+        eliminate_var_dep: {
+            "
+            nse (&&,<#x --> S>,<#x --> P>).
+            nse <M --> P>.
+            cyc 10
+            "
+            => OUT "<M --> S>" in outputs
         }
     }
 }
