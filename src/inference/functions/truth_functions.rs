@@ -505,6 +505,13 @@ pub trait TruthFunctions: Truth + Sized {
 /// 为「真值」自动实现「真值函数」
 impl<T: Truth + Sized> TruthFunctions for T {}
 
+/// 单真值函数
+pub type TruthFSingle = fn(&TruthValue) -> TruthValue;
+/// 双真值函数
+pub type TruthFDouble = fn(&TruthValue, &TruthValue) -> TruthValue;
+/// 单真值依赖函数（分析性函数）
+pub type TruthFAnalytic = fn(&TruthValue, ShortFloat) -> TruthValue;
+
 /// TODO: 单元测试
 #[cfg(test)]
 mod tests {
@@ -515,9 +522,6 @@ mod tests {
     /// * 🚩无需真正创建实例
     #[test]
     fn function_table() {
-        type TruthFSingle = fn(&TruthValue) -> TruthValue;
-        type TruthFDouble = fn(&TruthValue, &TruthValue) -> TruthValue;
-        type TruthFAnalytic = fn(&TruthValue, ShortFloat) -> TruthValue;
         // * 📌单真值函数
         let conversion: TruthFSingle = TruthValue::conversion;
         let negation: TruthFSingle = TruthValue::negation;

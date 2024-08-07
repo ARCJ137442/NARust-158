@@ -144,12 +144,17 @@ pub fn compose_as_set(
     }
 }
 
+/// 解构交并差
+/// * ️📝其规则正好是上头「[建构交并差](compose_as_set)」的逆
+///
 /// # 📄OpenNARS
 ///
 /// ```nal
 /// {<(S|P) ==> M>, <P ==> M>} |- <S ==> M>
 /// ```
-pub fn decompose_compound(
+#[doc(alias = "decompose_compound")]
+pub fn decompose_as_set(
+    task_content: StatementRef,
     compound: CompoundTermRef,
     component: &Term,
     component_common: &Term,
@@ -158,42 +163,127 @@ pub fn decompose_compound(
     context: &mut ReasonContextConcept,
 ) {
     // * 🚩「参考的复合词项」是 陈述/像 ⇒ 不解构
-    // * 🚩将当前元素从复合词项中移除
-    // * 🚩词项 * //
-    // * 🚩共有前项
-    // * 🚩共有后项
-    // * 🚩真值 * //
+    if compound.instanceof_statement() || compound.instanceof_image() {
+        return;
+    }
+
     // ! 只能是判断句、正向推理
+    // * 📝【2024-08-07 17:10:20】上游调用者已经限制了「仅判断句」
+    debug_assert!(context.current_task().get_().is_judgement());
+
+    // * 🚩将当前元素从复合词项中移除
+    let term2 = unwrap_or_return!(
+        ?compound.reduce_components(component)
+    );
+
+    // * 🚩词项 * //
+    // * 🚩共有前项：[共同元素, term2]
+    // * 🚩共有后项：[term2, 共同元素]
+    let [subject, predicate] = side.select([component_common.clone(), term2.clone()]);
+    let content = unwrap_or_return!(?Term::make_statement(&task_content, subject, predicate));
+
+    // * 🚩真值 * //
+    let belief_truth: TruthValue = context.current_belief().unwrap().into();
+    let task_truth: TruthValue = context.current_task().get_().unwrap_judgement().into();
+    let [v1, v2] = compound_from.select([task_truth, belief_truth]);
+
     // * 🚩根据各词项类型分派
-    // * 🚩共用主项
-    // * 🚩旧任务内容 <: 继承
-    // * 🚩外延交 ⇒ 合取
-    // * 🚩内涵交 ⇒ 析取
-    // * 🚩内涵集-内涵集 ⇒ 合取
-    // * 🚩外延集-外延集 ⇒ 析取
-    // * 🚩外延差
-    // * 🚩内容正好为被减项 ⇒ 析取（反向）
-    // * 🚩其它 ⇒ 合取否定
-    // * 🚩其它 ⇒ 否决
-    // * 🚩旧任务内容 <: 蕴含
-    // * 🚩合取 ⇒ 合取
-    // * 🚩析取 ⇒ 析取
-    // * 🚩其它 ⇒ 否决
-    // * 🚩其它 ⇒ 否决
-    // * 🚩共用谓项
-    // * 🚩旧任务内容 <: 继承
-    // * 🚩内涵交 ⇒ 合取
-    // * 🚩外延交 ⇒ 析取
-    // * 🚩外延集-外延集 ⇒ 合取
-    // * 🚩内涵集-内涵集 ⇒ 析取
-    // * 🚩内涵差
-    // * 🚩内容正好为所减项 ⇒ 析取（反向）
-    // * 🚩其它 ⇒ 合取否定
-    // * 🚩旧任务内容 <: 蕴含
-    // * 🚩其它 ⇒ 否决
-    // * 🚩其它 ⇒ 否决
+    let task_content_type = task_content.identifier();
+    let compound_type = compound.identifier();
+    /// 反向的「合取消去」
+    /// * 🎯格式整齐——让后边直接使用真值函数（指针）而无需凑表达式
+    fn reduce_disjunction_rev(v1: &impl Truth, v2: &impl Truth) -> TruthValue {
+        v1.reduce_disjunction(v2)
+    }
+    let truth_f: TruthFDouble = match side {
+        // * 🚩共用主项
+        Subject => match task_content_type {
+            // * 🚩旧任务内容 <: 继承
+            INHERITANCE_RELATION => match compound_type {
+                // * 🚩外延交 ⇒ 合取
+                INTERSECTION_EXT_OPERATOR => TruthFunctions::reduce_conjunction,
+                // * 🚩内涵交 ⇒ 析取
+                INTERSECTION_INT_OPERATOR => TruthFunctions::reduce_disjunction,
+                // * 🚩内涵集-内涵集 ⇒ 合取
+                SET_INT_OPERATOR if component.instanceof_set_int() => {
+                    TruthFunctions::reduce_conjunction
+                }
+                // * 🚩外延集-外延集 ⇒ 析取
+                SET_EXT_OPERATOR if component.instanceof_set_ext() => {
+                    TruthFunctions::reduce_disjunction
+                }
+                // * 🚩外延差
+                DIFFERENCE_INT_OPERATOR => {
+                    match *compound.component_at(0).unwrap() == *component {
+                        // * 🚩内容正好为被减项 ⇒ 析取（反向）
+                        true => reduce_disjunction_rev,
+                        // * 🚩其它 ⇒ 合取否定
+                        false => TruthFunctions::reduce_conjunction_neg,
+                    }
+                }
+                // * 🚩其它 ⇒ 否决
+                _ => return,
+            },
+            // * 🚩旧任务内容 <: 蕴含
+            IMPLICATION_RELATION => match compound_type {
+                // * 🚩合取 ⇒ 合取
+                CONJUNCTION_OPERATOR => TruthFunctions::reduce_conjunction,
+                // * 🚩析取 ⇒ 析取
+                DISJUNCTION_OPERATOR => TruthFunctions::reduce_disjunction,
+                // * 🚩其它 ⇒ 否决
+                _ => return,
+            },
+            // * 🚩其它 ⇒ 否决
+            _ => return,
+        },
+        // * 🚩共用谓项
+        Predicate => match task_content_type {
+            // * 🚩旧任务内容 <: 继承
+            INHERITANCE_RELATION => match compound_type {
+                // * 🚩内涵交 ⇒ 合取
+                INTERSECTION_INT_OPERATOR => TruthFunctions::reduce_conjunction,
+                // * 🚩外延交 ⇒ 析取
+                INTERSECTION_EXT_OPERATOR => TruthFunctions::reduce_disjunction,
+                // * 🚩外延集-外延集 ⇒ 合取
+                SET_EXT_OPERATOR if component.instanceof_set_ext() => {
+                    TruthFunctions::reduce_conjunction
+                }
+                // * 🚩内涵集-内涵集 ⇒ 析取
+                SET_INT_OPERATOR if component.instanceof_set_int() => {
+                    TruthFunctions::reduce_disjunction
+                }
+                // * 🚩内涵差
+                DIFFERENCE_INT_OPERATOR => {
+                    match *compound.component_at(0).unwrap() == *component {
+                        // * 🚩内容正好为被减项 ⇒ 析取（反向）
+                        true => reduce_disjunction_rev,
+                        // * 🚩其它 ⇒ 合取否定
+                        false => TruthFunctions::reduce_conjunction_neg,
+                    }
+                }
+                // * 🚩其它 ⇒ 否决
+                _ => return,
+            },
+            // * 🚩旧任务内容 <: 蕴含
+            IMPLICATION_RELATION => match compound_type {
+                // * 🚩析取 ⇒ 合取
+                DISJUNCTION_OPERATOR => TruthFunctions::reduce_conjunction,
+                // * 🚩合取 ⇒ 析取
+                CONJUNCTION_OPERATOR => TruthFunctions::reduce_disjunction,
+                // * 🚩其它 ⇒ 否决
+                _ => return,
+            },
+            // * 🚩其它 ⇒ 否决
+            _ => return,
+        },
+    };
+    let truth = truth_f(&v1, &v2);
+
     // * 🚩预算 * //
+    let budget = context.budget_compound_forward(&truth, &content);
+
     // * 🚩结论 * //
+    context.double_premise_task(content, Some(truth), budget);
 }
 
 /// # 📄OpenNARS
@@ -634,6 +724,124 @@ mod tests {
             cyc 10
             "
             => OUT "<M ==> (&&,S,P)>" in outputs
+        }
+
+        decompose_as_sub_inh_and: {
+            "
+            nse <(&,S,P) --> M>.
+            nse <S --> M>.
+            cyc 20
+            "
+            => OUT "<P --> M>" in outputs
+        }
+
+        decompose_as_sub_inh_or: {
+            "
+            nse <(|,S,P) --> M>.
+            nse <S --> M>.
+            cyc 20
+            "
+            => OUT "<P --> M>" in outputs
+        }
+
+        decompose_as_sub_inh_not_sp: {
+            "
+            nse <(~,S,P) --> M>. %1%
+            nse <S --> M>. %0%
+            cyc 20
+            " // 主项：`1` ~ `0`
+            => OUT "<P --> M>" in outputs
+        }
+
+        decompose_as_sub_inh_not_ps: {
+            "
+            nse <(~,P,S) --> M>. %0%
+            nse <S --> M>. %1%
+            cyc 20
+            " // 主项：`1` ~ `0`
+            => OUT "<P --> M>" in outputs
+        }
+
+        // ! ❌【2024-08-07 17:59:52】此测试失败：蕴含+合取⇒链接「复合条件」不走组合规则
+        // decompose_as_sub_imp_and: {
+        //     "
+        //     nse <(&&,S,P) ==> M>.
+        //     nse <S ==> M>.
+        //     cyc 1000
+        //     "
+        //     => OUT "<P ==> M>" in outputs
+        // }
+
+        decompose_as_sub_imp_or: {
+            "
+            nse <(||,S,P) ==> M>.
+            nse <S ==> M>.
+            cyc 20
+            "
+            => OUT "<P ==> M>" in outputs
+        }
+
+        decompose_as_pre_inh_and: {
+            "
+            nse <M --> (&,S,P)>.
+            nse <M --> S>.
+            cyc 20
+            "
+            => OUT "<M --> P>" in outputs
+        }
+
+        decompose_as_pre_inh_or: {
+            "
+            nse <M --> (|,S,P)>.
+            nse <M --> S>.
+            cyc 20
+            "
+            => OUT "<M --> P>" in outputs
+        }
+
+        decompose_as_pre_inh_not_sp: {
+            "
+            nse <M --> (-,S,P)>. %1%
+            nse <M --> S>. %0%
+            cyc 20
+            " // 谓项：`1` - `0`
+            => OUT "<M --> P>" in outputs
+        }
+
+        decompose_as_pre_inh_not_ps: {
+            "
+            nse <M --> (-,P,S)>. %0%
+            nse <M --> S>. %1%
+            cyc 20
+            " // 谓项：`1` - `0`
+            => OUT "<M --> P>" in outputs
+        }
+
+        decompose_as_pre_imp_and: {
+            "
+            nse <M ==> (||,S,P)>.
+            nse <M ==> S>.
+            cyc 20
+            "
+            => OUT "<M ==> P>" in outputs
+        }
+
+        decompose_as_pre_imp_or: {
+            "
+            nse <M ==> (&&,S,P)>.
+            nse <M ==> S>.
+            cyc 20
+            "
+            => OUT "<M ==> P>" in outputs
+        }
+
+        decompose_compound_pre_inh_and: {
+            "
+            nse <M --> (&,S,P)>.
+            nse <M --> S>.
+            cyc 10
+            "
+            => OUT "<M --> P>" in outputs
         }
     }
 }
