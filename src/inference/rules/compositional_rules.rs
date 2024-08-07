@@ -187,95 +187,56 @@ pub fn decompose_as_set(
     let task_truth: TruthValue = context.current_task().get_().unwrap_judgement().into();
     let [v1, v2] = compound_from.select([task_truth, belief_truth]);
 
-    // * 🚩根据各词项类型分派
-    let task_content_type = task_content.identifier();
-    let compound_type = compound.identifier();
     /// 反向的「合取消去」
     /// * 🎯格式整齐——让后边直接使用真值函数（指针）而无需凑表达式
     fn reduce_disjunction_rev(v1: &impl Truth, v2: &impl Truth) -> TruthValue {
-        v1.reduce_disjunction(v2)
+        v2.reduce_disjunction(v1)
     }
-    let truth_f: TruthFDouble = match side {
-        // * 🚩共用主项
-        Subject => match task_content_type {
-            // * 🚩旧任务内容 <: 继承
-            INHERITANCE_RELATION => match compound_type {
-                // * 🚩外延交 ⇒ 合取
-                INTERSECTION_EXT_OPERATOR => TruthFunctions::reduce_conjunction,
-                // * 🚩内涵交 ⇒ 析取
-                INTERSECTION_INT_OPERATOR => TruthFunctions::reduce_disjunction,
-                // * 🚩内涵集-内涵集 ⇒ 合取
-                SET_INT_OPERATOR if component.instanceof_set_int() => {
-                    TruthFunctions::reduce_conjunction
-                }
-                // * 🚩外延集-外延集 ⇒ 析取
-                SET_EXT_OPERATOR if component.instanceof_set_ext() => {
-                    TruthFunctions::reduce_disjunction
-                }
-                // * 🚩外延差
-                DIFFERENCE_INT_OPERATOR => {
-                    match *compound.component_at(0).unwrap() == *component {
-                        // * 🚩内容正好为被减项 ⇒ 析取（反向）
-                        true => reduce_disjunction_rev,
-                        // * 🚩其它 ⇒ 合取否定
-                        false => TruthFunctions::reduce_conjunction_neg,
-                    }
-                }
-                // * 🚩其它 ⇒ 否决
-                _ => return,
-            },
-            // * 🚩旧任务内容 <: 蕴含
-            IMPLICATION_RELATION => match compound_type {
-                // * 🚩合取 ⇒ 合取
-                CONJUNCTION_OPERATOR => TruthFunctions::reduce_conjunction,
-                // * 🚩析取 ⇒ 析取
-                DISJUNCTION_OPERATOR => TruthFunctions::reduce_disjunction,
-                // * 🚩其它 ⇒ 否决
-                _ => return,
-            },
+
+    // * 🚩预先获取各个上下文「主项/谓项」的「与或非」真值函数
+    let [truth_f_and, truth_f_or]: [TruthFDouble; 2] = side.select([
+        TruthFunctions::reduce_conjunction,
+        TruthFunctions::reduce_disjunction,
+    ]);
+    let truth_f_not = match *compound.component_at(0).unwrap() == *component {
+        // * 🚩内容正好为被减项 ⇒ 析取（反向）
+        true => reduce_disjunction_rev,
+        // * 🚩其它 ⇒ 合取否定
+        false => TruthFunctions::reduce_conjunction_neg,
+    };
+
+    // * 🚩根据各词项类型分派
+    let task_content_type = task_content.identifier();
+    let compound_type = compound.identifier();
+    let truth_f: TruthFDouble = match task_content_type {
+        // * 🚩任务内容 <: 继承
+        INHERITANCE_RELATION => match compound_type {
+            // * 🚩外延交 ⇒ 合取/析取
+            INTERSECTION_EXT_OPERATOR => truth_f_and,
+            // * 🚩内涵交 ⇒ 析取/合取
+            INTERSECTION_INT_OPERATOR => truth_f_or,
+            // * 🚩外延集-外延集 ⇒ 析取/合取
+            SET_EXT_OPERATOR if component.instanceof_set_ext() => truth_f_or,
+            // * 🚩内涵集-内涵集 ⇒ 合取/析取
+            SET_INT_OPERATOR if component.instanceof_set_int() => truth_f_and,
+            // * 🚩外延差 @ 主项 ⇒ 差
+            DIFFERENCE_EXT_OPERATOR if side == Subject => truth_f_not,
+            // * 🚩内涵差 @ 谓项 ⇒ 差
+            DIFFERENCE_INT_OPERATOR if side == Predicate => truth_f_not,
             // * 🚩其它 ⇒ 否决
             _ => return,
         },
-        // * 🚩共用谓项
-        Predicate => match task_content_type {
-            // * 🚩旧任务内容 <: 继承
-            INHERITANCE_RELATION => match compound_type {
-                // * 🚩内涵交 ⇒ 合取
-                INTERSECTION_INT_OPERATOR => TruthFunctions::reduce_conjunction,
-                // * 🚩外延交 ⇒ 析取
-                INTERSECTION_EXT_OPERATOR => TruthFunctions::reduce_disjunction,
-                // * 🚩外延集-外延集 ⇒ 合取
-                SET_EXT_OPERATOR if component.instanceof_set_ext() => {
-                    TruthFunctions::reduce_conjunction
-                }
-                // * 🚩内涵集-内涵集 ⇒ 析取
-                SET_INT_OPERATOR if component.instanceof_set_int() => {
-                    TruthFunctions::reduce_disjunction
-                }
-                // * 🚩内涵差
-                DIFFERENCE_INT_OPERATOR => {
-                    match *compound.component_at(0).unwrap() == *component {
-                        // * 🚩内容正好为被减项 ⇒ 析取（反向）
-                        true => reduce_disjunction_rev,
-                        // * 🚩其它 ⇒ 合取否定
-                        false => TruthFunctions::reduce_conjunction_neg,
-                    }
-                }
-                // * 🚩其它 ⇒ 否决
-                _ => return,
-            },
-            // * 🚩旧任务内容 <: 蕴含
-            IMPLICATION_RELATION => match compound_type {
-                // * 🚩析取 ⇒ 合取
-                DISJUNCTION_OPERATOR => TruthFunctions::reduce_conjunction,
-                // * 🚩合取 ⇒ 析取
-                CONJUNCTION_OPERATOR => TruthFunctions::reduce_disjunction,
-                // * 🚩其它 ⇒ 否决
-                _ => return,
-            },
+        // * 🚩任务内容 <: 蕴含
+        IMPLICATION_RELATION => match compound_type {
+            // * 🚩合取 ⇒ 合取/析取
+            CONJUNCTION_OPERATOR => truth_f_and,
+            // * 🚩析取 ⇒ 析取/合取
+            DISJUNCTION_OPERATOR => truth_f_or,
             // * 🚩其它 ⇒ 否决
             _ => return,
         },
+        // * 🚩其它 ⇒ 否决
+        _ => return,
     };
     let truth = truth_f(&v1, &v2);
 
