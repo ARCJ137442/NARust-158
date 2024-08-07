@@ -343,9 +343,17 @@ pub fn decompose_statement(
 
 /* --------------- rules used for variable introduction --------------- */
 
-/// 🆕入口之一：变量引入
-/// ! ⚠️【2024-07-23 12:20:18】逻辑未完全被测试覆盖，代码理解度低
+/// 🆕入口之一：变量引入同主谓
 /// * 📝【2024-07-23 12:04:33】OpenNARS 3.1.0仍然没有样例注释……
+/// * ♻️【2024-08-07 22:25:57】重构以规整
+///
+/// ```nal
+/// {<<$1 --> B> ==> <$1 --> A>>, <A --> C>}
+/// |- <<A --> B> ==> (&&, <#1 --> C>, <#1 --> A>)>
+/// {<<B --> $1> ==> <A --> $1>>, <C --> A>}
+/// |- <<B --> A> ==> (&&, <C --> #1>, <A --> #1>)>
+/// ```
+///
 /// * 📄一例（平凡情况）：
 ///   * originalMainSentence = "<<$1 --> swimmer> ==> <$1 --> bird>>"
 ///   * subSentence = "<bird --> animal>"
@@ -353,12 +361,17 @@ pub fn decompose_statement(
 ///   * subContent = "<bird --> animal>"
 ///   * index = 1 @ originalMainSentence
 ///   * => "<<$1 --> swimmer> ==> <$1 --> bird>>"
+/// * 📄一例：
+///   * originalMainSentence = "<<$1 --> swimmer> ==> <$1 --> bird>>"
+///   * subSentence = "<bird --> animal>"
+///   * index = 1 @ originalMainSentence
+///   * => "<<bird --> swimmer> ==> (&&, <#1 --> animal>, <#1 --> bird>)>"
 pub fn intro_var_same_subject_or_predicate(
     original_main_sentence: &impl Judgement,
     sub_sentence: &impl Judgement,
     component: &Term,
     sub_content: CompoundTermRef,
-    side: SyllogismPosition,
+    position_sub_in_hi: SyllogismPosition, // 子句在高阶词项中的位置
     context: &mut ReasonContextConcept,
 ) {
     // * 🚩词项 * //
@@ -390,62 +403,76 @@ pub fn intro_var_same_subject_or_predicate(
 
     let [com_sub, com_pre] = component.sub_pre();
     let [sub_sub, sub_pre] = sub_content.sub_pre();
-    let content;
-    if *com_pre == *sub_pre && !com_pre.instanceof_variable() {
-        // ! ⚠️【2024-07-23 12:17:44】目前还没真正触发过此处逻辑
-        // ! * 诸多尝试均被「变量分离规则」等 截胡
-        /*
-         * 📄已知如下输入无法触发：
-         * <swam --> swimmer>.
-         * <swam --> bird>.
-         * <bird --> swimmer>.
-         * <<$1 --> swimmer> ==> <$1 --> bird>>.
-         * <<bird --> $1> ==> <swimmer --> $1>>.
-         * 1000
-         */
-        let v = Term::make_var_d([&main_statement, sub_content.statement]); // * ✅不怕重名：现在始终是「最大词项的最大id+1」的模式
-        let zw = cast_compound(side.select_one(main_statement.sub_pre()).clone());
-        let zw2 = unwrap_or_return!(?zw.get_ref().set_component(1, Some(v.clone())));
-        let new_sub_compound =
-            unwrap_or_return!(?sub_content.into_compound_ref().set_component(1, Some(v.clone())));
-        if zw2 == new_sub_compound {
-            return;
-        }
-        let res = unwrap_or_return!(?Term::make_conjunction(zw.into(), new_sub_compound));
-        content = unwrap_or_return!(
-            ?main_statement
-                .into_compound_ref()
-                .set_component(side as usize, Some(res))
-        );
+    // * 🚩决定要「引入变量并替换元素」的位置
+    //   * 📝哪边词项相等且被替换的不是变量，哪边就引入变量
+    let var_position = if *com_pre == *sub_pre && !com_pre.instanceof_variable() {
+        Some(Predicate) // 在谓项中引入变量，保留主项
     } else if *com_sub == *sub_sub && !com_sub.instanceof_variable() {
-        // ! ⚠️【2024-07-23 12:17:44】目前还没真正触发过此处逻辑
-        // ! * 诸多尝试均被「变量分离规则」等 截胡
-        /*
-         * 📄已知如下输入无法触发：
-         * <swam --> swimmer>.
-         * <swam --> bird>.
-         * <bird --> swimmer>.
-         * <<$1 --> swimmer> ==> <$1 --> bird>>.
-         * <<bird --> $1> ==> <swimmer --> $1>>.
-         * 1000
-         */
-        let v = Term::make_var_d([&main_statement, sub_content.statement]); // * ✅不怕重名：现在始终是「最大词项的最大id+1」的模式
-        let zw = cast_compound(side.select_one(main_statement.sub_pre()).clone());
-        let zw2 = unwrap_or_return!(?zw.get_ref().set_component(0, Some(v.clone())));
-        let new_sub_compound =
-            unwrap_or_return!(?sub_content.into_compound_ref().set_component(0, Some(v.clone())));
-        if zw2 == new_sub_compound {
-            return;
-        }
-        let res = unwrap_or_return!(?Term::make_conjunction(zw.into(), new_sub_compound));
-        content = unwrap_or_return!(
-            ?main_statement
-                .into_compound_ref()
-                .set_component(side as usize, Some(res))
-        );
+        Some(Subject) // 在主项中引入变量，保留谓项
     } else {
-        content = main_statement.statement.clone(); // ? 【2024-07-23 12:20:27】为何要重复得出结果
+        None // 不引入变量，保留整个陈述（❓为何）
+    };
+    // * 🚩开始在词项中引入变量
+    /// 将陈述的某处替换为变量
+    fn replaced_statement_with_term_at(
+        statement: StatementRef,
+        at: SyllogismPosition,
+        new_term: Term,
+    ) -> Option<Term> {
+        // * 🚩【2024-08-07 21:14:35】实质上就是将「保留之侧的对侧」替换成变量
+        let new_remaining_component = at.opposite().select_one(statement.sub_pre()).clone();
+        let [sub, pre] = at.select([new_term, new_remaining_component]); // `new_term`在前，始终跟随`at`
+        Term::make_statement(&statement, sub, pre)
     }
+    let content = match var_position {
+        Some(var_position) => {
+            // ! ⚠️【2024-07-23 12:17:44】目前还没真正触发过此处逻辑
+            // ! * 诸多尝试均被「变量分离规则」等 截胡
+            /*
+             * 📄已知如下输入无法触发：
+             * <swam --> swimmer>.
+             * <swam --> bird>.
+             * <bird --> swimmer>.
+             * <<$1 --> swimmer> ==> <$1 --> bird>>.
+             * <<bird --> $1> ==> <swimmer --> $1>>.
+             * 1000
+             */
+            // * ✅↓不怕重名：现在始终是「最大词项的最大id+1」的模式
+            let var_d = || Term::make_var_d([&main_statement, sub_content.statement]);
+            // * 🚩假定这个是「子句」陈述，因此能继续提取主项/谓项
+            let sub_component_in_main = unwrap_or_return!( // 原zw
+                ?position_sub_in_hi.select_one(main_statement.sub_pre()).as_statement()
+            );
+            let sub_component_replaced = unwrap_or_return!(
+                // 原zw2
+                // unwrap_or_return!(?sub_component_in_main.get_ref().set_component(1, Some(v())));
+                // * 🚩【2024-08-07 21:14:35】实质上就是将「保留之侧的对侧」替换成变量
+                ?replaced_statement_with_term_at(sub_component_in_main, var_position, var_d())
+            );
+            let new_sub_compound = unwrap_or_return!(
+                // unwrap_or_return!(?sub_content.into_compound_ref().set_component(1, Some(v())))
+                // * 🚩【2024-08-07 21:14:35】实质上就是将「保留之侧的对侧」替换成变量
+                ?replaced_statement_with_term_at(sub_content, var_position, var_d())
+            );
+            if sub_component_replaced == new_sub_compound {
+                return;
+            }
+            // final Conjunction res = (Conjunction) makeConjunction(zw2, newSubCompound);
+            let sub_conjunction = unwrap_or_return!(
+                ?Term::make_conjunction(sub_component_replaced, new_sub_compound)
+            );
+            // * 🚩最终构造：替换掉`main_statement`中`position_sub_in_hi`处的「子句」为合取
+            unwrap_or_return!(
+                ?replaced_statement_with_term_at(
+                    main_statement,
+                    position_sub_in_hi,
+                    sub_conjunction,
+                )
+            )
+        }
+        // ? 【2024-07-23 12:20:27】为何要重复得出结果
+        None => main_statement.statement.clone(),
+    };
 
     // * 🚩真值 * //
     let truth = original_main_sentence.induction(sub_sentence);
@@ -969,14 +996,22 @@ mod tests {
             => ANSWER "S" in outputs
         }
 
-        // ! ❌【2024-08-07 20:58:52】失败：先前函数也未经测试成功
-        // intro_var_same_subject_or_predicate: {
-        //     "
-        //     nse <<$1 --> swimmer> ==> <$1 --> bird>>.
-        //     nse <bird --> animal>.
-        //     cyc 100
-        //     "
-        //     => OUT "<<$1 --> swimmer> ==> <$1 --> bird>>" in outputs
-        // }
+        intro_var_same_subject: {
+            "
+            nse <<$1 --> B> ==> <$1 --> A>>.
+            nse <A --> C>.
+            cyc 10
+            "
+            => OUT "<<A --> B> ==> (&&, <#1 --> C>, <#1 --> A>)>" in outputs
+        }
+
+        intro_var_same_predicate: {
+            "
+            nse <<B --> $1> ==> <A --> $1>>.
+            nse <C --> A>.
+            cyc 10
+            "
+            => OUT "<<B --> A> ==> (&&, <C --> #1>, <A --> #1>)>" in outputs
+        }
     }
 }

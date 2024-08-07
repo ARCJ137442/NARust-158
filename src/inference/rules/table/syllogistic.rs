@@ -372,7 +372,7 @@ pub fn detachment_with_var(
     mut task_sentence: impl Sentence,
     mut belief: impl Judgement,
     high_order_position: PremiseSource,
-    position_sub_in_hi: SyllogismPosition,
+    position_sub_in_hi: SyllogismPosition, // 子句在高阶词项中的位置
     context: &mut ReasonContextConcept,
 ) {
     // * 🚩提取元素
