@@ -8,14 +8,8 @@ use crate::{
 };
 use ReasonDirection::*;
 
-/// # 📄OpenNARS
-///
-/// ```nal
-/// {<S ==> M>, <P ==> M>} |- {
-/// <(S|P) ==> M>, <(S&P) ==> M>,
-/// <(S-P) ==> M>, <(P-S) ==> M>
-/// }
-/// ```
+/// 🆕原OpenNARS规则，现成为一个纯分派函数
+/// * ℹ️所直接包含的规则，请移步至[`crate::inference::rules::compositional_rules::compose_as_set`]
 pub fn compose_compound(
     task_content: StatementRef,
     belief_content: StatementRef,
@@ -59,6 +53,7 @@ pub fn compose_compound(
     // * 🚩NAL-3规则：交并差
     compose_as_set(
         task_content,
+        belief_content,
         shared_term_i,
         component_common,
         component_t,

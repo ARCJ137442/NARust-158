@@ -105,6 +105,13 @@ pub trait Truth: ToDisplayAndBrief {
         self.frequency() < ShortFloat::HALF
     }
 
+    /// 🆕模拟[`isNegative`](Self::is_negative)的反面：真值是否为【正面】
+    /// * 🎯让代码更好理解
+    #[inline]
+    fn is_positive(&self) -> bool {
+        !self.is_negative()
+    }
+
     /// 模拟`TruthValue.equals`
     /// * 🎯将两个对象作为「真值」比较
     /// * 🎯用于「判断句」中「真值方面的比较」

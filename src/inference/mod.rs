@@ -55,9 +55,10 @@ pub(super) mod test_inference {
     use super::*;
     use crate::{
         control::{Parameters, DEFAULT_PARAMETERS},
+        language::Term,
         vm::{Launcher, Runtime},
     };
-    use nar_dev_utils::list;
+    use nar_dev_utils::{list, unwrap_or_return};
     use narsese::api::GetTerm;
     use navm::{
         cmd::Cmd,
@@ -65,17 +66,34 @@ pub(super) mod test_inference {
         vm::{VmLauncher, VmRuntime},
     };
 
+    /// 预期输出词项相等
+    /// * 🎯独立的「输出内容与预期词项判等」方法
+    pub fn expect_output_eq_term(output: &Output, expected: &Term) -> bool {
+        let lexical_term = unwrap_or_return!(
+            ?output.get_narsese().map(GetTerm::get_term).cloned()
+            => false // 输出没有词项⇒直接不等
+        );
+        let out = Term::from_lexical(lexical_term).expect("要预期的词法不正确");
+        // 直接判等：使用内置词项类型
+        out == *expected
+    }
+
+    pub fn expect_output_eq_term_lexical(output: &Output, lexical: narsese::lexical::Term) -> bool {
+        let expected = Term::from_lexical(lexical).expect("要预期的词法不正确");
+        expect_output_eq_term(output, &expected)
+    }
+
     /// 预期其中的Narsese词项
     #[macro_export]
     macro_rules! expect_narsese_term {
         // * 🚩模式：【类型】 【内容】 in 【输出】
         ($type:ident $term:literal in outputs) => {
-            |o| matches!(
-                o,
-                navm::output::Output::$type { narsese,.. }
-                // * 🚩【2024-07-15 00:04:43】此处使用了「词法Narsese」的内部分派
-                if narsese.as_ref().is_some_and(|narsese| *narsese::api::GetTerm::get_term(narsese) == narsese::lexical_nse_term!(@PARSE $term))
-            )
+            move |output|
+                matches!(output, navm::output::Output::$type {..}) // ! 📌【2024-08-07 15:15:22】类型匹配必须放宏展开式中
+                && $crate::inference::test_inference::expect_output_eq_term_lexical(
+                    // * 🚩【2024-07-15 00:04:43】此处使用了「词法Narsese」的内部分派
+                    output, narsese::lexical_nse_term!(@PARSE $term)
+                )
         };
     }
 
@@ -205,11 +223,12 @@ pub(super) mod test_inference {
         outputs: impl IntoIterator<Item = &'a Output>,
         expected: impl Into<narsese::lexical::Term>,
     ) -> &'a Output {
-        let expected = expected.into();
+        let expected = Term::from_lexical(expected.into()).expect("要预期的词法不正确");
+        // 预测：所有输出中至少要有一个
         outputs
             .into_iter()
-            .find(|&output| matches!(output.get_narsese().map(GetTerm::get_term), Some(term) if *term == expected) )
-            .expect("没有找到期望的输出")
+            .find(|&output| expect_output_eq_term(output, &expected))
+            .unwrap_or_else(|| panic!("没有找到期望的输出「{expected}」"))
     }
 
     /// 概念推理专用测试引擎

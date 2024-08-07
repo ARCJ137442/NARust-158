@@ -18,37 +18,134 @@ use SyllogismPosition::*;
 
 /* -------------------- intersections and differences -------------------- */
 
-/// 🆕作为「集合」操作：交并差
+/// 🆕作为「集合」操作：组合交并差
+/// * 📝继承の交并差：外延交、内涵交、外延差/内涵差
+///   * 同主项→外延差，同谓项→内涵差
+/// * 📝蕴含の交并差：合取、析取、否定
+///   * ⚠️其中「否定」不在此出现
+///   * ❓是否可以`{<S ==> M>, <P ==> M>} |- {<(--,S) ==> M>, <(--,P) ==> M>}`
+///
+/// # 📄OpenNARS
+///
+/// ```nal
+/// {<S ==> M>, <P ==> M>} |- {
+/// <(S|P) ==> M>, <(S&P) ==> M>,
+/// <(S-P) ==> M>, <(P-S) ==> M>
+/// }
+/// ```
 pub fn compose_as_set(
     task_content: StatementRef,
+    belief_content: StatementRef,
     shared_term_i: SyllogismPosition,
     component_common: &Term,
     component_t: &Term,
     component_b: &Term,
     context: &mut ReasonContextConcept,
 ) {
-    // * 🚩根据「共有词项的位置」分派
-    // * 🚩共有在主项 ⇒ 内涵交，外延交，外延差
-    // * 📄"<M ==> S>", "<M ==> P>"
-    // * 🚩「或」内涵交
-    // * 🚩「与」外延交
-    // * 🚩根据「真值是否负面」决定「差」的真值
-    // * 🚩同正/同负 ⇒ 不予生成
-    // * 🚩任务正，信念负 ⇒ 词项="(任务-信念)"，真值=任务 ∩ ¬信念
-    // * 🚩任务负，信念正 ⇒ 词项="(信念-任务)"，真值=信念 ∩ ¬任务
-    // * 🚩其它⇒不可达
-    // * 🚩统一导出结论："<公共项 ==> 新词项>"
-    // index == 1
-    // * 🚩共有在谓项 ⇒ 内涵交，外延交，内涵差
-    // * 📄"<S ==> M>", "<P ==> M>"
-    // * 🚩「或」外延交
-    // * 🚩「与」内涵交
-    // * 🚩根据「真值是否负面」决定「差」的真值
-    // * 🚩同正/同负 ⇒ 不予生成
-    // * 🚩任务正，信念负 ⇒ 词项="(任务-信念)"，真值=任务 ∩ ¬信念
-    // * 🚩任务负，信念正 ⇒ 词项="(信念-任务)"，真值=信念 ∩ ¬任务
-    // * 🚩其它⇒不可达
-    // * 🚩统一导出结论："<新词项 ==> 公共项>"
+    // ! 📌分派上级「构造复合词项」已断言此处为「前向推理」
+    debug_assert_eq!(context.reason_direction(), Forward);
+
+    let truth_t = TruthValue::from(context.current_task().get_().unwrap_judgement());
+    let truth_b = context.current_belief().unwrap();
+    let truth_or = Some(truth_t.nal_union(truth_b)); // 后续统一类型
+    let truth_and = Some(truth_t.intersection(truth_b)); // 后续统一类型
+    let truth_dif;
+    let [term_or, term_and, term_dif];
+
+    // 俩闭包，调用时复制相应的词项（取得新所有权）
+    let component_t = || component_t.clone();
+    let component_b = || component_b.clone();
+
+    // * 🚩根据「共有词项的位置」「任务内容的类型」分派
+    match (shared_term_i, task_content.identifier()) {
+        // * 🚩共有在主项 ⇒ 内涵交，外延交，外延差
+        // * 📄"<M ==> S>", "<M ==> P>"
+        (Subject, INHERITANCE_RELATION) => {
+            // * 🚩「或」内涵交
+            term_or = Term::make_intersection_int(component_t(), component_b());
+            // * 🚩「与」外延交
+            term_and = Term::make_intersection_ext(component_t(), component_b());
+            // * 🚩根据「真值是否负面」决定「差」的真值
+            (term_dif, truth_dif) = match [truth_t.is_positive(), truth_b.is_positive()] {
+                // * 🚩同正/同负 ⇒ 不予生成
+                [true, true] | [false, false] => (None, None),
+                // * 🚩任务正，信念负 ⇒ 词项="(任务-信念)"，真值=任务 ∩ ¬信念
+                [true, false] => (
+                    Term::make_difference_ext(component_t(), component_b()),
+                    Some(truth_t.intersection(&truth_b.negation())),
+                ),
+                // * 🚩任务负，信念正 ⇒ 词项="(信念-任务)"，真值=信念 ∩ ¬任务
+                [false, true] => (
+                    Term::make_difference_ext(component_b(), component_t()),
+                    Some(truth_b.intersection(&truth_t.negation())),
+                ),
+            }
+        }
+        (Subject, IMPLICATION_RELATION) => {
+            // * 🚩「或」析取
+            term_or = Term::make_disjunction(component_t(), component_b());
+            // * 🚩「与」合取
+            term_and = Term::make_conjunction(component_t(), component_b());
+            // * 🚩没有「差」
+            (term_dif, truth_dif) = (None, None);
+        }
+        // * 🚩共有在谓项 ⇒ 内涵交，外延交，内涵差
+        // * 📄"<S ==> M>", "<P ==> M>"
+        (Predicate, INHERITANCE_RELATION) => {
+            // * 🚩「或」外延交
+            term_or = Term::make_intersection_ext(component_t(), component_b());
+            // * 🚩「与」内涵交
+            term_and = Term::make_intersection_int(component_t(), component_b());
+            // * 🚩根据「真值是否负面」决定「差」的真值
+            (term_dif, truth_dif) = match [truth_t.is_positive(), truth_b.is_positive()] {
+                // * 🚩同正/同负 ⇒ 不予生成
+                [true, true] | [false, false] => (None, None),
+                // * 🚩任务正，信念负 ⇒ 词项="(任务-信念)"，真值=任务 ∩ ¬信念
+                [true, false] => (
+                    Term::make_difference_int(component_t(), component_b()),
+                    Some(truth_t.intersection(&truth_b.negation())),
+                ),
+                // * 🚩任务负，信念正 ⇒ 词项="(信念-任务)"，真值=信念 ∩ ¬任务
+                [false, true] => (
+                    Term::make_difference_int(component_b(), component_t()),
+                    Some(truth_b.intersection(&truth_t.negation())),
+                ),
+            };
+        }
+        (Predicate, IMPLICATION_RELATION) => {
+            // * 🚩「或」合取
+            term_or = Term::make_conjunction(component_t(), component_b());
+            // * 🚩「与」析取
+            term_and = Term::make_disjunction(component_t(), component_b());
+            // * 🚩没有「差」
+            (term_dif, truth_dif) = (None, None);
+        }
+        // * 🚩其它情况都没有⇒直接返回
+        _ => return,
+    }
+    // TODO: 根据高度的对偶性，再度简化此处代码（用好`SyllogismPosition.select`）
+
+    // 下面开始统一构造结论
+    let component_common = || component_common.clone();
+    let mut term_truths = [
+        (term_or, truth_or),
+        (term_and, truth_and),
+        (term_dif, truth_dif),
+    ]
+    .into_iter();
+    // * 🚩遍历并跳过空值
+    while let Some((Some(term), Some(truth))) = term_truths.next() {
+        // * 🚩统一导出结论
+        //   * 主项 ⇒ "<公共项 ==> 新词项>"
+        //   * 谓项 ⇒ "<新词项 ==> 公共项>"
+        process_composed(
+            task_content,
+            belief_content,
+            shared_term_i.select_and_other([component_common(), term]), // [主项, 谓项]
+            truth,
+            context,
+        );
+    }
 }
 
 /// * 📌根据主谓项、真值 创建新内容，并导出结论
@@ -57,17 +154,23 @@ pub fn compose_as_set(
 ///
 /// Finish composing implication term
 fn process_composed(
-    task_content: Statement,
-    subject: Term,
-    predicate: Term,
+    task_content: StatementRef,
+    belief_content: StatementRef,
+    [subject, predicate]: [Term; 2],
     truth: TruthValue,
     context: &mut ReasonContextConcept,
 ) {
-    // * 🚩跳过空值
     // * 🚩词项：不能跟任务、信念 内容相同
-    // ! 假定一定有「当前信念」
+    let content = unwrap_or_return!(?Term::make_statement(&task_content, subject, predicate));
+    if content == *task_content || content == *belief_content {
+        return;
+    }
+
     // * 🚩预算：复合前向
+    let budget = context.budget_compound_forward(&truth, &content);
+
     // * 🚩结论
+    context.double_premise_task(content, Some(truth), budget);
 }
 
 /// # 📄OpenNARS
@@ -447,4 +550,119 @@ pub fn eliminate_var_dep(
     // * 🚩其它 ⇒ 反向弱推理
     // * 🚩前向推理
     // * 🚩结论 * //
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::expectation_tests;
+
+    expectation_tests! {
+        compose_as_sub_inh_and: {
+            "
+            nse <S --> M>.
+            nse <P --> M>.
+            cyc 10
+            "
+            => OUT "<(&,S,P) --> M>" in outputs
+        }
+
+        compose_as_sub_inh_or: {
+            "
+            nse <S --> M>.
+            nse <P --> M>.
+            cyc 10
+            "
+            => OUT "<(|,S,P) --> M>" in outputs
+        }
+
+        compose_as_sub_inh_not_sp: {
+            "
+            nse <S --> M>. %1%
+            nse <P --> M>. %0%
+            cyc 10
+            " // 主项：`1` ~ `0`
+            => OUT "<(~,S,P) --> M>" in outputs
+        }
+
+        compose_as_sub_inh_not_ps: {
+            "
+            nse <S --> M>. %0%
+            nse <P --> M>. %1%
+            cyc 10
+            " // 主项：`1` ~ `0`
+            => OUT "<(~,P,S) --> M>" in outputs
+        }
+
+        compose_as_sub_imp_and: {
+            "
+            nse <S ==> M>.
+            nse <P ==> M>.
+            cyc 10
+            "
+            => OUT "<(&&,S,P) ==> M>" in outputs
+        }
+
+        compose_as_sub_imp_or: {
+            "
+            nse <S ==> M>.
+            nse <P ==> M>.
+            cyc 10
+            "
+            => OUT "<(||,S,P) ==> M>" in outputs
+        }
+
+        compose_as_pre_inh_and: {
+            "
+            nse <M --> S>.
+            nse <M --> P>.
+            cyc 10
+            "
+            => OUT "<M --> (&,S,P)>" in outputs
+        }
+
+        compose_as_pre_inh_or: {
+            "
+            nse <M --> S>.
+            nse <M --> P>.
+            cyc 10
+            "
+            => OUT "<M --> (|,S,P)>" in outputs
+        }
+
+        compose_as_pre_inh_not_sp: {
+            "
+            nse <M --> S>. %1%
+            nse <M --> P>. %0%
+            cyc 10
+            " // 谓项：`1` - `0`
+            => OUT "<M --> (-,S,P)>" in outputs
+        }
+
+        compose_as_pre_inh_not_ps: {
+            "
+            nse <M --> S>. %0%
+            nse <M --> P>. %1%
+            cyc 10
+            " // 谓项：`1` - `0`
+            => OUT "<M --> (-,P,S)>" in outputs
+        }
+
+        compose_as_pre_imp_and: {
+            "
+            nse <M ==> S>.
+            nse <M ==> P>.
+            cyc 10
+            "
+            => OUT "<M ==> (||,S,P)>" in outputs
+        }
+
+        compose_as_pre_imp_or: {
+            "
+            nse <M ==> S>.
+            nse <M ==> P>.
+            cyc 10
+            "
+            => OUT "<M ==> (&&,S,P)>" in outputs
+        }
+    }
 }
