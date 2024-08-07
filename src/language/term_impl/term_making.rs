@@ -5,7 +5,9 @@
 //!   * 简化其表达
 //! * 🎯用于「制作词项」
 
-use super::{vec_utils, CompoundTermRef, StatementRef, Term, TermComponents};
+use super::{
+    variable::MaximumVariableId, vec_utils, CompoundTermRef, StatementRef, Term, TermComponents,
+};
 use crate::io::symbols::*;
 
 impl Term {
@@ -21,20 +23,20 @@ impl Term {
 
     /// 制作「独立变量」
     #[inline]
-    pub fn make_var_i(id: usize) -> Term {
-        Term::new_var_i(id)
+    pub fn make_var_i(to_max: impl MaximumVariableId) -> Term {
+        Term::new_var_i(to_max.maximum_variable_id() + 1)
     }
 
     /// 制作「非独变量」
     #[inline]
-    pub fn make_var_d(id: usize) -> Term {
-        Term::new_var_d(id)
+    pub fn make_var_d(to_max: impl MaximumVariableId) -> Term {
+        Term::new_var_d(to_max.maximum_variable_id() + 1)
     }
 
     /// 制作「查询变量」
     #[inline]
-    pub fn make_var_q(id: usize) -> Term {
-        Term::new_var_q(id)
+    pub fn make_var_q(to_max: impl MaximumVariableId) -> Term {
+        Term::new_var_q(to_max.maximum_variable_id() + 1)
     }
 
     /// 制作「与现有变量类型相同」的变量

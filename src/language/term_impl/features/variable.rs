@@ -158,6 +158,67 @@ impl Term {
     pub fn get_variable_type(&self) -> &str {
         &self.identifier
     }
+
+    /// 🆕获取多个词项中编号最大的变量词项id
+    pub fn maximum_variable_id_multi<'s>(terms: impl IntoIterator<Item = &'s Term>) -> usize {
+        terms
+            .into_iter()
+            .map(Term::maximum_variable_id) // 统计各个词项的最大变量id
+            .max() // 取最大值
+            .unwrap_or(0) // 以0为补充（即便空集）
+    }
+}
+
+/// 🆕获取编号最大的变量词项id
+/// * 🎯兼容「词项」与「词项数组」
+pub trait MaximumVariableId {
+    fn maximum_variable_id(&self) -> usize;
+}
+
+/// 词项本身
+impl MaximumVariableId for Term {
+    /// 🆕获取一个词项中编号最大的变量词项id
+    fn maximum_variable_id(&self) -> usize {
+        use TermComponents::*;
+        match self.components() {
+            // 变量⇒自身id
+            Variable(id) => *id,
+            // 内含词项⇒递归深入
+            Compound(terms) => Term::maximum_variable_id_multi(terms.iter()),
+            // 其它⇒0 | 后续开放补充
+            Empty | Word(..) => 0,
+        }
+    }
+}
+
+/// 兼容词项数组
+impl<const N: usize> MaximumVariableId for [Term; N] {
+    fn maximum_variable_id(&self) -> usize {
+        Term::maximum_variable_id_multi(self)
+    }
+}
+
+/// 兼容引用数组
+impl<const N: usize> MaximumVariableId for [&Term; N] {
+    fn maximum_variable_id(&self) -> usize {
+        // * 🚩使用`cloned`将`&&Term`转换为`&Term`
+        Term::maximum_variable_id_multi(self.iter().cloned())
+    }
+}
+
+/// 兼容数组切片
+impl MaximumVariableId for [Term] {
+    fn maximum_variable_id(&self) -> usize {
+        Term::maximum_variable_id_multi(self)
+    }
+}
+
+/// 兼容引用数组切片
+impl MaximumVariableId for [&Term] {
+    fn maximum_variable_id(&self) -> usize {
+        // * 🚩使用`cloned`将`&&Term`转换为`&Term`
+        Term::maximum_variable_id_multi(self.iter().cloned())
+    }
 }
 
 impl TermComponents {

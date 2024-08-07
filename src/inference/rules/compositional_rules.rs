@@ -362,30 +362,99 @@ pub fn intro_var_same_subject_or_predicate(
     context: &mut ReasonContextConcept,
 ) {
     // * 🚩词项 * //
-    // * 🚩仅对复合词项
+    let cloned_main = original_main_sentence.sentence_clone();
+    let cloned_main_t = cloned_main.content();
+
+    // * 🚩仅对复合词项子项
+    if !sub_content.instanceof_compound() {
+        return;
+    }
+
+    let main_statement = unwrap_or_return!(?cloned_main_t.as_statement());
     // * 🚩对内部内容，仅适用于「继承×继承」与「相似×相似」
+    match [component.identifier(), sub_content.identifier()] {
+        [INHERITANCE_RELATION, INHERITANCE_RELATION]
+        | [SIMILARITY_RELATION, SIMILARITY_RELATION] => {}
+        _ => return,
+    }
+    let [component, sub_content] = match [component.as_statement(), sub_content.as_statement()] {
+        [Some(component), Some(sub_content)] => [component, sub_content],
+        _ => return,
+    };
     // CompoundTerm result = mainCompound;
+    if *component == *sub_content {
+        return;
+    }
     // wouldn't make sense to create a conjunction here,
     // would contain a statement twice
-    // ! ⚠️【2024-07-23 12:17:44】目前还没真正触发过此处逻辑
-    // ! * 诸多尝试均被「变量分离规则」等 截胡
-    // * ✅不怕重名：现在始终是「最大词项的最大id+1」的模式
-    // ! ⚠️【2024-07-23 12:17:44】目前还没真正触发过此处逻辑
-    // ! * 诸多尝试均被「变量分离规则」等 截胡
-    /*
-     * 📄已知如下输入无法触发：
-     * <swam --> swimmer>.
-     * <swam --> bird>.
-     * <bird --> swimmer>.
-     * <<$1 --> swimmer> ==> <$1 --> bird>>.
-     * <<bird --> $1> ==> <swimmer --> $1>>.
-     * 1000
-     */
-    // * ✅不怕重名：现在始终是「最大词项的最大id+1」的模式
-    // ? 【2024-07-23 12:20:27】为何要重复得出结果
+
+    let [com_sub, com_pre] = component.sub_pre();
+    let [sub_sub, sub_pre] = sub_content.sub_pre();
+    let content;
+    if *com_pre == *sub_pre && !com_pre.instanceof_variable() {
+        // ! ⚠️【2024-07-23 12:17:44】目前还没真正触发过此处逻辑
+        // ! * 诸多尝试均被「变量分离规则」等 截胡
+        /*
+         * 📄已知如下输入无法触发：
+         * <swam --> swimmer>.
+         * <swam --> bird>.
+         * <bird --> swimmer>.
+         * <<$1 --> swimmer> ==> <$1 --> bird>>.
+         * <<bird --> $1> ==> <swimmer --> $1>>.
+         * 1000
+         */
+        let v = Term::make_var_d([&main_statement, sub_content.statement]); // * ✅不怕重名：现在始终是「最大词项的最大id+1」的模式
+        let zw = cast_compound(side.select_one(main_statement.sub_pre()).clone());
+        let zw2 = unwrap_or_return!(?zw.get_ref().set_component(1, Some(v.clone())));
+        let new_sub_compound =
+            unwrap_or_return!(?sub_content.into_compound_ref().set_component(1, Some(v.clone())));
+        if zw2 == new_sub_compound {
+            return;
+        }
+        let res = unwrap_or_return!(?Term::make_conjunction(zw.into(), new_sub_compound));
+        content = unwrap_or_return!(
+            ?main_statement
+                .into_compound_ref()
+                .set_component(side as usize, Some(res))
+        );
+    } else if *com_sub == *sub_sub && !com_sub.instanceof_variable() {
+        // ! ⚠️【2024-07-23 12:17:44】目前还没真正触发过此处逻辑
+        // ! * 诸多尝试均被「变量分离规则」等 截胡
+        /*
+         * 📄已知如下输入无法触发：
+         * <swam --> swimmer>.
+         * <swam --> bird>.
+         * <bird --> swimmer>.
+         * <<$1 --> swimmer> ==> <$1 --> bird>>.
+         * <<bird --> $1> ==> <swimmer --> $1>>.
+         * 1000
+         */
+        let v = Term::make_var_d([&main_statement, sub_content.statement]); // * ✅不怕重名：现在始终是「最大词项的最大id+1」的模式
+        let zw = cast_compound(side.select_one(main_statement.sub_pre()).clone());
+        let zw2 = unwrap_or_return!(?zw.get_ref().set_component(0, Some(v.clone())));
+        let new_sub_compound =
+            unwrap_or_return!(?sub_content.into_compound_ref().set_component(0, Some(v.clone())));
+        if zw2 == new_sub_compound {
+            return;
+        }
+        let res = unwrap_or_return!(?Term::make_conjunction(zw.into(), new_sub_compound));
+        content = unwrap_or_return!(
+            ?main_statement
+                .into_compound_ref()
+                .set_component(side as usize, Some(res))
+        );
+    } else {
+        content = main_statement.statement.clone(); // ? 【2024-07-23 12:20:27】为何要重复得出结果
+    }
+
     // * 🚩真值 * //
+    let truth = original_main_sentence.induction(sub_sentence);
+
     // * 🚩预算 * //
+    let budget = context.budget_compound_forward(&truth, &content);
+
     // * 🚩结论 * //
+    context.double_premise_task(content, Some(truth), budget);
 }
 
 /// Introduce a dependent variable in an outer-layer conjunction
@@ -899,5 +968,15 @@ mod tests {
             "
             => ANSWER "S" in outputs
         }
+
+        // ! ❌【2024-08-07 20:58:52】失败：先前函数也未经测试成功
+        // intro_var_same_subject_or_predicate: {
+        //     "
+        //     nse <<$1 --> swimmer> ==> <$1 --> bird>>.
+        //     nse <bird --> animal>.
+        //     cyc 100
+        //     "
+        //     => OUT "<<$1 --> swimmer> ==> <$1 --> bird>>" in outputs
+        // }
     }
 }
