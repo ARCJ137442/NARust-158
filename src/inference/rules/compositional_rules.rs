@@ -13,6 +13,7 @@ use crate::{
     util::RefCount,
 };
 use nar_dev_utils::unwrap_or_return;
+use variable_process::VarSubstitution;
 use ReasonDirection::*;
 use SyllogismPosition::*;
 
@@ -511,97 +512,169 @@ pub fn intro_var_outer(
     context: &mut ReasonContextConcept,
 ) {
     // * 🚩任务/信念 的真值 | 仅适用于前向推理
+    debug_assert!(context.current_task().get_().is_judgement());
+    let truth_t = TruthValue::from(context.current_task().get_().unwrap_judgement());
+    let truth_b = TruthValue::from(context.current_belief().unwrap());
+
     // * 🚩词项初步：引入变量 * //
+    let [state_i1, state_i2] = intro_var_states_ind(task_content, belief_content, shared_term_i);
+    let [state_d1, state_d2] = intro_var_states_dep(task_content, belief_content, shared_term_i);
+    let (state_i1, state_i2) = (|| state_i1.clone(), || state_i2.clone());
+    let (state_d1, state_d2) = (|| state_d1.clone(), || state_d2.clone());
+
     // * 🚩继续分派：词项、真值、预算、结论 * //
+    // * 📌【2024-08-07 22:37:47】此处为了可读性，将词项多拷贝了一次（而非在最后传入所有权）
+    //   * 💭若有在【不破坏调用统一性】的同时【节省掉一次clone】的方法，乐意改进
+    enum UsesVar {
+        /// 使用独立变量
+        I,
+        /// 使用非独变量
+        D,
+    }
+    use UsesVar::*;
+    type IntroVarOuterParameters = (
+        UsesVar,                                    // 用独立变量还是用非独变量
+        fn(Term, Term) -> Option<Term>,             // 制作词项
+        fn(&TruthValue, &TruthValue) -> TruthValue, // 制作真值
+        bool,                                       // 词项、真值的顺序是否要交换
+    );
+    const T: bool = true; // 💭【2024-08-07 23:57:50】为了简写无所不用其极。。
+    const F: bool = false; // 💭【2024-08-07 23:57:50】为了简写无所不用其极。。
+    let will_intro_parameters: [IntroVarOuterParameters; 4] = [
+        (I, Term::make_implication, TruthFunctions::induction, F), // "<<$1 --> A> ==> <$1 --> B>>"
+        (I, Term::make_implication, TruthFunctions::induction, T), // "<<$1 --> B> ==> <$1 --> A>>"
+        (I, Term::make_equivalence, TruthFunctions::comparison, F), // "<<$1 --> A> <=> <$1 --> B>>"
+        (D, Term::make_conjunction, TruthFunctions::intersection, F), // "(&&,<#1 --> A>,<#1 --> B>)"
+    ];
+    for (uses_var, make_content, truth_f, reverse_order) in will_intro_parameters {
+        // * 🚩决定要填进去的词项
+        let states = match uses_var {
+            I => [state_i1(), state_i2()],
+            D => [state_d1(), state_d2()],
+        };
+        // * 🚩逐个引入并导出结论
+        intro_var_outer_derive(
+            states,
+            [&truth_t, &truth_b],
+            make_content,
+            truth_f,
+            reverse_order,
+            context,
+        );
+    }
 }
 
 /// 🆕以「变量外引入」的内部词项，计算「引入状态」陈述
 /// * 📌引入的是「独立变量/自变量」"$"
 /// * 🎯产生的陈述（二元组）用于生成新结论内容
 fn intro_var_states_ind(
-    task_content: Statement,
-    belief_content: Statement,
-    side: SyllogismPosition,
-) -> [Term; 2] {
-    // * 🚩根据索引决定「要组成新陈述的词项的位置」
-    // index == 1
+    task_content: StatementRef,
+    belief_content: StatementRef,
+    shared_term_i: SyllogismPosition,
+) -> [Option<Term>; 2] {
+    let mut task_content = task_content.to_owned();
+    let mut belief_content = belief_content.to_owned();
+    // * 🚩先执行归一化替换：替换共同词项
+    let var_i = Term::make_var_i([&*task_content, &*belief_content]); // 无论如何都创建，避开借用问题
+    let [need_common_t, need_common_b] = [
+        shared_term_i.select_another(task_content.sub_pre_mut()),
+        shared_term_i.select_another(belief_content.sub_pre_mut()),
+    ];
     // * 🚩寻找「第二个相同词项」并在内容中替换 | 对「外延像@0」「内涵像@1」的特殊处理
     // * 📌【2024-07-23 13:19:30】此处原码与secondCommonTerm相同，故提取简并
+    let second_common_term = second_common_term([need_common_t, need_common_b], shared_term_i);
     // * 🚩产生一个新的独立变量，并以此替换
+    if let Some(second_common_term) = second_common_term {
+        // 生成替换映射：第二个相同词项 → 新独立变量
+        let substitute = VarSubstitution::from_pairs([(second_common_term.clone(), var_i)]);
+        // 应用替换映射
+        substitute.apply_to_term(need_common_t);
+        substitute.apply_to_term(need_common_b);
+    }
     // ! ⚠️在此期间【修改】其【所指向】的词项
+    // * 📝若应用了替换，则替换后的变量会算进「任务内容」「信念内容」中，故无需再考量
+    let var_i = || Term::make_var_i([&*task_content, &*belief_content]);
+
+    // * 🚩根据索引决定「要组成新陈述的词项的位置」
+    let [term11, term12, term21, term22];
+    match shared_term_i {
+        Subject => {
+            term11 = var_i();
+            term21 = var_i();
+            term12 = task_content.get_ref().predicate().clone();
+            term22 = belief_content.get_ref().predicate().clone();
+        }
+        Predicate => {
+            term11 = task_content.get_ref().subject().clone();
+            term21 = belief_content.get_ref().subject().clone();
+            term12 = var_i();
+            term22 = var_i();
+        }
+    }
+    // TODO: ↑继续用select简化
     // * 🚩返回：从元素构造继承陈述
-    todo!()
+    let inheritance = Term::make_inheritance; // 精简代码量
+    [inheritance(term11, term12), inheritance(term21, term22)]
 }
 
 /// 🆕以「变量外引入」的内部词项，计算「引入状态」陈述
 /// * 📌引入的是「独立变量/自变量」"$"
 /// * 🎯产生的陈述（二元组）用于生成新结论内容
 fn intro_var_states_dep(
-    task_content: Statement,
-    belief_content: Statement,
-    side: SyllogismPosition,
-) -> [Term; 2] {
-    todo!()
+    task_content: StatementRef,
+    belief_content: StatementRef,
+    shared_term_i: SyllogismPosition,
+) -> [Option<Term>; 2] {
+    let var_d = || Term::make_var_d([&*task_content, &*belief_content]);
+
+    // * 🚩根据索引决定「要组成新陈述的词项的位置」
+    let [term11, term12, term21, term22];
+    match shared_term_i {
+        Subject => {
+            term11 = var_d();
+            term21 = var_d();
+            term12 = task_content.predicate().clone();
+            term22 = belief_content.predicate().clone();
+        }
+        Predicate => {
+            term11 = task_content.subject().clone();
+            term21 = belief_content.subject().clone();
+            term12 = var_d();
+            term22 = var_d();
+        }
+    }
+    // TODO: ↑继续用select简化
+    // * 🚩返回：从元素构造继承陈述
+    let inheritance = Term::make_inheritance; // 精简代码量
+    [inheritance(term11, term12), inheritance(term21, term22)]
 }
 
-/// 「变量外引入」规则 结论1
-/// * 📄"<bird --> animal>" × "<bird --> swimmer>"
-///   * => "<<$1 --> animal> ==> <$1 --> swimmer>>"
-/// * 📄"<sport --> competition>" × "<chess --> competition>"
-///   * => "<<sport --> $1> ==> <chess --> $1>>"
-fn intro_var_outer1(
-    state_1: Term,
-    state_2: Term,
-    truth_t: &impl Truth,
-    truth_b: &impl Truth,
+/// 根据「词项构造函数」「真值函数」「是否交换顺序」统一构造「变量外引入」的结论
+/// * 📌其中`reverse_order`连词项与真值一同交换顺序
+///   * `state_1` <~> `truth_t`
+///   * `state_2` <~> `truth_b`
+fn intro_var_outer_derive(
+    [state_1, state_2]: [Option<Term>; 2],
+    [truth_t, truth_b]: [&TruthValue; 2],
+    make_content: fn(Term, Term) -> Option<Term>,
+    truth_f: fn(&TruthValue, &TruthValue) -> TruthValue,
+    reverse_order: bool,
     context: &mut ReasonContextConcept,
+    // 预算函数默认是「复合前向」
 ) {
-    // TODO
-}
-
-/// 「变量外引入」规则 结论2
-/// * 📄"<bird --> animal>" × "<bird --> swimmer>"
-///   * => "<<$1 --> swimmer> ==> <$1 --> animal>>"
-/// * 📄"<sport --> competition>" × "<chess --> competition>"
-///   * => "<<chess --> $1> ==> <sport --> $1>>"
-fn intro_var_outer2(
-    state_1: Term,
-    state_2: Term,
-    truth_t: &impl Truth,
-    truth_b: &impl Truth,
-    context: &mut ReasonContextConcept,
-) {
-    // TODO
-}
-
-/// 「变量外引入」规则 结论3
-/// * 📄"<bird --> animal>" × "<bird --> swimmer>"
-///   * => "<<$1 --> animal> <=> <$1 --> swimmer>>"
-/// * 📄"<sport --> competition>" × "<chess --> competition>"
-///   * => "<<chess --> $1> <=> <sport --> $1>>"
-fn intro_var_outer3(
-    state_1: Term,
-    state_2: Term,
-    truth_t: &impl Truth,
-    truth_b: &impl Truth,
-    context: &mut ReasonContextConcept,
-) {
-    // TODO
-}
-
-/// 「变量外引入」规则 结论4
-/// * 📄"<bird --> animal>" × "<bird --> swimmer>"
-///   * => "(&&,<#1 --> animal>,<#1 --> swimmer>)"
-/// * 📄"<sport --> competition>" × "<chess --> competition>"
-///   * => "(&&,<chess --> #1>,<sport --> #1>)"
-fn intro_var_outer4(
-    state_1: Term,
-    state_2: Term,
-    truth_t: &impl Truth,
-    truth_b: &impl Truth,
-    context: &mut ReasonContextConcept,
-) {
-    // TODO
+    // * 🚩词项
+    // 先尝试解包出有用的词项
+    let state_1 = unwrap_or_return!(?state_1);
+    let state_2 = unwrap_or_return!(?state_2);
+    let [state_1, state_2] = reverse_order.select([state_1, state_2]); // 用「是否交换」调换顺序
+    let content = unwrap_or_return!(?make_content(state_1, state_2));
+    // * 🚩真值
+    let [truth_1, truth_2] = reverse_order.select([truth_t, truth_b]);
+    let truth = truth_f(truth_1, truth_2);
+    // * 🚩预算：统一为「复合前向」
+    let budget = context.budget_compound_forward(&truth, &content);
+    // * 🚩结论
+    context.double_premise_task(content, Some(truth), budget);
 }
 
 /// * 📝入口2：变量内引入
@@ -692,15 +765,32 @@ fn intro_var_inner2(
 ///
 /// Introduce a second independent variable into two terms with a common
 /// component
-fn second_common_term([term1, term2]: [&Term; 2], side: SyllogismPosition) -> &Term {
-    // * 📄1: 都是主项，且均为外延像
-    // * 📄2: 都是谓项，且均为内涵像
-    // * 🚩先试第一个
-    // * 🚩尝试不到？考虑第二个/用第二个覆盖
-    // * 🚩再试第二个
-    // * 🚩尝试不到就是尝试不到
-    // * 🚩根据中间条件多次覆盖，最终拿到一个引用
-    todo!()
+fn second_common_term(
+    [term1, term2]: [&Term; 2], // 强制将这俩词项统一到了同一生命周期
+    shared_term_i: SyllogismPosition,
+) -> Option<&Term> {
+    // * 🚩确定「需要特别判断的『像』类型」
+    //   * 主项 ⇒ 外延像
+    //   * 谓项 ⇒ 内涵像
+    let specific_image_type = shared_term_i.select_one([IMAGE_EXT_OPERATOR, IMAGE_INT_OPERATOR]);
+    // * 🚩只在「都是指定像类型」时继续判断（其它情况直接返回空）
+    //   * 📄1: 都是主项，且均为外延像
+    //   * 📄2: 都是谓项，且均为内涵像
+    let image1 = term1.as_compound_type(specific_image_type)?;
+    let image2 = term2.as_compound_type(specific_image_type)?;
+
+    // * 🚩在俩像之间获取词项并尝试
+    match image1.get_the_other_component() {
+        // * 🚩先试第一个
+        Some(common_term) if image2.contain_term(common_term) => Some(common_term),
+        // * 🚩尝试不到？考虑第二个/用第二个覆盖
+        _ => match image2.get_the_other_component() {
+            // * 🚩再试第二个
+            Some(common_term) if image1.contain_term(common_term) => Some(common_term),
+            // * 🚩尝试不到就是尝试不到
+            _ => None,
+        },
+    }
 }
 
 /// 因变量消元
@@ -1012,6 +1102,78 @@ mod tests {
             cyc 10
             "
             => OUT "<<B --> A> ==> (&&, <C --> #1>, <A --> #1>)>" in outputs
+        }
+
+        intro_var_outer_sub_imp: {
+            "
+            nse <M --> A>.
+            nse <M --> B>.
+            cyc 5
+            "
+            => OUT "<<$1 --> A> ==> <$1 --> B>>" in outputs
+        }
+
+        intro_var_outer_sub_imp_rev: {
+            "
+            nse <M --> A>.
+            nse <M --> B>.
+            cyc 5
+            "
+            => OUT "<<$1 --> B> ==> <$1 --> A>>" in outputs
+        }
+
+        intro_var_outer_sub_equ: {
+            "
+            nse <M --> A>.
+            nse <M --> B>.
+            cyc 5
+            "
+            => OUT "<<$1 --> A> <=> <$1 --> B>>" in outputs
+        }
+
+        intro_var_outer_sub_con: {
+            "
+            nse <M --> A>.
+            nse <M --> B>.
+            cyc 5
+            "
+            => OUT "(&&, <#1 --> A>, <#1 --> B>)" in outputs
+        }
+
+        intro_var_outer_pre_imp: {
+            "
+            nse <A --> M>.
+            nse <B --> M>.
+            cyc 5
+            "
+            => OUT "<<A --> $1> ==> <B --> $1>>" in outputs
+        }
+
+        intro_var_outer_pre_imp_rev: {
+            "
+            nse <A --> M>.
+            nse <B --> M>.
+            cyc 5
+            "
+            => OUT "<<B --> $1> ==> <A --> $1>>" in outputs
+        }
+
+        intro_var_outer_pre_equ: {
+            "
+            nse <A --> M>.
+            nse <B --> M>.
+            cyc 5
+            "
+            => OUT "<<A --> $1> <=> <B --> $1>>" in outputs
+        }
+
+        intro_var_outer_pre_con: {
+            "
+            nse <A --> M>.
+            nse <B --> M>.
+            cyc 5
+            "
+            => OUT "(&&, <A --> #1>, <B --> #1>)" in outputs
         }
     }
 }

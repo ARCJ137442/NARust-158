@@ -80,6 +80,24 @@ pub trait Select {
     }
 }
 
+/// 为布尔值实现「选择」
+/// * 🎯简化类似「转换顺序」的模式匹配
+/// * 💭【2024-08-07 23:45:41】在不明确布尔值意义如「是否切换」的情况下 慎用
+impl Select for bool {
+    /// 为布尔值[`bool`]特别实现的「选择」
+    /// * 📌`true`总是会在[`select_one`]`([false_side, true_side])`中选中`true_side`
+    ///   * ✅`false`亦然
+    /// * 📌交换规则
+    ///   * `false` => 不交换（对称）
+    ///   * `true` => 交换（反对称）
+    fn select<T>(&self, [false_side, true_side]: [T; 2]) -> [T; 2] {
+        match self {
+            true => [true_side, false_side],
+            false => [false_side, true_side],
+        }
+    }
+}
+
 /// 记录各处推理中「前提」的位置
 /// * 🎯标记诸如「复合词项来自信念」等
 /// * 📄例如

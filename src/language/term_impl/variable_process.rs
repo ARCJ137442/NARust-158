@@ -324,6 +324,16 @@ impl VarSubstitution {
     pub fn apply_to(&self, to: CompoundTermRefMut) {
         apply_unify_one(to, self)
     }
+
+    /// 尝试将映射表的替换模式应用到任意词项上
+    /// * 🎯用于「先应用，再判断词项类型」的情况
+    #[inline]
+    pub fn apply_to_term(&self, to: &mut Term) {
+        if let Some(to) = to.as_compound_mut() {
+            // 传入（因此可内联）
+            self.apply_to(to);
+        }
+    }
 }
 
 /// 多值输出：寻找「归一替换」的中间结果

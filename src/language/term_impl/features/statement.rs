@@ -510,34 +510,38 @@ pub struct StatementRefMut<'a> {
     predicate: *mut Term,
 }
 
-impl StatementRefMut<'_> {
+impl<'a> StatementRefMut<'a> {
     /// 获取陈述整体
-    pub fn statement(&mut self) -> &mut Term {
+    #[doc(alias = "inner")]
+    pub fn statement(self) -> &'a mut Term {
         self.statement
     }
 
-    /// 📄OpenNARS `getSubject`
+    /// 🆕同时获取「主项」与「谓项」的可变引用
     /// * ⚠️此处对裸指针解引用
     ///   * 📄安全性保证同[`CompoundTermRefMut::components`]
-    ///
+    /// * 🎯获取陈述的主谓项，在这之后对齐进行变量替换
+    pub fn sub_pre(&mut self) -> [&'a mut Term; 2] {
+        // SAFETY: 同[`Compound::components`]
+        unsafe { [&mut *self.subject, &mut *self.predicate] }
+    }
+
+    /// 📄OpenNARS `getSubject`
     /// # 📄OpenNARS
     ///
     /// 🈚
-    pub fn subject(&mut self) -> &mut Term {
-        // SAFETY: 同[`Compound::components`]
-        unsafe { &mut *self.subject }
+    pub fn subject(&mut self) -> &'a mut Term {
+        let [sub, _] = self.sub_pre();
+        sub
     }
 
     /// 📄OpenNARS `getPredicate`
-    /// * ⚠️此处对裸指针解引用
-    ///   * 📄安全性保证同[`CompoundTermRefMut::components`]
-    ///
     /// # 📄OpenNARS
     ///
     /// 🈚
-    pub fn predicate(&mut self) -> &mut Term {
-        // SAFETY: 同[`Compound::components`]
-        unsafe { &mut *self.predicate }
+    pub fn predicate(&mut self) -> &'a mut Term {
+        let [_, pre] = self.sub_pre();
+        pre
     }
 
     /// 生成一个不可变引用
@@ -649,6 +653,12 @@ impl Statement {
         [subject, predicate]
     }
 
+    /// 🆕同时快捷获取`[主项, 谓项]`的可变引用
+    /// * 🎯用于场景「获取 主项/谓项，然后对齐进行变量替换」
+    pub fn sub_pre_mut(&mut self) -> [&mut Term; 2] {
+        self.mut_ref().sub_pre()
+    }
+
     /// 解包为内部元素（主项、谓项）
     /// * 🎯用于「推理规则」中的新词项生成
     pub fn unwrap_components(self) -> [Term; 2] {
@@ -704,6 +714,18 @@ impl DerefMut for Statement {
 impl Display for Statement {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         self.term.fmt(f)
+    }
+}
+
+/// 陈述引用⇒陈述
+impl StatementRef<'_> {
+    /// 从「陈述引用」转换为陈述（获得所有权）
+    /// * ✅对于「陈述可变引用」可以先转换为「不可变引用」使用
+    pub fn to_owned(&self) -> Statement {
+        debug_assert!(self.statement.is_statement()); // 转换前检验是否为陈述类词项
+        Statement {
+            term: self.statement.clone(),
+        }
     }
 }
 
