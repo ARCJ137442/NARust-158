@@ -74,8 +74,8 @@ impl Task {
         }
     }
 
-    pub fn from_input(sentence: SentenceV1, budget: BudgetValue) -> Self {
-        Self::new(sentence, budget, None, None, None)
+    pub fn from_input(sentence: impl Into<SentenceV1>, budget: impl Into<BudgetValue>) -> Self {
+        Self::new(sentence.into(), budget.into(), None, None, None)
     }
 
     /// 从「导出结论」构造

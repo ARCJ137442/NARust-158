@@ -157,14 +157,14 @@ pub trait ContextDerivationConcept: ReasonContextWithLinks {
     /// * 🎯避免对`newStamp`的复制，解耦调用（让「新时间戳」的赋值止步在「推理开始」之前）
     fn double_premise_task_compositional(
         &mut self,
-        current_task: Option<&Task>,
+        current_task: &Task,
         new_content: Term,
         new_truth: Option<TruthValue>,
         new_budget: impl Into<BudgetValue>,
         new_stamp: Stamp,
     ) {
         self.double_premise_task_full(
-            current_task,
+            Some(current_task),
             new_content,
             // * 🚩默认「可修正」
             new_truth.map(|truth| (truth, true)),

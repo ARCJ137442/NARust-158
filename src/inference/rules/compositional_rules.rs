@@ -259,27 +259,86 @@ pub fn decompose_statement(
     compound_from: PremiseSource,
     context: &mut ReasonContextConcept,
 ) {
+    let task_truth = context
+        .current_task()
+        .get_()
+        .as_judgement()
+        .map(TruthValue::from);
+    let belief_truth = TruthValue::from(context.current_belief().unwrap());
     // * 🚩删去指定的那个元素，用删去之后的剩余元素做结论
-    // * 🚩反向推理：尝试答问
-    // * 📄(||,A,B)? + A. => B?
-    // * 🚩先将剩余部分作为「问题」提出
-    // ! 📄原版bug：当输入 (||,A,?1)? 时，因「弹出的变量复杂度为零」预算推理「除以零」爆炸
-    // * 🚩再将对应有「概念」与「信念」的内容作为新的「信念」放出
-    // special inference to answer conjunctive questions with query variables
-    // * 🚩只有在「回答合取问题」时，取出其中的项构建新任务
-    // * 🚩只在「内容对应了概念」时，取出「概念」中的信念
-    // * 🚩只在「概念中有信念」时，以这个信念作为「当前信念」构建新任务
-    // * 🚩实际上就是需要与「已有信念」的证据基合并
-    // * 🚩【2024-06-07 13:41:16】现在直接从「任务」构造新的「预算值」
-    // ! 🚩【2024-05-19 20:29:17】现在移除：直接在「导出结论」处指定
-    // * ↓不会用到`context.getCurrentTask()`、`newStamp`
-    // * ↓不会用到`context.getCurrentTask()`、`newStamp`
-    // ! ⚠️↓会用到`context.getCurrentTask()`、`newStamp`：构建新结论时要用到
-    // * ✅【2024-05-21 22:38:52】现在通过「参数传递」抵消了对`context.getCurrentTask`的访问
-    // * 🚩前向推理：直接用于构造信念
-    // * 🚩选取前提真值 | ⚠️前后件语义不同
-    // * 🚩选取真值函数
-    // * 🚩构造真值、预算值，双前提结论
+    let content = unwrap_or_return!(?compound.reduce_components(component));
+    let direction = context.reason_direction();
+
+    match direction {
+        // * 🚩前向推理：直接用于构造信念
+        Forward => {
+            let task_truth = task_truth.unwrap();
+            // * 🚩选取前提真值 | ⚠️前后件语义不同
+            let [v1, v2] = compound_from.select([&task_truth, &belief_truth]);
+            // * 🚩选取真值函数
+            let truth_f: TruthFDouble = match compound.identifier() {
+                CONJUNCTION_OPERATOR => TruthFunctions::reduce_conjunction,
+                DISJUNCTION_OPERATOR => TruthFunctions::reduce_disjunction,
+                _ => return,
+            };
+            // * 🚩构造真值、预算值，双前提结论
+            let truth = truth_f(v1, v2);
+            let budget = context.budget_compound_forward(&truth, &content);
+            context.double_premise_task(content, Some(truth), budget)
+        }
+        // * 🚩反向推理：尝试答问
+        Backward => {
+            // * 📄(||,A,B)? + A. => B?
+            // * 🚩先将剩余部分作为「问题」提出
+            // ! 📄原版bug：当输入 (||,A,?1)? 时，因「弹出的变量复杂度为零」预算推理「除以零」爆炸
+            if !content.is_zero_complexity() {
+                let budget = context.budget_compound_backward(&content);
+                context.double_premise_task(content.clone(), None, budget);
+            }
+            let task_rc = context.current_task(); // ! 这俩后边要手动drop
+            let task_ref = task_rc.get_(); // ! 这俩后边要手动drop
+            let task = &*task_ref;
+            // * 🚩再将对应有「概念」与「信念」的内容作为新的「信念」放出
+            // special inference to answer conjunctive questions with query variables
+            if !task.content().contain_var_q() {
+                return;
+            }
+            // * 🚩只有在「回答合取问题」时，取出其中的项构建新任务
+            let content_concept = unwrap_or_return!(?context.term_to_concept(&content));
+            // * 🚩只在「内容对应了概念」时，取出「概念」中的信念
+            let content_belief = unwrap_or_return!(
+                ?content_concept.get_belief(task)
+            );
+            // * 🚩只在「概念中有信念」时，以这个信念作为「当前信念」构建新任务
+            let new_stamp = Stamp::from_merge_unchecked(
+                task,
+                content_belief, // * 🚩实际上就是需要与「已有信念」的证据基合并
+                context.time(),
+                context.max_evidence_base_length(),
+            );
+            // * 🚩【2024-06-07 13:41:16】现在直接从「任务」构造新的「预算值」
+            let content_task = Task::from_input(content_belief.clone(), task);
+            // ! 🚩【2024-05-19 20:29:17】现在移除：直接在「导出结论」处指定
+            let conjunction = unwrap_or_return!(
+                ?Term::make_conjunction(component.clone(), content)
+            );
+            // * ↓不会用到`context.getCurrentTask()`、`newStamp`
+            let truth = content_belief.intersection(&belief_truth);
+            // * ↓不会用到`context.getCurrentTask()`、`newStamp`
+            drop(task_ref);
+            drop(task_rc);
+            let budget = context.budget_compound_forward(&truth, &conjunction);
+            // ! ⚠️↓会用到`context.getCurrentTask()`、`newStamp`：构建新结论时要用到
+            // * ✅【2024-05-21 22:38:52】现在通过「参数传递」抵消了对`context.getCurrentTask`的访问
+            context.double_premise_task_compositional(
+                &content_task,
+                conjunction,
+                Some(truth),
+                budget,
+                new_stamp,
+            );
+        }
+    }
 }
 
 /* --------------- rules used for variable introduction --------------- */
@@ -803,6 +862,42 @@ mod tests {
             cyc 10
             "
             => OUT "<M --> P>" in outputs
+        }
+
+        decompose_statement_conjunction: {
+            "
+            nse (&&,S,P).
+            nse P.
+            cyc 10
+            "
+            => OUT "S" in outputs
+        }
+
+        decompose_statement_disjunction: {
+            "
+            nse (||,S,P).
+            nse P.
+            cyc 10
+            "
+            => OUT "S" in outputs
+        }
+
+        decompose_statement_conjunction_backward: {
+            "
+            nse (&&,S,P).
+            nse S?
+            cyc 10
+            "
+            => ANSWER "S" in outputs
+        }
+
+        decompose_statement_disjunction_backward: {
+            "
+            nse (||,S,P).
+            nse S?
+            cyc 10
+            "
+            => ANSWER "S" in outputs
         }
     }
 }
