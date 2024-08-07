@@ -126,39 +126,22 @@ pub fn compose_as_set(
         // * 🚩统一导出结论
         //   * 主项 ⇒ "<公共项 ==> 新词项>"
         //   * 谓项 ⇒ "<新词项 ==> 公共项>"
-        process_composed(
-            task_content,
-            belief_content,
-            shared_term_i.select([component_common(), term]), // [主项, 谓项]
-            truth,
-            context,
+        let [subject, predicate] = shared_term_i.select([component_common(), term]);
+        // * 🚩词项：不能跟任务、信念 内容相同
+        let content = unwrap_or_return!(
+            ?Term::make_statement(&task_content, subject, predicate)
+            => continue
         );
+        if content == *task_content || content == *belief_content {
+            continue;
+        }
+
+        // * 🚩预算：复合前向
+        let budget = context.budget_compound_forward(&truth, &content);
+
+        // * 🚩结论
+        context.double_premise_task(content, Some(truth), budget);
     }
-}
-
-/// * 📌根据主谓项、真值 创建新内容，并导出结论
-///
-/// # 📄OpenNARS
-///
-/// Finish composing implication term
-fn process_composed(
-    task_content: StatementRef,
-    belief_content: StatementRef,
-    [subject, predicate]: [Term; 2],
-    truth: TruthValue,
-    context: &mut ReasonContextConcept,
-) {
-    // * 🚩词项：不能跟任务、信念 内容相同
-    let content = unwrap_or_return!(?Term::make_statement(&task_content, subject, predicate));
-    if content == *task_content || content == *belief_content {
-        return;
-    }
-
-    // * 🚩预算：复合前向
-    let budget = context.budget_compound_forward(&truth, &content);
-
-    // * 🚩结论
-    context.double_premise_task(content, Some(truth), budget);
 }
 
 /// # 📄OpenNARS
