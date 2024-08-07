@@ -191,6 +191,13 @@ impl MaximumVariableId for Term {
     }
 }
 
+/// 词项引用
+impl MaximumVariableId for &Term {
+    fn maximum_variable_id(&self) -> usize {
+        Term::maximum_variable_id(*self)
+    }
+}
+
 /// 兼容词项数组
 impl<const N: usize> MaximumVariableId for [Term; N] {
     fn maximum_variable_id(&self) -> usize {

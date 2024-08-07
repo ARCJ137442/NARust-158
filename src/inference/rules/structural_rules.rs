@@ -572,10 +572,10 @@ pub fn structural_junction(
                 // * 🚩满足⇒分析性演绎
                 true => truth.analytic_deduction(context.reasoning_reliance()),
                 // * 🚩满足⇒分析性反演（非⇒演绎⇒非）
-                false => {
-                    dbg!(dbg!(truth.negation()).analytic_deduction(context.reasoning_reliance()))
-                        .negation()
-                }
+                false => truth
+                    .negation()
+                    .analytic_deduction(context.reasoning_reliance())
+                    .negation(),
             }
         }),
         Backward => None,

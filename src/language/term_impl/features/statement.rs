@@ -274,7 +274,7 @@ impl<'s> StatementRef<'s> {
     /// # 📄OpenNARS
     ///
     /// 🈚
-    pub fn subject(&self) -> &Term {
+    pub fn subject(&self) -> &'s Term {
         self.subject
     }
 
@@ -283,12 +283,12 @@ impl<'s> StatementRef<'s> {
     /// # 📄OpenNARS
     ///
     /// 🈚
-    pub fn predicate(&self) -> &Term {
+    pub fn predicate(&self) -> &'s Term {
         self.predicate
     }
 
     /// 🆕主项-谓项 二元数组
-    pub fn sub_pre(&self) -> [&Term; 2] {
+    pub fn sub_pre(&self) -> [&'s Term; 2] {
         [self.subject, self.predicate]
     }
 

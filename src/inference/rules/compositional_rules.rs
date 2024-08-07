@@ -12,7 +12,7 @@ use crate::{
     language::*,
     util::RefCount,
 };
-use nar_dev_utils::unwrap_or_return;
+use nar_dev_utils::{f_parallel, unwrap_or_return};
 use variable_process::VarSubstitution;
 use ReasonDirection::*;
 use SyllogismPosition::*;
@@ -677,7 +677,9 @@ fn intro_var_outer_derive(
     context.double_premise_task(content, Some(truth), budget);
 }
 
-/// * 📝入口2：变量内引入
+/// Intro some variables into the contents.
+/// * 📝「变量内引入」系列规则
+/// * 📝引入的既有非独变量 `#` 又有独立变量 `$`
 ///
 /// # 📄OpenNARS
 ///
@@ -691,20 +693,52 @@ pub fn intro_var_inner(
     old_compound: CompoundTermRef,
     context: &mut ReasonContextConcept,
 ) {
-    // * 🚩仅适用于前向推理
+    // * 🚩任务/信念 的真值 | 仅适用于前向推理
+    debug_assert!(context.current_task().get_().is_judgement());
+    let truth_t = TruthValue::from(context.current_task().get_().unwrap_judgement());
+    let truth_b = TruthValue::from(context.current_belief().unwrap());
+
     // * 🚩前提1与前提2必须是相同类型，且「旧复合词项」不能包括前提1
+    if !premise_1.is_same_type(&premise_2) || old_compound.contain_component(&premise_1) {
+        return;
+    }
+
     // * 🚩计算共有词项
+    let [common_term_1, common_term_2] = intro_var_commons([premise_1, premise_2]);
+    let (common_term_1, common_term_2) = (|| common_term_1.cloned(), || common_term_2.cloned());
+
     // * 🚩继续向下分派
+    //   * ℹ️因两个推理结论的构造方式不甚一样，不将它们统一到一个函数中
+    f_parallel![
+        // * 🚩同时分派到下边两个函数
+        intro_var_inner1 intro_var_inner2;
+        // * 🚩以如下所列参数分派
+        premise_1,
+        old_compound,
+        common_term_1(),
+        common_term_2(),
+        &truth_t,
+        &truth_b,
+        context,
+    ];
 }
 
 /// 🆕以「变量内引入」的内部词项，计算「共有词项」
 /// * 🎯产生的词项（二元组/空）用于生成新结论内容
-fn intro_var_commons(premise_1: Statement, premise_2: Statement) -> [Term; 2] {
+fn intro_var_commons([premise_1, premise_2]: [StatementRef; 2]) -> [Option<&Term>; 2] {
+    let [term11, term12] = premise_1.sub_pre();
+    let [term21, term22] = premise_2.sub_pre();
     // * 🚩轮流判等以决定所抽取的词项
-    // * 🚩共有主项 ⇒ 11→(12×22)
-    // * 🚩共有谓项 ⇒ 12→(11×21)
-    // * 🚩无共有词项⇒空
-    todo!()
+    if *term11 == *term21 {
+        // * 🚩共有主项 ⇒ 11→(12×22)
+        [Some(term11), second_common_term([term12, term22], Subject)]
+    } else if *term12 == *term22 {
+        // * 🚩共有谓项 ⇒ 12→(11×21)
+        [Some(term12), second_common_term([term11, term21], Subject)]
+    } else {
+        // * 🚩无共有词项⇒空
+        [None, None]
+    }
 }
 
 /// 「变量内引入」规则 结论1
@@ -718,19 +752,35 @@ fn intro_var_commons(premise_1: Statement, premise_2: Statement) -> [Term; 2] {
 /// * * @ "(&&,<robin --> [chirping]>,<robin --> [with_wings]>)"
 /// * * => "(&&,<robin --> #1>,<robin --> [with_wings]>,<{Tweety} --> #1>)"
 fn intro_var_inner1(
-    premise_1: Statement,
-    old_compound: CompoundTerm,
+    premise_1: StatementRef,
+    old_compound: CompoundTermRef,
+    common_term_1: Option<Term>,
+    _common_term_2: Option<Term>, // 此处用不到
     truth_t: &impl Truth,
     truth_b: &impl Truth,
-    common_term_1: Term,
-    common_term_2: Term,
     context: &mut ReasonContextConcept,
 ) {
     // * 🚩词项 * //
+    let mut content = unwrap_or_return!(
+        ?Term::make_conjunction(premise_1.statement.clone(), old_compound.inner.clone())
+    );
+
     // * 🚩将「共有词项」替换成变量
+    if let Some(common_term_1) = common_term_1 {
+        let var_d = Term::make_var_d(&content);
+        let substitute = VarSubstitution::from_pairs([(common_term_1, var_d)]);
+        substitute.apply_to_term(&mut content);
+    }
+
     // * 🚩真值 * //
+    let truth = truth_t.intersection(truth_b);
+
     // * 🚩预算 * //
+    let budget = context.budget_forward(&truth);
+
     // * 🚩结论 * //
+    println!("content1 = {content}\n from {premise_1}, {old_compound}");
+    context.double_premise_task_not_revisable(dbg!(content), Some(truth), budget);
 }
 
 /// 「变量内引入」规则 结论2
@@ -744,21 +794,47 @@ fn intro_var_inner1(
 /// * * @ "(&&,<robin --> [chirping]>,<robin --> [with_wings]>)"
 /// * * => "<<{Tweety} --> $1> ==> (&&,<robin --> $1>,<robin --> [with_wings]>)>"
 fn intro_var_inner2(
-    premise_1: Statement,
-    old_compound: CompoundTerm,
-    truth_t: &impl Truth,
-    truth_b: &impl Truth,
-    common_term_1: Term,
-    common_term_2: Term,
+    premise_1: StatementRef,
+    old_compound: CompoundTermRef,
+    common_term_1: Option<Term>,
+    common_term_2: Option<Term>,
+    truth_t: &TruthValue,
+    truth_b: &TruthValue,
     context: &mut ReasonContextConcept,
 ) {
     // * 🚩词项 * //
+    let mut content = unwrap_or_return!(
+        ?Term::make_implication(premise_1.statement.clone(), old_compound.inner.clone())
+    );
+
     // * 🚩将「共有词项」替换成变量
+    let var_i = Term::make_var_i(&content);
+    let var_i_2 = Term::make_var_i([&content, &var_i]); // ! 提前创建以示一致
+    let substitute = VarSubstitution::from_pairs(
+        // * 🚩两处均为「若有则替换」：空值直接跳过，有值则分别替换为俩不同变量
+        [
+            common_term_1.map(|common_term| (common_term, var_i)),
+            common_term_2.map(|common_term| (common_term, var_i_2)),
+        ]
+        .into_iter()
+        .flatten(),
+    );
+    substitute.apply_to_term(&mut content);
+
     // * 🚩真值 * //
-    // * 🚩前提 == 任务 ⇒ 归纳 信念→任务
-    // * 🚩前提 != 任务 ⇒ 归纳 任务→信念
+    // * 🚩根据「前提1是否与任务内容相等」调整真值参数顺序
+    //   * 📄前提1 == 任务 ⇒ 归纳 信念→任务
+    //   * 📄前提1 != 任务 ⇒ 归纳 任务→信念
+    let premise1_eq_task = *premise_1 == *context.current_task().get_().content();
+    let [truth_1, truth_2] = premise1_eq_task.select([truth_t, truth_b]);
+    let truth = truth_1.induction(truth_2);
+
     // * 🚩预算 * //
+    let budget = context.budget_forward(&truth);
+
     // * 🚩结论 * //
+    println!("content2 = {content}\n from {premise_1}, {old_compound}");
+    context.double_premise_task(dbg!(content), Some(truth), budget);
 }
 
 /// # 📄OpenNARS
@@ -1092,7 +1168,7 @@ mod tests {
             nse <A --> C>.
             cyc 10
             "
-            => OUT "<<A --> B> ==> (&&, <#1 --> C>, <#1 --> A>)>" in outputs
+            => OUT "<<A --> B> ==> (&&,<#1 --> C>,<#1 --> A>)>" in outputs
         }
 
         intro_var_same_predicate: {
@@ -1101,7 +1177,7 @@ mod tests {
             nse <C --> A>.
             cyc 10
             "
-            => OUT "<<B --> A> ==> (&&, <C --> #1>, <A --> #1>)>" in outputs
+            => OUT "<<B --> A> ==> (&&,<C --> #1>,<A --> #1>)>" in outputs
         }
 
         intro_var_outer_sub_imp: {
@@ -1137,7 +1213,7 @@ mod tests {
             nse <M --> B>.
             cyc 5
             "
-            => OUT "(&&, <#1 --> A>, <#1 --> B>)" in outputs
+            => OUT "(&&,<#1 --> A>,<#1 --> B>)" in outputs
         }
 
         intro_var_outer_pre_imp: {
@@ -1173,7 +1249,45 @@ mod tests {
             nse <B --> M>.
             cyc 5
             "
-            => OUT "(&&, <A --> #1>, <B --> #1>)" in outputs
+            => OUT "(&&,<A --> #1>,<B --> #1>)" in outputs
+        }
+
+        // ! ❌【2024-08-08 02:07:47】OpenNARS改版中亦测试失败
+        // intro_var_inner_imp_1: {
+        //     "
+        //     nse <M --> S>.
+        //     nse <C ==> <M --> P>>.
+        //     cyc 20
+        //     " // 似乎跟预期中 "(&&,C,<<#1 --> S> ==> <#1 --> P>>)" 不一致
+        //     => OUT "(&&,C,<#1 --> S>,<#1 --> P>)" in outputs
+        // }
+
+        // ! ❌【2024-08-08 02:07:47】OpenNARS改版中亦测试失败
+        // intro_var_inner_imp_2: {
+        //     "
+        //     nse <M --> S>.
+        //     nse <C ==> <M --> P>>.
+        //     cyc 20
+        //     " // 似乎跟预期中 "<(&&,<#x --> S>,C) ==> <#x --> P>>" 不一致
+        //     => OUT "<<$1 --> S> ==> (&&,C,<$1 --> P>)>" in outputs
+        // }
+
+        intro_var_inner_con_1: {
+            "
+            nse <M --> S>.
+            nse (&&,C,<M --> P>).
+            cyc 20
+            " // 似乎跟预期中 "(&&,C,<<#1 --> S> ==> <#1 --> P>>)" 不一致
+            => OUT "(&&,C,<#1 --> S>,<#1 --> P>)" in outputs
+        }
+
+        intro_var_inner_con_2: {
+            "
+            nse <M --> S>.
+            nse (&&,C,<M --> P>).
+            cyc 20
+            " // 似乎跟预期中 "<(&&,<#x --> S>,C) ==> <#x --> P>>" 不一致
+            => OUT "<<$1 --> S> ==> (&&,C,<$1 --> P>)>" in outputs
         }
     }
 }
