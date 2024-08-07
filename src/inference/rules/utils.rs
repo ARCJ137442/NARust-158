@@ -1,7 +1,7 @@
 //! 「规则表」中的「实用定义」
 //! * 🎯用于辅助理解的工具性定义
 
-use crate::language::{CompoundTerm, Statement, StatementRef, Term};
+use crate::language::{CompoundTerm, Statement, Term};
 
 /// 在断言的情况下，从[`Term`]中提取[`CompoundTerm`]
 /// * 🎯对标OpenNARS`(CompoundTerm) term`的转换
@@ -25,6 +25,56 @@ pub fn cast_statement(term: Term) -> Statement {
     term.try_into().expect("必定是陈述")
 }
 
+/// * 📌包含两项：对称项/反对称项
+/// * 🚩基础行为：两类项可以相互转换——[取反](Dual::opposite)算子
+///   * 对称项⇒反对称项
+///   * 反对称项⇒对称项
+pub trait Opposite: Sized {
+    /// 调转到「相反方向」「相反位置」
+    /// * 🎯抽象自各个「三段论位置」
+    /// * 🎯为「三段论图式」添加方法
+    /// * 🚩具体步骤
+    ///   * 对称项 ⇒ 反对称项
+    ///   * 反对称项 ⇒ 对称项
+    fn opposite(self) -> Self;
+
+    /// 返回自身与「自身的相反位置」
+    ///   * 对称项 ⇒ [对称项, 反对称项]
+    ///   * 反对称项 ⇒ [反对称项, 对称项]
+    fn and_opposite(self) -> [Self; 2]
+    where
+        Self: Clone,
+    {
+        [self.clone(), self.opposite()]
+    }
+}
+
+/// 统一表示所有「两项中选取一项，或可将其调换位置」的行为
+/// * 📌包含两项：对称项/反对称项
+/// * 🚩基础行为：在「左右」两项中选择
+///   * 其中的「对称项」⇒选择二者中的前一个，并且不改变顺序
+///   * 其中的「反对称项」⇒选择二者中的后一个，并且交换顺序
+pub trait Select {
+    /// 根据「对称性/反对称性」
+    fn select<T>(&self, left_right: [T; 2]) -> [T; 2];
+
+    /// 选择某一个「对称项」
+    /// * 对称项 ⇒ 前一个
+    /// * 反对称项 ⇒ 后一个
+    fn select_one<T>(&self, left_right: [T; 2]) -> T {
+        let [selected, _] = self.select(left_right);
+        selected
+    }
+
+    /// 选择另一个「对称项」
+    /// * 对称项 ⇒ 后一个
+    /// * 反对称项 ⇒ 前一个
+    fn select_another<T>(&self, left_right: [T; 2]) -> T {
+        let [_, selected] = self.select(left_right);
+        selected
+    }
+}
+
 /// 记录各处推理中「前提」的位置
 /// * 🎯标记诸如「复合词项来自信念」等
 /// * 📄例如
@@ -38,7 +88,7 @@ pub enum PremiseSource {
     Belief,
 }
 
-impl PremiseSource {
+impl Select for PremiseSource {
     /// 在「任务」「信念」中选择
     /// * 📌选取原则：**根据内容选中的**永远在**第一个**
     /// * 🚩传入`[任务, 信念]`，始终返回`[任务/信念, 信念/任务]`
@@ -46,27 +96,12 @@ impl PremiseSource {
     ///   * 「信念」 ⇒ `[信念, 任务]`
     /// * ✅【2024-08-01 21:27:43】正向选择、反向选择可直接`let [X, _] = ...`与`let [_, X] = ...`搞定
     ///   * 📌【2024-08-01 21:28:22】无需「选择反转」
-    pub fn select<T>(self, [task_thing, belief_thing]: [T; 2]) -> [T; 2] {
+    fn select<T>(&self, [task_thing, belief_thing]: [T; 2]) -> [T; 2] {
         use PremiseSource::*;
         match self {
             Task => [task_thing, belief_thing],
             Belief => [belief_thing, task_thing],
         }
-    }
-}
-
-pub trait Opposite {
-    /// 调转到「相反方向」「相反位置」
-    /// * 🎯抽象自各个「三段论位置」
-    /// * 🎯为「三段论图式」添加方法
-    fn opposite(self) -> Self;
-
-    /// 返回自身与「自身的相反位置」
-    fn and_opposite(self) -> [Self; 2]
-    where
-        Self: Clone,
-    {
-        [self.clone(), self.opposite()]
     }
 }
 
@@ -116,33 +151,17 @@ impl SyllogismPosition {
     pub fn build_figure(self, other: Self) -> SyllogismFigure {
         [self, other]
     }
-
-    /// 根据「三段论位置」从参数中选取一个参数
-    /// * 🎯在「陈述选择」的过程中使用，同时需要前后两项
-    /// * 🚩数组的第一项即为「选中项」
-    pub fn select_and_other<T>(self, [subject, predicate]: [T; 2]) -> [T; 2] {
-        match self {
-            Subject => [subject, predicate],
-            Predicate => [predicate, subject],
-        }
-    }
-
-    /// 根据「三段论位置」从参数中选取一个参数
-    /// * 🎯在「陈述解包」的过程中使用
-    pub fn select<T>(self, sub_pre: [T; 2]) -> T {
-        let [selected, _] = self.select_and_other(sub_pre);
-        selected
-    }
 }
 use SyllogismPosition::*;
 
-/// 以此扩展到「陈述」的功能
-impl StatementRef<'_> {
-    /// 根据「三段论位置」扩展获取「三段论位置」对应的「词项」
-    pub fn get_at_position(&self, position: SyllogismPosition) -> &Term {
-        match position {
-            Subject => self.subject(),
-            Predicate => self.predicate(),
+impl Select for SyllogismPosition {
+    /// 根据「三段论位置」从参数中选取一个参数
+    /// * 🎯在「陈述选择」的过程中使用，同时需要前后两项
+    /// * 🚩数组的第一项即为「选中项」
+    fn select<T>(&self, [subject, predicate]: [T; 2]) -> [T; 2] {
+        match self {
+            Subject => [subject, predicate],
+            Predicate => [predicate, subject],
         }
     }
 }
@@ -277,3 +296,51 @@ impl Opposite for SyllogismSide {
 }
 
 // ! ℹ️【2024-08-05 18:47:31】有关「辅助测试用代码」如「预期测试宏」均放到`inference`的根模块下
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum Symmetry {
+        Symmetric = 0,
+        Asymmetric = 1,
+    }
+    use nar_dev_utils::asserts;
+    use Symmetry::*;
+
+    impl Opposite for Symmetry {
+        fn opposite(self) -> Self {
+            match self {
+                Symmetric => Asymmetric,
+                Asymmetric => Symmetric,
+            }
+        }
+    }
+
+    impl Select for Symmetry {
+        fn select<T>(&self, [left, right]: [T; 2]) -> [T; 2] {
+            match self {
+                Symmetric => [left, right],
+                Asymmetric => [right, left],
+            }
+        }
+    }
+
+    #[test]
+    fn test_opposite() {
+        asserts! {
+            Symmetric.opposite() => Asymmetric,
+            Asymmetric.opposite() => Symmetric,
+        }
+    }
+
+    #[test]
+    fn test_select() {
+        asserts! {
+            Symmetric.select([0, 1]) => [0, 1],
+            Asymmetric.select([0, 1]) => [1, 0],
+            Symmetric.select(["0", "1"]) => ["0", "1"],
+            Asymmetric.select(["0", "1"]) => ["1", "0"],
+        }
+    }
+}

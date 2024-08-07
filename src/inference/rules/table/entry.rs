@@ -619,7 +619,7 @@ fn conditional_deduction_induction_with_var(
         // * component="<sunglasses --> (/,own,$1,_)>"
         // * side=0
         // * newSide=0
-        component2 = side.select(statement.sub_pre());
+        component2 = side.select_one(statement.sub_pre());
         new_side = side;
     } else {
         // * 📄【2024-06-10 18:13:13】一例：

@@ -55,16 +55,19 @@ pub fn compose_as_set(
     // 俩闭包，调用时复制相应的词项（取得新所有权）
     let component_t = || component_t.clone();
     let component_b = || component_b.clone();
+    type MakeTermFrom2 = fn(Term, Term) -> Option<Term>;
 
     // * 🚩根据「共有词项的位置」「任务内容的类型」分派
     match (shared_term_i, task_content.identifier()) {
         // * 🚩共有在主项 ⇒ 内涵交，外延交，外延差
         // * 📄"<M ==> S>", "<M ==> P>"
         (Subject, INHERITANCE_RELATION) => {
+            let [make_term_and, make_term_or]: [MakeTermFrom2; 2] =
+                shared_term_i.select([Term::make_intersection_ext, Term::make_intersection_int]);
             // * 🚩「或」内涵交
-            term_or = Term::make_intersection_int(component_t(), component_b());
+            term_or = make_term_and(component_t(), component_b());
             // * 🚩「与」外延交
-            term_and = Term::make_intersection_ext(component_t(), component_b());
+            term_and = make_term_or(component_t(), component_b());
             // * 🚩根据「真值是否负面」决定「差」的真值
             (term_dif, truth_dif) = match [truth_t.is_positive(), truth_b.is_positive()] {
                 // * 🚩同正/同负 ⇒ 不予生成
@@ -81,21 +84,15 @@ pub fn compose_as_set(
                 ),
             }
         }
-        (Subject, IMPLICATION_RELATION) => {
-            // * 🚩「或」析取
-            term_or = Term::make_disjunction(component_t(), component_b());
-            // * 🚩「与」合取
-            term_and = Term::make_conjunction(component_t(), component_b());
-            // * 🚩没有「差」
-            (term_dif, truth_dif) = (None, None);
-        }
         // * 🚩共有在谓项 ⇒ 内涵交，外延交，内涵差
         // * 📄"<S ==> M>", "<P ==> M>"
         (Predicate, INHERITANCE_RELATION) => {
+            let [make_term_and, make_term_or]: [MakeTermFrom2; 2] =
+                shared_term_i.select([Term::make_intersection_ext, Term::make_intersection_int]);
             // * 🚩「或」外延交
-            term_or = Term::make_intersection_ext(component_t(), component_b());
+            term_or = make_term_or(component_t(), component_b());
             // * 🚩「与」内涵交
-            term_and = Term::make_intersection_int(component_t(), component_b());
+            term_and = make_term_and(component_t(), component_b());
             // * 🚩根据「真值是否负面」决定「差」的真值
             (term_dif, truth_dif) = match [truth_t.is_positive(), truth_b.is_positive()] {
                 // * 🚩同正/同负 ⇒ 不予生成
@@ -112,11 +109,23 @@ pub fn compose_as_set(
                 ),
             };
         }
+        (Subject, IMPLICATION_RELATION) => {
+            let [make_term_and, make_term_or]: [MakeTermFrom2; 2] =
+                shared_term_i.select([Term::make_conjunction, Term::make_disjunction]);
+            // * 🚩「与」合取
+            term_and = make_term_and(component_t(), component_b());
+            // * 🚩「或」析取
+            term_or = make_term_or(component_t(), component_b());
+            // * 🚩没有「差」
+            (term_dif, truth_dif) = (None, None);
+        }
         (Predicate, IMPLICATION_RELATION) => {
-            // * 🚩「或」合取
-            term_or = Term::make_conjunction(component_t(), component_b());
+            let [make_term_and, make_term_or]: [MakeTermFrom2; 2] =
+                shared_term_i.select([Term::make_conjunction, Term::make_disjunction]);
             // * 🚩「与」析取
-            term_and = Term::make_disjunction(component_t(), component_b());
+            term_and = make_term_and(component_t(), component_b());
+            // * 🚩「或」合取
+            term_or = make_term_or(component_t(), component_b());
             // * 🚩没有「差」
             (term_dif, truth_dif) = (None, None);
         }
@@ -141,7 +150,7 @@ pub fn compose_as_set(
         process_composed(
             task_content,
             belief_content,
-            shared_term_i.select_and_other([component_common(), term]), // [主项, 谓项]
+            shared_term_i.select([component_common(), term]), // [主项, 谓项]
             truth,
             context,
         );

@@ -24,7 +24,7 @@ use super::compositional::compose_compound;
 fn index_to_figure<T, U>(link1: &impl TLink<T>, link2: &impl TLink<U>) -> SyllogismFigure {
     let side1 = SyllogismPosition::from_index(*link1.get_index(0).unwrap());
     let side2 = SyllogismPosition::from_index(*link2.get_index(0).unwrap());
-    [side1, side2]
+    side1.build_figure(side2)
 }
 
 pub fn syllogisms(
@@ -117,8 +117,8 @@ fn asymmetric_asymmetric(
     let [[common_pos_t, common_pos_b], [other_pos_t, other_pos_b]] = figure.and_opposite();
     // * 🚩先尝试统一独立变量
     let unified_i = unify_find_i(
-        t_term.get_ref().get_at_position(common_pos_t),
-        b_term.get_ref().get_at_position(common_pos_b),
+        common_pos_t.select_one(t_term.sub_pre()),
+        common_pos_b.select_one(b_term.sub_pre()),
         rng_seed,
     )
     .apply_to(
@@ -134,8 +134,8 @@ fn asymmetric_asymmetric(
         return;
     }
     // * 🚩取其中两个不同的项 | 需要在后续「条件类比」中重复使用
-    let term_t = other_pos_t.select(t_term.sub_pre());
-    let term_b = other_pos_b.select(b_term.sub_pre());
+    let term_t = other_pos_t.select_one(t_term.sub_pre());
+    let term_b = other_pos_b.select_one(b_term.sub_pre());
     // * 📝构造一个闭包，随时根据图式生成（用于NAL-1推理的）主项、谓项
     //   * 📌原因：先执行的「构造复合词项」「条件归纳」可能要使用term_t、term_b
     let lower_level_composition = |term_t, term_b| match figure {
@@ -268,8 +268,8 @@ fn asymmetric_symmetric(
 
     // * 🚩先尝试统一独立变量
     let unified_i = unify_find_i(
-        asy_s.get_ref().get_at_position(common_pos_asy),
-        sym_s.get_ref().get_at_position(common_pos_sym),
+        common_pos_asy.select_one(asy_s.sub_pre()),
+        common_pos_sym.select_one(sym_s.sub_pre()),
         rng_seed,
     )
     .apply_to(
@@ -282,8 +282,8 @@ fn asymmetric_symmetric(
     }
     // * 🚩再根据「是否可统一查询变量」做分派（可统一⇒已经统一了
     let unified_q = unify_find_q(
-        asy_s.get_ref().get_at_position(other_pos_asy),
-        sym_s.get_ref().get_at_position(other_pos_sym),
+        other_pos_asy.select_one(asy_s.sub_pre()),
+        other_pos_sym.select_one(sym_s.sub_pre()),
         rng_seed2,
     )
     .apply_to(
@@ -298,8 +298,8 @@ fn asymmetric_symmetric(
     else {
         // 获取并拷贝相应位置的词项
         let [term_asy, term_sym] = [
-            asy_s.get_ref().get_at_position(other_pos_asy).clone(),
-            sym_s.get_ref().get_at_position(other_pos_sym).clone(),
+            other_pos_asy.select_one(asy_s.sub_pre()).clone(),
+            other_pos_sym.select_one(sym_s.sub_pre()).clone(),
         ];
         // 转换顺序：true => [C, B], false => [B, C]
         let [term1, term2] = match switch_order {
@@ -348,8 +348,8 @@ fn symmetric_symmetric(
     let mut b_term = cast_statement(belief_sentence.clone_content());
     let [pos_t, pos_b] = figure;
     let [common_t, common_b] = [
-        pos_t.select(t_term.sub_pre()),
-        pos_b.select(b_term.sub_pre()),
+        pos_t.select_one(t_term.sub_pre()),
+        pos_b.select_one(b_term.sub_pre()),
     ];
     let rng_seed = context.shuffle_rng_seeds();
     // * 🚩尝试以不同方式统一独立变量 @ 公共词项
@@ -360,8 +360,8 @@ fn symmetric_symmetric(
     // * 🚩成功统一 ⇒ 相似传递
     if unified {
         let [other_t, other_b] = [
-            pos_t.opposite().select(t_term.unwrap_components()),
-            pos_b.opposite().select(b_term.unwrap_components()),
+            pos_t.opposite().select_one(t_term.unwrap_components()),
+            pos_b.opposite().select_one(b_term.unwrap_components()),
         ];
         resemblance(other_b, other_t, &belief_sentence, &task_sentence, context);
     }
@@ -379,7 +379,7 @@ pub fn detachment_with_var(
     let [term_t, term_b] = [task_sentence.content(), belief.content()];
     let [main_statement, sub_content] = high_order_position.select([term_t, term_b]); // 先选中高阶陈述（任务⇒顺序不变，信念⇒顺序反转）
     let main_statement = main_statement.as_statement().unwrap();
-    let component = position_sub_in_hi.select(main_statement.sub_pre()); // * 🚩前件
+    let component = position_sub_in_hi.select_one(main_statement.sub_pre()); // * 🚩前件
 
     // * 🚩非继承或否定⇒提前结束
     if !(component.instanceof_inheritance() || component.instanceof_negation()) {
@@ -428,7 +428,7 @@ pub fn detachment_with_var(
     // * 🚩使用一次性闭包代替重复的「引入变量」操作
     let intro_var_same_s_or_p = |context| {
         let task_judgement = task_sentence.unwrap_judgement(); // 避免重复借用
-        let component = position_sub_in_hi.select(main_statement.sub_pre());
+        let component = position_sub_in_hi.select_one(main_statement.sub_pre());
         // * 🚩【2024-08-06 20:49:18】此处必须分开
         //   * ⚠️不能保证俩`impl Judgement`是一样的类型，难以保证类型一致性
         match high_order_position {

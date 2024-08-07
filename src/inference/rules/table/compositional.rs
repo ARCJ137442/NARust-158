@@ -22,8 +22,10 @@ pub fn compose_compound(
     }
 
     // * 🚩提取词项
-    let [component_common, component_t] = shared_term_i.select_and_other(task_content.sub_pre());
-    let component_b = shared_term_i.opposite().select(belief_content.sub_pre());
+    let [component_common, component_t] = shared_term_i.select(task_content.sub_pre());
+    let component_b = shared_term_i
+        .opposite()
+        .select_one(belief_content.sub_pre());
     // * 🚩预判，分派到「解构」中
     match [component_t.as_compound(), component_b.as_compound()] {
         // * 🚩「任务词项中的另一项」包含「信念词项的另一侧」的所有元素

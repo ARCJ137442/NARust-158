@@ -65,7 +65,7 @@ pub fn structural_compose_both(
     let direction = context.reason_direction();
 
     // * 🚩预筛 * //
-    let indicated = side.select(statement.sub_pre());
+    let indicated = side.select_one(statement.sub_pre());
     if *compound == *indicated {
         // * 📄compound="(&,glasses,[black])" @ 0 = "glasses"
         //   * statement="<sunglasses --> (&,glasses,[black])>" @ 1 = compound
@@ -77,7 +77,7 @@ pub fn structural_compose_both(
     let [statement_sub, statement_pre] = statement.sub_pre();
     let sub_pre = [&statement_sub, &statement_pre];
     let mut components = compound.clone_components();
-    let [term_self_side, other_statement_component] = side.select_and_other(sub_pre); // 同侧词项 & 异侧词项
+    let [term_self_side, other_statement_component] = side.select(sub_pre); // 同侧词项 & 异侧词项
     if components.contains(other_statement_component) {
         // * 📝复合词项包含陈述的另一侧词项 ⇒ 中止
         // * 📄compound = "(*,{tom},(&,glasses,[black]))" @ 1 => "(&,glasses,[black])"
@@ -89,12 +89,12 @@ pub fn structural_compose_both(
     // 先决条件：是否包含同侧词项
     let cloned_statement_sub_pre = || [statement_sub.clone(), statement_pre.clone()];
     let [sub, pre] = match components.contains(term_self_side) {
-        true => side.select_and_other([
+        true => side.select([
             // * 🚩主项/谓项：原来的复合词项
             compound.inner.clone(),
             // * 🚩谓项/主项：替换后的复合词项
             {
-                let term_opposite = side.opposite().select([statement_sub, statement_pre]); // 提取出异侧词项
+                let term_opposite = side.opposite().select_one([statement_sub, statement_pre]); // 提取出异侧词项
                 components[index] = term_opposite.clone(); // 将对应位置换成异侧词项
                 unwrap_or_return!(?Term::make_compound_term(compound, components))
             },
