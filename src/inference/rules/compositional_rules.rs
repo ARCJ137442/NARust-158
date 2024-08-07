@@ -593,28 +593,21 @@ fn intro_var_states_ind(
     }
     // ! ⚠️在此期间【修改】其【所指向】的词项
     // * 📝若应用了替换，则替换后的变量会算进「任务内容」「信念内容」中，故无需再考量
-    let var_i = || Term::make_var_i([&*task_content, &*belief_content]);
+    let var_i = Term::make_var_i([&*task_content, &*belief_content]);
 
     // * 🚩根据索引决定「要组成新陈述的词项的位置」
-    let [term11, term12, term21, term22];
-    match shared_term_i {
-        Subject => {
-            term11 = var_i();
-            term21 = var_i();
-            term12 = task_content.get_ref().predicate().clone();
-            term22 = belief_content.get_ref().predicate().clone();
-        }
-        Predicate => {
-            term11 = task_content.get_ref().subject().clone();
-            term21 = belief_content.get_ref().subject().clone();
-            term12 = var_i();
-            term22 = var_i();
-        }
-    }
-    // TODO: ↑继续用select简化
+    //   * 📄主项 ⇒ <var_i --> other_t>, <var_i --> other_b>
+    //   * 📄谓项 ⇒ <other_t --> var_i>, <other_b --> var_i>
+    let other_t = shared_term_i.select_another(task_content.sub_pre());
+    let other_b = shared_term_i.select_another(belief_content.sub_pre());
+    let [term11, term12] = shared_term_i.select([&var_i, other_t]);
+    let [term21, term22] = shared_term_i.select([&var_i, other_b]);
+
     // * 🚩返回：从元素构造继承陈述
-    let inheritance = Term::make_inheritance; // 精简代码量
-    [inheritance(term11, term12), inheritance(term21, term22)]
+    [
+        Term::make_inheritance(term11.clone(), term12.clone()),
+        Term::make_inheritance(term21.clone(), term22.clone()),
+    ]
 }
 
 /// 🆕以「变量外引入」的内部词项，计算「引入状态」陈述
@@ -625,28 +618,22 @@ fn intro_var_states_dep(
     belief_content: StatementRef,
     shared_term_i: SyllogismPosition,
 ) -> [Option<Term>; 2] {
-    let var_d = || Term::make_var_d([&*task_content, &*belief_content]);
+    let var_d = Term::make_var_d([&*task_content, &*belief_content]);
 
     // * 🚩根据索引决定「要组成新陈述的词项的位置」
-    let [term11, term12, term21, term22];
-    match shared_term_i {
-        Subject => {
-            term11 = var_d();
-            term21 = var_d();
-            term12 = task_content.predicate().clone();
-            term22 = belief_content.predicate().clone();
-        }
-        Predicate => {
-            term11 = task_content.subject().clone();
-            term21 = belief_content.subject().clone();
-            term12 = var_d();
-            term22 = var_d();
-        }
-    }
-    // TODO: ↑继续用select简化
+    // * 🚩根据索引决定「要组成新陈述的词项的位置」
+    //   * 📄主项 ⇒ <var_d --> other_t>, <var_d --> other_b>
+    //   * 📄谓项 ⇒ <other_t --> var_d>, <other_b --> var_d>
+    let other_t = shared_term_i.select_another(task_content.sub_pre());
+    let other_b = shared_term_i.select_another(belief_content.sub_pre());
+    let [term11, term12] = shared_term_i.select([&var_d, other_t]);
+    let [term21, term22] = shared_term_i.select([&var_d, other_b]);
+
     // * 🚩返回：从元素构造继承陈述
-    let inheritance = Term::make_inheritance; // 精简代码量
-    [inheritance(term11, term12), inheritance(term21, term22)]
+    [
+        Term::make_inheritance(term11.clone(), term12.clone()),
+        Term::make_inheritance(term21.clone(), term22.clone()),
+    ]
 }
 
 /// 根据「词项构造函数」「真值函数」「是否交换顺序」统一构造「变量外引入」的结论
