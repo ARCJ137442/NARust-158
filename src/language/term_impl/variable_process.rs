@@ -6,7 +6,7 @@
 
 use crate::{
     io::symbols::*,
-    language::{CompoundTermRef, CompoundTermRefMut, Term, TermComponents},
+    language::{CompoundTermRef, CompoundTermRefMut, Term},
 };
 use nar_dev_utils::void;
 use rand::{rngs::StdRng, seq::SliceRandom, RngCore, SeedableRng};
@@ -137,6 +137,18 @@ impl CompoundTermRefMut<'_> {
             // re-order
             self.reorder_components();
         }
+        // * 📝【2024-08-08 13:03:24】所谓「共同变量」总会有所谓「泄漏」的问题
+        //   * 💡关键在于「是否最终能被当作『普通变量』对待」
+        //   * 🚩方案：将其就视作「普通变量」，判别方式就是「是否在词项本身域外」
+        // // 检查是否会有「共同变量泄漏」问题
+        // if cfg!(debug_assertions) {
+        //     self.for_each_atom(&mut |atom| {
+        //         debug_assert!(
+        //             !is_common_variable(atom) || substitution.chain_get(atom).is_some(),
+        //             "common variable {atom} leaked!\nsubstitution = {substitution:?}"
+        //         )
+        //     });
+        // }
         // * ✅不再需要重新生成名称
     }
 
@@ -417,168 +429,211 @@ fn find_unification(
     map_2: &mut VarSubstitution,
     shuffle_rng_seed: u64,
 ) -> bool {
-    //==== 内用函数 ====//
-
-    /// 特殊的「共有变量」标识符
-    /// * 📄迁移自OpenNARS
-    const COMMON_VARIABLE: &str = "COMMON_VARIABLE";
-
-    /// 📄OpenNARS `Variable.makeCommonVariable` 函数
-    /// * 📌制作临时的「共用变量」词项
-    /// * 🎯用于「变量统一」方法
-    #[inline]
-    fn make_common_variable(v1: &Term, v2: &Term) -> Term {
-        Term::new(
-            COMMON_VARIABLE,
-            TermComponents::Word(v1.name() + &v2.name()),
-        )
+    struct UnificationStatus<'s> {
+        /// 统一的变量类型
+        var_type: &'s str,
+        /// 需要统一的俩词项中，最大的变量id
+        max_var_id: usize,
+        // /// 根部词项1
+        // root_1: &'s Term,
+        // /// 根部词项2
+        // root_2: &'s Term,
     }
 
-    /// 📄OpenNARS `Variable.isCommonVariable` 函数
-    #[inline]
-    fn is_common_variable(v: &Term) -> bool {
-        v.identifier() == COMMON_VARIABLE
-    }
-
-    // 是【确定需要归一化】的变量
-    // * 📄临时的「共用变量」
-    // * 📄满足指定标识符的变量词项
-    // * 🚩【2024-07-09 22:46:21】因为要捕获「变量类型」故需使用闭包
-    // * 📝【2024-07-09 22:47:34】OpenNARS中似乎只在 `to_be_unified_1` 中出现「共用变量」
-    let as_correct_var = |t| match is_common_variable(t) || t.get_variable_type() == var_type {
-        true => Some(t),
-        false => None,
+    // 构造状态：原先用闭包能捕获的所有【不变】常量
+    let status = UnificationStatus {
+        var_type,
+        max_var_id: Term::maximum_variable_id_multi([to_be_unified_1, to_be_unified_2]),
+        // root_1: to_be_unified_1,
+        // root_2: to_be_unified_2,
     };
 
-    //==== 正式开始函数体 ====//
-    let is_same_type = to_be_unified_1.is_same_type(to_be_unified_2);
-    match [
-        as_correct_var(to_be_unified_1),
-        as_correct_var(to_be_unified_2),
-    ] {
-        // * 🚩[$1 x ?] 对应位置是变量
-        // * 🚩[$1 x $2] 若同为变量⇒统一二者（制作一个「共同变量」）
-        [Some(var_1), Some(var_2)] => {
-            // * 🚩已有替换⇒直接使用已有替换（看子项有无替换） | 递归深入
-            // already mapped
-            if let Some(ref mapped) = map_1.get(var_1).cloned() {
-                return find_unification(
-                    var_type,
-                    mapped,
-                    to_be_unified_2,
-                    map_1,
-                    map_2,
-                    shuffle_rng_seed,
-                );
-            }
-            // not mapped yet
-            // * 🚩生成一个外界输入中不可能的变量词项作为「匿名变量」
-            let common_var = make_common_variable(var_1, var_2);
-            // * 🚩建立映射：var1 -> commonVar @ term1
-            // * 🚩建立映射：var2 -> commonVar @ term2
-            map_1.put(var_1, common_var.clone()); // unify
-            map_2.put(var_2, common_var); // unify
-            true
+    impl UnificationStatus<'_> {
+        /// 是【确定需要归一化】的变量
+        /// * 📄临时的「共用变量」
+        /// * 📄满足指定标识符的变量词项
+        /// * 🚩【2024-07-09 22:46:21】因为要捕获「变量类型」故需使用闭包
+        /// * 📝【2024-07-09 22:47:34】OpenNARS中似乎只在 `to_be_unified_1` 中出现「共用变量」
+        fn as_correct_var<'t>(&self, t: &'t Term) -> Option<(&'t Term, usize)> {
+            t.as_variable() // 首先是个「变量」词项
+                .filter(|_| t.get_variable_type() == self.var_type) // 类型必须是指定类型
+                .map(|id| (t, id)) // 需要附带词项引用，以便后续拷贝
         }
-        // * 🚩[$1 x _2] 若并非变量⇒尝试消元划归
-        // * 📝此处意味「两个变量合并成一个变量」 | 后续「重命名变量」会将其消去
-        [Some(var_1), None] => {
-            // * 🚩已有替换⇒直接使用已有替换（看子项有无替换） | 递归深入
-            // already mapped
-            if let Some(ref mapped) = map_1.get(var_1).cloned() {
-                return find_unification(
-                    var_type,
-                    mapped,
-                    to_be_unified_2,
-                    map_1,
-                    map_2,
-                    shuffle_rng_seed,
-                );
-            }
-            // * 🚩建立映射：var1 -> term2 @ term1
-            // elimination
-            map_1.put(var_1, to_be_unified_2.clone());
-            // * 🚩尝试消除「共同变量」
-            if is_common_variable(var_1) {
-                // * 🚩建立映射：var1 -> term2 @ term2
-                map_2.put(var_1, to_be_unified_2.clone());
-            }
-            true
+
+        /// 📄OpenNARS `Variable.isCommonVariable` 函数
+        /// * 🚩【2024-08-08 13:22:09】现在不再使用特别的标识符，而是与「变量词项」一视同仁——只判断是否为「根部之外」的变量
+        ///   * id小于原先的「最大id」 ⇒ 一定是「新创的变量」 ⇒ 一定是「共同变量」
+        #[inline]
+        fn is_common_variable(&self, v: &Term) -> bool {
+            v.as_variable().is_some_and(|id| id > self.max_var_id)
         }
-        // * 🚩[? x $2] 对应位置是变量
-        [None, Some(var_2)] => {
-            // * 🚩已有替换⇒直接使用已有替换（看子项有无替换） | 递归深入
-            // already mapped
-            if let Some(ref mapped) = map_2.get(var_2).cloned() {
-                return find_unification(
-                    var_type,
-                    to_be_unified_1,
-                    mapped,
-                    map_1,
-                    map_2,
-                    shuffle_rng_seed,
-                );
-            }
-            // not mapped yet
-            // * 🚩[_1 x $2] 若非变量⇒尝试消元划归
-            /*
-             * 📝【2024-04-22 00:13:19】发生在如下场景：
-             * <(&&, <A-->C>, <B-->$2>) ==> <C-->$2>>.
-             * <(&&, <A-->$1>, <B-->D>) ==> <$1-->D>>.
-             * <(&&, <A-->C>, <B-->D>) ==> <C-->D>>?
-             * 📌要点：可能两边各有「需要被替换」的地方
-             */
-            // * 🚩建立映射：var2 -> term1 @ term2
-            // elimination
-            map_2.put(var_2, to_be_unified_1.clone());
-            // * 🚩尝试消除「共同变量」
-            if is_common_variable(var_2) {
-                // * 🚩建立映射：var2 -> term1 @ term2
-                map_1.put(var_2, to_be_unified_1.clone());
-            }
-            true
+
+        /// 制作一个由id1 id2共同决定的、在词项自身变量范围之外的id
+        /// * 📌假定：自身的「最大变量id」大于0，即 `max_var_id > 0`
+        ///   * 💭若根部词项没变量，就不会执行「创建共同变量」的操作
+        /// * 📝原理 & 证明
+        ///   * ℹ️前提：`id1 ∈ [0, max_var_id]`、`id2 ∈ [0, max_var_id]`
+        ///   * 📍推论：`(max_var_id + 1) * (1 + id1) ≥ max_var_id + 1 > max_var_id`
+        ///     * ✅满足「在词项自身变量范围之外」
+        ///   * 📍推论：`(max_var_id + 1) * (1 + id1) + id2 ≤ max_id_1 = (max_var_id + 1) * (1 + id1) + max_var_id]`
+        ///     *  `(max_var_id + 1) * (1 + (id1 + 1)) + id2 ≥ max_id_next = (max_var_id + 1) * (1 + (id1 + 1))`
+        ///     *  `max_id_1 = (max_var_id + 1) * (1 + id1) + max_var_id < (max_var_id + 1) * (1 + id1) + (max_var_id + 1) = (max_var_id + 1) * (1 + (id1 + 1)) = max_id_next`
+        fn common_var_id_from(&self, id1: usize, id2: usize) -> usize {
+            (self.max_var_id + 1) * (1 + id1) + id2
         }
-        // * 🚩均非变量
-        [None, None] => match [to_be_unified_1.as_compound(), to_be_unified_2.as_compound()] {
-            // * 🚩都是复合词项⇒尝试深入
-            [Some(compound_1), Some(compound_2)] if is_same_type => {
-                // * 🚩替换前提：容器相似（大小相同、像占位符位置相同）
-                if !is_same_kind_compound(compound_1, compound_2) {
-                    return false;
-                }
-                // * 🚩复制词项列表 | 实际上只需拷贝其引用
-                // * 📝【2024-07-10 14:53:16】随机打乱不影响内部值，也不影响原有排序
-                let mut list = compound_1.clone_component_refs();
-                // * 🚩可交换⇒打乱
-                // * 📝from Wang：需要让算法（对两个词项）的时间复杂度为定值（O(n)而非O(n!)）
-                // * ⚠️全排列的技术难度：多次尝试会修改映射表，需要多次复制才能在检验的同时完成映射替换
-                //    * 💭【2024-07-10 14:50:09】这意味着较大的计算成本
-                // * ✨现将`rng`外置：用于在「递归深入」中产生新随机数，增强算法随机性并仍保证宏观确定性
-                let mut rng = StdRng::seed_from_u64(shuffle_rng_seed);
-                if compound_1.is_commutative() {
-                    list.shuffle(&mut rng);
-                    // ! 边缘情况：   `<(*, $1, $2) --> [$1, $2]>` => `<(*, A, A) --> [A]>`
-                    // ! 边缘情况：   `<<A --> [$1, $2]> ==> <A --> (*, $1, $2)>>`
-                    // ! 　　　　　+  `<A --> [B, C]>` |- `<A --> (*, B, C)>`✅
-                    // ! 　　　　　+  `<A --> [B]>` |- `<A --> (*, B, B)>`❌
-                }
-                // * 🚩按位置逐一遍历
-                // * ✨【2024-07-10 15:02:10】更新机制：不再是「截断性返回」而是「逐个尝试」
-                //    * ⚠️与OpenNARS的核心区别：始终遍历所有子项，而非「一个不符就返回」
-                (list.into_iter().zip(compound_2.components.iter()))
-                    // * 🚩逐个尝试归一化
-                    .map(|(inner1, inner2)| {
-                        find_unification(var_type, inner1, inner2, map_1, map_2, rng.next_u64())
-                    })
-                    // * 🚩非惰性迭代：只有「所有子项均能归一化」才算「能归一化」
-                    //   * ⚠️不允许改为`all`：此处须强制遍历完所有子项（用`fold`+`BitAnd`）
-                    //   * 📝Rust中`bool | bool`也算合法：非惰性迭代，保证「有副作用的bool函数」正常起效
-                    .fold(true, BitAnd::bitand)
-            }
-            // * 🚩其它情况
-            _ => to_be_unified_1 == to_be_unified_2, // for atomic constant terms
-        },
+
+        /// 📄OpenNARS `Variable.makeCommonVariable` 函数
+        /// * 📌制作临时的「共用变量」词项
+        /// * 🎯用于「变量统一」方法
+        /// * 🚩【2024-08-08 13:43:24】现在创建一个新的「域外变量」代替
+        #[inline]
+        fn make_common_variable(&self, id1: usize, id2: usize) -> Term {
+            Term::new_var(self.var_type, self.common_var_id_from(id1, id2))
+        }
     }
+
+    /// 递归用子函数
+    fn find_unification_sub(
+        status: &UnificationStatus,
+        [to_be_unified_1, to_be_unified_2]: [&Term; 2],
+        [map_1, map_2]: [&mut VarSubstitution; 2],
+        shuffle_rng_seed: u64, // ! 在递归传入时刷新
+    ) -> bool {
+        let is_same_type = to_be_unified_1.is_same_type(to_be_unified_2);
+        match [
+            status.as_correct_var(to_be_unified_1),
+            status.as_correct_var(to_be_unified_2),
+        ] {
+            // * 🚩[$1 x ?] 对应位置是变量
+            // * 🚩[$1 x $2] 若同为变量⇒统一二者（制作一个「共同变量」）
+            [Some((var_1, id1)), Some((var_2, id2))] => {
+                // * 🚩已有替换⇒直接使用已有替换（看子项有无替换） | 递归深入
+                // already mapped
+                if let Some(ref mapped) = map_1.get(var_1).cloned() {
+                    return find_unification_sub(
+                        status,
+                        [mapped, to_be_unified_2],
+                        [map_1, map_2],
+                        shuffle_rng_seed,
+                    );
+                }
+                // not mapped yet
+                // * 🚩生成一个外界输入中不可能的变量词项作为「匿名变量」
+                let common_var = status.make_common_variable(id1, id2);
+                // * 🚩建立映射：var1 -> commonVar @ term1
+                // * 🚩建立映射：var2 -> commonVar @ term2
+                map_1.put(var_1, common_var.clone()); // unify
+                map_2.put(var_2, common_var); // unify
+                true
+            }
+            // * 🚩[$1 x _2] 若并非变量⇒尝试消元划归
+            // * 📝此处意味「两个变量合并成一个变量」 | 后续「重命名变量」会将其消去
+            [Some((var_1, _)), None] => {
+                // * 🚩已有替换⇒直接使用已有替换（看子项有无替换） | 递归深入
+                // already mapped
+                if let Some(ref mapped) = map_1.get(var_1).cloned() {
+                    return find_unification_sub(
+                        status,
+                        [mapped, to_be_unified_2],
+                        [map_1, map_2],
+                        shuffle_rng_seed,
+                    );
+                }
+                // * 🚩建立映射：var1 -> term2 @ term1
+                // elimination
+                map_1.put(var_1, to_be_unified_2.clone());
+                // * 🚩尝试消除「共同变量」
+                if status.is_common_variable(var_1) {
+                    // * 🚩建立映射：var1 -> term2 @ term2
+                    map_2.put(var_1, to_be_unified_2.clone());
+                }
+                true
+            }
+            // * 🚩[? x $2] 对应位置是变量
+            [None, Some((var_2, _))] => {
+                // * 🚩已有替换⇒直接使用已有替换（看子项有无替换） | 递归深入
+                // already mapped
+                if let Some(ref mapped) = map_2.get(var_2).cloned() {
+                    return find_unification_sub(
+                        status,
+                        [to_be_unified_1, mapped],
+                        [map_1, map_2],
+                        shuffle_rng_seed,
+                    );
+                }
+                // not mapped yet
+                // * 🚩[_1 x $2] 若非变量⇒尝试消元划归
+                /*
+                 * 📝【2024-04-22 00:13:19】发生在如下场景：
+                 * <(&&, <A-->C>, <B-->$2>) ==> <C-->$2>>.
+                 * <(&&, <A-->$1>, <B-->D>) ==> <$1-->D>>.
+                 * <(&&, <A-->C>, <B-->D>) ==> <C-->D>>?
+                 * 📌要点：可能两边各有「需要被替换」的地方
+                 */
+                // * 🚩建立映射：var2 -> term1 @ term2
+                // elimination
+                map_2.put(var_2, to_be_unified_1.clone());
+                // * 🚩尝试消除「共同变量」
+                if status.is_common_variable(var_2) {
+                    // * 🚩建立映射：var2 -> term1 @ term2
+                    map_1.put(var_2, to_be_unified_1.clone());
+                }
+                true
+            }
+            // * 🚩均非变量
+            [None, None] => match [to_be_unified_1.as_compound(), to_be_unified_2.as_compound()] {
+                // * 🚩都是复合词项⇒尝试深入
+                [Some(compound_1), Some(compound_2)] if is_same_type => {
+                    // * 🚩替换前提：容器相似（大小相同、像占位符位置相同）
+                    if !is_same_kind_compound(compound_1, compound_2) {
+                        return false;
+                    }
+                    // * 🚩复制词项列表 | 实际上只需拷贝其引用
+                    // * 📝【2024-07-10 14:53:16】随机打乱不影响内部值，也不影响原有排序
+                    let mut list = compound_1.clone_component_refs();
+                    // * 🚩可交换⇒打乱
+                    // * 📝from Wang：需要让算法（对两个词项）的时间复杂度为定值（O(n)而非O(n!)）
+                    // * ⚠️全排列的技术难度：多次尝试会修改映射表，需要多次复制才能在检验的同时完成映射替换
+                    //    * 💭【2024-07-10 14:50:09】这意味着较大的计算成本
+                    // * ✨现将`rng`外置：用于在「递归深入」中产生新随机数，增强算法随机性并仍保证宏观确定性
+                    let mut rng = StdRng::seed_from_u64(shuffle_rng_seed);
+                    if compound_1.is_commutative() {
+                        list.shuffle(&mut rng);
+                        // ! 边缘情况：   `<(*, $1, $2) --> [$1, $2]>` => `<(*, A, A) --> [A]>`
+                        // ! 边缘情况：   `<<A --> [$1, $2]> ==> <A --> (*, $1, $2)>>`
+                        // ! 　　　　　+  `<A --> [B, C]>` |- `<A --> (*, B, C)>`✅
+                        // ! 　　　　　+  `<A --> [B]>` |- `<A --> (*, B, B)>`❌
+                    }
+                    // * 🚩按位置逐一遍历
+                    // * ✨【2024-07-10 15:02:10】更新机制：不再是「截断性返回」而是「逐个尝试」
+                    //    * ⚠️与OpenNARS的核心区别：始终遍历所有子项，而非「一个不符就返回」
+                    (list.into_iter().zip(compound_2.components.iter()))
+                        // * 🚩逐个尝试归一化
+                        .map(|(inner1, inner2)| {
+                            find_unification_sub(
+                                status,
+                                [inner1, inner2],
+                                [map_1, map_2],
+                                rng.next_u64(),
+                            )
+                        })
+                        // * 🚩非惰性迭代：只有「所有子项均能归一化」才算「能归一化」
+                        //   * ⚠️不允许改为`all`：此处须强制遍历完所有子项（用`fold`+`BitAnd`）
+                        //   * 📝Rust中`bool | bool`也算合法：非惰性迭代，保证「有副作用的bool函数」正常起效
+                        .fold(true, BitAnd::bitand)
+                }
+                // * 🚩其它情况
+                _ => to_be_unified_1 == to_be_unified_2, // for atomic constant terms
+            },
+        }
+    }
+    // 记录「根部坐标」从根部开始
+    find_unification_sub(
+        &status,
+        [to_be_unified_1, to_be_unified_2],
+        [map_1, map_2],
+        shuffle_rng_seed,
+    )
 }
 
 /// 📄OpenNARS `Variable.hasSubstitute` 方法

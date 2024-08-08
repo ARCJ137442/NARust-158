@@ -36,19 +36,27 @@ impl Term {
         Self::new(PLACEHOLDER, TermComponents::Empty)
     }
 
+    /// NAL-6 / 变量（内部统一代码）
+    pub(in crate::language) fn new_var(
+        identifier: impl Into<String>,
+        id: impl Into<usize>,
+    ) -> Self {
+        Self::new(identifier.into(), TermComponents::Variable(id.into()))
+    }
+
     /// NAL-6 / 独立变量
     pub(in crate::language) fn new_var_i(id: impl Into<usize>) -> Self {
-        Self::new(VAR_INDEPENDENT, TermComponents::Variable(id.into()))
+        Self::new_var(VAR_INDEPENDENT, id.into())
     }
 
     /// NAL-6 / 非独变量
     pub(in crate::language) fn new_var_d(id: impl Into<usize>) -> Self {
-        Self::new(VAR_DEPENDENT, TermComponents::Variable(id.into()))
+        Self::new_var(VAR_DEPENDENT, id.into())
     }
 
     /// NAL-6 / 查询变量
     pub(in crate::language) fn new_var_q(id: impl Into<usize>) -> Self {
-        Self::new(VAR_QUERY, TermComponents::Variable(id.into()))
+        Self::new_var(VAR_QUERY, id.into())
     }
 
     /// 从旧的原子词项构造，但使用新的名称
@@ -59,7 +67,7 @@ impl Term {
         var_type: impl Into<String>,
         new_id: impl Into<usize>,
     ) -> Self {
-        Self::new(var_type.into(), TermComponents::Variable(new_id.into()))
+        Self::new_var(var_type, new_id)
     }
 
     // 复合词项 //
