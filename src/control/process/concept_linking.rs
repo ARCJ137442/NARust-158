@@ -361,6 +361,163 @@ impl Memory {
     }
 }
 
-// TODO: 单元测试
 #[cfg(test)]
-mod tests {}
+mod tests {
+    use super::*;
+    use crate::test_term as term;
+    use crate::{ok, util::AResult};
+    use nar_dev_utils::{join, macro_once, JoinTo};
+    use narsese::conversion::string::impl_lexical::format_instances::FORMAT_ASCII;
+    use std::fmt::Display;
+
+    /// 快捷构造词项链模板
+    /// * 📌语法：【目标】 #【链接类型】 @【链接位置】
+    macro_rules! link {
+        ($target:literal #$type:ident @ $index:expr) => {
+            // ! ⚠️要用`new_direct`不要用`new_template`：后者会自动「添油加醋」生成索引
+            TermLinkTemplate::new_direct(term!($target), TLinkType::$type, Vec::from($index))
+        };
+    }
+    /// 快捷构造词项链模板数组
+    macro_rules! links {
+        [
+            $( $target:literal #$type:ident @ $index:expr $(,)?)*
+        ] => {
+            [
+                $( link!($target #$type @ $index ) ),*
+            ]
+        };
+    }
+
+    impl Display for TermLinkTemplate {
+        /// 展示词项链模板
+        /// * 📝格式：`"词项" #链接类型 @索引`
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(
+                f,
+                "\"{}\" #{:?} @{:?}",
+                FORMAT_ASCII.format(&self.target().to_lexical()),
+                self.link_type(),
+                self.indexes()
+            )
+        }
+    }
+
+    /// 展示词项链
+    fn display_term_link_templates(vec: &[TermLinkTemplate]) -> String {
+        join! {
+            => "[".into()
+            => vec.iter().map(ToString::to_string).join_to_new(", ")
+            => "]"
+        }
+    }
+
+    /// 测试「构建词项链模板」
+    /// * ✅连带[`prepare_component_links`]也一并测过
+    #[test]
+    fn prepare_term_link_templates() -> AResult {
+        fn test(term: Term, expected: Vec<TermLinkTemplate>) -> AResult {
+            let templates = super::prepare_term_link_templates(&term);
+
+            println!("prepared: {}", display_term_link_templates(&templates));
+            assert_eq!(
+                templates,
+                expected,
+                "Test fail on {term} with templates != expected by\n{}\n!=\n{}",
+                display_term_link_templates(&templates),
+                display_term_link_templates(&expected)
+            );
+
+            ok!()
+        }
+        macro_once! {
+            macro test($( $term:literal => $expected:expr )*) {
+                $(
+                    test(term!($term), $expected.into())?;
+                )*
+            }
+            // 原子词项不产生链接模板
+            "A" => []
+            "_" => []
+            "$1" => []
+            // 有序复合词项 正常产生模板
+            "(*, A, B)" => links![
+                "A" #Compound @ [0]
+                "B" #Compound @ [1]
+            ]
+            // 可交换复合词项 正常产生模板
+            "{A, B, C, D}" => links![
+                "A" #Compound @ [0]
+                "B" #Compound @ [1]
+                "C" #Compound @ [2]
+                "D" #Compound @ [3]
+            ]
+            // ! 「像」：占位符不产生链接模板
+            "(/, R, _, A)" => links![
+                "R" #Compound @ [0] // ! ⚠️注意：与OpenNARS机制的不同
+                "A" #Compound @ [2]
+            ]
+            // ! 「像」：与OpenNARS机制的不同，其占位符处是没有链接模板的
+            "(/, R, A, _, B)" => links![
+                "R" #Compound @ [0]
+                "A" #Compound @ [1]
+             // "_" #Compound @ [2] // ! 占位符不能成链接
+                "B" #Compound @ [3]
+            ]
+            // 陈述：类型为「复合陈述」
+            "<A --> B>" => links![
+                "A" #CompoundStatement @ [0]
+                "B" #CompoundStatement @ [1]
+            ]
+            // 蕴含+合取：包含有类型为「复合条件」的模板
+            "<(&&, A, B) ==> C>" => links![
+                "(&&, A, B)" #CompoundStatement @ [0]
+                "A" #CompoundCondition @ [0, 0]
+                "B" #CompoundCondition @ [0, 1]
+                "C" #CompoundStatement @ [1]
+            ]
+            // 实际运行中产生的复合词项
+            "<<$1 --> key> ==> <{lock1} --> (/, open, $1, _)>>" => links![
+                // ! 📝不会给变量`$1`产生模板
+                // ! 📝不会给占位符`_`产生模板
+                "key" #CompoundStatement @[0, 1], // 蕴含→继承
+                "{lock1}" #CompoundStatement @[1, 0], // 蕴含→继承
+                "open" #Transform @[1, 1, 0] // 蕴含→继承→外延像
+            ]
+            "<(&&,<#1 --> lock>,<#1 --> (/,open,$2,_)>) ==> <$2 --> key>>" => links![
+                // ! 📝不会给变量`$1`产生模板
+                // ! 📝不会给占位符`_`产生模板
+                // * 📌实际只有仨词项
+                "lock" #CompoundCondition @[0, 0, 1], // 蕴含→合取→继承 + 条件句
+                "open" #Transform @[0, 1, 1, 0] // 蕴含→合取→继承→外延像
+                "key" #CompoundStatement @[1, 1], // 蕴含→继承
+            ]
+            "<(&&,<robin --> [chirping]>,<robin --> [flying]>) ==> <robin --> bird>>" => links![
+                // 大的纯常量词项 会进行「分层」操作
+                "(&&, <robin --> [chirping]>, <robin --> [flying]>)" #CompoundStatement @[0],
+                    // 蕴含→合取 ⇒ 自动变成「复合条件」
+                    "<robin --> [chirping]>"                         #CompoundCondition @[0, 0],
+                        "robin"                                      #CompoundCondition @[0, 0, 0],
+                        "[chirping]"                                 #CompoundCondition @[0, 0, 1],
+                            // ! ❌下一层不再细分`chirping`
+                    "<robin --> [flying]>"                           #CompoundCondition @[0, 1],
+                        "robin"                                      #CompoundCondition @[0, 1, 0],
+                        "[flying]"                                   #CompoundCondition @[0, 1, 1],
+                // 其它默认「复合陈述」
+                "<robin --> bird>"                                   #CompoundStatement @[1],
+                    "robin"                                          #CompoundStatement @[1, 0],
+                    "bird"                                           #CompoundStatement @[1, 1]
+            ]
+        }
+        ok!()
+    }
+
+    // TODO: 更多单测
+    // * link_concept_to_task
+    // * build_task_links
+    // * build_term_links
+    // * build_term_links_sub
+    // * insert_task_link_outer
+    // * link_task_link_from_template
+    // * insert_task_link_inner
+}

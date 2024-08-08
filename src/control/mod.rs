@@ -4,8 +4,6 @@
 //!   * 📌工作周期
 //!   * 📌推理过程：直接推理/概念推理
 //! * ⚠️此处代码与[原版OpenNARS 1.5.8](https://github.com/patham9/opennars_declarative_core)已有很大不同，不建议完全参考其源码
-//!
-//! TODO: 【2024-05-22 02:11:59】🚧按照改版重写此模块
 
 // 超参数
 mod parameters;
