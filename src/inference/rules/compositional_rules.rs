@@ -70,9 +70,9 @@ pub fn compose_as_set(
             let [make_term_and, make_term_or]: [MakeTermFrom2; 2] =
                 shared_term_i.select([Term::make_intersection_ext, Term::make_intersection_int]);
             // * 🚩「与」：主⇒外延，谓⇒内涵
-            term_and = make_term_or(component_t(), component_b());
+            term_and = make_term_and(component_t(), component_b());
             // * 🚩「或」：主⇒内涵，谓⇒外延
-            term_or = make_term_and(component_t(), component_b());
+            term_or = make_term_or(component_t(), component_b());
             // * 🚩「差」的类型：主⇒外延差，谓⇒内涵差
             let make_term_dif: MakeTermFrom2 =
                 shared_term_i.select_one([Term::make_difference_ext, Term::make_difference_int]);
@@ -117,8 +117,8 @@ pub fn compose_as_set(
     // 下面开始统一构造结论
     let component_common = || component_common.clone();
     let mut term_truths = [
-        (term_or, truth_or),
         (term_and, truth_and),
+        (term_or, truth_or),
         (term_dif, truth_dif),
     ]
     .into_iter();
