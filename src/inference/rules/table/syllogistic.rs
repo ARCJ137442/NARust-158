@@ -482,6 +482,87 @@ pub fn detachment_with_var(
     }
 }
 
+/// 分派：条件演绎/归纳 & 变量
+/// * 📄条件演绎换条件、条件归纳
+pub fn conditional_deduction_induction_with_var(
+    conditional_from: PremiseSource,
+    mut conditional: Statement,
+    index: usize,
+    mut statement: Statement,
+    side: SyllogismPosition,
+    belief: impl Judgement,
+    context: &mut ReasonContextConcept,
+) {
+    let [rng_seed1, rng_seed2] = context.shuffle_rng_seeds();
+    // * 🚩提取条件
+    let [condition, _] = conditional.sub_pre();
+    let condition = condition.as_compound().unwrap();
+    let component = condition.component_at(index).unwrap();
+    // * 🚩决定要尝试消去的第二个元素，以及发生条件演绎、归纳的位置
+    // * 📄一例：
+    // * conditional="<(&&,<$1 --> [aggressive]>,<sunglasses --> (/,own,$1,_)>) ==>
+    // <$1 --> murder>>"
+    // * condition="(&&,<$1 --> [aggressive]>,<sunglasses --> (/,own,$1,_)>)"
+    // * component="<$1 --> [aggressive]>"
+    // * index = 0
+    // * statement="<sunglasses --> glasses>"
+    // * side = 0
+    let component2: &Term;
+    let new_side;
+    if statement.instanceof_inheritance() {
+        // * 🚩继承⇒直接作为条件之一
+        component2 = &statement;
+        new_side = side;
+    } else if statement.instanceof_implication() {
+        // * 🚩蕴含⇒取其中一处元素（主项/谓项）
+        // * 📄【2024-06-10 18:10:39】一例：
+        // * statement="<<sunglasses --> (/,own,$1,_)> ==> <$1 --> [aggressive]>>"
+        // * component2="<sunglasses --> (/,own,$1,_)>"
+        // * component="<sunglasses --> (/,own,$1,_)>"
+        // * side=0
+        // * newSide=0
+        component2 = side.select_one(statement.sub_pre());
+        new_side = side;
+    } else {
+        // * 📄【2024-06-10 18:13:13】一例：
+        // * currentConcept="sunglasses"
+        // * condition="(&&,<sunglasses --> (/,own,$1,_)>,(||,<$1 --> [aggressive]>,
+        // <$1 --> (/,livingIn,_,{graz})>))"
+        // * statement="<sunglasses <-> (&,glasses,[black])>"
+        return;
+    }
+    // * 🚩先尝试替换独立变量
+    let unification_i = variable_process::unify_find_i(component, component2, rng_seed1);
+    let unification;
+    // * 🚩有替换⇒直接决定映射
+    if unification_i.has_unification {
+        unification = unification_i;
+    } else {
+        // * 🚩若替换失败，则尝试替换非独变量
+        // * 📝惰性求值：第一次替换成功，就无需再次替换
+        let unification_d = variable_process::unify_find_d(component, component2, rng_seed2);
+        if unification_d.has_unification {
+            unification = unification_d;
+        } else {
+            // 两个都没有⇒结束
+            return;
+        }
+    }
+    // * 🚩成功⇒替换
+    // ! 📝【2024-07-09 18:38:09】⚠️概念推理中会发生「词项内容被修改」的情形，但整体看似乎又没有
+    unification.apply_to_term(&mut conditional, &mut statement);
+    // * 🚩条件 演绎/归纳
+    syllogistic_rules::conditional_deduction_induction(
+        conditional,
+        index,
+        statement.into(),
+        &belief, // ! 此处不能用「当前信念」的内容，只用其真值（可能因变量归一化而过时）
+        conditional_from,
+        new_side.into(),
+        context,
+    )
+}
+
 /// ```nal
 /// {<S ==> M>, <M ==> P>} |- {<S ==> P>, <P ==> S>}
 /// ```
