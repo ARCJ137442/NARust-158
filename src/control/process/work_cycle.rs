@@ -373,7 +373,7 @@ impl Reasoner {
             format!(
                 "Task#{} \"{}{}\"",
                 task.creation_time(), // ! 这个不保证不重复
-                task.to_display(),
+                task.content(),
                 task.punctuation() // * 🚩【2024-08-09 00:28:05】目前从简：不显示真值、预算值（后两者可从`tasks`中查询）
             )
         }
