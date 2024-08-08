@@ -1322,5 +1322,14 @@ mod tests {
             "
             => OUT "<M --> S>" in outputs
         }
+
+        eliminate_var_dep_nal_616: {
+            "
+            nse $0.80;0.80;0.95$ (&&,<#x --> (/,open,#y,_)>,<#x --> lock>,<#y --> key>). %1.00;0.90%
+            nse $0.80;0.80;0.95$ <{lock1} --> lock>. %1.00;0.90%
+            cyc 10
+            "
+            => OUT "(&&,<#1 --> key>,<{lock1} --> (/,open,#1,_)>)" in outputs
+        }
     }
 }

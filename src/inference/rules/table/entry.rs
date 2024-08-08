@@ -395,13 +395,18 @@ fn compound_and_statement(
         // * 其内元素是「合取」且有「当前信念」
         if compound.instanceof_conjunction() && context.has_current_belief() {
             // * 🚩先尝试消去非独变量 #
-            let unified_d =
-                variable_process::unify_find_d(component, &statement, context.shuffle_rng_seeds())
-                    .apply_to(compound.mut_ref(), statement.mut_ref().into_compound_ref());
+            // ! ⚠️【2024-08-08 15:56:06】此处不能信任「应用归一化后，再从原来的index处得到元素引用」
+            //   * 可能对于「合取」这样的可交换词项，需要重新决定
+            let unification_d =
+                variable_process::unify_find_d(component, &statement, context.shuffle_rng_seeds());
             // 重新获取一次共同组分
-            let component = unwrap_or_return!(?compound.get_ref().component_at(index));
             // * 🚩能消去⇒因变量消元
-            if unified_d {
+            if unification_d.has_unification {
+                // * 🚩两边同时应用归一化
+                let mut component = component.clone();
+                unification_d.apply_to(compound.mut_ref(), statement.mut_ref().into_compound_ref());
+                unification_d.unify_map_1.apply_to_term(&mut component); // * 📌独立应用一次，应该和compound一样
+
                 // * 🚩现场计算「是否相等」，需要在「变量统一」后执行
                 let statement_equals_belief = {
                     // * 🚩复合词项来自任务：`[任务复合, 信念陈述]`；来自信念：`[任务陈述, 信念复合]`
@@ -413,7 +418,7 @@ fn compound_and_statement(
                 };
                 eliminate_var_dep(
                     compound.get_ref(),
-                    component,
+                    &component,
                     match statement_equals_belief {
                         true => PremiseSource::Task,
                         false => PremiseSource::Belief,
@@ -433,15 +438,20 @@ fn compound_and_statement(
             }
             // * 🚩是疑问句，且能消去查询变量⇒解构出元素作为结论
             else {
-                let unified_q = variable_process::unify_find_q(
+                // ! ⚠️【2024-08-08 15:56:06】此处不能信任「应用归一化后，再从原来的index处得到元素引用」
+                let unification_q = variable_process::unify_find_q(
                     component,
                     &statement,
                     context.shuffle_rng_seeds(),
-                )
-                .apply_to(compound.mut_ref(), statement.mut_ref().into_compound_ref());
-                if unified_q {
-                    let component = unwrap_or_return!(?compound.get_ref().component_at(index));
-                    decompose_statement(compound.get_ref(), component, compound_from, context);
+                );
+                if unification_q.has_unification {
+                    // * 🚩两边同时应用归一化
+                    let mut component = component.clone();
+                    unification_q
+                        .apply_to(compound.mut_ref(), statement.mut_ref().into_compound_ref());
+                    unification_q.unify_map_1.apply_to_term(&mut component); // * 📌独立应用一次，应该和compound一样
+                    // 解构陈述
+                    decompose_statement(compound.get_ref(), &component, compound_from, context);
                 }
             }
         }

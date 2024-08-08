@@ -1,6 +1,7 @@
 //! 三段论推理中的「子分派」
 //! * 🎯包括「不直接涉及推理结论」的诸多方法
 
+use super::compositional::compose_compound;
 use crate::{
     control::*,
     entity::*,
@@ -17,8 +18,6 @@ use crate::{
 use syllogistic_figures::*;
 use syllogistic_rules::*;
 use ReasonDirection::*;
-
-use super::compositional::compose_compound;
 
 /// 索引⇒图式
 fn index_to_figure<T, U>(link1: &impl TLink<T>, link2: &impl TLink<U>) -> SyllogismFigure {
