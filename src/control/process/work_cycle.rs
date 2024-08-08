@@ -290,18 +290,29 @@ impl Reasoner {
     fn cmd_inf(&mut self, source: String) {
         match source.to_lowercase().as_str() {
             // * 🚩普通信息查询
-            "memory" => self.report_info(format!("memory: {:?}", self.memory)), // 整个记忆区
-            "reasoner" => self.report_info(format!("reasoner: {self:?}")),      // 整个推理器
-            "tasks" => self.report_info(format!("tasks in reasoner:\n{}", self.report_tasks())), // 推理器中所有任务
+            "memory" => self.report_info(format!("Memory: {:?}", self.memory)), // 整个记忆区
+            "reasoner" => self.report_info(format!("Reasoner: {self:?}")),      // 整个推理器
+            "tasks" => self.report_info(format!("Tasks in reasoner:\n{}", self.report_tasks())), // 推理器中所有任务
+            "concepts" => self.report_info(format!(
+                "Concepts in memory:\n{}",
+                self.memory
+                    .iter_concepts()
+                    .map(|c| format!("- {}", c.term()))
+                    .join_to_new("\n") // 只展示所有词项
+            )), // 推理器中所有概念
 
             // * 🚩更详尽的信息
-            "#memory" => self.report_info(format!("memory:\n{:#?}", self.memory)), // 具有缩进层级
-            "#reasoner" => self.report_info(format!("reasoner:\n{self:#?}")),      // 具有缩进层级
+            "#memory" => self.report_info(format!("Memory:\n{:#?}", self.memory)), // 具有缩进层级
+            "#reasoner" => self.report_info(format!("Reasoner:\n{self:#?}")),      // 具有缩进层级
             "#tasks" => self.report_info(format!(
                 // 任务派生链
-                "tasks in reasoner:\n{}",
+                "Tasks in reasoner:\n{}",
                 self.report_task_derivations()
             )),
+            "#concepts" => self.report_info(format!(
+                "# Concepts in memory\n{}",
+                self.report_concepts(|c| format!("## Concept @ {}", c.to_display_long()))
+            )), // 推理器中所有概念
 
             // * 🚩其它⇒告警
             other => self.report_error(format!("unknown info query: {other:?}")),
@@ -352,6 +363,12 @@ impl Reasoner {
 
         // 输出
         outputs
+    }
+
+    /// 报告推理器内的所有「概念」
+    fn report_concepts(&self, fmt: impl Fn(&Concept) -> String) -> String {
+        // 开始组织格式化
+        self.memory.iter_concepts().map(fmt).join_to_new("\n\n")
     }
 
     /// 报告推理器内的所有「任务」
