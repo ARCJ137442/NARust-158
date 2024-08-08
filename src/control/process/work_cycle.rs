@@ -326,11 +326,9 @@ impl Reasoner {
             format!("Task#{task:p}: {}", task.to_display_long())
         }
         // 开始组织格式化
-        let mut out = String::new();
         self.collect_tasks_map(format_task)
             .into_iter()
-            .join_to(&mut out, "\n");
-        out
+            .join_to_new("\n")
     }
 
     /// 处理指令[`Cmd::HLP`]
