@@ -608,6 +608,20 @@ impl Term {
         if index + 1 == old_placeholder_index {
             return Some([old_image.inner.clone(), component.clone()]);
         }
+        // ! ⚠️【2024-08-08 15:32:34】防御性代码：索引越界⇒驳回
+        /* from：
+        println!("old_image = {old_image}, component = {component}, index = {index}");
+        old_image = /(open _ {}(lock1)), component = $1, index = 2
+            at .\src\language\term_impl\term_making.rs:614
+            at .\src\language\term_impl\term_making.rs:692
+            at .\src\inference\rules\transform_rules.rs:304
+            at .\src\inference\rules\transform_rules.rs:154
+            at .\src\inference\rules\transform_rules.rs:75
+        TODO: 彻查如上bug | 💭思路：可能是在构建「二层转换索引」时出现了问题
+         */
+        if index + 1 >= old_image.components.len() {
+            return None;
+        }
         // * 🚩开始选择性添加词项（关系词项也算在内）
         let mut argument = vec![];
         let outer = old_image.components[index + 1].clone();
