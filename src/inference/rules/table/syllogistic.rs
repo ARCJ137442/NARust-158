@@ -512,7 +512,7 @@ pub fn conditional_deduction_induction_with_var(
     if statement.instanceof_inheritance() {
         // * 🚩继承⇒直接作为条件之一
         component2 = &statement;
-        new_side = side;
+        new_side = SyllogismSide::Whole;
     } else if statement.instanceof_implication() {
         // * 🚩蕴含⇒取其中一处元素（主项/谓项）
         // * 📄【2024-06-10 18:10:39】一例：
@@ -522,7 +522,7 @@ pub fn conditional_deduction_induction_with_var(
         // * side=0
         // * newSide=0
         component2 = side.select_one(statement.sub_pre());
-        new_side = side;
+        new_side = side.into();
     } else {
         // * 📄【2024-06-10 18:13:13】一例：
         // * currentConcept="sunglasses"
@@ -558,7 +558,7 @@ pub fn conditional_deduction_induction_with_var(
         statement.into(),
         &belief, // ! 此处不能用「当前信念」的内容，只用其真值（可能因变量归一化而过时）
         conditional_from,
-        new_side.into(),
+        new_side,
         context,
     )
 }
