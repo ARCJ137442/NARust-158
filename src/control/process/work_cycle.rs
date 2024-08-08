@@ -16,12 +16,12 @@
 
 use crate::{
     control::Reasoner,
-    entity::{Concept, Task},
+    entity::{Concept, Sentence, Task},
     global::ClockTime,
-    inference::Budget,
+    inference::{Budget, Evidential},
     util::{RefCount, ToDisplayAndBrief},
 };
-use nar_dev_utils::{list, JoinTo};
+use nar_dev_utils::{join, list, JoinTo};
 use navm::cmd::Cmd;
 
 impl Reasoner {
@@ -191,6 +191,37 @@ impl Reasoner {
         input_cmds
     }
 
+    /// 模拟改版`Reasoner.inputTask`
+    /// * 🚩【2024-05-07 22:51:11】在此对[`Budget::budget_above_threshold`](crate::inference::Budget::budget_above_threshold)引入[「预算阈值」超参数](crate::control::Parameters::budget_threshold)
+    /// * 🚩【2024-05-17 15:01:06】自「记忆区」迁移而来
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// Input task processing. Invoked by the outside or inside environment.
+    /// Outside: StringParser (input); Inside: Operator (feedback). Input tasks
+    /// with low priority are ignored, and the others are put into task buffer.
+    ///
+    /// @param task The input task
+    fn input_task(&mut self, task: Task) {
+        let budget_threshold = self.parameters.budget_threshold;
+        if task.budget_above_threshold(budget_threshold) {
+            // ? 💭【2024-05-07 22:57:48】实际上只需要输出`IN`即可：日志系统不必照着OpenNARS的来
+            // * 🚩此处两个输出合而为一
+            self.report_in(&task);
+            // * 📝只追加到「新任务」里边，并不进行推理
+            self.derivation_datas.add_new_task(task);
+        } else {
+            // 此时还是输出一个「被忽略」好
+            self.report_comment(format!("!!! Neglected: {}", task.to_display_long()));
+        }
+    }
+
+    // ! 🚩【2024-06-28 00:09:12】方法「吸收推理上下文」不再需要被「推理器」实现
+    // * 📌原因：现在「推理上下文」内置「推理器」的引用
+}
+
+/// 输入指令
+impl Reasoner {
     /// 模拟`ReasonerBatch.textInputLine`
     /// * 🚩🆕【2024-05-13 02:27:07】从「字符串输入」变为「NAVM指令输入」
     /// * 🚩【2024-06-29 01:42:46】现在不直接暴露「输入NAVM指令」：全权交给「通道」机制
@@ -259,15 +290,19 @@ impl Reasoner {
     fn cmd_inf(&mut self, source: String) {
         match source.to_lowercase().as_str() {
             // * 🚩普通信息查询
-            "memory" => self.report_info(format!("memory: {:?}", self.memory)),
-            "reasoner" => self.report_info(format!("reasoner: {self:?}")),
-            // ! ⚠️【2024-08-06 14:15:43】目前对「任务列表」仅能列举出在记忆区中的任务，其中有技术问题
-            "tasks" => self.report_info(format!("tasks in reasoner:\n{}", self.report_tasks())),
+            "memory" => self.report_info(format!("memory: {:?}", self.memory)), // 整个记忆区
+            "reasoner" => self.report_info(format!("reasoner: {self:?}")),      // 整个推理器
+            "tasks" => self.report_info(format!("tasks in reasoner:\n{}", self.report_tasks())), // 推理器中所有任务
 
-            // * 🚩具有缩进层级 更详尽的信息
-            "#memory" => self.report_info(format!("memory:\n{:#?}", self.memory)),
-            "#reasoner" => self.report_info(format!("reasoner:\n{self:#?}")),
-            // TODO: 任务派生树，任务池
+            // * 🚩更详尽的信息
+            "#memory" => self.report_info(format!("memory:\n{:#?}", self.memory)), // 具有缩进层级
+            "#reasoner" => self.report_info(format!("reasoner:\n{self:#?}")),      // 具有缩进层级
+            "#tasks" => self.report_info(format!(
+                // 任务派生链
+                "tasks in reasoner:\n{}",
+                self.report_task_derivations()
+            )),
+
             // * 🚩其它⇒告警
             other => self.report_error(format!("unknown info query: {other:?}")),
         }
@@ -321,46 +356,54 @@ impl Reasoner {
 
     /// 报告推理器内的所有「任务」
     fn report_tasks(&self) -> String {
-        /// 组织格式
-        fn format_task(task: &Task) -> String {
-            format!("Task#{task:p}: {}", task.to_display_long())
+        /// 组织一个任务的格式
+        fn fmt_task(task: &Task) -> String {
+            format!("Task#{} {}", task.creation_time(), task.to_display_long())
         }
         // 开始组织格式化
-        self.collect_tasks_map(format_task)
+        self.collect_tasks_map(fmt_task)
             .into_iter()
             .join_to_new("\n")
+    }
+
+    /// 报告推理器内所有「任务」的派生关系
+    fn report_task_derivations(&self) -> String {
+        /// 组织一个任务的格式
+        fn fmt_task(task: &Task) -> String {
+            format!(
+                "Task#{} \"{}{}\"",
+                task.creation_time(), // ! 这个不保证不重复
+                task.to_display(),
+                task.punctuation() // * 🚩【2024-08-09 00:28:05】目前从简：不显示真值、预算值（后两者可从`tasks`中查询）
+            )
+        }
+        /// 组织一条「任务链」的格式
+        fn format_task_chain(root: &Task) -> Option<String> {
+            // 开始组织
+            Some(join! {
+                // 当前任务
+                => fmt_task(root)
+                // 逐个加入其父任务
+                => (join! {
+                    => "\n <- {}".to_string()
+                    => fmt_task(&parent_task.get_())
+                    => (format!(
+                        " + Belief#{} \"{}\"",
+                        belief.creation_time(), // ! 这个不保证不重复
+                        belief.to_display()
+                    )) if let Some(belief) = parent_belief
+                }) for (parent_task, parent_belief) in root.parents()
+            })
+        }
+        // 开始组织格式化
+        self.collect_tasks_map(format_task_chain)
+            .into_iter()
+            .flatten()
+            .join_to_new("\n\n") // 任务之间两行分隔
     }
 
     /// 处理指令[`Cmd::HLP`]
     fn cmd_hlp(&mut self, name: String) {
         self.report_info(format!("help: {name:?}"));
     }
-
-    /// 模拟改版`Reasoner.inputTask`
-    /// * 🚩【2024-05-07 22:51:11】在此对[`Budget::budget_above_threshold`](crate::inference::Budget::budget_above_threshold)引入[「预算阈值」超参数](crate::control::Parameters::budget_threshold)
-    /// * 🚩【2024-05-17 15:01:06】自「记忆区」迁移而来
-    ///
-    /// # 📄OpenNARS
-    ///
-    /// Input task processing. Invoked by the outside or inside environment.
-    /// Outside: StringParser (input); Inside: Operator (feedback). Input tasks
-    /// with low priority are ignored, and the others are put into task buffer.
-    ///
-    /// @param task The input task
-    fn input_task(&mut self, task: Task) {
-        let budget_threshold = self.parameters.budget_threshold;
-        if task.budget_above_threshold(budget_threshold) {
-            // ? 💭【2024-05-07 22:57:48】实际上只需要输出`IN`即可：日志系统不必照着OpenNARS的来
-            // * 🚩此处两个输出合而为一
-            self.report_in(&task);
-            // * 📝只追加到「新任务」里边，并不进行推理
-            self.derivation_datas.add_new_task(task);
-        } else {
-            // 此时还是输出一个「被忽略」好
-            self.report_comment(format!("!!! Neglected: {}", task.to_display_long()));
-        }
-    }
-
-    // ! 🚩【2024-06-28 00:09:12】方法「吸收推理上下文」不再需要被「推理器」实现
-    // * 📌原因：现在「推理上下文」内置「推理器」的引用
 }

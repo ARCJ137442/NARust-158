@@ -92,18 +92,22 @@ impl Task {
 
 // 访问类 方法
 impl Task {
+    /// 获取其「父任务」
     pub fn parent_task(&self) -> OrcRef<Self> {
         self.parent_task.as_ref()
     }
 
+    /// 获取其「父信念」
     pub fn parent_belief(&self) -> Option<&JudgementV1> {
         self.parent_belief.as_ref()
     }
 
+    /// 获取其「最优解」
     pub fn best_solution(&self) -> Option<&JudgementV1> {
         self.best_solution.as_ref()
     }
 
+    /// 设置其「最优解」
     pub fn set_best_solution(&mut self, new_solution: JudgementV1) -> &mut JudgementV1 {
         // * 🚩调试时断言
         debug_assert!(
@@ -117,6 +121,47 @@ impl Task {
     /// * 🚩其「父任务」是否为空
     pub fn is_input(&self) -> bool {
         self.parent_task.is_none()
+    }
+
+    /// 🆕判断「是否有父任务」
+    /// * 🎯语义相比「是否来自输入」更明确
+    ///   * 后者可能会在未来被更改
+    pub fn has_parent(&self) -> bool {
+        self.parent_task.is_some()
+    }
+
+    /// 🆕获取其由[`Self::parent_task`]得来的一系列「父任务+父信念」
+    /// * 📌派生关系是下标从小到大「子→父」
+    /// * ✨后续若只用到「父任务」的话，可以用「元组提取」方便地构造新函数
+    ///   * 💭【2024-08-09 00:11:15】只希望这时编译器能知道「优化掉父信念的复制」
+    /// * 📝派生关系是「有父任务才可能有父信念，有父信念一定有父任务（单前提）」
+    pub fn parents(&self) -> impl Iterator<Item = (RCTask, Option<JudgementV1>)> {
+        let option_iter = if let Some(parent) = self.parent_task() {
+            let mut current = Some((parent.clone(), self.parent_belief().cloned()));
+            let iter = std::iter::from_fn(move || {
+                // 先拿到完整的结果，将缓存的量置空
+                let returns = current.take();
+                // 然后准备「下一个要迭代出的对象」：尝试从结果中拿到引用
+                // * 🚩若当前结果（亦即缓存的「当前量」）都没引用，则直接返回
+                let (current_rc, _) = returns.as_ref()?;
+                let current_ref = current_rc.get_();
+                if let Some(next) = current_ref.parent_task().cloned() {
+                    // 若有下一个引用，获取值、删掉引用并更新之
+                    let parent_belief = current_ref.parent_belief().cloned();
+                    drop(current_ref);
+                    current = Some((next, parent_belief));
+                } else {
+                    // 没有⇒直接抛掉「当前任务」的引用，下一次就退出迭代
+                    drop(current_ref);
+                }
+                // 返回最开始拿到的「当前量」
+                returns
+            });
+            Some(iter)
+        } else {
+            None
+        };
+        option_iter.into_iter().flatten()
     }
 }
 
