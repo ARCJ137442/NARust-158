@@ -341,13 +341,13 @@ mod cmd_hlp {
             }
 
             // * 🚩普通帮助查询
-            "inf" => CMD_INF // 展示有关命令`INF`的帮助
+            "inf" => CMD_INF            // 展示有关命令`INF`的帮助
+            "examples" => EXAMPLES_CMD  // 有关各类指令的输入示例
         }
     }
 
     /// 有关指令 [`INF`](Cmd::INF) 的帮助
-    const CMD_INF: &str = "
-# cmd `INF`
+    const CMD_INF: &str = "# cmd `INF`
 - Format: `INF <qualifier><target>`
 - qualifiers:
   - `#`: Detailed info
@@ -357,6 +357,30 @@ mod cmd_hlp {
   - `tasks`: Tasks in reasoner
   - `concepts`: Concepts in memory
   - `links`: Task-links and term-links in each concepts
+";
+
+    /// 有关「示例输入」的帮助
+    const EXAMPLES_CMD: &str = "# NAVM Cmd examples
+
+## Inputting narseses, tuning the volume, running cycles and querying information
+```navm-cmd
+NSE <A --> B>.
+NSE <A --> C>.
+VOL 99
+CYC 10
+INF tasks
+```
+
+## Comments
+```navm-cmd
+REM This is a comment, it will be ignored
+REM For multi-line comments, use `REM` to start each line
+```
+
+## Getting help
+```navm-cmd
+HLP
+```
 ";
 }
 /// 专用于指令[`Cmd::INF`]的处理函数
@@ -377,7 +401,7 @@ mod cmd_inf {
                     // * 🚩特殊/空字串：列举所有query并转接`HLP INF`
                     // ! ⚠️【2024-08-09 17:48:15】不能放外边：会被列入非空查询列表中
                     "" => Ok(format!(
-                        "Available info queries: {ALL_QUERIES_LIST}\n\nAnd more info:{}",
+                        "Available info queries: {ALL_QUERIES_LIST}\n\nAnd more info:\n{}",
                         cmd_hlp::hlp_dispatch(reasoner, "inf")?
                     )),
                     // 所有固定模式的分派
