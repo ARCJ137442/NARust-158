@@ -420,12 +420,12 @@ mod cmd_inf {
             "links" => reasoner.report_links()                               // 推理器中所有链接
 
             // * 🚩更详尽的信息
-            "#memory" => format!("Memory:\n{:#?}", reasoner.memory)            // 具有缩进层级
-            "#reasoner" => format!("Reasoner:\n{reasoner:#?}")                 // 具有缩进层级
+            "#memory" => format!("Memory:\n{:#?}", reasoner.memory)             // 具有缩进层级
+            "#reasoner" => format!("Reasoner:\n{reasoner:#?}")                  // 具有缩进层级
             "#parameters" => format!("Parameters:\n{:#?}", reasoner.parameters) // 具有缩进层级
-            "#tasks" => reasoner.report_task_detailed()                        // 推理器中的任务派生链
-            "#concepts" => reasoner.report_concepts_detailed()                 // 推理器中所有概念，含任务链、词项链
-            "#links" => reasoner.report_links_detailed()                       // 推理器中所有链接，含预算值
+            "#tasks" => reasoner.report_task_detailed()                         // 推理器中的任务派生链
+            "#concepts" => reasoner.report_concepts_detailed()                  // 推理器中所有概念，含任务链、词项链
+            "#links" => reasoner.report_links_detailed()                        // 推理器中所有链接，含预算值
         }
     }
 
