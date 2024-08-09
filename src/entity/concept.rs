@@ -247,19 +247,29 @@ impl Concept {
     /// * 📄目前参考的点儿
     ///   * 任务链袋
     ///   * 问题缓冲区
-    pub fn iter_tasks(&self) -> impl Iterator<Item = &RCTask> {
-        let iter_task_links = self.task_links.iter().map(|link| link.target_rc_ref());
-        let iter_questions = self.questions.iter();
+    pub(crate) fn iter_tasks(&self) -> impl Iterator<Item = &RCTask> {
+        let iter_task_links = self.iter_task_links().map(TaskLink::target_rc_ref);
+        let iter_questions = self.iter_questions();
         iter_task_links.chain(iter_questions)
     }
 
+    /// 🆕迭代内部所有的信念
+    pub(crate) fn iter_beliefs(&self) -> impl Iterator<Item = &JudgementV1> {
+        self.beliefs.iter()
+    }
+
+    /// 🆕迭代内部所有的问题（任务）
+    pub(crate) fn iter_questions(&self) -> impl Iterator<Item = &RCTask> {
+        self.questions.iter()
+    }
+
     /// 🆕迭代内部所有的词项链
-    pub fn iter_term_links(&self) -> impl Iterator<Item = &TermLink> {
+    pub(crate) fn iter_term_links(&self) -> impl Iterator<Item = &TermLink> {
         self.term_links.iter()
     }
 
     /// 🆕迭代内部所有的任务链
-    pub fn iter_task_links(&self) -> impl Iterator<Item = &TaskLink> {
+    pub(crate) fn iter_task_links(&self) -> impl Iterator<Item = &TaskLink> {
         self.task_links.iter()
     }
 }

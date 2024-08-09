@@ -386,6 +386,7 @@ HLP
 /// 专用于指令[`Cmd::INF`]的处理函数
 mod cmd_inf {
     use super::*;
+    use crate::{entity::ShortFloat, global::Float, inference::Truth};
     use nar_dev_utils::macro_once;
 
     /// 指令[`Cmd::INF`]的入口函数
@@ -418,6 +419,7 @@ mod cmd_inf {
             "tasks" => reasoner.report_tasks()                               // 推理器中所有任务
             "concepts" => reasoner.report_concepts()                         // 推理器中所有概念
             "links" => reasoner.report_links()                               // 推理器中所有链接
+            "summary" => reasoner.report_summary()                               // 推理器中所有链接
 
             // * 🚩更详尽的信息
             "#memory" => format!("Memory:\n{:#?}", reasoner.memory)             // 具有缩进层级
@@ -477,7 +479,7 @@ mod cmd_inf {
         }
 
         /// 报告推理器内的所有「任务」
-        pub(super) fn report_tasks(&self) -> String {
+        fn report_tasks(&self) -> String {
             format!(
                 "Tasks in reasoner:\n{}", // 开始组织格式化
                 self.collect_tasks_map(fmt_task)
@@ -487,7 +489,7 @@ mod cmd_inf {
         }
 
         /// 详尽报告推理器内所有「任务」（的派生关系）
-        pub(super) fn report_task_detailed(&self) -> String {
+        fn report_task_detailed(&self) -> String {
             format!(
                 // 任务派生链
                 "Tasks in reasoner:\n{}",
@@ -506,7 +508,7 @@ mod cmd_inf {
         }
 
         /// 报告推理器内的所有「概念」
-        pub(super) fn report_concepts(&self) -> String {
+        fn report_concepts(&self) -> String {
             format!(
                 "Concepts in memory:\n{}",
                 self.memory
@@ -517,7 +519,7 @@ mod cmd_inf {
         }
 
         /// 详尽报告推理器内的所有「概念」
-        pub(super) fn report_concepts_detailed(&self) -> String {
+        fn report_concepts_detailed(&self) -> String {
             format!(
                 "# Concepts in memory\n{}",
                 self.format_concepts(|c| format!("## Concept @ {}", c.to_display_long()))
@@ -525,7 +527,7 @@ mod cmd_inf {
         }
 
         /// 报告内部所有链接（仅词项）
-        pub(super) fn report_links(&self) -> String {
+        fn report_links(&self) -> String {
             format!(
                 "Links in memory:\n{}",
                 self.memory
@@ -536,7 +538,7 @@ mod cmd_inf {
         }
 
         /// 详尽报告内部所有链接
-        pub(super) fn report_links_detailed(&self) -> String {
+        fn report_links_detailed(&self) -> String {
             format!(
                 "Links in memory:\n{}",
                 self.memory
@@ -544,6 +546,73 @@ mod cmd_inf {
                     .map(format_concept_links_detailed)
                     .join_to_new("\n") // 只展示所有词项
             )
+        }
+
+        /// 报告自身状况概要
+        /// * 💡【2024-08-09 18:12:57】灵感源自ONA
+        ///   * 📝复现方式：`NAR.exe shell`后 Ctrl+D 触发EOF
+        /// * 📌格式：Markdown
+        fn report_summary(&self) -> String {
+            // 预先计算可重用的统计数据
+            let iter_concepts = || self.memory.iter_concepts();
+            let n_concepts = iter_concepts().count();
+            let n_tasks = self.collect_tasks_map(|_| ()).len(); // * 📌使用ZST闭包统计（不重复的）任务数量
+            let iter_beliefs = || iter_concepts().flat_map(Concept::iter_beliefs);
+            let total_beliefs = iter_beliefs().count();
+            let iter_questions = || iter_concepts().flat_map(Concept::iter_questions);
+            let total_questions = iter_questions().count();
+            let total_questions_solved = iter_questions()
+                .filter(|q| q.get_().has_best_solution())
+                .count();
+            let total_task_links = iter_concepts().flat_map(Concept::iter_task_links).count();
+            let total_term_links = iter_concepts().flat_map(Concept::iter_term_links).count();
+            let task_parent_sizes = self.collect_tasks_map(|task| task.parents().count());
+            macro_once! {
+                // * 🚩组织格式：`【名称】 => 【值】`
+                macro ( $( $name:literal => $value:expr)* ) => {
+                    format!(
+                        concat!(
+                            "# Statistics",
+                            // * 📌所有名称，格式：`- $name: $value`
+                            $("\n- ", $name, ":\t{}"),*
+                        ),
+                        $($value),*
+                    )
+                }
+                // * 🚩当前状态
+                "current time" => self.time()
+                "current stamp serial" => self.stamp_current_serial
+                "current volume" => self.volume
+                "current count of new tasks" => self.derivation_datas.new_tasks.len()
+                "current count of novel tasks" => self.derivation_datas.novel_tasks.size()
+
+                // * 🚩总数有关的信息
+                "total in-channels" => self.io_channels.input_channels.len()
+                "total out-channels" => self.io_channels.output_channels.len()
+                "total concepts" => n_concepts
+                "total tasks" => n_tasks
+                "total beliefs" => total_beliefs
+                "total questions" => total_questions
+                "total task-links" => total_task_links
+                "total term-links" => total_term_links
+                "total questions solved" => total_questions_solved
+
+                // * 🚩均值/比值 有关的信息
+                "average concept priority" => ShortFloat::arithmetical_average(self.memory.iter_concepts().map(Budget::priority))
+                "average concept quality" => ShortFloat::arithmetical_average(self.memory.iter_concepts().map(Budget::quality))
+                "average tasks by concept" => n_tasks as Float / n_concepts as Float
+                "average beliefs by concept" => total_beliefs as Float / n_concepts as Float
+                "average questions by concept" => total_questions as Float / n_concepts as Float
+                "average task-links by concept" => total_task_links as Float / n_concepts as Float
+                "average term-links by concept" => total_term_links as Float / n_concepts as Float
+                "average parent counts by task" => task_parent_sizes.iter().sum::<usize>() as Float / n_tasks as Float
+                "average confidence by belief" => ShortFloat::arithmetical_average(iter_beliefs().map(Truth::confidence))
+                "percentage of problems solved" => total_questions_solved as Float / total_questions as Float
+
+                // * 🚩极值有关的信息
+                "maximum task parent count" => task_parent_sizes.iter().max().unwrap_or(&0)
+                "minimum task parent count" => task_parent_sizes.iter().min().unwrap_or(&0)
+            }
         }
     }
 

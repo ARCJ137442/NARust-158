@@ -130,6 +130,11 @@ impl Task {
         self.parent_task.is_some()
     }
 
+    /// 🆕判断「是否有最优解」
+    pub fn has_best_solution(&self) -> bool {
+        self.best_solution.is_some()
+    }
+
     /// 🆕获取其由[`Self::parent_task`]得来的一系列「父任务+父信念」
     /// * 📌派生关系是下标从小到大「子→父」
     /// * ✨后续若只用到「父任务」的话，可以用「元组提取」方便地构造新函数
