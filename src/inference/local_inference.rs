@@ -97,7 +97,8 @@ fn process_judgement(context: &mut ReasonContextDirect) {
         let overflowed_belief = this.add_belief(judgment);
         // * 🚩报告溢出
         if let Some(overflowed_belief) = overflowed_belief {
-            let message = format!( // ! 提取成单独的变量，避免对`this`的借用问题
+            let message = format!(
+                // ! 提取成单独的变量，避免对`this`的借用问题
                 "!!! Overflowed Belief in '{}': {}",
                 this.term(),
                 overflowed_belief.to_display_long()
@@ -162,7 +163,7 @@ fn process_question(context: &mut ReasonContextDirect) {
     // * 🚩🆕未能新增⇒跳过问题
     else {
         context.report_comment(format!(
-            "!!! Skipped Question Task: {}",
+            "!!! Skipped Non-new Question Task: {}",
             question_task.get_().to_display_long()
         ));
     }

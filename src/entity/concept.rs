@@ -252,6 +252,16 @@ impl Concept {
         let iter_questions = self.questions.iter();
         iter_task_links.chain(iter_questions)
     }
+
+    /// 🆕迭代内部所有的词项链
+    pub fn iter_term_links(&self) -> impl Iterator<Item = &TermLink> {
+        self.term_links.iter()
+    }
+
+    /// 🆕迭代内部所有的任务链
+    pub fn iter_task_links(&self) -> impl Iterator<Item = &TaskLink> {
+        self.task_links.iter()
+    }
 }
 
 impl Budget for Concept {

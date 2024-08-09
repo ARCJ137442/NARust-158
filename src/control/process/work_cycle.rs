@@ -16,11 +16,12 @@
 
 use crate::{
     control::Reasoner,
-    entity::{Concept, Sentence, Task},
+    entity::{Concept, Sentence, TLink, Task},
     global::ClockTime,
     inference::{Budget, Evidential},
     util::{RefCount, ToDisplayAndBrief},
 };
+use cmd_hlp::hlp_dispatch;
 use nar_dev_utils::{join, list, JoinTo};
 use navm::cmd::Cmd;
 
@@ -288,139 +289,287 @@ impl Reasoner {
 
     /// 处理指令[`Cmd::INF`]
     fn cmd_inf(&mut self, source: String) {
-        match source.to_lowercase().as_str() {
+        // 查询
+        let query = source.to_lowercase();
+        // 消息分派 | 📌只在此处涉及「报告输出」
+        match inf_dispatch(self, query) {
+            // 正常信息⇒报告info
+            Ok(message) => self.report_info(message),
+            // 错误信息⇒报告error
+            Err(message) => self.report_error(message),
+        }
+    }
+
+    /// 处理指令[`Cmd::HLP`]
+    fn cmd_hlp(&mut self, name: String) {
+        // 查询
+        let query = name.to_lowercase();
+        // 消息分派 | 📌只在此处涉及「报告输出」
+        match hlp_dispatch(self, query) {
+            // 正常信息⇒报告info
+            Ok(message) => self.report_info(message),
+            // 错误信息⇒报告error
+            Err(message) => self.report_error(message),
+        }
+    }
+}
+
+/// 专用于指令[`Cmd::HLP`]的处理函数
+mod cmd_hlp {
+    use super::*;
+    use nar_dev_utils::macro_once;
+
+    /// 处理指令[`Cmd::HLP`]
+    pub fn hlp_dispatch(
+        _reasoner: &mut Reasoner,
+        query: impl AsRef<str>,
+    ) -> Result<String, String> {
+        let message = macro_once! {
+            macro ( $( $parameter_name:literal => $message:expr )* ) => {
+                const ALL_HELP_QUERIES: &[&str] = &[
+                    $( $parameter_name ),*
+                ];
+                match query.as_ref() {
+                    /// 特殊/空字串：列举已有的所有参数
+                    "" => format!("Available help queries: {ALL_HELP_QUERIES:?}"),
+                    // 所有已有的帮助命令
+                    $( $parameter_name => $message.to_string(), )*
+                    // 未知的查询关键词
+                    other => return Err(format!("Unknown help query: {other:?}\nAvailable help queries: {ALL_HELP_QUERIES:?}")),
+                }
+            }
+            "inf" => CMD_INF // 展示有关命令`INF`的帮助
+        };
+        Ok(message)
+    }
+
+    const CMD_INF: &str = "
+# cmd `INF`
+- Format: `INF <qualifier><target>`
+- qualifiers:
+  - `#`: Detailed info
+- targets:
+  - `memory`: Memory
+  - `reasoner`: Reasoner
+  - `tasks`: Tasks in reasoner
+  - `concepts`: Concepts in memory
+  - `links`: Task-links and term-links in each concepts
+";
+}
+/// 专用于指令[`Cmd::INF`]的处理函数
+mod cmd_inf {
+    use super::*;
+
+    /// 指令[`Cmd::INF`]的入口函数
+    /// * 📌传入的`query`默认为小写字串引用
+    /// * 📌输出仅为一个消息字符串；若返回[错误值](Err)，则视为「报错」
+    pub fn inf_dispatch(reasoner: &mut Reasoner, query: impl AsRef<str>) -> Result<String, String> {
+        let message = match query.as_ref() {
             // * 🚩普通信息查询
-            "memory" => self.report_info(format!("Memory: {:?}", self.memory)), // 整个记忆区
-            "reasoner" => self.report_info(format!("Reasoner: {self:?}")),      // 整个推理器
-            "tasks" => self.report_info(format!("Tasks in reasoner:\n{}", self.report_tasks())), // 推理器中所有任务
-            "concepts" => self.report_info(format!(
+            "memory" => format!("Memory: {:?}", reasoner.memory), // 整个记忆区
+            "reasoner" => format!("Reasoner: {reasoner:?}"),      // 整个推理器
+            "tasks" => reasoner.report_tasks(),                   // 推理器中所有任务
+            "concepts" => reasoner.report_concepts(),             // 推理器中所有概念
+            "links" => reasoner.report_links(),                   // 推理器中所有链接
+
+            // * 🚩更详尽的信息
+            "#memory" => format!("Memory:\n{:#?}", reasoner.memory), // 具有缩进层级
+            "#reasoner" => format!("Reasoner:\n{reasoner:#?}"),      // 具有缩进层级
+            "#tasks" => reasoner.report_task_detailed(),             // 推理器中的任务派生链
+            "#concepts" => reasoner.report_concepts_detailed(),      // 推理器中所有概念
+            "#links" => reasoner.report_links_detailed(),            // 推理器中所有链接
+
+            // * 🚩其它⇒告警
+            other => return Err(format!("Unknown info query: {other:?}")),
+        };
+        Ok(message)
+    }
+
+    impl Reasoner {
+        /// 收集推理器内所有的「任务」
+        /// * 🎯包括如下地方
+        ///   * 新任务列表
+        ///   * 新近任务袋
+        ///   * 任务链目标
+        ///   * 问题表
+        /// * 📌所有收集到的「任务」不会重复
+        ///   * 📝对于[`Rc`]，Rust中使用[`Rc::ptr_eq`]判等
+        ///   * 💡亦可【直接从引用取指针】判等
+        fn collect_tasks_map<T>(&self, map: impl Fn(&Task) -> T) -> Vec<T> {
+            let mut outputs = vec![];
+            // 获取所有引用地址：通过地址判断是否引用到了同一任务
+            let mut target_locations = vec![];
+            /// 判断引用是否唯一
+            fn ref_unique(task_refs: &[*const Task], task_location: *const Task) -> bool {
+                !task_refs
+                    .iter()
+                    .any(|ptr_location: &*const Task| *ptr_location == task_location)
+            }
+            let mut deal_ref = |task_ref: &Task| {
+                // 取地址
+                let task_location = task_ref as *const Task;
+                // 不能有任何一个引用重复
+                if ref_unique(&target_locations, task_location) {
+                    // 加入被记录在案的地址
+                    target_locations.push(task_location);
+                    // 添加到输出
+                    outputs.push(map(task_ref));
+                }
+            };
+
+            // 记忆区的「所有任务」
+            self.memory
+                .iter_concepts()
+                .flat_map(Concept::iter_tasks)
+                .for_each(|task_cell| deal_ref(&task_cell.get_())); // 取引用并添加
+
+            // 新任务列表、新近任务袋中的「所有任务」
+            let new_tasks = self.iter_new_tasks();
+            let novel_tasks = self.iter_novel_tasks();
+            new_tasks.chain(novel_tasks).for_each(deal_ref); // 添加
+
+            // 输出
+            outputs
+        }
+
+        /// 报告推理器内的所有「任务」
+        pub(super) fn report_tasks(&self) -> String {
+            format!(
+                "Tasks in reasoner:\n{}", // 开始组织格式化
+                self.collect_tasks_map(fmt_task)
+                    .into_iter()
+                    .join_to_new("\n")
+            )
+        }
+
+        /// 详尽报告推理器内所有「任务」（的派生关系）
+        pub(super) fn report_task_detailed(&self) -> String {
+            format!(
+                // 任务派生链
+                "Tasks in reasoner:\n{}",
+                // 开始组织格式化
+                self.collect_tasks_map(format_task_chain_detailed)
+                    .into_iter()
+                    .flatten()
+                    .join_to_new("\n\n") // 任务之间两行分隔
+            )
+        }
+
+        /// 按指定函数格式化推理器内的所有「概念」
+        fn format_concepts(&self, fmt: impl Fn(&Concept) -> String) -> String {
+            // 开始组织格式化
+            self.memory.iter_concepts().map(fmt).join_to_new("\n\n")
+        }
+
+        /// 报告推理器内的所有「概念」
+        pub(super) fn report_concepts(&self) -> String {
+            format!(
                 "Concepts in memory:\n{}",
                 self.memory
                     .iter_concepts()
                     .map(|c| format!("- {}", c.term()))
                     .join_to_new("\n") // 只展示所有词项
-            )), // 推理器中所有概念
-
-            // * 🚩更详尽的信息
-            "#memory" => self.report_info(format!("Memory:\n{:#?}", self.memory)), // 具有缩进层级
-            "#reasoner" => self.report_info(format!("Reasoner:\n{self:#?}")),      // 具有缩进层级
-            "#tasks" => self.report_info(format!(
-                // 任务派生链
-                "Tasks in reasoner:\n{}",
-                self.report_task_derivations()
-            )),
-            "#concepts" => self.report_info(format!(
-                "# Concepts in memory\n{}",
-                self.report_concepts(|c| format!("## Concept @ {}", c.to_display_long()))
-            )), // 推理器中所有概念
-
-            // * 🚩其它⇒告警
-            other => self.report_error(format!("unknown info query: {other:?}")),
-        }
-    }
-
-    /// 收集推理器内所有的「任务」
-    /// * 🎯包括如下地方
-    ///   * 新任务列表
-    ///   * 新近任务袋
-    ///   * 任务链目标
-    ///   * 问题表
-    /// * 📌所有收集到的「任务」不会重复
-    ///   * 📝对于[`Rc`]，Rust中使用[`Rc::ptr_eq`]判等
-    ///   * 💡亦可【直接从引用取指针】判等
-    fn collect_tasks_map<T>(&self, map: impl Fn(&Task) -> T) -> Vec<T> {
-        let mut outputs = vec![];
-        // 获取所有引用地址：通过地址判断是否引用到了同一任务
-        let mut target_locations = vec![];
-        /// 判断引用是否唯一
-        fn ref_unique(task_refs: &[*const Task], task_location: *const Task) -> bool {
-            !task_refs
-                .iter()
-                .any(|ptr_location: &*const Task| *ptr_location == task_location)
-        }
-        let mut deal_ref = |task_ref: &Task| {
-            // 取地址
-            let task_location = task_ref as *const Task;
-            // 不能有任何一个引用重复
-            if ref_unique(&target_locations, task_location) {
-                // 加入被记录在案的地址
-                target_locations.push(task_location);
-                // 添加到输出
-                outputs.push(map(task_ref));
-            }
-        };
-
-        // 记忆区的「所有任务」
-        self.memory
-            .iter_concepts()
-            .flat_map(Concept::iter_tasks)
-            .for_each(|task_cell| deal_ref(&task_cell.get_())); // 取引用并添加
-
-        // 新任务列表、新近任务袋中的「所有任务」
-        let new_tasks = self.iter_new_tasks();
-        let novel_tasks = self.iter_novel_tasks();
-        new_tasks.chain(novel_tasks).for_each(deal_ref); // 添加
-
-        // 输出
-        outputs
-    }
-
-    /// 报告推理器内的所有「概念」
-    fn report_concepts(&self, fmt: impl Fn(&Concept) -> String) -> String {
-        // 开始组织格式化
-        self.memory.iter_concepts().map(fmt).join_to_new("\n\n")
-    }
-
-    /// 报告推理器内的所有「任务」
-    fn report_tasks(&self) -> String {
-        /// 组织一个任务的格式
-        fn fmt_task(task: &Task) -> String {
-            format!("Task#{} {}", task.creation_time(), task.to_display_long())
-        }
-        // 开始组织格式化
-        self.collect_tasks_map(fmt_task)
-            .into_iter()
-            .join_to_new("\n")
-    }
-
-    /// 报告推理器内所有「任务」的派生关系
-    fn report_task_derivations(&self) -> String {
-        /// 组织一个任务的格式
-        fn fmt_task(task: &Task) -> String {
-            format!(
-                "Task#{} \"{}{}\"",
-                task.creation_time(), // ! 这个不保证不重复
-                task.content(),
-                task.punctuation() // * 🚩【2024-08-09 00:28:05】目前从简：不显示真值、预算值（后两者可从`tasks`中查询）
             )
         }
-        /// 组织一条「任务链」的格式
-        fn format_task_chain(root: &Task) -> Option<String> {
-            // 开始组织
-            Some(join! {
-                // 当前任务
-                => fmt_task(root)
-                // 逐个加入其父任务
-                => (join! {
-                    => "\n <- {}".to_string()
-                    => fmt_task(&parent_task.get_())
-                    => (format!(
-                        " + Belief#{} \"{}\"",
-                        belief.creation_time(), // ! 这个不保证不重复
-                        belief.to_display()
-                    )) if let Some(belief) = parent_belief
-                }) for (parent_task, parent_belief) in root.parents()
-            })
+
+        /// 详尽报告推理器内的所有「概念」
+        pub(super) fn report_concepts_detailed(&self) -> String {
+            format!(
+                "# Concepts in memory\n{}",
+                self.format_concepts(|c| format!("## Concept @ {}", c.to_display_long()))
+            )
         }
-        // 开始组织格式化
-        self.collect_tasks_map(format_task_chain)
-            .into_iter()
-            .flatten()
-            .join_to_new("\n\n") // 任务之间两行分隔
+
+        /// 报告内部所有链接（仅词项）
+        pub(super) fn report_links(&self) -> String {
+            format!(
+                "Links in memory:\n{}",
+                self.memory
+                    .iter_concepts()
+                    .map(format_concept_links)
+                    .join_to_new("\n") // 只展示所有词项
+            )
+        }
+
+        /// 详尽报告内部所有链接
+        pub(super) fn report_links_detailed(&self) -> String {
+            format!(
+                "Links in memory:\n{}",
+                self.memory
+                    .iter_concepts()
+                    .map(format_concept_links_detailed)
+                    .join_to_new("\n") // 只展示所有词项
+            )
+        }
     }
 
-    /// 处理指令[`Cmd::HLP`]
-    fn cmd_hlp(&mut self, name: String) {
-        self.report_info(format!("help: {name:?}"));
+    /// 组织一个[任务](Task)的格式
+    fn fmt_task(task: &Task) -> String {
+        format!("Task#{} {}", task.creation_time(), task.to_display_long())
+    }
+
+    /// 简略组织一个[任务](Task)的格式
+    /// * 🎯需求：所有信息均在一行之内
+    fn format_task_brief(task: &Task) -> String {
+        format!(
+            "Task#{} \"{}{}\"",
+            task.creation_time(), // ! 这个不保证不重复
+            task.content(),
+            task.punctuation() // * 🚩【2024-08-09 00:28:05】目前从简：不显示真值、预算值（后两者可从`tasks`中查询）
+        )
+    }
+
+    /// 详尽展示一条「任务派生链」
+    /// * ⚠️可能失败：父任务可能不存在
+    fn format_task_chain_detailed(root: &Task) -> Option<String> {
+        // 开始组织
+        Some(join! {
+            // 当前任务
+            => format_task_brief(root)
+            // 逐个加入其父任务
+            => (join! {
+                => "\n <- {}".to_string()
+                => format_task_brief(&parent_task.get_())
+                => (format!(
+                    " + Belief#{} \"{}\"",
+                    belief.creation_time(), // ! 这个不保证不重复
+                    belief.to_display()
+                )) if let Some(belief) = parent_belief
+            }) for (parent_task, parent_belief) in root.parents()
+        })
+    }
+
+    /// 展示一个「概念」的链接
+    fn format_concept_links(c: &Concept) -> String {
+        format!(
+            "- {}\n{}\n{}",
+            c.term(),
+            c.iter_term_links() // 词项链
+                .map(|l| format!("  -> {}", &*l.target(),))
+                .join_to_new("\n"),
+            c.iter_task_links() // 任务链
+                .map(|l| format!("  ~> {}", l.target().content(),))
+                .join_to_new("\n")
+        )
+    }
+
+    /// 详尽展示一个「概念」的链接
+    fn format_concept_links_detailed(c: &Concept) -> String {
+        format!(
+            "- {}\n{}\n{}",
+            c.term(),
+            c.iter_term_links() // 词项链
+                .map(|l| format!("  -> {} {}", l.budget_to_display(), &*l.target(),))
+                .join_to_new("\n"),
+            c.iter_task_links() // 任务链
+                .map(|l| format!(
+                    "  ~> {} {}{}",
+                    l.budget_to_display(),
+                    l.target().content(),
+                    l.target().punctuation(),
+                ))
+                .join_to_new("\n")
+        )
     }
 }
+use cmd_inf::*;
