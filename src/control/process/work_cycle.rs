@@ -324,23 +324,25 @@ mod cmd_hlp {
         _reasoner: &mut Reasoner,
         query: impl AsRef<str>,
     ) -> Result<String, String> {
-        let message = macro_once! {
+        macro_once! {
             macro ( $( $query:literal => $message:expr )* ) => {
-                const HELP_QUERIES_LIST: &str = concat!(
-                    $( "\n- ", $query, )*
-                );
+                /// 所有非空查询的列表
+                /// * 📌格式：Markdown无序列表
+                const ALL_QUERIES_LIST: &str = concat!($( "\n- ", $query, )*);
                 match query.as_ref() {
-                    /// 特殊/空字串：列举已有的所有参数
-                    "" => format!("Available help queries: {HELP_QUERIES_LIST}"),
-                    // 所有已有的帮助命令
-                    $( $query => $message.to_string(), )*
+                    // 特殊/空字串：列举已有的所有参数
+                    // ! ⚠️【2024-08-09 17:48:15】不能放外边：会被列入非空查询列表中
+                    "" => Ok(format!("Available help queries: {ALL_QUERIES_LIST}")),
+                    // 所有固定模式的分派
+                    $( $query => Ok($message.to_string()), )*
                     // 未知的查询关键词
-                    other => return Err(format!("Unknown help query: {other:?}\nAvailable help queries: {HELP_QUERIES_LIST}")),
+                    other => return Err(format!("Unknown help query: {other:?}\nAvailable help queries: {ALL_QUERIES_LIST}")),
                 }
             }
+
+            // * 🚩普通帮助查询
             "inf" => CMD_INF // 展示有关命令`INF`的帮助
-        };
-        Ok(message)
+        }
     }
 
     /// 有关指令 [`INF`](Cmd::INF) 的帮助
@@ -366,21 +368,22 @@ mod cmd_inf {
     /// * 📌传入的`query`默认为小写字串引用
     /// * 📌输出仅为一个消息字符串；若返回[错误值](Err)，则视为「报错」
     pub fn inf_dispatch(reasoner: &mut Reasoner, query: impl AsRef<str>) -> Result<String, String> {
-        let message = macro_once! {
+        macro_once! {
             macro ( $( $query:literal => $message:expr )* ) => {
-                const INF_QUERIES_LIST: &str = concat!(
-                    $( "\n- ", $query, )*
-                );
+                /// 所有非空查询的列表
+                /// * 📌格式：Markdown无序列表
+                const ALL_QUERIES_LIST: &str = concat!($( "\n- ", $query, )*);
                 match query.as_ref() {
-                    // * 🚩空消息⇒列举所有query并转接`HLP INF`
-                    "" => format!(
-                        "Available help queries: {INF_QUERIES_LIST}\n\nAnd more info:{}",
+                    // * 🚩特殊/空字串：列举所有query并转接`HLP INF`
+                    // ! ⚠️【2024-08-09 17:48:15】不能放外边：会被列入非空查询列表中
+                    "" => Ok(format!(
+                        "Available info queries: {ALL_QUERIES_LIST}\n\nAnd more info:{}",
                         cmd_hlp::hlp_dispatch(reasoner, "inf")?
-                    ),
-                    // 所有已有的帮助命令
-                    $( $query => $message.to_string(), )*
+                    )),
+                    // 所有固定模式的分派
+                    $( $query => Ok($message.to_string()), )*
                     // * 🚩其它⇒告警
-                    other => return Err(format!("Unknown info query: {other:?}")),
+                    other => Err(format!("Unknown info query: {other:?}")),
                 }
             }
 
@@ -397,8 +400,7 @@ mod cmd_inf {
             "#tasks" => reasoner.report_task_detailed()             // 推理器中的任务派生链
             "#concepts" => reasoner.report_concepts_detailed()      // 推理器中所有概念，含任务链、词项链
             "#links" => reasoner.report_links_detailed()            // 推理器中所有链接，含预算值
-        };
-        Ok(message)
+        }
     }
 
     impl Reasoner {
