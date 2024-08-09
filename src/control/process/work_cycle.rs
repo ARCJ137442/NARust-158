@@ -325,17 +325,17 @@ mod cmd_hlp {
         query: impl AsRef<str>,
     ) -> Result<String, String> {
         let message = macro_once! {
-            macro ( $( $parameter_name:literal => $message:expr )* ) => {
-                const ALL_HELP_QUERIES: &[&str] = &[
-                    $( $parameter_name ),*
-                ];
+            macro ( $( $query:literal => $message:expr )* ) => {
+                const HELP_QUERIES_LIST: &str = concat!(
+                    $( "\n- ", $query, )*
+                );
                 match query.as_ref() {
                     /// 特殊/空字串：列举已有的所有参数
-                    "" => format!("Available help queries: {ALL_HELP_QUERIES:?}"),
+                    "" => format!("Available help queries: {HELP_QUERIES_LIST}"),
                     // 所有已有的帮助命令
-                    $( $parameter_name => $message.to_string(), )*
+                    $( $query => $message.to_string(), )*
                     // 未知的查询关键词
-                    other => return Err(format!("Unknown help query: {other:?}\nAvailable help queries: {ALL_HELP_QUERIES:?}")),
+                    other => return Err(format!("Unknown help query: {other:?}\nAvailable help queries: {HELP_QUERIES_LIST}")),
                 }
             }
             "inf" => CMD_INF // 展示有关命令`INF`的帮助
@@ -343,6 +343,7 @@ mod cmd_hlp {
         Ok(message)
     }
 
+    /// 有关指令 [`INF`](Cmd::INF) 的帮助
     const CMD_INF: &str = "
 # cmd `INF`
 - Format: `INF <qualifier><target>`
@@ -359,28 +360,43 @@ mod cmd_hlp {
 /// 专用于指令[`Cmd::INF`]的处理函数
 mod cmd_inf {
     use super::*;
+    use nar_dev_utils::macro_once;
 
     /// 指令[`Cmd::INF`]的入口函数
     /// * 📌传入的`query`默认为小写字串引用
     /// * 📌输出仅为一个消息字符串；若返回[错误值](Err)，则视为「报错」
     pub fn inf_dispatch(reasoner: &mut Reasoner, query: impl AsRef<str>) -> Result<String, String> {
-        let message = match query.as_ref() {
+        let message = macro_once! {
+            macro ( $( $query:literal => $message:expr )* ) => {
+                const INF_QUERIES_LIST: &str = concat!(
+                    $( "\n- ", $query, )*
+                );
+                match query.as_ref() {
+                    // * 🚩空消息⇒列举所有query并转接`HLP INF`
+                    "" => format!(
+                        "Available help queries: {INF_QUERIES_LIST}\n\nAnd more info:{}",
+                        cmd_hlp::hlp_dispatch(reasoner, "inf")?
+                    ),
+                    // 所有已有的帮助命令
+                    $( $query => $message.to_string(), )*
+                    // * 🚩其它⇒告警
+                    other => return Err(format!("Unknown info query: {other:?}")),
+                }
+            }
+
             // * 🚩普通信息查询
-            "memory" => format!("Memory: {:?}", reasoner.memory), // 整个记忆区
-            "reasoner" => format!("Reasoner: {reasoner:?}"),      // 整个推理器
-            "tasks" => reasoner.report_tasks(),                   // 推理器中所有任务
-            "concepts" => reasoner.report_concepts(),             // 推理器中所有概念
-            "links" => reasoner.report_links(),                   // 推理器中所有链接
+            "memory" => format!("Memory: {:?}", reasoner.memory) // 整个记忆区
+            "reasoner" => format!("Reasoner: {reasoner:?}")      // 整个推理器
+            "tasks" => reasoner.report_tasks()                   // 推理器中所有任务
+            "concepts" => reasoner.report_concepts()             // 推理器中所有概念
+            "links" => reasoner.report_links()                   // 推理器中所有链接
 
             // * 🚩更详尽的信息
-            "#memory" => format!("Memory:\n{:#?}", reasoner.memory), // 具有缩进层级
-            "#reasoner" => format!("Reasoner:\n{reasoner:#?}"),      // 具有缩进层级
-            "#tasks" => reasoner.report_task_detailed(),             // 推理器中的任务派生链
-            "#concepts" => reasoner.report_concepts_detailed(),      // 推理器中所有概念
-            "#links" => reasoner.report_links_detailed(),            // 推理器中所有链接
-
-            // * 🚩其它⇒告警
-            other => return Err(format!("Unknown info query: {other:?}")),
+            "#memory" => format!("Memory:\n{:#?}", reasoner.memory) // 具有缩进层级
+            "#reasoner" => format!("Reasoner:\n{reasoner:#?}")      // 具有缩进层级
+            "#tasks" => reasoner.report_task_detailed()             // 推理器中的任务派生链
+            "#concepts" => reasoner.report_concepts_detailed()      // 推理器中所有概念，含任务链、词项链
+            "#links" => reasoner.report_links_detailed()            // 推理器中所有链接，含预算值
         };
         Ok(message)
     }
