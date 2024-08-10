@@ -512,7 +512,7 @@ pub type TruthFDouble = fn(&TruthValue, &TruthValue) -> TruthValue;
 /// 单真值依赖函数（分析性函数）
 pub type TruthFAnalytic = fn(&TruthValue, ShortFloat) -> TruthValue;
 
-/// TODO: 单元测试
+/// TODO: 对每个真值函数的单元测试
 #[cfg(test)]
 mod tests {
     use super::*;

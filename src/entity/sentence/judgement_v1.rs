@@ -128,3 +128,21 @@ __impl_to_display_and_display! {
 }
 
 // TODO: 单元测试
+// * new
+// * evidential_base
+// * creation_time
+// * stamp_to_lexical
+// * sentence_clone
+// * content
+// * content_mut
+// * as_punctuated_ref
+// * to_key
+// * sentence_to_display
+// * sentence_to_lexical
+// * frequency
+// * frequency_mut
+// * confidence
+// * confidence_mut
+// * is_analytic
+// * set_analytic
+// * revisable

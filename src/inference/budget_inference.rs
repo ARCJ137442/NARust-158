@@ -211,4 +211,17 @@ impl<C: ReasonContextWithLinks> BudgetInferenceContext for C {}
 
 /// TODO: 单元测试
 #[cfg(test)]
-mod tests {}
+mod tests {
+    // * merge_from
+    // * revise_direct
+    // * revise_matching
+    // * budget_forward
+    // * budget_backward
+    // * budget_backward_weak
+    // * budget_compound_forward
+    // * budget_compound_backward
+    // * budget_compound_backward_weak
+    // * budget_inference
+    // * concept_activation
+    // * budget_inference_apply
+}
