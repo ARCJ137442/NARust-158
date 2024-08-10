@@ -3,7 +3,6 @@
 //! * ✅【2024-05-11 15:10:00】初步复现方法API
 //! * ♻️【2024-08-05 17:32:20】开始根据改版OpenNARS重写
 
-use super::SyllogismPosition;
 use crate::{
     control::*,
     entity::*,
@@ -14,7 +13,7 @@ use crate::{
 };
 use nar_dev_utils::unwrap_or_return;
 use ReasonDirection::*;
-use SyllogismPosition::*;
+use StatementPosition::*;
 
 /// 📝根据复合词项与索引，确定「是否在构建时交换」
 ///
@@ -59,7 +58,7 @@ pub fn structural_compose_both(
     compound: CompoundTermRef,
     index: usize,
     statement: StatementRef,
-    side: SyllogismPosition,
+    side: StatementPosition,
     context: &mut ReasonContextConcept,
 ) {
     let direction = context.reason_direction();
@@ -461,7 +460,7 @@ fn structural_statement(
 pub fn transform_set_relation(
     compound: CompoundTermRef,
     statement: StatementRef,
-    side: SyllogismPosition,
+    side: StatementPosition,
     context: &mut ReasonContextConcept,
 ) {
     // * 🚩预筛 * //

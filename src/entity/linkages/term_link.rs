@@ -2,7 +2,7 @@
 
 use std::ops::{Deref, DerefMut};
 
-use super::{TLink, TLinkType, TLinkage, TermLinkTemplate};
+use super::{TLink, TLinkTag, TLinkage, TermLinkTemplate};
 use crate::{
     entity::{BudgetValue, Item, ShortFloat, Token},
     inference::Budget,
@@ -36,7 +36,7 @@ impl TermLink {
     fn new(
         target: Term,
         budget: BudgetValue,
-        link_type: TLinkType,
+        link_type: TLinkTag,
         indexes: impl Into<Box<[usize]>>,
     ) -> Self {
         let indexes = indexes.into();
@@ -58,16 +58,12 @@ impl TermLink {
 
     /// 不同于默认方法，但要调用默认方法
     /// * 🎯从「目标」、已生成的「类型」「索引」生成「键」
-    fn generate_key_for_term_link(
-        target: &Term,
-        link_type: TLinkType,
-        indexes: &[usize],
-    ) -> String {
+    fn generate_key_for_term_link(target: &Term, link_type: TLinkTag, indexes: &[usize]) -> String {
         // * 🚩标准T链接子串 + 词项的字符串形式
         Self::generate_key_base(link_type, indexes) + &target.to_string()
     }
 
-    fn generate_type_from_template(target: &Term, template: &TermLinkTemplate) -> TLinkType {
+    fn generate_type_from_template(target: &Term, template: &TermLinkTemplate) -> TLinkTag {
         let template_type = template.link_type();
         // * 🚩断言此时「链接模板」的链接类型：必定是「从元素链接到整体」
         debug_assert!(
@@ -134,7 +130,7 @@ impl TLink<Term> for TermLink {
         self.inner.target_mut()
     }
 
-    fn link_type(&self) -> super::TLinkType {
+    fn link_type(&self) -> super::TLinkTag {
         self.inner.link_type()
     }
 

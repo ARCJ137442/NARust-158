@@ -1,6 +1,6 @@
 use std::ops::{Deref, DerefMut};
 
-use super::{TLink, TLinkType};
+use super::{TLink, TLinkTag};
 
 /// T链接的一个默认实现
 /// * ℹ️目前开放给「词项链」「任务链」访问内部字段
@@ -12,7 +12,7 @@ pub struct TLinkage<Target> {
     pub(super) target: Target,
 
     /// The type of link, one of the above
-    pub(super) link_type: TLinkType,
+    pub(super) link_type: TLinkTag,
 
     /// The index of the component in the component list of the compound,
     /// may have up to 4 levels
@@ -28,7 +28,7 @@ impl<Target> TLinkage<Target> {
     ///   * 方便使用[`TermLinkTemplate::new`]而不受歧义
     pub(crate) fn new_direct(
         target: Target,
-        link_type: TLinkType,
+        link_type: TLinkTag,
         index: impl Into<Box<[usize]>>,
     ) -> Self {
         Self {
@@ -53,7 +53,7 @@ impl<Target> TLink<Target> for TLinkage<Target> {
         &mut self.target
     }
 
-    fn link_type(&self) -> TLinkType {
+    fn link_type(&self) -> TLinkTag {
         self.link_type
     }
 

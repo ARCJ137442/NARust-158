@@ -3,7 +3,7 @@
 
 use crate::{
     control::*,
-    entity::Sentence,
+    entity::{Sentence, StatementPosition},
     inference::rules::{utils::*, *},
     language::*,
     util::RefCount,
@@ -14,7 +14,7 @@ use crate::{
 pub fn compose_compound(
     task_content: StatementRef,
     belief_content: StatementRef,
-    shared_term_i: SyllogismPosition,
+    shared_term_i: StatementPosition,
     context: &mut ReasonContextConcept,
 ) {
     // * 🚩前提：任务是判断句、任务与信念类型相同

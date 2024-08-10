@@ -14,7 +14,7 @@
 // *   ~> "D"        i=[1]   # 4=COMPOUND_STATEMENT " @(T3-2)_ D"
 // *   ~T> null      i=null  # 0=SELF               " _@(T0) <(&&,A,B) ==> D>. %1.00;0.90%"
 
-use super::{TLinkType, TLinkage};
+use super::{TLinkTag, TLinkage};
 use crate::language::Term;
 
 /// 「词项链模板」就是【目标为词项】的「T链接实现」
@@ -32,7 +32,7 @@ impl TermLinkTemplate {
     /// # Panics
     ///
     /// ! 需要在传入前检查「链接类型」是否为「到复合词项」或者「转换」
-    pub fn new_template(target: Term, link_type: TLinkType, index: impl Into<Vec<usize>>) -> Self {
+    pub fn new_template(target: Term, link_type: TLinkTag, index: impl Into<Vec<usize>>) -> Self {
         Self::new_direct(
             target,
             link_type,
@@ -41,17 +41,17 @@ impl TermLinkTemplate {
     }
 
     fn generate_template_indexes(
-        link_type: TLinkType,
+        link_type: TLinkTag,
         indexes: impl Into<Vec<usize>>,
     ) -> Box<[usize]> {
         // * 🚩假定此处是「COMPOUND」系列或「TRANSFORM」类型——链接到复合词项
         debug_assert!(
-            link_type.is_to_compound() || link_type == TLinkType::Transform,
+            link_type.is_to_compound() || matches!(link_type, TLinkTag::Transform(..)),
             "链接类型 {link_type:?} 并非链接到复合词项"
         );
         let mut index = indexes.into();
         // * 🚩原数组为「复合条件」⇒头部添加`0`
-        if link_type == TLinkType::CompoundCondition {
+        if let TLinkTag::CompoundCondition(..) = link_type {
             index.insert(0, 0);
         }
         // * 🚩默认：复制原数组

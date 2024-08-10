@@ -21,8 +21,8 @@ use ReasonDirection::*;
 
 /// 索引⇒图式
 fn index_to_figure<T, U>(link1: &impl TLink<T>, link2: &impl TLink<U>) -> SyllogismFigure {
-    let side1 = SyllogismPosition::from_index(*link1.get_index(0).unwrap());
-    let side2 = SyllogismPosition::from_index(*link2.get_index(0).unwrap());
+    let side1 = StatementPosition::from_index(*link1.get_index(0).unwrap());
+    let side2 = StatementPosition::from_index(*link2.get_index(0).unwrap());
     side1.build_figure(side2)
 }
 
@@ -77,7 +77,7 @@ pub fn syllogisms(
                 task_sentence, // ! 📌【2024-08-01 18:26:04】需要传递所有权：直接统一语句中的变量
                 belief,        // ! 📌【2024-08-01 18:26:04】需要传递所有权：直接统一语句中的变量
                 PremiseSource::Belief,
-                SyllogismPosition::from_index(b_index),
+                StatementPosition::from_index(b_index),
                 context,
             )
         }
@@ -87,7 +87,7 @@ pub fn syllogisms(
                 task_sentence, // ! 📌【2024-08-01 18:26:04】需要传递所有权：直接统一语句中的变量
                 belief,        // ! 📌【2024-08-01 18:26:04】需要传递所有权：直接统一语句中的变量
                 PremiseSource::Task,
-                SyllogismPosition::from_index(t_index),
+                StatementPosition::from_index(t_index),
                 context,
             )
         }
@@ -153,7 +153,7 @@ fn asymmetric_asymmetric(
             compose_compound(
                 t_term.get_ref(),
                 b_term.get_ref(),
-                SyllogismPosition::Subject,
+                StatementPosition::Subject,
                 context,
             );
             // * 🚩归因+归纳+比较
@@ -181,7 +181,7 @@ fn asymmetric_asymmetric(
             compose_compound(
                 t_term.get_ref(),
                 b_term.get_ref(),
-                SyllogismPosition::Predicate,
+                StatementPosition::Predicate,
                 context,
             );
             // * 🚩归因+归纳+比较
@@ -371,7 +371,7 @@ pub fn detachment_with_var(
     mut task_sentence: impl Sentence,
     mut belief: impl Judgement,
     high_order_position: PremiseSource,
-    position_sub_in_hi: SyllogismPosition, // 子句在高阶词项中的位置
+    position_sub_in_hi: StatementPosition, // 子句在高阶词项中的位置
     context: &mut ReasonContextConcept,
 ) {
     // * 🚩提取元素
@@ -488,7 +488,7 @@ pub fn conditional_deduction_induction_with_var(
     mut conditional: Statement,
     index: usize,
     mut statement: Statement,
-    side: SyllogismPosition,
+    side: StatementPosition,
     belief: impl Judgement,
     context: &mut ReasonContextConcept,
 ) {

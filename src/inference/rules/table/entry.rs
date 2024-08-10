@@ -45,10 +45,10 @@ pub fn reason(context: &mut ReasonContextConcept) {
     let b_link_type = b_link.link_type();
 
     // * 🚩直接一个match分派好
-    use TLinkType::*;
+    use TLinkTag::*;
     match [t_link_type, b_link_type] {
         // * 🚩↓已经在转换推理中处理过
-        [Transform, _] | [_, Transform] => { /* 不可能 */ }
+        [Transform(..), _] | [_, Transform(..)] => { /* 不可能 */ }
 
         // * conceptTerm = taskTerm * //
 
@@ -58,7 +58,7 @@ pub fn reason(context: &mut ReasonContextConcept) {
         // * 📄T="(&&,<#1 --> object>,<#1 --> (/,made_of,_,plastic)>)"
         // * + B="object"
         // * @ C="(&&,<#1 --> object>,<#1 --> (/,made_of,_,plastic)>)"
-        [SELF, Component] => compound_and_self(
+        [SELF, Component(..)] => compound_and_self(
             cast_compound(task_term),
             belief_term,
             PremiseSource::Task,
@@ -68,7 +68,7 @@ pub fn reason(context: &mut ReasonContextConcept) {
         // * 📄T="<<$1 --> [aggressive]> ==> <$1 --> murder>>"
         // * + B="[aggressive]"
         // * @ C="<<$1 --> [aggressive]> ==> <$1 --> murder>>"
-        [SELF, Compound] => compound_and_self(
+        [SELF, Compound(..)] => compound_and_self(
             cast_compound(belief_term),
             task_term,
             PremiseSource::Belief,
@@ -78,13 +78,13 @@ pub fn reason(context: &mut ReasonContextConcept) {
         // * 📄T="<{tim} --> (/,livingIn,_,{graz})>"
         // * + B="{tim}"
         // * @ C="<{tim} --> (/,livingIn,_,{graz})>"
-        [SELF, ComponentStatement] => {
+        [SELF, ComponentStatement(..)] => {
             if let Some(belief) = belief {
                 detachment(
                     &task_sentence,
                     &belief,
                     PremiseSource::Task,
-                    SyllogismPosition::from_index(b_index.unwrap()),
+                    StatementPosition::from_index(b_index.unwrap()),
                     context,
                 )
             }
@@ -93,13 +93,13 @@ pub fn reason(context: &mut ReasonContextConcept) {
         // *📄T="<{tim} --> (/,own,_,sunglasses)>"
         // * + B="<<{tim} --> (/,own,_,sunglasses)> ==> <{tim} --> murder>>"
         // * @ C=T
-        [SELF, CompoundStatement] => {
+        [SELF, CompoundStatement(..)] => {
             if let Some(belief) = belief {
                 detachment(
                     &task_sentence,
                     &belief,
                     PremiseSource::Belief,
-                    SyllogismPosition::from_index(b_index.unwrap()),
+                    StatementPosition::from_index(b_index.unwrap()),
                     context,
                 )
             }
@@ -108,7 +108,7 @@ pub fn reason(context: &mut ReasonContextConcept) {
         // *📄T="<(&&,<$1-->[aggressive]>,<$1-->(/,livingIn,_,{graz})>)==><$1-->murder>>"
         // * + B="[aggressive]"
         // * @ C=T
-        [SELF, ComponentCondition] => {
+        [SELF, ComponentCondition(p, i)] => {
             if let Some(belief) = belief {
                 // * 📝「复合条件」一定有两层，就处在作为「前件」的「条件」中
                 conditional_deduction_induction(
@@ -126,7 +126,7 @@ pub fn reason(context: &mut ReasonContextConcept) {
         // * 📄T="<(*,{tim},{graz}) --> livingIn>"
         // * + B="<(&&,<{tim} --> [aggressive]>,<(*,{tim},{graz}) --> livingIn>) ==> <{tim} --> murder>>"
         // * @ C=T
-        [SELF, CompoundCondition] => {
+        [SELF, CompoundCondition(p, i)] => {
             // ! ❌【2024-06-18 21:34:08】「任务链是「复合条件」的，当前任务一定是复合词项」不一定成立
             // * 📄edge case：
             // * * task="flyer"
@@ -146,44 +146,44 @@ pub fn reason(context: &mut ReasonContextConcept) {
         }
 
         // * 📝【2024-07-10 22:32:16】OpenNARS均不存在
-        [Component, _] => {}
+        [Component(..), _] => {}
 
         // * conceptTerm ∈ taskTerm * //
-        [Compound, SELF] => {}
+        [Compound(..), SELF] => {}
 
-        [Compound, Component] => {}
+        [Compound(..), Component(..)] => {}
 
         // * 🚩conceptTerm ∈ taskTerm, conceptTerm ∈ beliefTerm
         // * 📄T="(&&,<cup --> #1>,<toothbrush --> #1>)"
         // * + B="<cup --> [bendable]>"
         // * @ C="cup"
-        [Compound, Compound] => compound_and_compound(
+        [Compound(..), Compound(..)] => compound_and_compound(
             cast_compound(task_term),
             cast_compound(belief_term),
             context,
         ),
 
-        [Compound, ComponentStatement] => {}
+        [Compound(..), ComponentStatement(..)] => {}
 
         // * 🚩conceptTerm ∈ taskTerm, conceptTerm ∈ beliefTerm (statement)
         // * 📄T="(&&,<{tim} --> #1>,<{tom} --> #1>)"
         // * + B="<{tom} --> murder>"
         // * @ C="{tom}"
-        [Compound, CompoundStatement] => compound_and_statement(
+        [Compound(i), CompoundStatement(..)] => compound_and_statement(
             PremiseSource::Task,
             cast_compound(task_term),
             t_index.unwrap(),
             cast_statement(belief_term),
-            SyllogismPosition::from_index(b_index.unwrap()),
+            StatementPosition::from_index(b_index.unwrap()),
             context,
         ),
 
-        [Compound, ComponentCondition] => {}
+        [Compound(..), ComponentCondition(..)] => {}
 
         // *📄T="(||,<{tom}-->[aggressive]>,<{tom}-->(/,livingIn,_,{graz})>)"
         // * + B="<(&&,<$1-->[aggressive]>,<$1-->(/,livingIn,_,{graz})>)==><$1-->murder>>"
         // * @ C="(/,livingIn,_,{graz})"
-        [Compound, CompoundCondition] => {
+        [Compound(..), CompoundCondition(p, i)] => {
             if let Some(belief) = belief {
                 compound_and_compound_condition(
                     task_sentence,
@@ -197,40 +197,40 @@ pub fn reason(context: &mut ReasonContextConcept) {
         }
 
         // * 📝【2024-07-10 22:37:22】OpenNARS均不存在
-        [ComponentStatement, _] => {}
+        [ComponentStatement(..), _] => {}
 
         // * conceptTerm ∈ taskTerm (statement) * //
-        [CompoundStatement, SELF] => {}
+        [CompoundStatement(..), SELF] => {}
 
         // * 📄T="<{tim} --> (/,livingIn,_,{graz})>"
         // * + B="tim"
         // * @ C="{tim}"
-        [CompoundStatement, Component] => component_and_statement(
+        [CompoundStatement(..), Component(i)] => component_and_statement(
             cast_compound(concept_term),
             b_index.unwrap(),
             cast_statement(task_term),
-            SyllogismPosition::from_index(t_index.unwrap()),
+            StatementPosition::from_index(t_index.unwrap()),
             context,
         ),
 
         // * 📄T="<{tim} --> (/,livingIn,_,{graz})>"
         // * + B="{tim}"
         // * @ C="tim"
-        [CompoundStatement, Compound] => compound_and_statement(
+        [CompoundStatement(..), Compound(i)] => compound_and_statement(
             PremiseSource::Belief,
             cast_compound(belief_term.clone()),
             b_index.unwrap(),
             cast_statement(task_term),
-            SyllogismPosition::from_index(t_index.unwrap()),
+            StatementPosition::from_index(t_index.unwrap()),
             context,
         ),
 
-        [CompoundStatement, ComponentStatement] => {}
+        [CompoundStatement(..), ComponentStatement(..)] => {}
 
         // * 📄T="<{tim} --> (/,livingIn,_,{graz})>"
         // * + B="<<$1 --> (/,livingIn,_,{graz})> ==> <$1 --> murder>>"
         // * @ C="(/,livingIn,_,{graz})"
-        [CompoundStatement, CompoundStatement] => {
+        [CompoundStatement(p1), CompoundStatement(p2)] => {
             if let Some(belief) = belief {
                 syllogisms(
                     cast_statement(task_term),
@@ -243,12 +243,12 @@ pub fn reason(context: &mut ReasonContextConcept) {
             }
         }
 
-        [CompoundStatement, ComponentCondition] => {}
+        [CompoundStatement(..), ComponentCondition(..)] => {}
 
         // * 📄T="<<$1 --> [aggressive]> ==> <$1 --> (/,livingIn,_,{graz})>>"
         // *+B="<(&&,<$1-->[aggressive]>,<$1-->(/,livingIn,_,{graz})>)==><$1-->murder>>"
         // * @ C="(/,livingIn,_,{graz})"
-        [CompoundStatement, CompoundCondition] => {
+        [CompoundStatement(p_t), CompoundCondition(p, i)] => {
             if let Some(belief) = belief {
                 conditional_deduction_induction_with_var(
                     PremiseSource::Belief,
@@ -257,7 +257,7 @@ pub fn reason(context: &mut ReasonContextConcept) {
                     cast_statement(belief_term),
                     b_link.get_index(1).cloned().unwrap(),
                     cast_statement(task_term),
-                    SyllogismPosition::from_index(t_index.unwrap()),
+                    StatementPosition::from_index(t_index.unwrap()),
                     belief,
                     context,
                 )
@@ -265,50 +265,50 @@ pub fn reason(context: &mut ReasonContextConcept) {
         }
 
         // * 📝【2024-07-10 23:08:10】OpenNARS均不出现
-        [ComponentCondition, _] => {}
+        [ComponentCondition(..), _] => {}
 
         // * conceptTerm ∈ taskTerm (condition in statement) * //
-        [CompoundCondition, SELF] => {}
+        [CompoundCondition(..), SELF] => {}
 
-        [CompoundCondition, Component] => {}
+        [CompoundCondition(..), Component(..)] => {}
 
         // * 📄T="<(&&,<{graz} --> (/,livingIn,$1,_)>,(||,<$1 --> [aggressive]>,<sunglasses --> (/,own,$1,_)>)) ==> <$1 --> murder>>"
         // * + B="(/,livingIn,_,{graz})"
         // * @ C="{graz}"
-        [CompoundCondition, Compound] => {
+        [CompoundCondition(p, i), Compound(..)] => {
             if let Some(belief) = belief {
                 detachment_with_var(
                     task_sentence,
                     belief,
                     PremiseSource::Task,
-                    SyllogismPosition::from_index(t_index.unwrap()),
+                    StatementPosition::from_index(t_index.unwrap()),
                     context,
                 )
             }
         }
 
-        [CompoundCondition, ComponentStatement] => {}
+        [CompoundCondition(..), ComponentStatement(..)] => {}
 
         // *📄T="<(&&,<$1-->[aggressive]>,<sunglasses-->(/,own,$1,_)>)==><$1-->murder>>"
         // * + B="<sunglasses --> glasses>"
         // * @ C="sunglasses"
-        [CompoundCondition, CompoundStatement] => {
+        [CompoundCondition(t_side, ..), CompoundStatement(b_side)] => {
             if let Some(belief) = belief {
                 compound_condition_and_compound_statement(
                     task_sentence,
                     cast_statement(task_term),
-                    SyllogismPosition::from_index(t_index.unwrap()),
+                    StatementPosition::from_index(t_index.unwrap()),
                     belief,
                     cast_statement(belief_term),
-                    SyllogismPosition::from_index(b_index.unwrap()),
+                    StatementPosition::from_index(b_index.unwrap()),
                     context,
                 )
             }
         }
 
-        [CompoundCondition, ComponentCondition] => {}
+        [CompoundCondition(..), ComponentCondition(..)] => {}
 
-        [CompoundCondition, CompoundCondition] => {}
+        [CompoundCondition(..), CompoundCondition(..)] => {}
     }
 }
 
@@ -384,7 +384,7 @@ fn compound_and_statement(
     mut compound: CompoundTerm,
     index: usize,
     mut statement: Statement,
-    side: SyllogismPosition,
+    side: StatementPosition,
     context: &mut ReasonContextConcept,
 ) {
     let component = unwrap_or_return!(?compound.get_ref().component_at(index));
@@ -450,7 +450,7 @@ fn compound_and_statement(
                     unification_q
                         .apply_to(compound.mut_ref(), statement.mut_ref().into_compound_ref());
                     unification_q.unify_map_1.apply_to_term(&mut component); // * 📌独立应用一次，应该和compound一样
-                    // 解构陈述
+                                                                             // 解构陈述
                     decompose_statement(compound.get_ref(), &component, compound_from, context);
                 }
             }
@@ -495,7 +495,7 @@ fn component_and_statement(
     compound: CompoundTerm,
     index: usize,
     statement: Statement,
-    side: SyllogismPosition,
+    side: StatementPosition,
     context: &mut ReasonContextConcept,
 ) {
     // if (context.getCurrentTask().isStructural()) return;
@@ -561,7 +561,7 @@ fn compound_and_compound_condition(
                 task_sentence,
                 belief,
                 PremiseSource::Belief,
-                SyllogismPosition::from_index(b_index),
+                StatementPosition::from_index(b_index),
                 context,
             ),
             // * 🚩未能统一 ⇒ 应用「条件 演绎/归纳」规则
@@ -594,10 +594,10 @@ fn compound_and_compound_condition(
 fn compound_condition_and_compound_statement(
     task_sentence: impl Sentence,
     task_term: Statement,
-    t_side: SyllogismPosition,
+    t_side: StatementPosition,
     belief: impl Judgement,
     belief_term: Statement,
-    b_side: SyllogismPosition,
+    b_side: StatementPosition,
     context: &mut ReasonContextConcept,
 ) {
     let [task_subject, _] = task_term.sub_pre();

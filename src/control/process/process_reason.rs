@@ -15,7 +15,7 @@ use crate::{
         ReasonContext, ReasonContextConcept, ReasonContextTransform, ReasonContextWithLinks,
         Reasoner,
     },
-    entity::{Concept, Sentence, TLink, TLinkType, TaskLink, TermLink},
+    entity::{Concept, Sentence, TLink, TLinkTag, TaskLink, TermLink},
     util::{RefCount, ToDisplayAndBrief},
 };
 use nar_dev_utils::{unwrap_or_return, JoinTo};
@@ -52,7 +52,7 @@ impl Reasoner {
         // * 📝此处应该是「重置信念链，以便后续拿取词项链做『概念推理』」
 
         // * 🚩若为「转换」类链接⇒转换推理并返回
-        if current_task_link.link_type() == TLinkType::Transform {
+        if let TLinkTag::Transform(..) = current_task_link.link_type() {
             self.report_comment(format!(
                 "* Selected TaskLink to transform: {}",
                 current_task_link.to_display()

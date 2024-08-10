@@ -1,7 +1,7 @@
 //! 🎯复刻OpenNARS `nars.entity.TaskLink`
 //! * ♻️【2024-06-22 12:02:13】开始基于OpenNARS改版重写
 
-use super::{TLink, TLinkType, TLinkage, TermLink, TermLinkTemplate};
+use super::{TLink, TLinkTag, TLinkage, TermLink, TermLinkTemplate};
 use crate::{
     control::DEFAULT_PARAMETERS,
     entity::{BudgetValue, Item, RCTask, Sentence, ShortFloat, Task, Token},
@@ -113,7 +113,7 @@ impl TLink<Task> for TaskLink {
         self.inner.target.mut_()
     }
 
-    fn link_type(&self) -> TLinkType {
+    fn link_type(&self) -> TLinkTag {
         self.inner.link_type()
     }
 
@@ -131,7 +131,7 @@ impl TaskLink {
     fn new(
         target_rc: RCTask,
         budget: BudgetValue,
-        link_type: TLinkType,
+        link_type: TLinkTag,
         indexes: impl Into<Box<[usize]>>,
         record_length: usize,
     ) -> Self {
@@ -152,11 +152,7 @@ impl TaskLink {
     }
 
     /// 特别为任务链生成索引键
-    fn generate_key_for_task_link(
-        target: &Task,
-        link_type: TLinkType,
-        indexes: &[usize],
-    ) -> String {
+    fn generate_key_for_task_link(target: &Task, link_type: TLinkTag, indexes: &[usize]) -> String {
         let key = Self::generate_key_base(link_type, indexes);
         join! {
             => key
@@ -168,7 +164,7 @@ impl TaskLink {
     fn with_default_record_len(
         target_rc: RCTask,
         budget: BudgetValue,
-        link_type: TLinkType,
+        link_type: TLinkTag,
         indexes: impl Into<Box<[usize]>>,
     ) -> Self {
         Self::new(target_rc, budget, link_type, indexes, Self::RECORD_LENGTH)
@@ -201,7 +197,7 @@ impl TaskLink {
         let indexes = vec![].into_boxed_slice();
 
         // * 🚩构造
-        Self::with_default_record_len(target_rc, budget, TLinkType::SELF, indexes)
+        Self::with_default_record_len(target_rc, budget, TLinkTag::SELF, indexes)
     }
 
     /// * 🎯用于从「新近任务袋」中获取「新近任务」：根据「新近」调配优先级

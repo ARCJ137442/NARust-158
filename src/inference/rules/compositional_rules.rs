@@ -3,7 +3,6 @@
 //! * ✅【2024-05-12 00:47:43】初步复现方法API
 //! * ♻️【2024-08-05 17:31:37】开始根据改版OpenNARS重写
 
-use super::SyllogismPosition;
 use crate::{
     control::*,
     entity::*,
@@ -15,7 +14,7 @@ use crate::{
 use nar_dev_utils::{f_parallel, unwrap_or_return};
 use variable_process::VarSubstitution;
 use ReasonDirection::*;
-use SyllogismPosition::*;
+use StatementPosition::*;
 
 /* -------------------- intersections and differences -------------------- */
 
@@ -37,7 +36,7 @@ use SyllogismPosition::*;
 pub fn compose_as_set(
     task_content: StatementRef,
     belief_content: StatementRef,
-    shared_term_i: SyllogismPosition,
+    shared_term_i: StatementPosition,
     component_common: &Term,
     component_t: &Term,
     component_b: &Term,
@@ -159,7 +158,7 @@ pub fn decompose_as_set(
     compound: CompoundTermRef,
     component: &Term,
     component_common: &Term,
-    side: SyllogismPosition,
+    side: StatementPosition,
     compound_from: PremiseSource,
     context: &mut ReasonContextConcept,
 ) {
@@ -372,7 +371,7 @@ pub fn intro_var_same_subject_or_predicate(
     sub_sentence: &impl Judgement,
     component: &Term,
     sub_content: CompoundTermRef,
-    position_sub_in_hi: SyllogismPosition, // 子句在高阶词项中的位置
+    position_sub_in_hi: StatementPosition, // 子句在高阶词项中的位置
     context: &mut ReasonContextConcept,
 ) {
     // * 🚩词项 * //
@@ -417,7 +416,7 @@ pub fn intro_var_same_subject_or_predicate(
     /// 将陈述的某处替换为变量
     fn replaced_statement_with_term_at(
         statement: StatementRef,
-        at: SyllogismPosition,
+        at: StatementPosition,
         new_term: Term,
     ) -> Option<Term> {
         // * 🚩【2024-08-07 21:14:35】实质上就是将「保留之侧的对侧」替换成变量
@@ -508,7 +507,7 @@ pub fn intro_var_same_subject_or_predicate(
 pub fn intro_var_outer(
     task_content: StatementRef,
     belief_content: StatementRef,
-    shared_term_i: SyllogismPosition,
+    shared_term_i: StatementPosition,
     context: &mut ReasonContextConcept,
 ) {
     // * 🚩任务/信念 的真值 | 仅适用于前向推理
@@ -570,7 +569,7 @@ pub fn intro_var_outer(
 fn intro_var_states_ind(
     task_content: StatementRef,
     belief_content: StatementRef,
-    shared_term_i: SyllogismPosition,
+    shared_term_i: StatementPosition,
 ) -> [Option<Term>; 2] {
     let mut task_content = task_content.to_owned();
     let mut belief_content = belief_content.to_owned();
@@ -616,7 +615,7 @@ fn intro_var_states_ind(
 fn intro_var_states_dep(
     task_content: StatementRef,
     belief_content: StatementRef,
-    shared_term_i: SyllogismPosition,
+    shared_term_i: StatementPosition,
 ) -> [Option<Term>; 2] {
     let var_d = Term::make_var_d([&*task_content, &*belief_content]);
 
@@ -828,7 +827,7 @@ fn intro_var_inner2(
 /// component
 fn second_common_term(
     [term1, term2]: [&Term; 2], // 强制将这俩词项统一到了同一生命周期
-    shared_term_i: SyllogismPosition,
+    shared_term_i: StatementPosition,
 ) -> Option<&Term> {
     // * 🚩确定「需要特别判断的『像』类型」
     //   * 主项 ⇒ 外延像

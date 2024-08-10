@@ -5,7 +5,8 @@
 use crate::{
     control::{util_outputs, ReasonContext, ReasonContextDirect},
     entity::{
-        BudgetValue, Concept, Item, RCTask, TLink, TLinkType, TaskLink, TermLink, TermLinkTemplate,
+        BudgetValue, Concept, Item, RCTask, StatementPosition, TLink, TLinkTag, TaskLink, TermLink,
+        TermLinkTemplate,
     },
     inference::{Budget, BudgetFunctions},
     language::{CompoundTermRef, Term},
@@ -24,8 +25,8 @@ pub fn prepare_term_link_templates(this: &Term) -> Vec<TermLinkTemplate> {
         Some(compound) => {
             // * 🚩预备「默认类型」：自身为陈述⇒陈述，自身为复合⇒复合
             let initial_term_link_type = match this.instanceof_statement() {
-                true => TLinkType::CompoundStatement,
-                false => TLinkType::Compound, // default
+                true => TLinkTag::CompoundStatement(crate::entity::StatementPosition::Subject),
+                false => TLinkTag::Compound(0), // default
             };
             // * 🚩建立连接：从「自身到自身」开始
             prepare_component_links(
@@ -46,16 +47,23 @@ pub fn prepare_term_link_templates(this: &Term) -> Vec<TermLinkTemplate> {
 fn prepare_component_links(
     whole: CompoundTermRef,
     links: &mut Vec<TermLinkTemplate>,
-    term_link_type: TLinkType,
+    term_link_tag: TLinkTag,
     current: CompoundTermRef,
 ) {
+    use TLinkTag::*;
     /* 第一层元素 */
     for (i, t1) in current.components.iter().enumerate() {
         // * 🚩「常量」词项⇒直接链接 | 构建「元素→自身」的「到复合词项」类型
+        let redirected_tag = match term_link_tag {
+            CompoundStatement(_) => CompoundStatement(StatementPosition::from_index(i)),
+            Compound(_) => Compound(i),
+            CompoundCondition(p, _) => CompoundCondition(p, i), // ! 用于更细一层的分派（详见下层递归）
+            tag => tag,
+        };
         if t1.is_constant() {
             links.push(TermLinkTemplate::new_template(
                 t1.clone(),
-                term_link_type,
+                redirected_tag,
                 vec![i],
             ));
             // * 📝【2024-05-15 18:21:25】案例笔记 概念="<(&&,A,B) ==> D>"：
@@ -85,7 +93,12 @@ fn prepare_component_links(
             if let Some(t1) = t1.as_compound() {
                 // * 📝递归深入，将作为「入口」的「自身向自身建立链接」缩小到「组分」区域
                 // * 🚩改变「默认类型」为「复合条件」
-                prepare_component_links(t1, links, TLinkType::CompoundCondition, t1);
+                prepare_component_links(
+                    t1,
+                    links,
+                    TLinkTag::CompoundCondition(StatementPosition::from_index(i), 0), // TODO: 此处「0」是占位符
+                    t1,
+                );
             }
         }
         // * 🚩其它情况⇒若元素为复合词项，再度深入
@@ -97,22 +110,22 @@ fn prepare_component_links(
                     let transform_t1 = t1.instanceof_product() || t1.instanceof_image();
                     if transform_t1 {
                         // * 🚩NAL-4「转换」相关 | 构建「复合→复合」的「转换」类型（仍然到复合词项）
-                        let indexes = match term_link_type {
+                        let indexes = match term_link_tag {
                             // * 📝若背景的「链接类型」已经是「复合条件」⇒已经深入了一层，并且一定在「主项」位置
-                            TLinkType::CompoundCondition => vec![0, i, j],
+                            TLinkTag::CompoundCondition(..) => vec![0, i, j],
                             // * 📝否则就还是第二层
                             _ => vec![i, j],
                         };
                         links.push(TermLinkTemplate::new_template(
                             t2.clone(),
-                            TLinkType::Transform,
+                            TLinkTag::Transform(StatementPosition::from_index(i), j),
                             indexes,
                         ));
                     } else {
                         // * 🚩非「转换」相关：直接按类型添加 | 构建「元素→自身」的「到复合词项」类型
                         links.push(TermLinkTemplate::new_template(
                             t2.clone(),
-                            term_link_type,
+                            term_link_tag,
                             vec![i, j],
                         ));
                     }
@@ -125,15 +138,15 @@ fn prepare_component_links(
                     // * 🚩NAL-4「转换」相关 | 构建「复合→复合」的「转换」类型（仍然到复合词项）
                     for (k, t3) in t2.components.iter().enumerate() {
                         if t3.is_constant() {
-                            let indexes = match term_link_type {
+                            let indexes = match term_link_tag {
                                 // * 📝此处若是「复合条件」即为最深第四层
-                                TLinkType::CompoundCondition => vec![0, i, j, k],
+                                TLinkTag::CompoundCondition(..) => vec![0, i, j, k],
                                 // * 📝否则仅第三层
                                 _ => vec![i, j, k],
                             };
                             links.push(TermLinkTemplate::new_template(
                                 t3.clone(),
-                                TLinkType::Transform,
+                                TLinkTag::Transform(StatementPosition::from_index(j), k),
                                 indexes,
                             ));
                         }
@@ -252,7 +265,7 @@ impl ReasonContextDirect<'_> {
         let templates = concept.link_templates_to_self().to_vec();
         for template in &templates {
             // * 🚩仅在链接类型不是「转换」时
-            if template.link_type() == TLinkType::Transform {
+            if let TLinkTag::Transform(..) = template.link_type() {
                 continue;
             }
             // * 🚩仅在「元素词项所对应概念」存在时
@@ -373,18 +386,18 @@ mod tests {
     /// 快捷构造词项链模板
     /// * 📌语法：【目标】 #【链接类型】 @【链接位置】
     macro_rules! link {
-        ($target:literal #$type:ident @ $index:expr) => {
+        ($target:literal #$type:ident $(( $($params:tt)* ))? @ $index:expr) => {
             // ! ⚠️要用`new_direct`不要用`new_template`：后者会自动「添油加醋」生成索引
-            TermLinkTemplate::new_direct(term!($target), TLinkType::$type, Vec::from($index))
+            TermLinkTemplate::new_direct(term!($target), TLinkTag::$type $(( $($params)* ))?, Vec::from($index))
         };
     }
     /// 快捷构造词项链模板数组
     macro_rules! links {
         [
-            $( $target:literal #$type:ident @ $index:expr $(,)?)*
+            $( $target:literal #$type:ident $(( $($params:tt)* ))? @ $index:expr $(,)?)*
         ] => {
             [
-                $( link!($target #$type @ $index ) ),*
+                $( link!($target #$type $(( $($params)* ))? @ $index ) ),*
             ]
         };
     }
@@ -411,6 +424,8 @@ mod tests {
             => "]"
         }
     }
+
+    use StatementPosition::*;
 
     /// 测试「构建词项链模板」
     /// * ✅连带[`prepare_component_links`]也一并测过
@@ -442,71 +457,71 @@ mod tests {
             "$1" => []
             // 有序复合词项 正常产生模板
             "(*, A, B)" => links![
-                "A" #Compound @ [0]
-                "B" #Compound @ [1]
+                "A" #Compound(0) @ [0]
+                "B" #Compound(1) @ [1]
             ]
             // 可交换复合词项 正常产生模板
             "{A, B, C, D}" => links![
-                "A" #Compound @ [0]
-                "B" #Compound @ [1]
-                "C" #Compound @ [2]
-                "D" #Compound @ [3]
+                "A" #Compound(0) @ [0]
+                "B" #Compound(1) @ [1]
+                "C" #Compound(2) @ [2]
+                "D" #Compound(3) @ [3]
             ]
             // ! 「像」：占位符不产生链接模板
             "(/, R, _, A)" => links![
-                "R" #Compound @ [0] // ! ⚠️注意：与OpenNARS机制的不同
-                "A" #Compound @ [2]
+                "R" #Compound(0) @ [0] // ! ⚠️注意：与OpenNARS机制的不同
+                "A" #Compound(2) @ [2]
             ]
             // ! 「像」：与OpenNARS机制的不同，其占位符处是没有链接模板的
             "(/, R, A, _, B)" => links![
-                "R" #Compound @ [0]
-                "A" #Compound @ [1]
-             // "_" #Compound @ [2] // ! 占位符不能成链接
-                "B" #Compound @ [3]
+                "R" #Compound(0) @ [0]
+                "A" #Compound(1) @ [1]
+             // "_" #Compound(2) @ [2] // ! 占位符不能成链接
+                "B" #Compound(3) @ [3]
             ]
             // 陈述：类型为「复合陈述」
             "<A --> B>" => links![
-                "A" #CompoundStatement @ [0]
-                "B" #CompoundStatement @ [1]
+                "A" #CompoundStatement(Subject) @ [0]
+                "B" #CompoundStatement(Predicate) @ [1]
             ]
             // 蕴含+合取：包含有类型为「复合条件」的模板
             "<(&&, A, B) ==> C>" => links![
-                "(&&, A, B)" #CompoundStatement @ [0]
-                "A" #CompoundCondition @ [0, 0]
-                "B" #CompoundCondition @ [0, 1]
-                "C" #CompoundStatement @ [1]
+                "(&&, A, B)" #CompoundStatement(Subject) @ [0]
+                "A" #CompoundCondition(Subject, 0) @ [0, 0]
+                "B" #CompoundCondition(Subject, 1) @ [0, 1]
+                "C" #CompoundStatement(Predicate) @ [1]
             ]
             // 实际运行中产生的复合词项
             "<<$1 --> key> ==> <{lock1} --> (/, open, $1, _)>>" => links![
                 // ! 📝不会给变量`$1`产生模板
                 // ! 📝不会给占位符`_`产生模板
-                "key" #CompoundStatement @[0, 1], // 蕴含→继承
-                "{lock1}" #CompoundStatement @[1, 0], // 蕴含→继承
-                "open" #Transform @[1, 1, 0] // 蕴含→继承→外延像
+                "key" #CompoundStatement(Subject) @[0, 1], // 蕴含→继承
+                "{lock1}" #CompoundStatement(Predicate) @[1, 0], // 蕴含→继承
+                "open" #Transform(Predicate, 1) @[1, 1, 0] // 蕴含→继承→外延像
             ]
             "<(&&,<#1 --> lock>,<#1 --> (/,open,$2,_)>) ==> <$2 --> key>>" => links![
                 // ! 📝不会给变量`$1`产生模板
                 // ! 📝不会给占位符`_`产生模板
                 // * 📌实际只有仨词项
-                "lock" #CompoundCondition @[0, 0, 1], // 蕴含→合取→继承 + 条件句
-                "open" #Transform @[0, 1, 1, 0] // 蕴含→合取→继承→外延像
-                "key" #CompoundStatement @[1, 1], // 蕴含→继承
+                "lock" #CompoundCondition(Subject, 0) @[0, 0, 1], // 蕴含→合取→继承 + 条件句
+                "open" #Transform(Subject, 1) @[0, 1, 1, 0] // 蕴含→合取→继承→外延像
+                "key" #CompoundStatement(Predicate) @[1, 1], // 蕴含→继承
             ]
             "<(&&,<robin --> [chirping]>,<robin --> [flying]>) ==> <robin --> bird>>" => links![
                 // 大的纯常量词项 会进行「分层」操作
-                "(&&, <robin --> [chirping]>, <robin --> [flying]>)" #CompoundStatement @[0],
+                "(&&, <robin --> [chirping]>, <robin --> [flying]>)" #CompoundStatement(Subject) @[0],
                     // 蕴含→合取 ⇒ 自动变成「复合条件」
-                    "<robin --> [chirping]>"                         #CompoundCondition @[0, 0],
-                        "robin"                                      #CompoundCondition @[0, 0, 0],
-                        "[chirping]"                                 #CompoundCondition @[0, 0, 1],
+                    "<robin --> [chirping]>"                         #CompoundCondition(Subject, 0) @[0, 0],
+                        "robin"                                      #CompoundCondition(Subject, 0) @[0, 0, 0],
+                        "[chirping]"                                 #CompoundCondition(Subject, 0) @[0, 0, 1],
                             // ! ❌下一层不再细分`chirping`
-                    "<robin --> [flying]>"                           #CompoundCondition @[0, 1],
-                        "robin"                                      #CompoundCondition @[0, 1, 0],
-                        "[flying]"                                   #CompoundCondition @[0, 1, 1],
+                    "<robin --> [flying]>"                           #CompoundCondition(Subject, 1) @[0, 1],
+                        "robin"                                      #CompoundCondition(Subject, 1) @[0, 1, 0],
+                        "[flying]"                                   #CompoundCondition(Subject, 1) @[0, 1, 1],
                 // 其它默认「复合陈述」
-                "<robin --> bird>"                                   #CompoundStatement @[1],
-                    "robin"                                          #CompoundStatement @[1, 0],
-                    "bird"                                           #CompoundStatement @[1, 1]
+                "<robin --> bird>"                                   #CompoundStatement(Predicate) @[1],
+                    "robin"                                          #CompoundStatement(Predicate) @[1, 0],
+                    "bird"                                           #CompoundStatement(Predicate) @[1, 1]
             ]
         }
         ok!()

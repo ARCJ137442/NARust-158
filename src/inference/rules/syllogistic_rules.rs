@@ -767,7 +767,7 @@ pub fn detachment(
     task_sentence: &impl Sentence,
     belief: &impl Judgement,
     high_order_position: PremiseSource,
-    position_sub_in_hi: SyllogismPosition,
+    position_sub_in_hi: StatementPosition,
     context: &mut ReasonContextConcept,
 ) {
     // * 🚩合法性
@@ -787,7 +787,7 @@ pub fn detachment(
     let direction = context.reason_direction();
     // * 🚩词项
     let [_, sub_content] = high_order_position.select([task_sentence.content(), belief.content()]); // 选取另一侧的子内容
-    use SyllogismPosition::*;
+    use StatementPosition::*;
     let content = match position_sub_in_hi {
         // * 🚩主项&相等⇒取出
         Subject if *sub_content == sub => pre,
