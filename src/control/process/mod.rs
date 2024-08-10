@@ -15,6 +15,9 @@ nar_dev_utils::mods! {
     // 工作周期
     pub use work_cycle;
 
+    // 指令分派
+    pub use cmd_dispatch;
+
     // 解析Narsese任务
     pub use parsing_task;
 
