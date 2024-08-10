@@ -1,6 +1,6 @@
 [package]
 name = "narust-158"
-version = "0.1.1"
+version = "0.2.0"
 edition = "2021"
 description = """
 A Rust reproduction of OpenNARS 1.5.8
@@ -35,7 +35,7 @@ features = [
 
 # NAVM：统IO模型
 [dependencies.navm]
-version = "0.16"
+version = "0.17"
 features = ["bundled"]
 
 # 用于方言解析的词法解析器

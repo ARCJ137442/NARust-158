@@ -105,12 +105,6 @@ checksum = "78ca9ab1a0babb1e7d5695e3530886289c18cf2f87ec19a575a0abdce112e3a3"
 
 [[package]]
 name = "nar_dev_utils"
-version = "0.36.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "72b0e91e1c429370c212be8d983d2dc20ce492b38f951ab1b4a0302099cc3e7a"
-
-[[package]]
-name = "nar_dev_utils"
 version = "0.37.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "963b8f0abd2c299160eb638fede38d4a8995d3d3e43a83384c33e897e48fcfdf"
@@ -122,15 +116,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13c57221a3695c35e112e40e2148670f0831fea12c9b1420357e4ed8d892db3c"
 dependencies = [
  "lazy_static",
- "nar_dev_utils 0.36.0",
+ "nar_dev_utils",
 ]
 
 [[package]]
 name = "narust-158"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "anyhow",
- "nar_dev_utils 0.37.0",
+ "nar_dev_utils",
  "narsese",
  "navm",
  "pest",
@@ -141,12 +135,12 @@ dependencies = [
 
 [[package]]
 name = "navm"
-version = "0.16.0"
+version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a1121fb786aa345300556e1e3f040333d64c214525567370622bd5c7f903ed99"
+checksum = "6ceb6936639408ce1f9f6a2aa4cec77912281fc4f3bd89d943e01061c2139d09"
 dependencies = [
  "anyhow",
- "nar_dev_utils 0.36.0",
+ "nar_dev_utils",
  "narsese",
  "serde",
  "serde_json",
@@ -268,18 +262,18 @@ checksum = "f3cb5ba0dc43242ce17de99c180e96db90b235b8a9fdc9543c96d2209116bd9f"
 
 [[package]]
 name = "serde"
-version = "1.0.204"
+version = "1.0.205"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc76f558e0cbb2a839d37354c575f1dc3fdc6546b5be373ba43d95f231bf7c12"
+checksum = "e33aedb1a7135da52b7c21791455563facbbcc43d0f0f66165b42c21b3dfb150"
 dependencies = [
  "serde_derive",
 ]
 
 [[package]]
 name = "serde_derive"
-version = "1.0.204"
+version = "1.0.205"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e0cd7e117be63d3c3678776753929474f3b04a43a080c744d6b0ae2a8c28e222"
+checksum = "692d6f5ac90220161d6774db30c662202721e64aed9058d2c394f451261420c1"
 dependencies = [
  "proc-macro2",
  "quote",
