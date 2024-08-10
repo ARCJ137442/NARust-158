@@ -6,6 +6,10 @@
 mod t_link;
 pub use t_link::*;
 
+// 基石：T链接(新)
+mod t_link_new;
+pub use t_link_new::*;
+
 // T链接的基础模板（其特化变种亦用作「词项链模板」）
 mod t_linkage;
 pub use t_linkage::*;
