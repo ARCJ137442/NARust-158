@@ -386,7 +386,13 @@ HLP
 /// 专用于指令[`Cmd::INF`]的处理函数
 mod cmd_inf {
     use super::*;
-    use crate::{entity::ShortFloat, global::Float, inference::Truth};
+    use crate::{
+        entity::{Judgement, ShortFloat},
+        global::Float,
+        inference::Truth,
+        language::Term,
+        util::AverageUsize,
+    };
     use nar_dev_utils::macro_once;
 
     /// 指令[`Cmd::INF`]的入口函数
@@ -417,6 +423,8 @@ mod cmd_inf {
             "reasoner" => format!("Reasoner: {reasoner:?}")                  // 整个推理器
             "parameters" => format!("Parameters: {:?}", reasoner.parameters) // 推理器的超参数
             "tasks" => reasoner.report_tasks()                               // 推理器中所有任务
+            "beliefs" => reasoner.report_beliefs()                           // 推理器中所有信念
+            "questions" => reasoner.report_questions()                       // 推理器中所有问题
             "concepts" => reasoner.report_concepts()                         // 推理器中所有概念
             "links" => reasoner.report_links()                               // 推理器中所有链接
             "summary" => reasoner.report_summary()                               // 推理器中所有链接
@@ -425,7 +433,9 @@ mod cmd_inf {
             "#memory" => format!("Memory:\n{:#?}", reasoner.memory)             // 具有缩进层级
             "#reasoner" => format!("Reasoner:\n{reasoner:#?}")                  // 具有缩进层级
             "#parameters" => format!("Parameters:\n{:#?}", reasoner.parameters) // 具有缩进层级
-            "#tasks" => reasoner.report_task_detailed()                         // 推理器中的任务派生链
+            "#tasks" => reasoner.report_tasks_detailed()                         // 推理器中的任务派生链
+            "#beliefs" => reasoner.report_beliefs_detailed()                     // 推理器中所有信念（详细）
+            "#questions" => reasoner.report_questions_detailed()                 // 推理器中所有问题（详细）
             "#concepts" => reasoner.report_concepts_detailed()                  // 推理器中所有概念，含任务链、词项链
             "#links" => reasoner.report_links_detailed()                        // 推理器中所有链接，含预算值
         }
@@ -482,14 +492,14 @@ mod cmd_inf {
         fn report_tasks(&self) -> String {
             format!(
                 "Tasks in reasoner:\n{}", // 开始组织格式化
-                self.collect_tasks_map(fmt_task)
+                self.collect_tasks_map(format_task)
                     .into_iter()
                     .join_to_new("\n")
             )
         }
 
         /// 详尽报告推理器内所有「任务」（的派生关系）
-        fn report_task_detailed(&self) -> String {
+        fn report_tasks_detailed(&self) -> String {
             format!(
                 // 任务派生链
                 "Tasks in reasoner:\n{}",
@@ -501,8 +511,57 @@ mod cmd_inf {
             )
         }
 
+        /// 报告推理器内的所有「信念」
+        fn report_beliefs(&self) -> String {
+            format!(
+                "Beliefs in reasoner:\n{}", // 开始组织格式化
+                self.memory
+                    .iter_concepts()
+                    .flat_map(Concept::iter_beliefs)
+                    .map(format_belief)
+                    .join_to_new("\n")
+            )
+        }
+
+        /// 详尽报告推理器内所有「信念」
+        fn report_beliefs_detailed(&self) -> String {
+            format!(
+                "Beliefs in reasoner:\n{}", // 开始组织格式化
+                self.memory
+                    .iter_concepts()
+                    .flat_map(Concept::iter_beliefs)
+                    .map(format_belief_detailed)
+                    .join_to_new("\n")
+            )
+        }
+
+        /// 报告推理器内的所有「问题」
+        fn report_questions(&self) -> String {
+            format!(
+                "Questions in reasoner:\n{}", // 开始组织格式化
+                self.collect_tasks_map(fmt_question(format_task))
+                    .into_iter()
+                    .flatten()
+                    .join_to_new("\n")
+            )
+        }
+
+        /// 详尽报告推理器内所有「问题」（的派生关系）
+        fn report_questions_detailed(&self) -> String {
+            format!(
+                // 任务派生链
+                "Questions in reasoner:\n{}",
+                // 开始组织格式化
+                self.collect_tasks_map(fmt_question(format_task_chain_detailed))
+                    .into_iter()
+                    .flatten()
+                    .flatten()
+                    .join_to_new("\n\n") // 任务之间两行分隔
+            )
+        }
+
         /// 按指定函数格式化推理器内的所有「概念」
-        fn format_concepts(&self, fmt: impl Fn(&Concept) -> String) -> String {
+        fn fmt_concepts(&self, fmt: impl Fn(&Concept) -> String) -> String {
             // 开始组织格式化
             self.memory.iter_concepts().map(fmt).join_to_new("\n\n")
         }
@@ -522,7 +581,7 @@ mod cmd_inf {
         fn report_concepts_detailed(&self) -> String {
             format!(
                 "# Concepts in memory\n{}",
-                self.format_concepts(|c| format!("## Concept @ {}", c.to_display_long()))
+                self.fmt_concepts(|c| format!("## Concept @ {}", c.to_display_long()))
             )
         }
 
@@ -552,24 +611,50 @@ mod cmd_inf {
         /// * 💡【2024-08-09 18:12:57】灵感源自ONA
         ///   * 📝复现方式：`NAR.exe shell`后 Ctrl+D 触发EOF
         /// * 📌格式：Markdown
+        /// * 📝概念：「原生信息/次生信息」
+        ///   * 📌「原生信息」：只能从推理器内部信息获得的信息，如「系统内的概念数量」「系统内的任务数量」
+        ///   * 📌「次生信息」：可以从其它「原生信息」推算出来的信息，如「系统内每个概念平均持有的任务数量」
         fn report_summary(&self) -> String {
             // 预先计算可重用的统计数据
-            let iter_concepts = || self.memory.iter_concepts();
+            let iter_concepts = self.memory.iter_concepts().collect::<Vec<_>>(); // 避免重复计算引用
+            let iter_concepts = || iter_concepts.iter().cloned(); // 若复制了整个「概念」则会编译报错
+            let iter_beliefs = || iter_concepts().flat_map(Concept::iter_beliefs);
+            let iter_questions = || iter_concepts().flat_map(Concept::iter_questions);
+            let iter_inputted_questions = || iter_questions().filter(|q| q.get_().is_input()); // 用户输入的问题，用于区分「系统派生的问题」
+            let iter_concept_complexity =
+                || iter_concepts().map(Concept::term).map(Term::complexity);
+            // let iter_tasks = || self.collect_tasks_map(|t| t); // ! 不能这样做：有些任务的引用在Rc里，不能随意脱离生命周期
+            let iter_tasks_complexity = || {
+                self.collect_tasks_map(|t| t.content().complexity())
+                    .into_iter()
+            };
+            let iter_beliefs_complexity =
+                || iter_beliefs().map(Sentence::content).map(Term::complexity);
+            let iter_questions_complexity =
+                || iter_questions().map(|t| t.get_().content().complexity());
+
             let n_concepts = iter_concepts().count();
             let n_tasks = self.collect_tasks_map(|_| ()).len(); // * 📌使用ZST闭包统计（不重复的）任务数量
-            let iter_beliefs = || iter_concepts().flat_map(Concept::iter_beliefs);
-            let total_beliefs = iter_beliefs().count();
-            let iter_questions = || iter_concepts().flat_map(Concept::iter_questions);
-            let total_questions = iter_questions().count();
-            let total_questions_solved = iter_questions()
+            let n_beliefs = iter_beliefs().count();
+            let n_questions = iter_questions().count();
+            let n_inputted_questions = iter_inputted_questions().count();
+            let n_questions_solved = iter_questions()
                 .filter(|q| q.get_().has_best_solution())
                 .count();
-            let total_task_links = iter_concepts().flat_map(Concept::iter_task_links).count();
-            let total_term_links = iter_concepts().flat_map(Concept::iter_term_links).count();
+            let n_questions_answered = iter_inputted_questions() // 「回答」了用户输入的问题
+                .filter(|q| q.get_().has_best_solution())
+                .count();
+            let n_task_links = iter_concepts().flat_map(Concept::iter_task_links).count();
+            let n_term_links = iter_concepts().flat_map(Concept::iter_term_links).count();
             let task_parent_sizes = self.collect_tasks_map(|task| task.parents().count());
+
+            // 用一次性宏组织信息
             macro_once! {
                 // * 🚩组织格式：`【名称】 => 【值】`
                 macro ( $( $name:literal => $value:expr)* ) => {
+                    // const NAME_LENS: &[usize] = &[$($name.len()),*];
+                    // let max_name_len = NAME_LENS.iter().cloned().max().unwrap_or(0);
+                    // ? 💭【2024-08-10 13:59:23】似乎没必要因为「字段名对齐」牺牲concat的性能
                     format!(
                         concat!(
                             "# Statistics",
@@ -585,39 +670,55 @@ mod cmd_inf {
                 "current volume" => self.volume
                 "current count of new tasks" => self.derivation_datas.new_tasks.len()
                 "current count of novel tasks" => self.derivation_datas.novel_tasks.size()
+                "current count of in-channels" => self.io_channels.input_channels.len()
+                "current count of out-channels" => self.io_channels.output_channels.len()
 
                 // * 🚩总数有关的信息
-                "total in-channels" => self.io_channels.input_channels.len()
-                "total out-channels" => self.io_channels.output_channels.len()
                 "total concepts" => n_concepts
                 "total tasks" => n_tasks
-                "total beliefs" => total_beliefs
-                "total questions" => total_questions
-                "total task-links" => total_task_links
-                "total term-links" => total_term_links
-                "total questions solved" => total_questions_solved
+                "total beliefs" => n_beliefs
+                "total questions" => n_questions
+                "total questions inputted" => n_inputted_questions
+                "total task-links" => n_task_links
+                "total term-links" => n_term_links
+                "total questions solved" => n_questions_solved
+                "total questions answered" => n_questions_answered
 
                 // * 🚩均值/比值 有关的信息
                 "average concept priority" => ShortFloat::arithmetical_average(self.memory.iter_concepts().map(Budget::priority))
                 "average concept quality" => ShortFloat::arithmetical_average(self.memory.iter_concepts().map(Budget::quality))
-                "average tasks by concept" => n_tasks as Float / n_concepts as Float
-                "average beliefs by concept" => total_beliefs as Float / n_concepts as Float
-                "average questions by concept" => total_questions as Float / n_concepts as Float
-                "average task-links by concept" => total_task_links as Float / n_concepts as Float
-                "average term-links by concept" => total_term_links as Float / n_concepts as Float
-                "average parent counts by task" => task_parent_sizes.iter().sum::<usize>() as Float / n_tasks as Float
+                "average concept complexity" => iter_concept_complexity().average_usize()
+                "average task complexity" => iter_tasks_complexity().average_usize()
+                "average belief complexity" => iter_beliefs_complexity().average_usize()
+                "average question complexity" => iter_questions_complexity().average_usize()
                 "average confidence by belief" => ShortFloat::arithmetical_average(iter_beliefs().map(Truth::confidence))
-                "percentage of problems solved" => total_questions_solved as Float / total_questions as Float
+                // ⚠️下边是「次生信息」
+                "average tasks by concept" => n_tasks as Float / n_concepts as Float
+                "average beliefs by concept" => n_beliefs as Float / n_concepts as Float
+                "average questions by concept" => n_questions as Float / n_concepts as Float
+                "average task-links by concept" => n_task_links as Float / n_concepts as Float
+                "average term-links by concept" => n_term_links as Float / n_concepts as Float
+                "average parent counts by task" => task_parent_sizes.iter().sum::<usize>() as Float / n_tasks as Float
+                "percentage of problems solved" => n_questions_solved as Float / n_questions as Float
+                "percentage of problems answered" => n_questions_answered as Float / n_inputted_questions as Float
 
                 // * 🚩极值有关的信息
                 "maximum task parent count" => task_parent_sizes.iter().max().unwrap_or(&0)
                 "minimum task parent count" => task_parent_sizes.iter().min().unwrap_or(&0)
+                "maximum concept complexity" => iter_concept_complexity().max().unwrap_or(0)
+                "minimum concept complexity" => iter_concept_complexity().min().unwrap_or(0)
+                "maximum task complexity" => iter_tasks_complexity().max().unwrap_or(0)
+                "minimum task complexity" => iter_tasks_complexity().min().unwrap_or(0)
+                "maximum belief complexity" => iter_beliefs_complexity().max().unwrap_or(0)
+                "minimum belief complexity" => iter_beliefs_complexity().min().unwrap_or(0)
+                "maximum question complexity" => iter_questions_complexity().max().unwrap_or(0)
+                "minimum question complexity" => iter_questions_complexity().min().unwrap_or(0)
             }
         }
     }
 
     /// 组织一个[任务](Task)的格式
-    fn fmt_task(task: &Task) -> String {
+    fn format_task(task: &Task) -> String {
         format!("Task#{} {}", task.creation_time(), task.to_display_long())
     }
 
@@ -632,6 +733,34 @@ mod cmd_inf {
         )
     }
 
+    /// 组织一个[信念](Judgement)的格式
+    fn format_belief(belief: &impl Judgement) -> String {
+        format!("Belief#{} {}", belief.creation_time(), belief.to_display())
+    }
+
+    /// 简略组织一个[任务](Task)的格式
+    /// * 🎯需求：所有信息均在一行之内
+    fn format_belief_detailed(belief: &impl Judgement) -> String {
+        format!(
+            "Belief#{} {}",
+            belief.creation_time(), // ! 这个不保证不重复
+            belief.to_display_long()
+        )
+    }
+
+    /// 根据「任务是否为『问题』」决定「是否要格式化并展示」
+    /// * 📌核心思路：转换成一个可选的String，并在后边用[`Iterator::flatten`]解包
+    ///   * ⚠️因为要兼容返回「可选字符串」的「任务派生链」，将其泛型化
+    /// * 🚩具体步骤：返回一个包装后的新函数，这个函数「在『任务』为『问题』时调用原格式化函数，否则返回空值」
+    /// * ️🚩【2024-08-10 13:00:13】为了节省函数，目前做成一个高阶函数
+    ///   * ℹ️返回一个闭包，可以通过`fmt_question(fn_format_task)`获得新闭包
+    fn fmt_question<T>(format: impl Fn(&Task) -> T) -> impl Fn(&Task) -> Option<T> {
+        move |maybe_question: &Task| match maybe_question.is_question() {
+            true => Some(format(maybe_question)),
+            false => None,
+        }
+    }
+
     /// 详尽展示一条「任务派生链」
     /// * ⚠️可能失败：父任务可能不存在
     fn format_task_chain_detailed(root: &Task) -> Option<String> {
@@ -644,10 +773,9 @@ mod cmd_inf {
                 => "\n <- {}".to_string()
                 => format_task_brief(&parent_task.get_())
                 => (format!(
-                    " + Belief#{} \"{}\"",
-                    belief.creation_time(), // ! 这个不保证不重复
-                    belief.to_display()
-                )) if let Some(belief) = parent_belief
+                    " + {}",
+                    format_belief(belief)
+                )) if let Some(ref belief) = parent_belief
             }) for (parent_task, parent_belief) in root.parents()
         })
     }

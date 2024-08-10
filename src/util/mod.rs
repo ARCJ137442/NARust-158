@@ -9,6 +9,9 @@ nar_dev_utils::mods! {
 
     // 共享引用
     pub use rc;
+
+    // 均值
+    pub use average;
 }
 
 // 字符串呈现 | 内含导出的宏
