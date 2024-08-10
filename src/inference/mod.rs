@@ -304,7 +304,7 @@ mod tests {
     use super::*;
     use crate::inference::test_inference::{create_vm_from_engine, print_outputs, VmRuntimeBoost};
     use crate::{ok, util::AResult};
-    use nar_dev_utils::{pipe, JoinTo};
+    use nar_dev_utils::pipe;
 
     /// 引擎dev
     /// * 🚩【2024-07-09 16:52:40】目前除了「概念推理」均俱全
@@ -318,11 +318,13 @@ mod tests {
 
     /// 测试多行NAVM指令（文本形式）输入
     /// * 🚩仅测试文本输入（稳定性），不负责捕获输出等额外操作
-    fn test_line_inputs(inputs: impl AsRef<str>) -> AResult {
+    fn test_line_inputs<S: AsRef<str>>(inputs: impl IntoIterator<Item = S>) -> AResult {
         // 创建
         let mut runtime = create_vm_from_engine(ENGINE_DEV);
         // 输入指令（软标准，不要求解析成功⇒向后兼容）
-        runtime.input_cmds_soft(inputs.as_ref());
+        for inputs in inputs {
+            runtime.input_cmds_soft(inputs.as_ref());
+        }
         // 打印推理器概要
         let _ = runtime.fetch_outputs(); // 丢掉先前的输出
         pipe! {
@@ -334,66 +336,66 @@ mod tests {
         ok!()
     }
 
+    const NAL_LONG_TERM_STABILITY: &str = r#"
+        nse <{tim} --> (/,livingIn,_,{graz})>. %0%
+        cyc 100
+        nse <<(*,$1,sunglasses) --> own> ==> <$1 --> [aggressive]>>.
+        nse <(*,{tom},sunglasses) --> own>.
+        nse <<$1 --> [aggressive]> ==> <$1 --> murder>>.
+        nse <<$1 --> (/,livingIn,_,{graz})> ==> <$1 --> murder>>.
+        nse <{?who} --> murder>?
+        nse <{tim} --> (/,livingIn,_,{graz})>.
+        nse <{tim} --> (/,livingIn,_,{graz})>. %0%
+        cyc 100
+        nse <<(*,$1,sunglasses) --> own> ==> <$1 --> [aggressive]>>.
+        nse <(*,{tom},(&,[black],glasses)) --> own>.
+        nse <<$1 --> [aggressive]> ==> <$1 --> murder>>.
+        nse <<$1 --> (/,livingIn,_,{graz})> ==> <$1 --> murder>>.
+        nse <sunglasses --> (&,[black],glasses)>.
+        nse <{?who} --> murder>?
+        nse <(*,toothbrush,plastic) --> made_of>.
+        nse <(&/,<(*,$1,plastic) --> made_of>,(^lighter,{SELF},$1)) =/> <$1 --> [heated]>>.
+        nse <<$1 --> [heated]> =/> <$1 --> [melted]>>.
+        nse <<$1 --> [melted]> <|> <$1 --> [pliable]>>.
+        nse <(&/,<$1 --> [pliable]>,(^reshape,{SELF},$1)) =/> <$1 --> [hardened]>>.
+        nse <<$1 --> [hardened]> =|> <$1 --> [unscrewing]>>.
+        nse <toothbrush --> object>.
+        nse (&&,<#1 --> object>,<#1 --> [unscrewing]>)!
+        nse <{SELF} --> [hurt]>! %0%
+        nse <{SELF} --> [hurt]>. :|: %0%
+        nse <(&/,<(*,{SELF},wolf) --> close_to>,+1000) =/> <{SELF} --> [hurt]>>.
+        nse <(*,{SELF},wolf) --> close_to>. :|:
+        nse <(&|,(^want,{SELF},$1,FALSE),(^anticipate,{SELF},$1)) =|> <(*,{SELF},$1) --> afraid_of>>.
+        nse <(*,{SELF},?what) --> afraid_of>?
+        nse <a --> A>. :|: %1.00;0.90%
+        cyc 8
+        nse <b --> B>. :|: %1.00;0.90%
+        cyc 8
+        nse <c --> C>. :|: %1.00;0.90%
+        cyc 8
+        nse <a --> A>. :|: %1.00;0.90%
+        cyc 100
+        nse <b --> B>. :|: %1.00;0.90%
+        cyc 100
+        nse <?1 =/> <c --> C>>?
+        nse <(*,cup,plastic) --> made_of>.
+        nse <cup --> object>.
+        nse <cup --> [bendable]>.
+        nse <toothbrush --> [bendable]>.
+        nse <toothbrush --> object>.
+        nse <(&/,<(*,$1,plastic) --> made_of>,(^lighter,{SELF},$1)) =/> <$1 --> [heated]>>.
+        nse <<$1 --> [heated]> =/> <$1 --> [melted]>>.
+        nse <<$1 --> [melted]> <|> <$1 --> [pliable]>>.
+        nse <(&/,<$1 --> [pliable]>,(^reshape,{SELF},$1)) =/> <$1 --> [hardened]>>.
+        nse <<$1 --> [hardened]> =|> <$1 --> [unscrewing]>>.
+        nse (&&,<#1 --> object>,<#1 --> [unscrewing]>)!
+        cyc 2000"#;
+
     /// 集成测试：长期稳定性
     /// * 🎯推理器在大量词项与任务的基础上，保持运行不panic
     #[test]
     fn long_term_stability() -> AResult {
-        test_line_inputs(
-            r#"
-            nse <{tim} --> (/,livingIn,_,{graz})>. %0%
-            cyc 100
-            nse <<(*,$1,sunglasses) --> own> ==> <$1 --> [aggressive]>>.
-            nse <(*,{tom},sunglasses) --> own>.
-            nse <<$1 --> [aggressive]> ==> <$1 --> murder>>.
-            nse <<$1 --> (/,livingIn,_,{graz})> ==> <$1 --> murder>>.
-            nse <{?who} --> murder>?
-            nse <{tim} --> (/,livingIn,_,{graz})>.
-            nse <{tim} --> (/,livingIn,_,{graz})>. %0%
-            cyc 100
-            nse <<(*,$1,sunglasses) --> own> ==> <$1 --> [aggressive]>>.
-            nse <(*,{tom},(&,[black],glasses)) --> own>.
-            nse <<$1 --> [aggressive]> ==> <$1 --> murder>>.
-            nse <<$1 --> (/,livingIn,_,{graz})> ==> <$1 --> murder>>.
-            nse <sunglasses --> (&,[black],glasses)>.
-            nse <{?who} --> murder>?
-            nse <(*,toothbrush,plastic) --> made_of>.
-            nse <(&/,<(*,$1,plastic) --> made_of>,(^lighter,{SELF},$1)) =/> <$1 --> [heated]>>.
-            nse <<$1 --> [heated]> =/> <$1 --> [melted]>>.
-            nse <<$1 --> [melted]> <|> <$1 --> [pliable]>>.
-            nse <(&/,<$1 --> [pliable]>,(^reshape,{SELF},$1)) =/> <$1 --> [hardened]>>.
-            nse <<$1 --> [hardened]> =|> <$1 --> [unscrewing]>>.
-            nse <toothbrush --> object>.
-            nse (&&,<#1 --> object>,<#1 --> [unscrewing]>)!
-            nse <{SELF} --> [hurt]>! %0%
-            nse <{SELF} --> [hurt]>. :|: %0%
-            nse <(&/,<(*,{SELF},wolf) --> close_to>,+1000) =/> <{SELF} --> [hurt]>>.
-            nse <(*,{SELF},wolf) --> close_to>. :|:
-            nse <(&|,(^want,{SELF},$1,FALSE),(^anticipate,{SELF},$1)) =|> <(*,{SELF},$1) --> afraid_of>>.
-            nse <(*,{SELF},?what) --> afraid_of>?
-            nse <a --> A>. :|: %1.00;0.90%
-            cyc 8
-            nse <b --> B>. :|: %1.00;0.90%
-            cyc 8
-            nse <c --> C>. :|: %1.00;0.90%
-            cyc 8
-            nse <a --> A>. :|: %1.00;0.90%
-            cyc 100
-            nse <b --> B>. :|: %1.00;0.90%
-            cyc 100
-            nse <?1 =/> <c --> C>>?
-            nse <(*,cup,plastic) --> made_of>.
-            nse <cup --> object>.
-            nse <cup --> [bendable]>.
-            nse <toothbrush --> [bendable]>.
-            nse <toothbrush --> object>.
-            nse <(&/,<(*,$1,plastic) --> made_of>,(^lighter,{SELF},$1)) =/> <$1 --> [heated]>>.
-            nse <<$1 --> [heated]> =/> <$1 --> [melted]>>.
-            nse <<$1 --> [melted]> <|> <$1 --> [pliable]>>.
-            nse <(&/,<$1 --> [pliable]>,(^reshape,{SELF},$1)) =/> <$1 --> [hardened]>>.
-            nse <<$1 --> [hardened]> =|> <$1 --> [unscrewing]>>.
-            nse (&&,<#1 --> object>,<#1 --> [unscrewing]>)!
-            cyc 2000"#,
-        )
+        test_line_inputs([NAL_LONG_TERM_STABILITY])
     }
 
     /// 「逻辑稳定性」中的NAL测试（源自OpenNARS测试用例）
@@ -972,9 +974,11 @@ mod tests {
 
     /// 「逻辑稳定性」中的NAL测试（源自OpenNARS测试用例）
     const NAL_6_UNCLE: &str = r"
-        nse $0.80;0.80;0.95$ <tim --> (/,uncle,_,tom)>. %1.00;0.90%
-        nse $0.80;0.80;0.95$ <tim --> (/,uncle,tom,_)>. %0.00;0.90%";
+    nse $0.80;0.80;0.95$ <tim --> (/,uncle,_,tom)>. %1.00;0.90%
+    nse $0.80;0.80;0.95$ <tim --> (/,uncle,tom,_)>. %0.00;0.90%";
 
+    /// 「逻辑稳定性」中所有的NAL测试（源自OpenNARS测试用例）
+    /// * 📌【2024-08-10 14:47:27】此中之`119`是为了兼容后续测试
     const NAL_TESTS: [&str; 119] = [
         NAL_1_0,
         NAL_1_1,
@@ -1099,8 +1103,8 @@ mod tests {
 
     /// 从指定的「分隔符」生成「逻辑稳定性」测试用例
     /// * 🎯简化「重复后缀的语句」并统一「测试用例文本」
-    fn generate_logical_stability(sep: impl AsRef<str>) -> String {
-        NAL_TESTS.into_iter().join_to_new(sep.as_ref())
+    fn generate_logical_stability(sep: &str) -> impl Iterator<Item = String> + '_ {
+        NAL_TESTS.into_iter().map(|s| s.to_string() + sep)
     }
 
     /// 集成测试：逻辑稳定性
