@@ -134,6 +134,15 @@ __impl_to_display_and_display! {
     BudgetValue as Budget
 }
 
+/// 初代「预算值」的快捷构造宏
+#[macro_export]
+macro_rules! budget {
+    // 三参数
+    ($p:expr; $d:expr; $q:expr) => {
+        BudgetValue::from_floats($p, $d, $q)
+    };
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -143,14 +152,6 @@ mod tests {
     /// 定义要测试的「预算值」类型
     type BudgetValue = super::BudgetValue;
     type SF = ShortFloat;
-
-    /// 快捷构造宏
-    macro_rules! budget {
-        // 三参数
-        ($p:expr; $d:expr; $q:expr) => {
-            BudgetValue::from_floats($p, $d, $q)
-        };
-    }
 
     // * ✅测试/new已在「快捷构造宏」中实现
 

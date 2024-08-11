@@ -22,8 +22,7 @@
 
 use crate::{
     control::{ReasonContext, ReasonContextDirect, Reasoner},
-    entity::{Item, Sentence, Task},
-    global::RC,
+    entity::{Item, RCTask, Sentence, Task},
     inference::{Budget, Truth},
     util::{RefCount, ToDisplayAndBrief},
 };
@@ -158,7 +157,7 @@ impl Reasoner {
         let concept_key = self.memory.get_concept_or_create(task_term)?.key().clone();
         let current_concept = self.memory.pick_out_concept(&concept_key)?;
         // * 🚩将「任务」变为共享引用
-        let current_task = RC::new_(task_to_process);
+        let current_task = RCTask::new_(task_to_process);
         // * 🚩构造上下文 | ⚠️在此传入`self: &mut Reasoner`独占引用
         let context = ReasonContextDirect::new(self, current_concept, current_task);
         // * 🚩返回

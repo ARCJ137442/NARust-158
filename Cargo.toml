@@ -17,10 +17,13 @@ repository = "https://github.com/ARCJ137442/NARust/tree/narust-158"
 
 [dependencies]
 anyhow = "1.0.86"
-rand = { version="0.8.5", features=["serde"] }
-serde = "1.0.206"
+rand = "0.8.5"
 serde_json = "1.0.122"
 thiserror = "1.0.63"
+
+[dependencies.serde]
+version = "1.0.206"
+features = ["rc"] # ! 引入不完备的「共享引用」实现，后续将通过「归一化」的方式修复
 
 # 用于开发NARS的实用工具
 [dependencies.nar_dev_utils]
