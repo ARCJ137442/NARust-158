@@ -9,9 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 
 /// 🚀推理导出用数据
-///
-/// TODO: 🚧【2024-08-11 16:07:26】序列反序列化 @ 袋
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub(in super::super) struct ReasonerDerivationData {
     /// 新任务列表
     /// * 🚩没有上限，不适合作为「缓冲区」使用

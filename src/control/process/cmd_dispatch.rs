@@ -17,7 +17,7 @@ impl Reasoner {
     ///   * 🚩由「通道」的「处理IO」引入
     pub(super) fn input_cmd(&mut self, cmd: Cmd) {
         match cmd {
-            // Cmd::SAV { target, path } => (),
+            Cmd::SAV { target, path } => self.cmd_sav(target, path),
             // Cmd::LOA { target, path } => (),
             // * 🚩重置：推理器复位
             Cmd::RES { .. } => self.reset(),
@@ -94,6 +94,19 @@ impl Reasoner {
         let query = name.to_lowercase();
         // 消息分派 | 📌只在此处涉及「报告输出」
         match hlp_dispatch(self, query) {
+            // 正常信息⇒报告info
+            Ok(message) => self.report_info(message),
+            // 错误信息⇒报告error
+            Err(message) => self.report_error(message),
+        }
+    }
+
+    /// 处理指令[`Cmd::SAV`]
+    fn cmd_sav(&mut self, target: String, path: String) {
+        // 查询
+        let query = target.to_lowercase();
+        // 消息分派 | 📌只在此处涉及「报告输出」
+        match sav_dispatch(self, query, path) {
             // 正常信息⇒报告info
             Ok(message) => self.report_info(message),
             // 错误信息⇒报告error
@@ -605,3 +618,45 @@ mod cmd_inf {
     }
 }
 use cmd_inf::*;
+
+/// 专用于指令[`Cmd::SAV`]的处理函数
+mod cmd_sav {
+    use super::*;
+    use nar_dev_utils::macro_once;
+
+    impl Reasoner {}
+
+    /// 指令[`Cmd::SAV`]的入口函数
+    /// * 📌传入的`query`默认为小写字串引用
+    /// * 📌输出仅为JSON字符串；若返回[错误值](Err)，则视为「报错」
+    pub fn sav_dispatch(
+        reasoner: &mut Reasoner,
+        query: impl AsRef<str>,
+        _path: impl AsRef<str>,
+    ) -> Result<String, String> {
+        macro_once! {
+            macro ( $( $query:literal => $message:expr )* ) => {
+                /// 所有非空查询的列表
+                /// * 📌格式：Markdown无序列表
+                const ALL_QUERIES_LIST: &str = concat!($( "\n- ", $query, )*);
+                match query.as_ref() {
+                    // * 🚩特殊/空字串：列举所有query并转接`HLP INF`
+                    // ! ⚠️【2024-08-09 17:48:15】不能放外边：会被列入非空查询列表中
+                    "" => Ok(format!("Available save target: {ALL_QUERIES_LIST}",)),
+                    // 所有固定模式的分派
+                    $( $query => Ok($message.to_string()), )*
+                    // * 🚩其它⇒告警
+                    other => Err(format!("Unknown save target: {other:?}")),
+                }
+            }
+
+            // * 🚩状态信息保存
+            "memory" => format!(
+                "{}",
+                serde_json::to_string(&reasoner.memory)
+                    .map_err(|e| format!("Failed to serialize memory: {e}"))?
+            )
+        }
+    }
+}
+use cmd_sav::*;
