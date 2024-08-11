@@ -9,9 +9,10 @@ use crate::{
     language::Term,
 };
 use narsese::lexical::Sentence as LexicalSentence;
+use serde::{Deserialize, Serialize};
 
 /// 🆕判断句 初代实现
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct JudgementV1 {
     /// 🆕内部存储的「语句」实现
     pub(crate) inner: SentenceInner,

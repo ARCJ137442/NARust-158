@@ -11,6 +11,7 @@
 
 use crate::{global::Float, impl_display_from_to_display, util::ToDisplayAndBrief};
 use narsese::api::EvidentNumber;
+use serde::{Deserialize, Serialize};
 use std::ops::{Add, BitAnd, BitOr, Div, Mul, Not, Sub};
 use thiserror::Error;
 
@@ -63,7 +64,9 @@ const MULTIPLIER_TO_UINT: Float = 10000.0;
 /// # 📄OpenNARS
 ///
 /// A float value in [0, 1], with 4 digits accuracy.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
+)]
 pub struct ShortFloat {
     /// 0~4294967296的「实际值」
     ///

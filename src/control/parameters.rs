@@ -3,6 +3,7 @@
 
 use crate::global::Float;
 use nar_dev_utils::macro_once;
+use serde::{Deserialize, Serialize};
 
 /// 用于决定推理器诸多推理中的「k值」
 /// * 🚩🆕【2024-05-03 16:00:14】根据在「真值函数」中的实际用途，此处将其修改为「浮点数」[`Float`]类型
@@ -53,7 +54,7 @@ macro_once! {
     /// # 📄OpenNARS
     ///
     /// Collected system parameters. To be modified before compiling.
-    #[derive(Debug, Clone, Copy, PartialEq)]
+    #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
     pub struct Parameters {
 
         /// # 📄OpenNARS

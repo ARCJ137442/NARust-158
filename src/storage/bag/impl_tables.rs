@@ -1,13 +1,14 @@
 //! 存放与内部「映射表」有关的结构
 
 use crate::entity::Item;
+use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, VecDeque},
     fmt::Debug,
 };
 
 /// 初代「元素映射」实现
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BagNameTable<E: Item>(HashMap<String, NameValue<E>>);
 
 /// 「元素映射」最终从「名称」映射到的结构
@@ -116,7 +117,7 @@ impl<E: Item> BagNameTable<E> {
 }
 
 /// 初代「层级映射」实现
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct BagItemTable(Box<[BagItemLevel]>);
 
 impl BagItemTable {
@@ -195,7 +196,7 @@ impl BagItemTable // * 需要在「具体值匹配删除」时用到
 }
 
 /// 实现一个「层级队列」
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct BagItemLevel(VecDeque<String>);
 
 /// 📜实现「层级」

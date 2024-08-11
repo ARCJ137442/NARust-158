@@ -10,6 +10,7 @@ use crate::{
 use anyhow::Result;
 use nar_dev_utils::matches_or;
 use narsese::lexical::Sentence as LexicalSentence;
+use serde::{Deserialize, Serialize};
 
 /// 模拟`nars.entity.Sentence`
 /// * 📌【2024-05-10 20:17:04】此处不加入对[`PartialEq`]的要求：会将要求传播到上层的「词项链」「任务链」
@@ -239,7 +240,7 @@ pub trait Sentence: ToDisplayAndBrief + Evidential {
 }
 
 /// 🆕一个用于「复用共有字段」的内部对象
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct SentenceInner {
     /// 内部词项
     content: Term,

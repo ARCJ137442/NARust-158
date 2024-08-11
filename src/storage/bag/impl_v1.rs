@@ -8,6 +8,9 @@ use crate::{
     inference::{Budget, BudgetFunctions, BudgetInference},
     util::ToDisplayAndBrief,
 };
+use serde::{Deserialize, Serialize};
+
+// TODO: 有关「函数指针」的序列化
 
 // ! 删除「具体类型」特征：能直接`struct`就直接`struct`
 
@@ -48,7 +51,7 @@ use crate::{
 ///
 /// 1. level selection vs. item selection
 /// 2. decay rate
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone /* , Serialize, Deserialize */)]
 pub struct Bag<E: Item> {
     /// 🆕分派器
     /// * 🚩不再作为全局变量，而是在构造函数中附带
@@ -155,6 +158,8 @@ pub struct Bag<E: Item> {
     /// 🆕决定「预算合并顺序」的函数指针
     /// * 🎯根据元素决定「预算合并」的顺序：新→旧 or 旧→新
     /// * 🚩目前采用函数指针
+    ///
+    /// ! ⚠️【2024-08-11 15:50:16】目前函数指针的序列化/反序列化 有大问题
     merge_order_f: MergeOrderF<E>,
 }
 

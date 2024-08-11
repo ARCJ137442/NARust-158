@@ -1,9 +1,9 @@
 //! 推理器的输入输出（通道）部分
 
-use crate::io::{InputChannel, OutputChannel};
-use std::fmt::{Debug, Formatter};
-
 use super::Reasoner;
+use crate::io::{InputChannel, OutputChannel};
+use serde::{Deserialize, Serialize};
+use std::fmt::{Debug, Formatter};
 
 /// 输入通道对象
 pub(in super::super) type InputChannelObj = Box<dyn InputChannel>;
@@ -13,6 +13,8 @@ pub(in super::super) type OutputChannelObj = Box<dyn OutputChannel>;
 
 /// 内部的「推理器通道」结构
 /// * 🎯在内部实现中分离[推理器](Reasoner)的「输入输出」逻辑
+/// 
+/// TODO: 特征对象的反序列化，or 放弃对「通道」的模拟
 #[derive(Default)]
 pub(in super::super) struct ReasonerChannels {
     /// 所有输入通道

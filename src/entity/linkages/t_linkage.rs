@@ -1,11 +1,11 @@
-use std::ops::{Deref, DerefMut};
-
 use super::{TLink, TLinkType};
+use serde::{Deserialize, Serialize};
+use std::ops::{Deref, DerefMut};
 
 /// T链接的一个默认实现
 /// * ℹ️目前开放给「词项链」「任务链」访问内部字段
 ///   * 🎯「任务链」需要借此访问「共享引用代理」
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct TLinkage<Target> {
     /// The linked Target
     /// * 📝【2024-05-30 19:39:14】final化：一切均在构造时确定，构造后不再改变

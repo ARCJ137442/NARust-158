@@ -7,10 +7,11 @@ use crate::__impl_to_display_and_display;
 use crate::{global::ClockTime, inference::Evidential};
 use anyhow::Result;
 use narsese::lexical::Stamp as LexicalStamp;
+use serde::{Deserialize, Serialize};
 use std::hash::{Hash, Hasher};
 
 /// [时间戳](Stamp)初代实现
-#[derive(Debug, Clone, Eq)]
+#[derive(Debug, Clone, Eq, Serialize, Deserialize)]
 pub struct Stamp {
     evidential_base: Box<[ClockTime]>,
     creation_time: ClockTime,

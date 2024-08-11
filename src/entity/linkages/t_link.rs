@@ -1,12 +1,13 @@
 //! 作为「词项链」与「任务链」共有的特征基础存在
 
 use crate::io::symbols::*;
+use serde::{Deserialize, Serialize};
 use std::ops::{Deref, DerefMut};
 
 /// 基于枚举的「链接类型」
 /// * 📌【2024-06-04 19:35:12】拨乱反正：此处的「类型名」均为「从自身向目标」视角下「目标相对自身」的类型
 /// * 📄目标是自身的元素⇒COMPONENT「元素」链接
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum TLinkType {
     /// From C, targeted to "SELF" C; TaskLink only
     /// * 🚩【2024-06-22 00:26:43】避嫌Rust的`Self`关键字

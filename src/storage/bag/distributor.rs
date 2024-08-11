@@ -8,6 +8,7 @@
 //! A pseudo-random number generator, used in Bag.
 
 use nar_dev_utils::manipulate;
+use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
 /// 伪随机数分派
@@ -91,7 +92,7 @@ where
 /// * 🎯以更Rusty的方式复刻OpenNARS之Distributor
 ///   * ⚡性能
 ///   * ✨通用性
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Distributor {
     /// 🆕缓存的「随机范围」量
     /// * 🚩表示随机数的样本空间大小

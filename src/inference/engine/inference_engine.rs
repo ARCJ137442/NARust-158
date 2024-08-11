@@ -5,12 +5,15 @@
 //! * ♻️【2024-06-26 12:11:03】开始根据改版OpenNARS编写
 
 use crate::control::{ReasonContextConcept, ReasonContextDirect, ReasonContextTransform};
+use serde::{Deserialize, Serialize};
 
 /// 作为通用接口的「推理引擎」特征
 /// * 📌只负责处理「推理上下文」
 /// * 🚩【2024-06-28 01:24:34】现在从「特征对象」降级到「函数指针集合」
 ///   * 💡实际上只是需要动态分派几个函数而已——况且，这些函数一般也会静态存在（不是闭包什么的）
 ///   * 💭【2024-06-28 01:26:37】这个「引擎分派」本身就是个`VTable`嘛……
+///
+/// TODO: 【2024-08-11 16:04:42】函数指针/闭包 的 序列反序列化
 #[derive(Debug, Clone, Copy)]
 pub struct InferenceEngine {
     /// 直接推理 入口函数

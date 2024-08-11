@@ -8,6 +8,7 @@ use crate::{
 };
 use anyhow::Result;
 use narsese::lexical::Truth as LexicalTruth;
+use serde::{Deserialize, Serialize};
 use std::{
     fmt::Debug,
     hash::{Hash, Hasher},
@@ -20,7 +21,7 @@ use std::{
 /// # 📄OpenNARS
 ///
 /// Frequency and confidence.
-#[derive(Debug, Clone, Copy, Default, Eq)]
+#[derive(Debug, Clone, Copy, Default, Eq, Serialize, Deserialize)]
 pub struct TruthValue {
     /// frequency
     f: ShortFloat,

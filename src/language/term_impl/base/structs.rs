@@ -1,6 +1,8 @@
 //! 「词项」的结构体
 //! * 🚩【2024-06-12 21:11:15】新迁入作为「定义」mod
 
+use serde::{Deserialize, Serialize};
+
 /// 作为「结构」的词项
 /// * 🚩更多通过「复合」而非「抽象特征-具体实现」复用代码
 ///   * 📍【2024-04-20 21:13:20】目前只需实现OpenNARS 1.5.8的东西
@@ -51,7 +53,7 @@
 /// The same as getName by default, used in display only.
 ///
 /// @return The name of the term as a String
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct Term {
     /// 标识符
     /// * 🎯决定词项的「类型」
@@ -82,7 +84,7 @@ pub struct Term {
 
 /// 复合词项组分
 /// * ⚠️
-#[derive(Debug, Clone, Hash, Eq, PartialEq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum TermComponents {
     /// 不包含任何组分
     /// * 📄占位符

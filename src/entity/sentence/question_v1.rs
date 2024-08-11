@@ -7,9 +7,10 @@ use crate::{
     language::Term,
 };
 use narsese::lexical::Sentence as LexicalSentence;
+use serde::{Deserialize, Serialize};
 
 /// 🆕疑问句 初代实现
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct QuestionV1 {
     pub(crate) inner: SentenceInner,
 }

@@ -11,12 +11,17 @@ use crate::{
 };
 use navm::output::Output;
 use rand::{rngs::StdRng, SeedableRng};
+use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
 // ! ❌【2024-06-27 18:01:23】不复刻静态常量`Reasoner.DEBUG`
 
 /// 作为结构体的「推理器」
-#[derive(Debug)]
+///
+/// TODO: ⚠️【2024-08-11 15:52:04】函数指针、闭包等对象的 序列化/反序列化 问题
+/// * 💭或将弃用有关「通道」「随机数生成器」等字段的序列反序列化可能，仅专注于「推理器存储」部分
+///   * 亦即【可被序列化】的部分
+#[derive(Debug /* Serialize, Deserialize */)]
 pub struct Reasoner {
     /// 推理器「名称」
     name: String,
@@ -49,6 +54,8 @@ pub struct Reasoner {
 
     // ! ❌不复刻`finishedInputs`：仅DEBUG变量
     /// 最后一个输出之前的步数
+    ///
+    /// TODO: 可简化——无用
     pub(in super::super) timer: usize,
 
     /// 音量等级（0~100）

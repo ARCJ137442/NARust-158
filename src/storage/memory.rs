@@ -13,6 +13,7 @@ use crate::{
     inference::{Budget, BudgetFunctions},
     language::Term,
 };
+use serde::{Deserialize, Serialize};
 
 /// 记忆区
 #[derive(Debug)]
@@ -22,6 +23,8 @@ pub struct Memory {
     /// # 📄OpenNARS
     ///
     /// Concept bag. Containing all Concepts of the system
+    ///
+    /// TODO: 函数指针的序列化问题
     concepts: Bag<Concept>,
 
     /// 🆕统一所有「超参数」的存储

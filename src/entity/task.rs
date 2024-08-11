@@ -10,14 +10,12 @@ use crate::{
 };
 use nar_dev_utils::join;
 use narsese::lexical::{Sentence as LexicalSentence, Task as LexicalTask};
-
-/// 可选的共享指针
-/// * 📌类似Java中默认的对象类型
-type Orc<T> = Option<RC<T>>;
-type OrcRef<'a, T> = Option<&'a RC<T>>;
+use serde::{Deserialize, Serialize};
 
 /// A task to be processed, consists of a Sentence and a BudgetValue
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// TODO: 🏗️【2024-08-11 15:55:37】有待翻新[`RCTask`]并开启Rc特性
+#[derive(Debug, Clone, PartialEq, Eq /* , Serialize, Deserialize */)]
 pub struct Task {
     /// The sentence of the Task
     /// * 📝任务的「内容」
@@ -32,7 +30,7 @@ pub struct Task {
     /// # 📄OpenNARS
     ///
     /// Task from which the Task is derived, or null if input
-    parent_task: Orc<Task>,
+    parent_task: Option<RCTask>,
 
     /// 派生所源自的信念
     ///
@@ -60,7 +58,7 @@ impl Task {
     pub fn new(
         sentence: SentenceV1,
         budget: BudgetValue,
-        parent_task: Orc<Self>,
+        parent_task: Option<RCTask>,
         parent_belief: Option<JudgementV1>,
         best_solution: Option<JudgementV1>,
     ) -> Self {
@@ -83,7 +81,7 @@ impl Task {
     pub fn from_derived(
         sentence: SentenceV1,
         budget: impl Into<BudgetValue>,
-        parent_task: Orc<Self>,
+        parent_task: Option<RCTask>,
         parent_belief: Option<JudgementV1>,
     ) -> Self {
         Self::new(sentence, budget.into(), parent_task, parent_belief, None)
@@ -93,7 +91,7 @@ impl Task {
 // 访问类 方法
 impl Task {
     /// 获取其「父任务」
-    pub fn parent_task(&self) -> OrcRef<Self> {
+    pub fn parent_task(&self) -> Option<&RCTask> {
         self.parent_task.as_ref()
     }
 

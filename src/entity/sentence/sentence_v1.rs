@@ -9,6 +9,7 @@ use crate::{
 use anyhow::Result;
 use nar_dev_utils::enum_union;
 use narsese::lexical::Sentence as LexicalSentence;
+use serde::{Deserialize, Serialize};
 
 // 使用「枚举联合」快捷实现「判断/问题」的「语句」类型
 // 等效于以下代码：
@@ -19,7 +20,7 @@ use narsese::lexical::Sentence as LexicalSentence;
 // }
 enum_union! {
     /// 作为【可能是判断，也可能是问题】的统一「语句」类型
-    #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+    #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
     pub SentenceV1 = JudgementV1 | QuestionV1;
 }
 

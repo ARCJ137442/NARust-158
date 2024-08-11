@@ -15,6 +15,7 @@ use crate::{
     util::{to_display_when_has_content, Iterable, RefCount, ToDisplayAndBrief},
 };
 use nar_dev_utils::join;
+use serde::{Deserialize, Serialize};
 use std::usize;
 
 /// 复刻改版OpenNARS `nars.entity.Concept`

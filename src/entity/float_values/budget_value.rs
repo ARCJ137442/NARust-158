@@ -6,10 +6,11 @@ use crate::entity::ShortFloat;
 use crate::{global::Float, inference::Budget, util::ToDisplayAndBrief};
 use anyhow::Result;
 use narsese::lexical::Budget as LexicalBudget;
+use serde::{Deserialize, Serialize};
 
 /// [预算值](BudgetValue)的初步实现
 /// * 🚩直接表示为一个三元组（但并非直接对元组实现）
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct BudgetValue(ShortFloat, ShortFloat, ShortFloat);
 
 impl Budget for BudgetValue {

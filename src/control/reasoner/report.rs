@@ -6,9 +6,10 @@
 use super::Reasoner;
 use crate::{control::ReasonContextCoreOut, entity::Task, global::Float};
 use navm::output::Output;
+use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub(super) struct ReasonRecorder {
     /// 缓存的NAVM输出
     cached_outputs: VecDeque<Output>,
