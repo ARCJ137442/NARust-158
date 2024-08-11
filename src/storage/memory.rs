@@ -16,18 +16,18 @@ use crate::{
 use serde::{Deserialize, Serialize};
 
 /// 记忆区
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Memory {
     /// 概念袋
     ///
     /// # 📄OpenNARS
     ///
     /// Concept bag. Containing all Concepts of the system
-    ///
-    /// TODO: 函数指针的序列化问题
     concepts: Bag<Concept>,
 
     /// 🆕统一所有「超参数」的存储
+    ///
+    /// TODO: 【2024-08-11 23:46:10】后续尽可能跟「推理器」的超参数字段合并
     parameters: Parameters,
 }
 
