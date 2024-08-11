@@ -49,7 +49,7 @@ use serde::{Deserialize, Serialize};
 ///
 /// 1. level selection vs. item selection
 /// 2. decay rate
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Bag<E: Item> {
     /// 🆕分派器
     /// * 🚩不再作为全局变量，而是在构造函数中附带

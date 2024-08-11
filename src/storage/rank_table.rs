@@ -118,7 +118,7 @@ pub type IsCompatibleToAddF<T> = for<'a> fn(&'a T, &'a T) -> bool;
 ///   * 💫【2024-08-11 22:43:01】基于「中间类型」的方式难走通
 ///     * ❌内部存储有复杂的堆分配对象，而序列化时只拿取引用——中间类型的引用不`clone`就拿不到
 ///   * 🚩【2024-08-11 22:35:56】目前用「先反序列化到白板，再由调用处填充」的方式实现
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct ArrayRankTable<T> {
     /// 内部数组
     inner: Vec<T>,
@@ -127,13 +127,14 @@ pub struct ArrayRankTable<T> {
     capacity: usize,
 
     /// 「计算排行」函数（函数指针）
-    #[serde(skip_serializing)]
-    #[serde(deserialize_with = "ArrayRankTable::<T>::default_rank_f")]
+    #[serde(skip)]
+    #[serde(default = "ArrayRankTable::<T>::default_rank_f")]
     rank_f: RankF<T>,
 
     /// 「计算是否可兼容以添加」（函数指针）
-    #[serde(skip_serializing)]
-    #[serde(deserialize_with = "ArrayRankTable::<T>::default_is_compatible_to_add_f")]
+    #[serde(skip)]
+    // ! ❌不能`skip_serialize`+`deserialize_with`：区别在于「反序列化时仍然检查字段」
+    #[serde(default = "ArrayRankTable::<T>::default_is_compatible_to_add_f")]
     is_compatible_to_add_f: IsCompatibleToAddF<T>,
 }
 
@@ -216,29 +217,23 @@ impl<T> ArrayRankTable<T> {
     }
 
     /// 用于序列化产生「空白函数」
-    pub fn default_rank_f<'de, D>(_: D) -> Result<RankF<T>, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
+    pub fn default_rank_f() -> RankF<T> {
         /// 🚩【2024-08-11 22:37:05】目前将默认返回值定位为「默认panic」
         /// * 💭【2024-08-11 22:37:23】尽可能提前暴露错误（何处未及时设置函数指针），而非让值蒙混过关
         fn rank_f<T>(_: &T) -> Float {
             panic!("未完全反序列化的`rank_f`函数指针")
         }
-        Ok(rank_f)
+        rank_f
     }
 
     /// 用于序列化产生「空白函数」
-    pub fn default_is_compatible_to_add_f<'de, D>(_: D) -> Result<IsCompatibleToAddF<T>, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
+    pub fn default_is_compatible_to_add_f() -> IsCompatibleToAddF<T> {
         /// 🚩【2024-08-11 22:37:05】目前将默认返回值定位为「默认panic」
         /// * 💭【2024-08-11 22:37:23】尽可能提前暴露错误（何处未及时设置函数指针），而非让值蒙混过关
         fn is_compatible_to_add_f<T>(_: &T, _: &T) -> bool {
             panic!("未完全反序列化的`is_compatible_to_add_f`函数指针")
         }
-        Ok(is_compatible_to_add_f)
+        is_compatible_to_add_f
     }
 }
 

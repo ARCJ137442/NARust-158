@@ -657,7 +657,7 @@ mod cmd_sav {
                     .map_err(|e| format!("Failed to serialize memory: {e}"))?
             )
             // 推理器整体状态
-            "status" => "Not implemented yet"
+            "status" => "Not implemented yet" // TODO: 记忆区、推导数据（俩缓冲区）等
         }
     }
 }

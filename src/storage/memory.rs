@@ -16,7 +16,7 @@ use crate::{
 use serde::{Deserialize, Deserializer, Serialize};
 
 /// 记忆区
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Memory {
     /// 概念袋
     ///
@@ -238,5 +238,37 @@ impl Memory {
         RCTask::unify_rcs(all_task_rcs);
         // 返回归一化后的概念袋
         Ok(bag)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{ok, test_term as term, util::AResult};
+
+    #[test]
+    fn test_soundness() -> AResult {
+        fn test(memory: &Memory) -> AResult {
+            let ser = serde_json::to_string(memory)?;
+            let de = serde_json::from_str::<Memory>(&ser)?;
+            assert_eq!(*memory, de); // 应该相等
+
+            // let ser2 = serde_json::to_string(&de)?;
+            // assert_eq!(ser, ser2); // ! 可能会有无序对象
+
+            ok!()
+        }
+        // 测试的总体规模：使用字符当作词项名
+        const R_TERM: std::ops::RangeInclusive<char> = 'A'..='Z';
+        for t_end in R_TERM {
+            // 构造不同大小的记忆区
+            let mut memory = Memory::new(DEFAULT_PARAMETERS);
+            for t in 'A'..=t_end {
+                memory.make_new_concept(&term!(str t.to_string()));
+            }
+            // 开始测试「序列反序列化」
+            test(&memory)?;
+        }
+        ok!()
     }
 }
