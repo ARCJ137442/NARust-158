@@ -10,8 +10,6 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 
-// TODO: 有关「函数指针」的序列化
-
 // ! 删除「具体类型」特征：能直接`struct`就直接`struct`
 
 /// 对应OpenNARS的「袋」
@@ -51,7 +49,7 @@ use serde::{Deserialize, Serialize};
 ///
 /// 1. level selection vs. item selection
 /// 2. decay rate
-#[derive(Debug, Clone /* , Serialize, Deserialize */)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Bag<E: Item> {
     /// 🆕分派器
     /// * 🚩不再作为全局变量，而是在构造函数中附带
@@ -160,6 +158,8 @@ pub struct Bag<E: Item> {
     /// * 🚩目前采用函数指针
     ///
     /// ! ⚠️【2024-08-11 15:50:16】目前函数指针的序列化/反序列化 有大问题
+    /// * ✅【2024-08-11 23:15:46】目前暂时以「默认参数」完成绑定
+    #[serde(skip_serializing, deserialize_with = "MergeOrder::default_order_fn")]
     merge_order_f: MergeOrderF<E>,
 }
 
@@ -183,6 +183,14 @@ impl MergeOrder {
     /// 默认的「合并顺序」：旧→新
     pub fn default_order<E>(_: &E, _: &E) -> Self {
         Self::default()
+    }
+
+    /// 用于[`serde`]的、生成「默认函数」指针的函数
+    pub fn default_order_fn<'de, E, D>(_: D) -> Result<MergeOrderF<E>, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        Ok(MergeOrder::default_order)
     }
 }
 

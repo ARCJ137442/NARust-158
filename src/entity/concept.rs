@@ -11,12 +11,11 @@ use crate::{
     global::{ClockTime, Float},
     inference::{Budget, BudgetFunctions},
     language::Term,
-    storage::{ArrayBuffer, ArrayRankTable, Bag, Buffer, RankTable},
+    storage::{ArrayBuffer, ArrayRankTable, Bag, Buffer, IsCompatibleToAddF, RankF, RankTable},
     util::{to_display_when_has_content, Iterable, RefCount, ToDisplayAndBrief},
 };
 use nar_dev_utils::join;
 use serde::{Deserialize, Serialize};
-use std::usize;
 
 /// 复刻改版OpenNARS `nars.entity.Concept`
 ///
@@ -27,7 +26,7 @@ use std::usize;
 /// To make sure the space will be released, the only allowed reference to a  concept are those in a ConceptBag.
 ///
 /// All other access go through the Term that names the concept.
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Concept {
     /// 🆕Item令牌
     token: Token,
@@ -53,8 +52,61 @@ pub struct Concept {
     /// * 🚩【2024-07-02 15:58:38】转换为共享引用
     questions: ArrayBuffer<RCTask>,
 
-    /// Sentences directly made about the term, with non-future tense
+    /// 信念表
+    ///
+    /// * 📝【2024-08-11 23:23:42】对接[`serde`]序列反序列化 经验笔记
+    ///   * 📌一个应对「带函数指针结构」的serde模式：白板结构+指针覆写
+    ///     * ❓关键问题：这里「要覆写的指针」从哪儿决定
+    ///   * 💡一个核心可利用信息：反序列化时可以「基于字段指定要专门反序列化该字段的函数」
+    ///     * ✨因此：正巧「信念表」的函数指针是由「信念表」这个字段决定的
+    ///   * 🚩最终做法：通过「特制的反序列化函数」实现函数指针的无损序列反序列化
+    ///   * ! 💫踩坑：基于「中间类型」的方式较为繁琐
+    ///     * ⚠️需要包装旧有类型：对原先代码侵入式大
+    ///     * ℹ️实际上需要借助「中间类型」，多出许多boilerplate
+    ///
+    /// # 📄OpenNARS
+    ///
+    ///  Sentences directly made about the term, with non-future tense
+    #[serde(deserialize_with = "beliefs::deserialize")]
     beliefs: ArrayRankTable<JudgementV1>,
+}
+
+/// 有关「信念排行表」的模块
+mod beliefs {
+    use super::*;
+    pub const RANK_F: RankF<JudgementV1> = BudgetValue::rank_belief;
+    pub const IS_COMPATIBLE_TO_ADD_F: IsCompatibleToAddF<JudgementV1> = belief_compatible_to_add;
+
+    type Table = ArrayRankTable<JudgementV1>;
+
+    /// 构造一个「信念排行表」
+    pub fn new(parameters: &Parameters) -> Table {
+        Table::new(
+            parameters.maximum_belief_length,
+            RANK_F, // * 📌作为「预算函数」的「预算值」
+            IS_COMPATIBLE_TO_ADD_F,
+        )
+    }
+
+    /// 信念适合添加的条件：不能等价
+    fn belief_compatible_to_add(incoming: &impl Judgement, existed: &impl Judgement) -> bool {
+        // * 📌【2024-07-09 17:13:29】debug：应该是「不等价⇒可兼容」
+        !incoming.is_belief_equivalent(existed)
+    }
+
+    /// 定制版序列化函数
+    /// * 🚩反序列化→覆写指针→原样返回
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<ArrayRankTable<JudgementV1>, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        // 先反序列化出原排行表
+        let mut table = ArrayRankTable::deserialize(deserializer)?;
+        // 再覆盖函数指针
+        table.override_fn(beliefs::RANK_F, beliefs::IS_COMPATIBLE_TO_ADD_F);
+        // 最后返回
+        Ok(table)
+    }
 }
 
 impl Concept {
@@ -71,21 +123,7 @@ impl Concept {
         const PARAMETERS: Parameters = DEFAULT_PARAMETERS;
         let token = Token::new(term.name(), initial_budget);
         let questions = ArrayBuffer::new(PARAMETERS.maximum_questions_length);
-        let beliefs = ArrayRankTable::new(
-            PARAMETERS.maximum_belief_length,
-            BudgetValue::rank_belief, // * 📌作为「预算函数」的「预算值」
-            {
-                /// 信念适合添加的条件：不能等价
-                fn belief_compatible_to_add(
-                    incoming: &impl Judgement,
-                    existed: &impl Judgement,
-                ) -> bool {
-                    // * 📌【2024-07-09 17:13:29】debug：应该是「不等价⇒可兼容」
-                    !incoming.is_belief_equivalent(existed)
-                }
-                belief_compatible_to_add
-            },
-        );
+        let beliefs = beliefs::new(&PARAMETERS);
         let task_links = Bag::new(task_link_forgetting_rate, PARAMETERS.task_link_bag_size);
         let term_links = Bag::new(term_link_forgetting_rate, PARAMETERS.term_link_bag_size);
         Self {

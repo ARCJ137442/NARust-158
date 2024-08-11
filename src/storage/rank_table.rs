@@ -104,11 +104,21 @@ pub trait RankTable<T>: Iterable<T> {
     }
 }
 
+/// 🆕「排行函数」类型
+pub type RankF<T> = for<'a> fn(&'a T) -> Float;
+
+/// 🆕「兼容性检查」类型
+pub type IsCompatibleToAddF<T> = for<'a> fn(&'a T, &'a T) -> bool;
+
 /// 🆕使用「变长数组」实现的「排行表」类型
 /// * 📌直接使用函数指针类型
-///
-/// TODO: 函数指针的序列化问题
-#[derive(Debug)]
+/// * ❓包含函数指针类型「不大幅破坏原有结构」下的序列化问题
+///   * ❌【2024-08-11 22:27:35】回退为特征的方法不可行
+///     * ⚠️模拟继承式分派 不可取：多很多有关字段的方法
+///   * 💫【2024-08-11 22:43:01】基于「中间类型」的方式难走通
+///     * ❌内部存储有复杂的堆分配对象，而序列化时只拿取引用——中间类型的引用不`clone`就拿不到
+///   * 🚩【2024-08-11 22:35:56】目前用「先反序列化到白板，再由调用处填充」的方式实现
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ArrayRankTable<T> {
     /// 内部数组
     inner: Vec<T>,
@@ -117,18 +127,22 @@ pub struct ArrayRankTable<T> {
     capacity: usize,
 
     /// 「计算排行」函数（函数指针）
-    rank_f: fn(&T) -> Float,
+    #[serde(skip_serializing)]
+    #[serde(deserialize_with = "ArrayRankTable::<T>::default_rank_f")]
+    rank_f: RankF<T>,
 
     /// 「计算是否可兼容以添加」（函数指针）
-    is_compatible_to_add_f: fn(&T, &T) -> bool,
+    #[serde(skip_serializing)]
+    #[serde(deserialize_with = "ArrayRankTable::<T>::default_is_compatible_to_add_f")]
+    is_compatible_to_add_f: IsCompatibleToAddF<T>,
 }
 
 impl<T> ArrayRankTable<T> {
     /// 构造函数：创建一个空排行表，用上两个函数指针
     pub fn new(
         capacity: usize,
-        rank_f: fn(&T) -> Float,
-        is_compatible_to_add_f: fn(&T, &T) -> bool,
+        rank_f: RankF<T>,
+        is_compatible_to_add_f: IsCompatibleToAddF<T>,
     ) -> Self {
         Self {
             inner: vec![],
@@ -190,5 +204,70 @@ impl<T> RankTable<T> for ArrayRankTable<T> {
 
     fn __pop(&mut self) -> Option<T> {
         self.inner.pop()
+    }
+}
+
+impl<T> ArrayRankTable<T> {
+    /// （公开API）覆盖所有的函数指针
+    /// * 🎯序列反序列化：反序列化到「白板对象」后，覆写其中的模板函数指针
+    pub fn override_fn(&mut self, rank_f: RankF<T>, is_compatible_to_add_f: IsCompatibleToAddF<T>) {
+        self.rank_f = rank_f;
+        self.is_compatible_to_add_f = is_compatible_to_add_f;
+    }
+
+    /// 用于序列化产生「空白函数」
+    pub fn default_rank_f<'de, D>(_: D) -> Result<RankF<T>, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        /// 🚩【2024-08-11 22:37:05】目前将默认返回值定位为「默认panic」
+        /// * 💭【2024-08-11 22:37:23】尽可能提前暴露错误（何处未及时设置函数指针），而非让值蒙混过关
+        fn rank_f<T>(_: &T) -> Float {
+            panic!("未完全反序列化的`rank_f`函数指针")
+        }
+        Ok(rank_f)
+    }
+
+    /// 用于序列化产生「空白函数」
+    pub fn default_is_compatible_to_add_f<'de, D>(_: D) -> Result<IsCompatibleToAddF<T>, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        /// 🚩【2024-08-11 22:37:05】目前将默认返回值定位为「默认panic」
+        /// * 💭【2024-08-11 22:37:23】尽可能提前暴露错误（何处未及时设置函数指针），而非让值蒙混过关
+        fn is_compatible_to_add_f<T>(_: &T, _: &T) -> bool {
+            panic!("未完全反序列化的`is_compatible_to_add_f`函数指针")
+        }
+        Ok(is_compatible_to_add_f)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{ok, util::AResult};
+
+    #[test]
+    fn ser() -> AResult {
+        let table = ArrayRankTable::new(
+            10,
+            {
+                fn rank_f(item: &i32) -> Float {
+                    *item as Float
+                }
+                rank_f
+            },
+            {
+                fn is_compatible_to_add_f(new_item: &i32, existed_item: &i32) -> bool {
+                    *new_item > *existed_item
+                }
+                is_compatible_to_add_f
+            },
+        );
+        let s = serde_json::to_string(&table)?;
+
+        println!("{table:?} => {s}");
+
+        ok!()
     }
 }
