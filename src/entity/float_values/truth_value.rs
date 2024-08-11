@@ -42,8 +42,10 @@ mod serde {
         where
             S: Serializer,
         {
-            // 直接委托到内部整数值
-            (self.f, self.c, self.a).serialize(serializer)
+            // 构造[f,c,a]三元组
+            let v = (self.f, self.c, self.a);
+            // 直接委托到表示三元组
+            v.serialize(serializer)
         }
     }
 

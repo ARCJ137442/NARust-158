@@ -14,3 +14,6 @@ mod property;
 
 // 【内建】与其它类型相互转换
 mod conversion;
+
+// 【对外】序列反序列化
+mod serde;
