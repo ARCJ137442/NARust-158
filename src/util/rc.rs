@@ -22,13 +22,29 @@ pub type ArcMutex<T> = Arc<Mutex<T>>;
 /// * 🚩【2024-05-22 15:32:30】目前暂不打算支持「弱引用」类型
 ///   * 📌目前主要用于「任务链→任务→任务」，任务之间具有树状引用结构，同时「任务链」单向指向任务
 pub trait RefCount<T>: Sized + Clone {
+    /// 使用[`RefCount::get_`]方法获取到的「不变引用」类型
+    /// * 🚩这个类型应该是【每个实现者唯一】的
+    /// * 🎯可被获取，以便能被`struct`存取
+    type Ref<'r>: Deref<Target = T> + 'r
+    where
+        Self: 'r,
+        T: 'r;
+
+    /// 使用[`RefCount::mut_`]方法获取到的「可变引用」类型
+    /// * 🚩这个类型应该是【每个实现者唯一】的
+    /// * 🎯可被获取，以便能被`struct`存取
+    type RefMut<'r>: DerefMut<Target = T> + 'r
+    where
+        Self: 'r,
+        T: 'r;
+
     /// 特征方法：获取不可变引用
     /// * 🚩可能是包装类型：[`Rc`]等需要一个特别的「代理类型」封装内部引用
-    fn get_<'r, 's: 'r>(&'s self) -> impl Deref<Target = T> + 'r;
+    fn get_<'r, 's: 'r>(&'s self) -> Self::Ref<'r>;
 
     /// 特征方法：获取可变引用（包装类型）
     /// * 🚩可能是包装类型：[`Rc`]等需要一个特别的「代理类型」封装内部引用
-    fn mut_<'r, 's: 'r>(&'s mut self) -> impl DerefMut<Target = T> + 'r;
+    fn mut_<'r, 's: 'r>(&'s mut self) -> Self::RefMut<'r>;
 
     /// 特征方法：构造函数
     /// * 🎯从实际值中构造一个「可变共享引用」
@@ -70,13 +86,16 @@ pub trait RefCount<T>: Sized + Clone {
 
 /// 对[`Rc<RefCell<T>>`](Rc)实现
 impl<T> RefCount<T> for RcCell<T> {
+    type Ref<'a> = std::cell::Ref<'a, T> where T: 'a;
+    type RefMut<'a> = std::cell::RefMut<'a, T> where T: 'a;
+
     #[inline(always)]
-    fn get_<'r, 's: 'r>(&'s self) -> impl Deref<Target = T> + 'r {
+    fn get_<'r, 's: 'r>(&'s self) -> Self::Ref<'r> {
         RefCell::borrow(self)
     }
 
     #[inline(always)]
-    fn mut_<'r, 's: 'r>(&'s mut self) -> impl DerefMut<Target = T> + 'r {
+    fn mut_<'r, 's: 'r>(&'s mut self) -> Self::RefMut<'r> {
         RefCell::borrow_mut(self)
     }
 
@@ -103,14 +122,17 @@ impl<T> RefCount<T> for RcCell<T> {
 
 /// 对[`Arc<Mutex<T>>`](Arc)实现
 impl<T> RefCount<T> for ArcMutex<T> {
+    type Ref<'a> = std::sync::MutexGuard<'a, T> where T: 'a;
+    type RefMut<'a> = std::sync::MutexGuard<'a, T> where T: 'a;
+
     #[inline(always)]
-    fn get_<'r, 's: 'r>(&'s self) -> impl Deref<Target = T> + 'r {
+    fn get_<'r, 's: 'r>(&'s self) -> Self::Ref<'r> {
         // * ❓或许后续可以考虑使用`get_try`等
         self.lock().expect("互斥锁已中毒")
     }
 
     #[inline(always)]
-    fn mut_<'r, 's: 'r>(&'s mut self) -> impl DerefMut<Target = T> + 'r {
+    fn mut_<'r, 's: 'r>(&'s mut self) -> Self::RefMut<'r> {
         self.lock().expect("互斥锁已中毒")
     }
 

@@ -110,15 +110,21 @@ impl<T: Clone> SerialRef<T> {
 
 /// 委托内部rc: RC<Task>字段
 impl<T: Clone> RefCount<T> for SerialRef<T> {
+    // 直接委托
+    type Ref<'r> = <RC<T> as RefCount<T>>::Ref<'r> where T: 'r;
+    type RefMut<'r> = <RC<T> as RefCount<T>>::RefMut<'r> where T: 'r;
+
     fn new_(t: T) -> Self {
         Self::new(t)
     }
 
-    fn get_<'r, 's: 'r>(&'s self) -> impl std::ops::Deref<Target = T> + 'r {
+    #[inline(always)]
+    fn get_<'r, 's: 'r>(&'s self) -> Self::Ref<'r> {
         self.rc.get_()
     }
 
-    fn mut_<'r, 's: 'r>(&'s mut self) -> impl std::ops::DerefMut<Target = T> + 'r {
+    #[inline(always)]
+    fn mut_<'r, 's: 'r>(&'s mut self) -> Self::RefMut<'r> {
         self.rc.mut_()
     }
 
@@ -401,19 +407,19 @@ impl Sentence for Task {
 }
 
 /// 有关「序列反序列化」的实用方法
-impl<T: Clone> SerialRef<T> {
+impl RCTask {
     /// 将[`serde`]反序列化后【分散】了的引用按「标识符」重新统一
-    pub fn unify_rcs<'t>(refs: impl IntoIterator<Item = &'t mut SerialRef<T>>)
+    pub fn unify_rcs<'t>(refs: impl IntoIterator<Item = &'t mut RCTask>)
     where
-        T: 't,
+        Task: 't,
     {
         use std::collections::HashMap;
 
         // 构建空映射
-        let mut serial_map: HashMap<usize, SerialRef<T>> = HashMap::new();
+        let mut serial_map: HashMap<usize, RCTask> = HashMap::new();
 
-        // 遍历所有引用，开始归一化
-        for task_rc in refs {
+        // 一个用于统一每个「任务共享引用」的闭包
+        let mut deal_serial = move |task_rc: &mut SerialRef<Task>| {
             // 先尝试获取已有同序列号的引用
             match serial_map.get(&task_rc.serial()) {
                 // 若已有同序列号的引用，则直接归一化
@@ -427,6 +433,18 @@ impl<T: Clone> SerialRef<T> {
                     serial_map.insert(serial_to_identify, task_rc.clone());
                 }
             }
+        };
+
+        // 遍历所有引用，开始归一化
+        for task_rc in refs {
+            // 遍历「任务」中的所有「任务共享引用」字段
+            // * 🎯【2024-08-12 02:15:01】为了避免遗漏「父任务」这个字段
+            // TODO: 后续或许能通用化成 `T::遍历内部所有与自身有关的共享引用(&mut self, mut 探针: impl Fn(&mut Self))`
+            if let Some(parent) = task_rc.mut_().parent_task.as_mut() {
+                deal_serial(parent) // 有父任务⇒处理父任务
+            }
+            // 总是先处理自身
+            deal_serial(task_rc)
         }
     }
 }
