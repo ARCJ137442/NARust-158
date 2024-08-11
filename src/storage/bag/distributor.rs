@@ -7,7 +7,7 @@
 //!
 //! A pseudo-random number generator, used in Bag.
 
-use nar_dev_utils::manipulate;
+use nar_dev_utils::{manipulate, pipe};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
@@ -92,7 +92,7 @@ where
 /// * 🎯以更Rusty的方式复刻OpenNARS之Distributor
 ///   * ⚡性能
 ///   * ✨通用性
-#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub struct Distributor {
     /// 🆕缓存的「随机范围」量
     /// * 🚩表示随机数的样本空间大小
@@ -251,6 +251,60 @@ impl Distribute for Distributor {
     }
 }
 
+/// 用于序列反序列化的专用数据结构
+/// * 💡整个「分派器」的序列反序列化 先通过此类型，再由此构造
+/// * 📌在此享用[`serde`]中自动派生的好处
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+struct DistributorSerde {
+    /// 只有一个必要的参数
+    range: usize,
+}
+
+/// 内部类型到外部类型的相互转换
+impl From<&Distributor> for DistributorSerde {
+    fn from(d: &Distributor) -> Self {
+        Self { range: d.range }
+    }
+}
+
+/// 外部类型到内部类型的相互转换
+impl From<DistributorSerde> for Distributor {
+    fn from(d: DistributorSerde) -> Self {
+        Self::new(d.range)
+    }
+}
+
+/// 定制的「序列化」方法
+/// ✨只需处理一个range属性，其它均不用
+impl Serialize for Distributor {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        pipe! {
+            self
+            => DistributorSerde::from
+            => .serialize(serializer)
+        }
+    }
+}
+
+/// 定制的「反序列化」方法
+/// ✨只需处理一个range属性，其它均不用
+impl<'de> Deserialize<'de> for Distributor {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        pipe! {
+            deserializer
+            => DistributorSerde::deserialize => {?}#
+            => Distributor::from
+            => Ok
+        }
+    }
+}
+
 /// 单元测试
 #[cfg(test)]
 mod tests {
@@ -345,5 +399,19 @@ mod tests {
         }
 
         weights
+    }
+
+    /// 测试序列化与反序列化
+    #[test]
+    fn serde() {
+        /// 测试用的[`Distributor::range`]范围
+        const TEST_RANGE: std::ops::Range<usize> = 10..100;
+
+        for range in TEST_RANGE {
+            let d0 = Distributor::new(range);
+            let s = serde_json::to_string(&d0).unwrap();
+            let d = serde_json::from_str::<Distributor>(&s).unwrap();
+            assert_eq!(d0, d);
+        }
     }
 }
