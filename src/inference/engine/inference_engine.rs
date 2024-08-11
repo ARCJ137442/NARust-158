@@ -5,7 +5,6 @@
 //! * ♻️【2024-06-26 12:11:03】开始根据改版OpenNARS编写
 
 use crate::control::{ReasonContextConcept, ReasonContextDirect, ReasonContextTransform};
-use serde::{Deserialize, Serialize};
 
 /// 作为通用接口的「推理引擎」特征
 /// * 📌只负责处理「推理上下文」
@@ -13,7 +12,9 @@ use serde::{Deserialize, Serialize};
 ///   * 💡实际上只是需要动态分派几个函数而已——况且，这些函数一般也会静态存在（不是闭包什么的）
 ///   * 💭【2024-06-28 01:26:37】这个「引擎分派」本身就是个`VTable`嘛……
 ///
-/// TODO: 【2024-08-11 16:04:42】函数指针/闭包 的 序列反序列化
+/// * 🚩【2024-08-12 00:23:38】目前搁置这方面「序列反序列化」的可能
+///   * 🔦太多函数指针，并且没有可用的上下文信息（如struct字段 at Concept::beliefs）
+///   * ❌【2024-08-12 00:24:15】因此决定弃用
 #[derive(Debug, Clone, Copy)]
 pub struct InferenceEngine {
     /// 直接推理 入口函数

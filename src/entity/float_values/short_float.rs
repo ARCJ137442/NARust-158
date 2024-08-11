@@ -11,7 +11,6 @@
 
 use crate::{global::Float, impl_display_from_to_display, util::ToDisplayAndBrief};
 use narsese::api::EvidentNumber;
-use serde::{Deserialize, Serialize};
 use std::ops::{Add, BitAnd, BitOr, Div, Mul, Not, Sub};
 use thiserror::Error;
 
@@ -64,9 +63,7 @@ const MULTIPLIER_TO_UINT: Float = 10000.0;
 /// # 📄OpenNARS
 ///
 /// A float value in [0, 1], with 4 digits accuracy.
-#[derive(
-    Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
-)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ShortFloat {
     /// 0~4294967296的「实际值」
     ///
@@ -76,6 +73,36 @@ pub struct ShortFloat {
     /// 0 to 10000 used),
     /// but used as float
     value: UShort,
+}
+
+/// 定制的序列反序列化方法
+/// * 🎯节省序列化后的占用空间
+///   * 📄在JSON中不再需要是一个object，是一个number就行了
+mod serde {
+    use super::{ShortFloat, UShort};
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    impl Serialize for ShortFloat {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: Serializer,
+        {
+            // 直接委托到内部整数值
+            self.value.serialize(serializer)
+        }
+    }
+
+    impl<'de> Deserialize<'de> for ShortFloat {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: Deserializer<'de>,
+        {
+            // 先反序列化到内部整数值
+            let value = UShort::deserialize(deserializer)?;
+            // 然后尝试创建，并在其中转换Error类型
+            Self::new(value).map_err(serde::de::Error::custom)
+        }
+    }
 }
 
 /// 用于表示「短浮点」可能产生的错误

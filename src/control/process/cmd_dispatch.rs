@@ -650,12 +650,14 @@ mod cmd_sav {
                 }
             }
 
-            // * 🚩状态信息保存
+            // 记忆区
             "memory" => format!(
                 "{}",
                 serde_json::to_string(&reasoner.memory)
                     .map_err(|e| format!("Failed to serialize memory: {e}"))?
             )
+            // 推理器整体状态
+            "status" => "Not implemented yet"
         }
     }
 }
