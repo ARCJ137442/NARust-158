@@ -4,6 +4,7 @@
 
 use super::{BudgetValue, Item, JudgementV1, Sentence, SentenceV1, Token};
 use crate::{
+    entity::MergeOrder,
     global::{ClockTime, RC},
     inference::{Budget, Evidential},
     util::{RefCount, ToDisplayAndBrief},
@@ -298,6 +299,18 @@ impl Budget for Task {
 impl Item for Task {
     fn key(&self) -> &String {
         self.token.key()
+    }
+
+    /// 决定两个「任务」之间的「合并顺序」
+    /// * 🚩 true ⇒ 改变顺序(self <- newer)，并入newer
+    /// * 🚩false ⇒ 维持原样(newer <- self)，并入self
+    fn merge_order(&self, newer: &Self) -> MergeOrder {
+        match self.creation_time() < newer.creation_time() {
+            // * 📝自身「创建时间」早于「要移出的任务」 ⇒ 将「要移出的任务」并入自身 ⇒ 新任务并入旧任务
+            true => MergeOrder::NewToOld,
+            // * 📝自身「创建时间」晚于「要移出的任务」 ⇒ 将「要移出的任务」并入自身 ⇒ 旧任务并入新任务
+            false => MergeOrder::OldToNew,
+        }
     }
 }
 

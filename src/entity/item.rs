@@ -25,6 +25,24 @@ pub trait Item: Budget {
     /// * 🎯应该只与自身数据绑定
     ///   * 📄概念的「词项名」
     fn key(&self) -> &String;
+
+    /// 🆕决定「袋」中俩[`Item`]的合并顺序
+    /// * 📜默认的「合并顺序」：旧→新（然后抛掉旧的）
+    fn merge_order(&self, _new: &Self) -> MergeOrder {
+        MergeOrder::OldToNew
+    }
+}
+
+/// 预算合并顺序（枚举）
+/// * 🎯用于「袋」中「相同key值预算该从哪儿合并到哪儿」的逻辑
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MergeOrder {
+    /// 从「将移出的Item」合并到「新进入的Item」
+    /// * 📌修改「新进入的Item」
+    OldToNew,
+    /// 从「新进入的Item」合并到「将移出的Item」
+    /// * 📌修改「将移出的Item」
+    NewToOld,
 }
 
 /// 🆕一个基于「复合」而非「继承」的[`Item`]默认实现

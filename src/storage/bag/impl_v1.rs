@@ -3,7 +3,7 @@
 use super::{BagItemTable, BagNameTable, Distribute, Distributor, NameValue};
 use crate::{
     control::DEFAULT_PARAMETERS,
-    entity::{Item, ShortFloat},
+    entity::{Item, MergeOrder, ShortFloat},
     global::Float,
     inference::{Budget, BudgetFunctions, BudgetInference},
     util::ToDisplayAndBrief,
@@ -152,46 +152,6 @@ pub struct Bag<E: Item> {
     ///
     /// maximum number of items to be taken out at current level
     current_counter: usize,
-
-    /// 🆕决定「预算合并顺序」的函数指针
-    /// * 🎯根据元素决定「预算合并」的顺序：新→旧 or 旧→新
-    /// * 🚩目前采用函数指针
-    ///
-    /// ! ⚠️【2024-08-11 15:50:16】目前函数指针的序列化/反序列化 有大问题
-    /// * ✅【2024-08-11 23:15:46】目前暂时以「默认参数」完成绑定
-    #[serde(skip_serializing, deserialize_with = "MergeOrder::default_order_fn")]
-    merge_order_f: MergeOrderF<E>,
-}
-
-/// 🆕决定「预算合并顺序」的函数指针类型
-pub type MergeOrderF<E> = fn(&E, &E) -> MergeOrder;
-
-/// 预算合并顺序（枚举）
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub enum MergeOrder {
-    /// 从「将移出的Item」合并到「新进入的Item」
-    /// * 📌修改「新进入的Item」
-    /// * 📜亦为默认值
-    #[default]
-    OldToNew,
-    /// 从「新进入的Item」合并到「将移出的Item」
-    /// * 📌修改「将移出的Item」
-    NewToOld,
-}
-
-impl MergeOrder {
-    /// 默认的「合并顺序」：旧→新
-    pub fn default_order<E>(_: &E, _: &E) -> Self {
-        Self::default()
-    }
-
-    /// 用于[`serde`]的、生成「默认函数」指针的函数
-    pub fn default_order_fn<'de, E, D>(_: D) -> Result<MergeOrderF<E>, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        Ok(MergeOrder::default_order)
-    }
 }
 
 impl<E: Item> Default for Bag<E> {
@@ -206,11 +166,7 @@ impl<E: Item> Default for Bag<E> {
 
 // impl<E: Item> BagConcrete<E> for Bag<E> {
 impl<E: Item> Bag<E> {
-    pub fn with_merge_order(
-        capacity: usize,
-        forget_rate: usize,
-        merge_order_f: MergeOrderF<E>,
-    ) -> Self {
+    pub fn new(capacity: usize, forget_rate: usize) -> Self {
         /* 📄OpenNARS源码：
         self.memory = memory;
         capacity = capacity();
@@ -230,17 +186,9 @@ impl<E: Item> Bag<E> {
             level_index: usize::default(),
             current_level: usize::default(),
             current_counter: usize::default(),
-            merge_order_f,
         };
         this.init();
         this
-    }
-
-    pub fn new(capacity: usize, forget_rate: usize) -> Self
-    where
-        Self: Sized,
-    {
-        Self::with_merge_order(capacity, forget_rate, MergeOrder::default_order::<E>)
     }
 }
 
@@ -480,7 +428,7 @@ impl<E: Item> Bag<E> {
 
             // * 🚩计算「合并顺序」
             let new_item = self.get(&new_key).unwrap(); // * 🚩🆕重新获取「置入后的新项」（⚠️一定有）
-            let merge_order = (self.merge_order_f)(&old_item, new_item); // 此处调用函数指针，一定是不可变引用
+            let merge_order = old_item.merge_order(new_item); // 此处调用函数指针，一定是不可变引用
             let new_item = self.get_mut(&new_key).unwrap(); // * 🚩🆕重新获取「置入后的新项」（⚠️一定有）
 
             // * 🚩按照计算出的「合并顺序」合并预算值
