@@ -8,7 +8,7 @@ use crate::{
     inference::{Budget, Evidential},
     util::{RefCount, ToDisplayAndBrief},
 };
-use nar_dev_utils::{join, Void};
+use nar_dev_utils::join;
 use narsese::lexical::{Sentence as LexicalSentence, Task as LexicalTask};
 use serde::{Deserialize, Serialize};
 
@@ -99,22 +99,10 @@ impl<T: Clone> SerialRef<T> {
         Self::get_serial(&*self.get_())
     }
 
-    /// 归一化
-    pub fn unify(&mut self, from: &Self) {
-        // 只有序列号相同才尝试归一化
-        if self.serial() == from.serial() {
-            if self.rc.ref_eq(&from.rc) {
-                return; // 引用相同则无需归一
-            }
-            //,否则：覆盖自身
-            *self = from.clone();
-        }
-    }
-
     /// 同步化
     /// * 🚩将自身的序列号变为内部内容的指针地址
     ///   * 📝后者不会因为引用的拷贝而改变
-    pub fn sync_serial(&mut self) {
+    fn sync_serial(&mut self) {
         self.serial = self.inner_serial();
     }
 }
@@ -402,11 +390,12 @@ impl Sentence for Task {
 /// 有关「序列反序列化」的实用方法
 impl<T: Clone> SerialRef<T> {
     /// 将[`serde`]反序列化后【分散】了的引用按「标识符」重新统一
-    pub fn unify_refs<'t>(refs: impl IntoIterator<Item = &'t mut SerialRef<T>>)
+    pub fn unify_rcs<'t>(refs: impl IntoIterator<Item = &'t mut SerialRef<T>>)
     where
         T: 't,
     {
         use std::collections::HashMap;
+
         // 构建空映射
         let mut serial_map: HashMap<usize, SerialRef<T>> = HashMap::new();
 
@@ -415,9 +404,15 @@ impl<T: Clone> SerialRef<T> {
             // 先尝试获取已有同序列号的引用
             match serial_map.get(&task_rc.serial()) {
                 // 若已有同序列号的引用，则直接归一化
+                // * ✅此时归一化后被`clone`的`rc`已经被【同步序列号】了
                 Some(rc) => *task_rc = rc.clone(),
-                // 若无已有同序列号的引用，则进入表中
-                None => serial_map.insert(task_rc.serial(), task_rc.clone()).void(),
+                // 若无已有同序列号的引用，则同步序列号，并以旧序列号为键进入表中
+                // * ℹ️自身序列号已更新，但旧序列号仍用于映射索引
+                None => {
+                    let serial_to_identify = task_rc.serial();
+                    task_rc.sync_serial();
+                    serial_map.insert(serial_to_identify, task_rc.clone());
+                }
             }
         }
     }
@@ -461,6 +456,12 @@ mod tests {
                 serial,
             }
         }
+
+        /// 判断序列号是否已同步
+        /// * 🚩判断自身序列号是否与内部内容的地址相同
+        fn is_synced_serial(&self) -> bool {
+            self.serial == self.inner_serial()
+        }
     }
 
     mod task {
@@ -495,14 +496,14 @@ mod tests {
         }
     }
 
+    /// [样本任务](task_sample)的共享引用
+    /// * ✅一并测试了[`RCTask::new`]
+    fn task_sample_rc() -> RCTask {
+        RCTask::new(task_sample())
+    }
+
     mod rc_task {
         use super::*;
-
-        /// [样本任务](task_sample)的共享引用
-        /// * ✅一并测试了[`RCTask::new`]
-        fn task_sample_rc() -> RCTask {
-            RCTask::new(task_sample())
-        }
 
         /// 构造稳定性
         #[test]
@@ -541,64 +542,6 @@ mod tests {
             println!("t2->{:p}", &t2);
             println!("serial: \tt1#0x{s1:x},\tt2#0x{s2:x}");
             assert_eq!(s1, s2); // ! RC移动后，内部Task的地址不变
-            ok!()
-        }
-
-        #[test]
-        fn unify() -> AResult {
-            let task = task_sample();
-            let t = RCTask::new(task.clone()); // 参照
-            let s = t.serial(); // 取序列号
-            let mut t1 = t.clone(); // 直接拷贝 | 序列号和引用都不同
-            let mut t2 = RCTask::with_serial(s, task.clone()); // 序列号相同的实例，哪怕引用不同
-            let mut t3 = RCTask::new(task.clone()); // 完全不相关的实例
-
-            println!("t->{:p}\nt1->{:p}\nt2->{:p}\nt3->{:p}", &t, &t1, &t2, &t3); // 三个共享引用的地址
-            println!(
-                "*t->{:p}\n*t->{:p}\n*t2->{:p}\n*t3->{:p}",
-                &t.get_(),
-                &t1.get_(),
-                &t2.get_(),
-                &t3.get_(),
-            ); // 三个共享引用的内容地址
-
-            // 归一前
-            asserts! {
-                t.ref_eq(&t1), // 只有直接clone的是相等的
-                !t.ref_eq(&t2), // 另俩都指向不同的任务
-                !t.ref_eq(&t3), // 另俩都指向不同的任务
-
-                t.serial() == t1.serial(), // 序列号相同
-                t.serial() == t2.serial(), // 序列号相同
-                t.serial() != t3.serial(), // 序列号不同
-            }
-
-            // 归一
-            t1.unify(&t);
-            t2.unify(&t);
-            t3.unify(&t);
-
-            println!("unified:");
-            println!("t->{:p}\nt1->{:p}\nt2->{:p}\nt3->{:p}", &t, &t1, &t2, &t3); // 三个共享引用的地址
-            println!(
-                "*t->{:p}\n*t1->{:p}\n*t2->{:p}\n*t3->{:p}",
-                &t.get_(),
-                &t1.get_(),
-                &t2.get_(),
-                &t3.get_(),
-            ); // 三个共享引用的内容地址
-
-            // 归一后
-            asserts! {
-                t.ref_eq(&t1), // 只有直接clone的是相等的
-                t.ref_eq(&t2), // 序列号相同的被归一了
-                !t.ref_eq(&t3), // 仍不相同的还指向不同的任务
-
-                t.serial() == t1.serial(), // 序列号仍然相同
-                t.serial() == t2.serial(), // 序列号仍然相同
-                t.serial() != t3.serial(), // 序列号仍然不同
-            }
-
             ok!()
         }
 
@@ -702,7 +645,7 @@ mod tests {
         }
 
         #[test]
-        fn unify_refs() -> AResult {
+        fn unify_rcs() -> AResult {
             let task = task_sample();
             let mut t = RCTask::new(task.clone()); // 参照
             let s = t.serial(); // 取序列号
@@ -747,7 +690,7 @@ mod tests {
             show!("broken:");
 
             // 归一
-            RCTask::unify_refs([&mut t, &mut t1, &mut t2, &mut t3]);
+            RCTask::unify_rcs([&mut t, &mut t1, &mut t2, &mut t3]);
 
             show!("synced:");
 
@@ -760,6 +703,52 @@ mod tests {
                 t.serial() == t1.serial(), // 序列号相同
                 t.serial() == t2.serial(), // 序列号相同
                 t.serial() != t3.serial(), // 序列号不同
+            }
+            // 确保序列号均已同步
+            for t in [&t, &t1, &t2, &t3] {
+                assert!(t.is_synced_serial());
+            }
+            ok!()
+        }
+
+        /// 较大规模的同步
+        #[test]
+        fn unify_rcs_large() -> AResult {
+            /// 测试的规模（单次任务个数）
+            const RANGE_N: std::ops::Range<usize> = 100..500;
+            const MAX_N_GROUPS: usize = 5;
+
+            /// 检查是否均统一
+            fn verify_unified(tasks: &[RCTask]) {
+                if tasks.is_empty() {
+                    return;
+                }
+                let t0 = &tasks[0];
+                for t in tasks {
+                    // 检查「序列号一致」
+                    assert!(t.is_synced_serial());
+                    // 检查「引用相等⇔序列号相等」
+                    let is_serial_eq = t0.serial() == t.serial();
+                    assert!(t0.ref_eq(t) == is_serial_eq);
+                }
+            }
+
+            for n in RANGE_N {
+                let n_groups = (n % MAX_N_GROUPS) + 1;
+                let tasks = list![
+                    (vec![task_sample_rc(); n / n_groups]) // 每次添加 n / n_groups个任务
+                    for _ in (0..n_groups) // 此处会重复n_groups次
+                ]
+                .concat(); // 总共 n 个任务
+
+                // 序列反序列化 破坏引用
+                let mut tasks = tasks.iter().map(serde_rc_task).collect::<Vec<_>>();
+
+                // 归一化 修复引用
+                RCTask::unify_rcs(tasks.iter_mut());
+
+                // 检验
+                verify_unified(&tasks);
             }
             ok!()
         }
