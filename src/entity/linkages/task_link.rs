@@ -51,6 +51,12 @@ impl TaskLink {
     pub(in crate::entity) fn target_rc_ref(&self) -> &RCTask {
         &self.inner.target
     }
+    /// 直接获取内部链接到的「任务引用」（可变）
+    /// * 🎯用于「序列反序列化」「归一化任务共享引用」
+    /// * ⚠️慎用
+    pub(in crate::entity) fn target_rc_ref_mut(&mut self) -> &mut RCTask {
+        &mut self.inner.target
+    }
 
     pub fn target_rc<'r, 's: 'r>(&'s self) -> impl Deref<Target = RCTask> + 'r {
         // ! 🚩【2024-06-22 12:21:12】要直接引用target字段，不能套两层`impl Deref`

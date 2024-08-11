@@ -311,6 +311,15 @@ impl Concept {
     pub(crate) fn iter_task_links(&self) -> impl Iterator<Item = &TaskLink> {
         self.task_links.iter()
     }
+
+    /// 🆕迭代内部所有的「任务共享引用」
+    /// * 🎯序列反序列化中「归一任务共享引用」的需要
+    /// * 🚩取材自「任务链」「问题表」
+    pub(crate) fn iter_tasks_mut(&mut self) -> impl Iterator<Item = &mut RCTask> {
+        let iter_task_links = self.task_links.iter_mut().map(TaskLink::target_rc_ref_mut);
+        let iter_questions = self.questions.iter_mut();
+        iter_task_links.chain(iter_questions)
+    }
 }
 
 impl Budget for Concept {

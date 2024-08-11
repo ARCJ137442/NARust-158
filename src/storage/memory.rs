@@ -9,11 +9,11 @@
 use super::Bag;
 use crate::{
     control::{prepare_term_link_templates, Parameters, DEFAULT_PARAMETERS},
-    entity::{BudgetValue, Concept, Item},
+    entity::{BudgetValue, Concept, Item, RCTask},
     inference::{Budget, BudgetFunctions},
     language::Term,
 };
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 /// 记忆区
 #[derive(Debug, Serialize, Deserialize)]
@@ -23,6 +23,7 @@ pub struct Memory {
     /// # 📄OpenNARS
     ///
     /// Concept bag. Containing all Concepts of the system
+    #[serde(deserialize_with = "Memory::deserialize_concepts")]
     concepts: Bag<Concept>,
 
     /// 🆕统一所有「超参数」的存储
@@ -215,5 +216,27 @@ impl Default for Memory {
     fn default() -> Self {
         // * 🚩超参数实现了[`Copy`]
         Self::new(DEFAULT_PARAMETERS)
+    }
+}
+
+/// 针对[`serde`]做特殊调整
+/// * 🎯原本需求是「在自动派生之方法的基础上，归一化其中的『任务共享引用』」
+/// * 💡目前实际上「任务共享引用」只存在于「概念袋」中，那为何不在「概念袋」处做优化？
+///   * 🚩【2024-08-12 01:28:31】当前做法：在反序列化「概念袋」时因【字段】插入「任务引用归一化」代码
+///   * ✅这样便可省去「调用方还要再归一一次」的烦恼
+impl Memory {
+    /// 反序列化「概念袋」
+    /// * 🚩在默认反序列化逻辑上，再加对内部所有「任务共享引用」的归一化处理
+    fn deserialize_concepts<'de, D>(deserializer: D) -> Result<Bag<Concept>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        // 先反序列化到普通概念袋
+        let mut bag = Bag::<Concept>::deserialize(deserializer)?;
+        // 开始遍历所有「任务共享引用」，并归一化其值
+        let all_task_rcs = bag.iter_mut().flat_map(Concept::iter_tasks_mut);
+        RCTask::unify_rcs(all_task_rcs);
+        // 返回归一化后的概念袋
+        Ok(bag)
     }
 }

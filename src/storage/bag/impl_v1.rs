@@ -338,6 +338,13 @@ impl<E: Item> Bag<E> {
         self.item_map.iter_items()
     }
 
+    /// 🆕迭代内部所有元素（可变）
+    /// * 🎯用于「序列反序列化」「归一化任务共享引用」
+    /// * ⚠️慎用
+    pub(crate) fn iter_mut(&mut self) -> impl Iterator<Item = &mut E> {
+        self.item_map.iter_items_mut()
+    }
+
     /// 模拟`Bag.contains`
     /// * 🎯从模拟`Bag.nameTable.containsValue`派生
     /// * 📜默认使用[`Self::get`]

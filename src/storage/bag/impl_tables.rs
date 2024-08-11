@@ -114,6 +114,13 @@ impl<E: Item> BagNameTable<E> {
     pub(super) fn iter_items(&self) -> impl Iterator<Item = &E> {
         self.0.values().map(|(item, _)| item)
     }
+
+    /// 从0到「层数」遍历所有元素（可变）
+    /// * 🎯用于「序列反序列化」「归一化任务共享引用」
+    /// * ⚠️慎用
+    pub(super) fn iter_items_mut(&mut self) -> impl Iterator<Item = &mut E> {
+        self.0.values_mut().map(|(item, _)| item)
+    }
 }
 
 /// 初代「层级映射」实现
