@@ -8,7 +8,6 @@ use crate::{
 };
 use anyhow::Result;
 use narsese::lexical::Truth as LexicalTruth;
-use serde::{Deserialize, Serialize};
 use std::{
     fmt::Debug,
     hash::{Hash, Hasher},
@@ -21,7 +20,7 @@ use std::{
 /// # 📄OpenNARS
 ///
 /// Frequency and confidence.
-#[derive(Debug, Clone, Copy, Default, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, Eq)]
 pub struct TruthValue {
     /// frequency
     f: ShortFloat,
@@ -29,6 +28,36 @@ pub struct TruthValue {
     c: ShortFloat,
     /// analytic
     a: bool,
+}
+
+/// 定制的序列反序列化方法
+/// * 🎯节省序列化后的占用空间
+///   * 📄在JSON中不再需要是一个object，是一个`[f, c, a]`三元组就行
+mod serde {
+    use super::TruthValue;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    impl Serialize for TruthValue {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: Serializer,
+        {
+            // 直接委托到内部整数值
+            (self.f, self.c, self.a).serialize(serializer)
+        }
+    }
+
+    impl<'de> Deserialize<'de> for TruthValue {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: Deserializer<'de>,
+        {
+            // 先反序列化到内部整数值
+            let (f, c, a) = Deserialize::deserialize(deserializer)?;
+            // 然后尝试创建，并在其中转换Error类型
+            Ok(Self { f, c, a })
+        }
+    }
 }
 
 impl Truth for TruthValue {
