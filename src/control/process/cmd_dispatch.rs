@@ -832,52 +832,87 @@ mod cmd_loa {
         vol 99
         cyc 20";
 
-        /// 将JSON数据以NAVM指令形式输入推理器，让推理器加载记忆区
+        /// 输入NAVM[`SAV`](Cmd::SAV)指令，并从后续的INFO中取出JSON字符串
+        /// * 📄推理器状态
+        /// * 📄记忆区
         /// * 🚩同时检验「是否有加载成功」
-        fn load_memory_by_cmd(reasoner: &mut Reasoner, data: impl Into<String>) {
-            // 将JSON以指令形式封装
-            let cmd = Cmd::LOA {
-                target: "memory".into(),
-                path: data.into(),
+        fn save_xxx_by_cmd(
+            reasoner: &mut Reasoner,
+            target: impl Into<String>,
+            path: impl Into<String>,
+        ) -> String {
+            // SAV指令
+            let cmd = Cmd::SAV {
+                target: target.into(),
+                path: path.into(),
             };
-            // 打包成NAVM指令，加载进记忆区
+            // 输入之前清空旧输出，以避免其它输出干扰
+            let _ = reasoner.fetch_outputs();
             reasoner.input_cmd(cmd);
             let outputs = reasoner.fetch_outputs();
             // 记忆区应该被替换了
+            // 找到一条「INFO」内容，就直接返回
+            for o in outputs {
+                if let Output::INFO { message } = o {
+                    return message;
+                }
+            }
+            panic!("未找到序列化后的数据");
+        }
+
+        /// 将JSON数据以NAVM指令形式输入推理器，让推理器加载指定数据
+        /// * 📄推理器状态
+        /// * 📄记忆区
+        /// * 🚩同时检验「是否有加载成功」
+        fn load_xxx_by_cmd(
+            reasoner: &mut Reasoner,
+            target: impl Into<String>,
+            data: impl Into<String>,
+            target_name: &str,
+            success_message: &str,
+        ) {
+            // 将JSON以指令形式封装
+            let cmd = Cmd::LOA {
+                target: target.into(),
+                path: data.into(),
+            };
+            // 打包成NAVM指令，加载进推理器
+            reasoner.input_cmd(cmd);
+            let outputs = reasoner.fetch_outputs();
+            // 推理器部分内容应该被替换了
             assert!(
+                // 检查是否有一条【类型为INFO】且内容为「加载成功」的输出
                 outputs.iter().any(|o| matches!(
                     o,
-                    Output::INFO {
-                        message
-                    }
-                    if message == MESSAGE_MEMORY_LOAD_SUCCESS
+                    Output::INFO { message }
+                    if message == success_message
                 )),
-                "记忆区没有被替换: {outputs:?}",
+                "{target_name}没有被替换: {outputs:?}",
             );
+        }
+
+        /// 将JSON数据以NAVM指令形式输入推理器，让推理器加载记忆区
+        /// * 🚩同时检验「是否有加载成功」
+        fn load_memory_by_cmd(reasoner: &mut Reasoner, data: impl Into<String>) {
+            load_xxx_by_cmd(
+                reasoner,
+                "memory",
+                data,
+                "记忆区",
+                MESSAGE_MEMORY_LOAD_SUCCESS,
+            )
         }
 
         /// 将JSON数据以NAVM指令形式输入推理器，让推理器加载状态
         /// * 🚩同时检验「是否有加载成功」
         fn load_status_by_cmd(reasoner: &mut Reasoner, data: impl Into<String>) {
-            // 将JSON以指令形式封装
-            let cmd = Cmd::LOA {
-                target: "status".into(),
-                path: data.into(),
-            };
-            // 打包成NAVM指令，加载进推理器状态
-            reasoner.input_cmd(cmd);
-            let outputs = reasoner.fetch_outputs();
-            // 推理器状态应该被替换了
-            assert!(
-                outputs.iter().any(|o| matches!(
-                    o,
-                    Output::INFO {
-                        message
-                    }
-                    if message == MESSAGE_STATUS_LOAD_SUCCESS
-                )),
-                "推理器状态没有被替换: {outputs:?}",
-            );
+            load_xxx_by_cmd(
+                reasoner,
+                "status",
+                data,
+                "推理器状态",
+                MESSAGE_STATUS_LOAD_SUCCESS,
+            )
         }
 
         #[test]
@@ -885,7 +920,7 @@ mod cmd_loa {
             // 一定推理后的推理器
             let mut reasoner = reasoner_after_inputs(SAMPLE_INPUTS);
             // 记忆区序列化成JSON
-            let data = reasoner.memory_to_json()?;
+            let data = save_xxx_by_cmd(&mut reasoner, "memory", "");
             // 从JSON加载记忆区
             let old_memory = reasoner.load_memory_from_json(&data)?;
             // 旧的记忆区应该与新的一致
@@ -912,7 +947,7 @@ mod cmd_loa {
             // 一定推理后的推理器
             let mut reasoner = reasoner_after_inputs(SAMPLE_INPUTS);
             // 记忆区序列化成JSON
-            let data = reasoner.memory_to_json()?;
+            let data = save_xxx_by_cmd(&mut reasoner, "memory", "");
             // 从JSON加载记忆区
             let old_memory = reasoner.load_memory_from_json(&data)?;
             // 旧的记忆区应该与新的一致
@@ -986,7 +1021,7 @@ mod cmd_loa {
             let reasoner_old = reasoner_after_inputs(SAMPLE_INPUTS);
             let mut reasoner = reasoner_after_inputs(SAMPLE_INPUTS);
             // 状态序列化成JSON
-            let data = reasoner.status_to_json()?;
+            let data = save_xxx_by_cmd(&mut reasoner, "status", "");
             // 从JSON加载状态
             reasoner.load_status_from_json(&data)?;
             // 旧的状态应该与新的一致
@@ -1012,7 +1047,7 @@ mod cmd_loa {
             let old_reasoner = reasoner_after_inputs(SAMPLE_INPUTS);
             let mut reasoner = reasoner_after_inputs(SAMPLE_INPUTS);
             // 状态序列化成JSON
-            let data = reasoner.status_to_json()?;
+            let data = save_xxx_by_cmd(&mut reasoner, "status", "");
             // 从JSON加载状态
             reasoner.load_status_from_json(&data)?;
             // 旧的状态应该与新的一致

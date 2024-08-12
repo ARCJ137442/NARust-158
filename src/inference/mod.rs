@@ -318,9 +318,13 @@ mod tests {
 
     /// 测试多行NAVM指令（文本形式）输入
     /// * 🚩仅测试文本输入（稳定性），不负责捕获输出等额外操作
+    /// * 🚩【2024-08-12 22:47:01】为提高「长期测试」效率，将推理器强制静音
+    ///   * ⚠️损失了一部分有关「生成输出」的测试
     fn test_line_inputs<S: AsRef<str>>(inputs: impl IntoIterator<Item = S>) -> AResult {
         // 创建
         let mut runtime = create_vm_from_engine(ENGINE_DEV);
+        // 静音
+        runtime.input_cmds("vol 0");
         // 输入指令（软标准，不要求解析成功⇒向后兼容）
         for inputs in inputs {
             runtime.input_cmds_soft(inputs.as_ref());
@@ -1109,12 +1113,13 @@ mod tests {
 
     /// 集成测试：逻辑稳定性
     /// * 🎯推理器在所有NAL 1-6的测试用例中，保持运行不panic
+    /// * 🚩【2024-08-12 22:56:38】考虑到单测时间太长，目前压到5步
     #[test]
     fn logical_stability() -> AResult {
         pipe! {
-            // * 🚩生成的最终文本附带「每次输入测试后运行100步」的效果
+            // * 🚩生成的最终文本附带「每次输入测试后运行5步」的效果
             "
-            cyc 100
+            cyc 5
             "
             => generate_logical_stability
             => test_line_inputs
@@ -1124,12 +1129,13 @@ mod tests {
     /// 集成测试：逻辑稳定性（分离的）
     /// * 🎯推理器在所有NAL 1-6的测试用例中，保持运行不panic
     /// * 🚩与[原测试](logical_stability)的区别：每运行完一个文件后，重置推理器
+    /// * 🚩【2024-08-12 22:56:38】考虑到单测时间太长，目前压到50步
     #[test]
     fn logical_stability_separated() -> AResult {
         pipe! {
-            // * 🚩生成的最终文本附带「每次输入测试后运行100步，并在运行后重置推理器」的效果
+            // * 🚩生成的最终文本附带「每次输入测试后运行50步，并在运行后重置推理器」的效果
             "
-            cyc 100
+            cyc 50
             res
             "
             => generate_logical_stability

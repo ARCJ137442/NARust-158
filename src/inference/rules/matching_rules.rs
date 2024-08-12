@@ -210,11 +210,12 @@ mod tests {
     }
 
     /// 稳定性
+    /// * 🚩【2024-08-12 22:56:38】考虑到单测时间太长，目前压到16轮
     #[test]
     fn stability() {
         let mut vm = create_vm_from_engine(ENGINE);
         // * 🚩检验长期稳定性
-        for i in 0..0x100 {
+        for i in 0..0x10 {
             let _outs = vm.input_cmds_and_fetch_out(&format!(
                 "
                 nse <A{i} --> B>. %1.0;0.9%
