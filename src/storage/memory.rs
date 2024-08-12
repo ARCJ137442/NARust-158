@@ -261,7 +261,7 @@ impl Memory {
 pub mod tests_memory {
     use super::*;
     use crate::{
-        assert_eq,
+        assert_eq_try,
         control::DEFAULT_PARAMETERS,
         entity::*,
         ok, test_term as term,
@@ -283,8 +283,9 @@ pub mod tests_memory {
     /// * 📝对「记忆区」因为「共享引用无法准确判等（按引用）」只能由此验证
     pub fn memory_consistent(old: &Memory, new: &Memory) -> AResult {
         // 参数一致
-        assert_eq!(
-            &old.parameters, &new.parameters,
+        assert_eq_try!(
+            &old.parameters,
+            &new.parameters,
             "记忆区不一致——超参数不一致"
         );
         // 概念袋一致
@@ -308,7 +309,7 @@ pub mod tests_memory {
         }
         let [items_old, items_new] = f_parallel![sorted_items; old; new];
         // 内容量
-        assert_eq!(items_old.len(), items_new.len(), "袋不一致——内容数量不相等");
+        assert_eq_try!(items_old.len(), items_new.len(), "袋不一致——内容数量不相等");
         // 袋内每一对内容一致
         for (item_old, item_new) in zip(items_old, items_new) {
             consistent_t(item_old, item_new)?;
@@ -321,11 +322,11 @@ pub mod tests_memory {
         // 词项一致
         let term = Concept::term;
         let [term_old, term_new] = f_parallel![term; concept_old; concept_new];
-        assert_eq!(term_old, term_new);
+        assert_eq_try!(term_old, term_new);
         let term = term_old;
 
         // 预算值一致
-        assert_eq!(
+        assert_eq_try!(
             BudgetValue::from(concept_old),
             BudgetValue::from(concept_new),
             "概念'{term}'的预算值不一致"
@@ -340,7 +341,7 @@ pub mod tests_memory {
         }
         let [task_links_old, task_links_new] =
             f_parallel![sorted_task_links; concept_old; concept_new];
-        assert_eq!(
+        assert_eq_try!(
             task_links_old.len(),
             task_links_new.len(),
             "概念'{term}'的任务链数量不一致"
@@ -357,14 +358,15 @@ pub mod tests_memory {
             }
         }
         let [links_old, links_new] = f_parallel![sorted_term_links; concept_old; concept_new];
-        assert_eq!(
-            links_old, links_new,
+        assert_eq_try!(
+            links_old,
+            links_new,
             "概念'{term}'的词项链不一致\nold = {links_old:?}\nnew = {links_new:?}",
         );
 
         // 信念表 | ℹ️顺序也必须一致
         for (old, new) in zip(concept_old.iter_beliefs(), concept_new.iter_beliefs()) {
-            assert_eq!(
+            assert_eq_try!(
                 old,
                 new,
                 "概念'{term}'的信念列表不一致\nold = {}\nnew = {}",
@@ -379,24 +381,24 @@ pub mod tests_memory {
     /// * 🎯应对其中「父任务」引用的「无法判等」
     pub fn task_consistent(a: &Task, b: &Task) -> AResult {
         // 常规属性
-        assert_eq!(a.key(), b.key(), "任务不一致——key不一致");
-        assert_eq!(a.content(), b.content(), "任务不一致——content不一致");
-        assert_eq!(
+        assert_eq_try!(a.key(), b.key(), "任务不一致——key不一致");
+        assert_eq_try!(a.content(), b.content(), "任务不一致——content不一致");
+        assert_eq_try!(
             a.as_judgement().map(TruthValue::from),
             b.as_judgement().map(TruthValue::from),
             "任务不一致——真值不一致"
         );
-        assert_eq!(
+        assert_eq_try!(
             BudgetValue::from(a),
             BudgetValue::from(b),
             "任务不一致——预算不一致"
         );
-        assert_eq!(
+        assert_eq_try!(
             a.punctuation(),
             b.punctuation(),
             "任务不一致——punctuation不一致"
         );
-        assert_eq!(
+        assert_eq_try!(
             a.parent_belief(),
             b.parent_belief(),
             "任务不一致——parent_belief不一致"
@@ -421,7 +423,7 @@ pub mod tests_memory {
             memory_consistent(memory, &de)?; // 应该相等
 
             // let ser2 = serde_json::to_string(&de)?;
-            // assert_eq!(ser, ser2); // ! 可能会有无序对象
+            // assert_eq_try!(ser, ser2); // ! 可能会有无序对象
 
             ok!()
         }

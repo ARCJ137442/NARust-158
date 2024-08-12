@@ -52,7 +52,7 @@ macro_rules! debug_assert_matches {
 ///   * 否则会有`mods!`的「绝对路径导出问题」
 #[cfg(test)]
 #[macro_export]
-macro_rules! assert {
+macro_rules! assert_try {
     ($bool:expr) => {
         if !$bool {
             return Err(anyhow::anyhow!("assertion failed with {}", stringify!($bool)));
@@ -71,8 +71,8 @@ macro_rules! assert {
 ///   * 否则会有`mods!`的「绝对路径导出问题」
 #[cfg(test)]
 #[macro_export]
-macro_rules! assert_eq {
+macro_rules! assert_eq_try {
     ($left:expr, $right:expr $(, $($fmt_params:tt)*)?) => {
-        $crate::assert!($left == $right $(, $($fmt_params)*)?)
+        $crate::assert_try!($left == $right $(, $($fmt_params)*)?)
     };
 }

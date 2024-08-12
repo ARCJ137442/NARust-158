@@ -120,7 +120,7 @@ impl Reasoner {
 pub mod test_util_ser_de {
     use super::*;
     use crate::{
-        assert_eq,
+        assert_eq_try,
         entity::Task,
         ok,
         storage::{tests_memory::*, Bag},
@@ -155,7 +155,7 @@ pub mod test_util_ser_de {
     /// 任务队列一致性
     /// * 🎯新任务队列
     fn task_deque_consistent(a: &VecDeque<Task>, b: &VecDeque<Task>) -> AResult {
-        assert_eq!(a.len(), b.len(), "任务队列不一致——长度不一致");
+        assert_eq_try!(a.len(), b.len(), "任务队列不一致——长度不一致");
         for (a, b) in zip(a, b) {
             task_consistent(a, b)?;
         }
