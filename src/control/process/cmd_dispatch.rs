@@ -717,11 +717,11 @@ mod cmd_loa {
                 match query.as_ref() {
                     // * 🚩特殊/空字串：列举所有query并转接`HLP INF`
                     // ! ⚠️【2024-08-09 17:48:15】不能放外边：会被列入非空查询列表中
-                    "" => Ok(format!("Available save target: {ALL_QUERIES_LIST}",)),
+                    "" => Ok(format!("Available load target: {ALL_QUERIES_LIST}",)),
                     // 所有固定模式的分派
                     $( $query => Ok($message.to_string()), )*
                     // * 🚩其它⇒告警
-                    other => Err(format!("Unknown save target: {other:?}")),
+                    other => Err(format!("Unknown load target: {other:?}")),
                 }
             }
 
