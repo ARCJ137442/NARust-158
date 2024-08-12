@@ -643,6 +643,16 @@ mod cmd_sav {
         pub fn memory_to_json(&self) -> Result<String, serde_json::Error> {
             serde_json::to_string(&self.memory)
         }
+
+        /// 将「推理状态」转换为JSON字符串
+        /// * ⚠️可能失败：记忆区数据可能无法被序列化
+        pub fn status_to_json(&self) -> anyhow::Result<String> {
+            let mut writer = Vec::<u8>::new();
+            let mut ser = serde_json::Serializer::new(&mut writer);
+            self.serialize_status(&mut ser)?;
+            let json = String::from_utf8(writer)?;
+            Ok(json)
+        }
     }
 
     /// 指令[`Cmd::SAV`]的入口函数
@@ -673,7 +683,8 @@ mod cmd_sav {
             "memory" => reasoner.memory_to_json()
                 .map_err(|e| format!("Failed to serialize memory: {e}"))?
             // 推理器整体状态
-            "status" => "Not implemented yet" // TODO: 记忆区、推导数据（俩缓冲区）等
+            "status" => reasoner.status_to_json()
+                .map_err(|e| format!("Failed to serialize status: {e}"))?
         }
     }
 }
@@ -688,6 +699,7 @@ mod cmd_loa {
     /// 可复用的「记忆区加载成功」消息
     /// * 🎯用于在测试用例中重用
     const MESSAGE_MEMORY_LOAD_SUCCESS: &str = "Memory loading success";
+    const MESSAGE_STATUS_LOAD_SUCCESS: &str = "Status loading success";
 
     /// 指令[`Cmd::LOA`]的入口函数
     /// * 📌传入的`query`默认为小写字串引用
@@ -715,14 +727,19 @@ mod cmd_loa {
 
             // 记忆区
             "memory" => {
-                reasoner.load_memory_from_json(data).map_err(|e| e.to_string())?;
+                reasoner.load_memory_from_json(data).as_ref().map_err(ToString::to_string)?;
                 MESSAGE_MEMORY_LOAD_SUCCESS
             }
             // 推理器整体状态
-            "status" => "Not implemented yet" // TODO: 记忆区、推导数据（俩缓冲区）等
+            "status" => {
+                reasoner.load_status_from_json(data).as_ref().map_err(ToString::to_string)?;
+                MESSAGE_STATUS_LOAD_SUCCESS
+            }
         }
     }
 
+    /// 处理有关JSON的交互
+    /// * 🎯让`ser_de`模块无需使用[`serde_json`]
     impl Reasoner {
         /// 从JSON加载记忆区
         /// * ⚠️覆盖自身原本的「记忆区」
@@ -732,12 +749,14 @@ mod cmd_loa {
             Ok(old_memory)
         }
 
-        /// 加载新的记忆区
-        pub fn load_memory(&mut self, mut memory: Memory) -> Memory {
-            // 先交换记忆区对象
-            std::mem::swap(&mut memory, &mut self.memory);
-            // 返回旧记忆区
-            memory
+        /// 从JSON加载状态
+        /// * ⚠️覆盖自身原本数据
+        /// * 🚩【2024-08-12 20:22:42】不返回「推理器状态」数据
+        ///   * 💭出于内部使用考虑，不暴露「推理器状态」数据类型
+        fn load_status_from_json(&mut self, data: impl AsRef<str>) -> anyhow::Result<()> {
+            let mut deserializer_json = serde_json::Deserializer::from_str(data.as_ref());
+            self.load_from_deserialized_status(&mut deserializer_json)?;
+            Ok(())
         }
     }
 
@@ -745,12 +764,12 @@ mod cmd_loa {
     mod tests {
         use super::*;
         use crate::{
-            control::DEFAULT_PARAMETERS,
+            control::{test_util_ser_de::status_consistent, DEFAULT_PARAMETERS},
             inference::{
                 match_task_and_belief, process_direct, reason, transform_task, InferenceEngine,
             },
             ok,
-            storage::tests::memory_consistent,
+            storage::tests_memory::memory_consistent,
             util::AResult,
         };
         use nar_dev_utils::*;
@@ -784,6 +803,13 @@ mod cmd_loa {
                     out
                     while let Some(out) = (self.take_output())
                 ]
+            }
+
+            /// 测试用：打印所有输出
+            fn print_outputs(&mut self) {
+                self.fetch_outputs()
+                    .iter()
+                    .for_each(|o| println!("[{}] {}", o.type_name(), o.get_content()))
             }
         }
 
@@ -827,6 +853,30 @@ mod cmd_loa {
                     if message == MESSAGE_MEMORY_LOAD_SUCCESS
                 )),
                 "记忆区没有被替换: {outputs:?}",
+            );
+        }
+
+        /// 将JSON数据以NAVM指令形式输入推理器，让推理器加载状态
+        /// * 🚩同时检验「是否有加载成功」
+        fn load_status_by_cmd(reasoner: &mut Reasoner, data: impl Into<String>) {
+            // 将JSON以指令形式封装
+            let cmd = Cmd::LOA {
+                target: "status".into(),
+                path: data.into(),
+            };
+            // 打包成NAVM指令，加载进推理器状态
+            reasoner.input_cmd(cmd);
+            let outputs = reasoner.fetch_outputs();
+            // 推理器状态应该被替换了
+            assert!(
+                outputs.iter().any(|o| matches!(
+                    o,
+                    Output::INFO {
+                        message
+                    }
+                    if message == MESSAGE_STATUS_LOAD_SUCCESS
+                )),
+                "推理器状态没有被替换: {outputs:?}",
             );
         }
 
@@ -913,22 +963,119 @@ mod cmd_loa {
                 inf summary
                 ",
             );
-            fn print_outputs(reasoner: &mut Reasoner) {
-                reasoner
-                    .fetch_outputs()
-                    .iter()
-                    .for_each(|o| println!("[{}] {}", o.type_name(), o.get_content()))
-            }
             println!("reasoner:");
-            print_outputs(&mut reasoner);
+            reasoner.print_outputs();
             println!("reasoner 2:");
-            print_outputs(&mut reasoner2);
+            reasoner2.print_outputs();
             println!("reasoner 3:");
-            print_outputs(&mut reasoner3);
+            reasoner3.print_outputs();
             // 现在推理器（的记忆区）应该两两不一致
             memory_consistent(&reasoner.memory, &reasoner2.memory).expect_err("意外的记忆区一致");
             memory_consistent(&reasoner.memory, &reasoner3.memory).expect_err("意外的记忆区一致");
             memory_consistent(&reasoner2.memory, &reasoner3.memory).expect_err("意外的记忆区一致");
+            ok!()
+        }
+
+        /// 加载状态
+        /// ! 💫【2024-08-12 22:23:23】因为「推理器内部类型不暴露在外」，所以「单推理器加载状态后，用旧的状态与新的状态对比」难以安排
+        /// * 🚩【2024-08-12 22:23:26】目前采用「创建多个推理器，保留一个作为『旧状态』」的方式
+        ///   * 📝核心想法：既然「一致性」比对的是推理器，那多创建两个一样的不就好了……
+        #[test]
+        fn load_status_from_json() -> AResult {
+            // 一定推理后的推理器 样本
+            let reasoner_old = reasoner_after_inputs(SAMPLE_INPUTS);
+            let mut reasoner = reasoner_after_inputs(SAMPLE_INPUTS);
+            // 状态序列化成JSON
+            let data = reasoner.status_to_json()?;
+            // 从JSON加载状态
+            reasoner.load_status_from_json(&data)?;
+            // 旧的状态应该与新的一致
+            status_consistent(&reasoner_old, &reasoner)?;
+
+            // 将JSON以指令形式封装，让推理器从指令中加载状态
+            load_status_by_cmd(&mut reasoner, data.clone());
+
+            // 旧的状态应该与新的一致
+            status_consistent(&reasoner_old, &reasoner)?;
+
+            // ✅成功，输出附加信息 | ❌【2024-08-12 13:21:22】下面俩太卡了
+            println!("Status reloading success!");
+            println!("data = {data}");
+
+            ok!()
+        }
+
+        /// 将状态加载到其它空推理器中，实现「分支」效果
+        #[test]
+        fn load_status_to_other_reasoners() -> AResult {
+            // 一定推理后的推理器
+            let old_reasoner = reasoner_after_inputs(SAMPLE_INPUTS);
+            let mut reasoner = reasoner_after_inputs(SAMPLE_INPUTS);
+            // 状态序列化成JSON
+            let data = reasoner.status_to_json()?;
+            // 从JSON加载状态
+            reasoner.load_status_from_json(&data)?;
+            // 旧的状态应该与新的一致
+            status_consistent(&old_reasoner, &reasoner)?;
+
+            // * 🚩以纯数据形式加载到新的「空白推理器」中 * //
+            // 创建新的空白推理器
+            let old_reasoner2 = default_reasoner();
+            let mut reasoner2 = default_reasoner();
+            // 从JSON加载状态
+            reasoner2.load_status_from_json(&data)?;
+            let consistent_on_clone = |reasoner2: &Reasoner| -> AResult {
+                // 但新的状态应该与先前旧的状态一致
+                status_consistent(&old_reasoner, reasoner2)?;
+                // 同时，俩推理器现在状态一致
+                status_consistent(&reasoner, reasoner2)?;
+                ok!()
+            };
+            // 空白的状态应该与新的不一致
+            status_consistent(&old_reasoner2, &reasoner2).expect_err("意外的状态一致");
+            // 被重复加载的状态应该一致
+            consistent_on_clone(&reasoner2)?;
+
+            // * 🚩以NAVM指令形式加载到新的「空白推理器」中 * //
+            // 创建新的空白推理器
+            let mut reasoner3 = default_reasoner();
+            // 从JSON加载状态
+            load_status_by_cmd(&mut reasoner3, data.clone());
+            // 被重复加载的状态应该一致
+            consistent_on_clone(&reasoner3)?;
+
+            // * 🚩分道扬镳的推理歧路 * //
+            // 推理器2
+            reasoner2.input_cmds(
+                "
+                nse (&&, <A --> C>, <A --> B>).
+                cyc 10
+                inf concepts
+                inf tasks
+                inf summary
+                ",
+            );
+            // 推理器3
+            reasoner3.input_cmds(
+                "
+                nse <C --> D>.
+                nse <A --> D>?
+                cyc 10
+                inf concepts
+                inf tasks
+                inf summary
+                ",
+            );
+            println!("reasoner:");
+            reasoner.print_outputs();
+            println!("reasoner 2:");
+            reasoner2.print_outputs();
+            println!("reasoner 3:");
+            reasoner3.print_outputs();
+            // 现在推理器（的状态）应该两两不一致
+            status_consistent(&reasoner, &reasoner2).expect_err("意外的状态一致");
+            status_consistent(&reasoner, &reasoner3).expect_err("意外的状态一致");
+            status_consistent(&reasoner2, &reasoner3).expect_err("意外的状态一致");
             ok!()
         }
     }

@@ -16,4 +16,7 @@ nar_dev_utils::mods! {
 
     // 功能：输出报告
     pub use report;
+
+    // 功能：序列反序列化
+    pub use ser_de;
 }

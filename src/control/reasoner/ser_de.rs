@@ -1,0 +1,172 @@
+//! 实现「推理器」层面的「序列反序列化」
+//! * 🎯基本完整的「推理器状态」数据存储
+//! * 🎯「记忆区」加上「推导数据」的序列反序列化
+//! * ℹ️有关「记忆区序列反序列化」参见[`crate::storage::Memory`]
+//! * 🔗有关`state`与`status`的区别：https://www.quora.com/Whats-the-difference-in-usage-between-state-and-status
+//!   * `state`范围更广，且常用于描述【离散】的状态
+//!   * `status`大多指「当下状态」并且能用于名词
+
+use super::{Reasoner, ReasonerDerivationData};
+use crate::{entity::RCTask, storage::Memory};
+use serde::{Deserialize, Serialize};
+
+/// 推理器状态
+/// * 🎯先反序列化到此类型，再让推理器加载
+/// * 🎯基本完整的「推理器状态」数据存储
+/// * 🎯「记忆区」加上「推导数据」的序列反序列化
+/// * 🔗有关`state`与`status`的区别：https://www.quora.com/Whats-the-difference-in-usage-between-state-and-status
+///   * `state`范围更广，且常用于描述【离散】的状态
+///   * `status`大多指「当下状态」并且能用于名词
+/// * 🚩【2024-08-12 20:25:24】作为与「推导数据」类似的结构，不对外暴露
+/// * ❌【2024-08-12 20:44:58】不能手动实现：操作较为复杂
+///   * ⚠️[`Deserialize::deserialize`]只能在函数中调用一次，并且会消耗参数所有权
+///   * 🔗参见：<https://serde.rs/deserialize-struct.html>
+#[derive(Debug, Deserialize)]
+pub(super) struct ReasonerStatusStorage {
+    /// 记忆区
+    pub memory: Memory,
+    /// 推导数据
+    pub derivation_datas: ReasonerDerivationData,
+}
+
+/// 推理器状态的引用
+/// * 🎯从「推理器」构造引用，并由此序列化
+#[derive(Debug, Clone, Copy, Serialize)]
+pub(super) struct ReasonerStatusStorageRef<'s> {
+    /// 记忆区
+    pub memory: &'s Memory,
+    /// 推导数据
+    pub derivation_datas: &'s ReasonerDerivationData,
+}
+
+impl ReasonerStatusStorage {
+    /// 对整个「推理器状态」的共享引用归一化
+    fn unify_all_task_rcs(&mut self) {
+        let memory_refs = self.memory.all_task_rcs();
+        let derivation_datas_refs = self.derivation_datas.iter_mut_task_rcs();
+        let refs = memory_refs.chain(derivation_datas_refs);
+        RCTask::unify_rcs(refs);
+    }
+}
+
+impl Reasoner {
+    /// 加载新的记忆区
+    #[must_use]
+    pub fn load_memory(&mut self, mut memory: Memory) -> Memory {
+        // 先交换记忆区对象
+        std::mem::swap(&mut memory, &mut self.memory);
+        // 返回旧记忆区
+        memory
+    }
+
+    /// 加载「推导数据」
+    #[must_use]
+    fn load_derivation_datas(
+        &mut self,
+        mut derivation_datas: ReasonerDerivationData,
+    ) -> ReasonerDerivationData {
+        // 先交换记忆区对象
+        std::mem::swap(&mut derivation_datas, &mut self.derivation_datas);
+        // 返回旧记忆区
+        derivation_datas
+    }
+
+    /// 加载「推理器状态」
+    fn load_status(&mut self, status: ReasonerStatusStorage) -> ReasonerStatusStorage {
+        let ReasonerStatusStorage {
+            memory,
+            derivation_datas,
+        } = status;
+        // 加载记忆区
+        let memory = self.load_memory(memory);
+        // 加载推导数据
+        let derivation_datas = self.load_derivation_datas(derivation_datas);
+        ReasonerStatusStorage {
+            memory,
+            derivation_datas,
+        }
+    }
+
+    /// 从推理器序列化出「推理器状态」
+    pub fn serialize_status<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        // 先构造引用
+        let storage_ref = ReasonerStatusStorageRef {
+            memory: &self.memory,
+            derivation_datas: &self.derivation_datas,
+        };
+        // 再序列化
+        storage_ref.serialize(serializer)
+    }
+
+    /// 反序列化并加载「推理器状态」
+    /// * 🚩【2024-08-12 20:22:42】不返回「推理器状态」数据
+    ///   * 💭出于内部使用考虑，不暴露「推理器状态」数据类型
+    pub fn load_from_deserialized_status<'de, D: serde::Deserializer<'de>>(
+        &mut self,
+        deserializer: D,
+    ) -> Result<(), D::Error> {
+        // 先反序列化到结构体
+        let mut status = ReasonerStatusStorage::deserialize(deserializer)?;
+        // 引用归一化
+        status.unify_all_task_rcs();
+        // 再加载
+        let _ = self.load_status(status);
+        Ok(())
+    }
+}
+
+// * 🚩【2024-08-12 21:16:27】单元测试放在`cmd_dispatch`处，与JSON格式、NAVM指令分派 一同测试
+#[cfg(test)]
+pub mod test_util_ser_de {
+    use super::*;
+    use crate::{
+        assert_eq,
+        entity::Task,
+        ok,
+        storage::{tests_memory::*, Bag},
+        util::AResult,
+    };
+    use std::collections::VecDeque;
+
+    /// 判断推理器状态的一致性
+    /// * 🚩通过「返回错误」指定「一致性缺失」
+    /// * 📌只传入推理器来判断，不暴露内部数据类型
+    pub fn status_consistent(a: &Reasoner, b: &Reasoner) -> AResult {
+        // 记忆区一致性
+        memory_consistent(&a.memory, &b.memory)?;
+        // 推导数据一致性
+        derivation_datas_consistent(&a.derivation_datas, &b.derivation_datas)?;
+
+        ok!()
+    }
+
+    fn derivation_datas_consistent(
+        a: &ReasonerDerivationData,
+        b: &ReasonerDerivationData,
+    ) -> AResult {
+        // 新任务队列一致性
+        task_deque_consistent(&a.new_tasks, &b.new_tasks)?;
+        // 任务袋一致性
+        task_bag_consistent(&a.novel_tasks, &b.novel_tasks)?;
+        // 推导数据一致性
+        ok!()
+    }
+
+    /// 任务队列一致性
+    /// * 🎯新任务队列
+    fn task_deque_consistent(a: &VecDeque<Task>, b: &VecDeque<Task>) -> AResult {
+        assert_eq!(a.len(), b.len(), "任务队列不一致——长度不一致");
+        for (a, b) in zip(a, b) {
+            task_consistent(a, b)?;
+        }
+        // 任务一致性
+        ok!()
+    }
+
+    /// 任务袋一致性
+    /// * 🎯新近任务袋
+    fn task_bag_consistent(a: &Bag<Task>, b: &Bag<Task>) -> AResult {
+        bag_consistent(a, b, task_consistent)?;
+        ok!()
+    }
+}

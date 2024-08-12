@@ -236,17 +236,32 @@ impl Memory {
         // 先反序列化到普通概念袋
         let mut bag = Bag::<Concept>::deserialize(deserializer)?;
         // 开始遍历所有「任务共享引用」，并归一化其值
-        let all_task_rcs = bag.iter_mut().flat_map(Concept::iter_tasks_mut);
+        let all_task_rcs = Self::concept_bag_all_task_rcs(&mut bag);
         RCTask::unify_rcs(all_task_rcs);
         // 返回归一化后的概念袋
         Ok(bag)
     }
+
+    /// 【内部】遍历其概念袋内所有「任务共享引用」
+    /// * 🎯在「反序列化概念袋」与「参与反序列化上层」之间 共享代码
+    fn concept_bag_all_task_rcs(bag: &mut Bag<Concept>) -> impl Iterator<Item = &mut RCTask> {
+        bag.iter_mut().flat_map(Concept::iter_tasks_mut)
+    }
+
+    /// 【内部】遍历其内所有「任务共享引用」
+    /// * 🎯反序列化时与上层如「推理器状态」一同归一化
+    /// * ⚠️不包括各个「任务」的「父任务」字段
+    ///   * 后者会在[「任务共享引用归一化」](RCTask::unify_rcs)中处理
+    pub(crate) fn all_task_rcs(&mut self) -> impl Iterator<Item = &mut RCTask> {
+        Self::concept_bag_all_task_rcs(&mut self.concepts)
+    }
 }
 
 #[cfg(test)]
-pub mod tests {
+pub mod tests_memory {
     use super::*;
     use crate::{
+        assert_eq,
         control::DEFAULT_PARAMETERS,
         entity::*,
         ok, test_term as term,
@@ -256,35 +271,12 @@ pub mod tests {
 
     /// 顶层实用函数：迭代器zip
     /// * 🎯让语法`a.zip(b)`变成`zip(a, b)`
-    fn zip<'t, T: 't, I1, I2>(a: I1, b: I2) -> impl Iterator<Item = (T, T)>
+    pub fn zip<'t, T: 't, I1, I2>(a: I1, b: I2) -> impl Iterator<Item = (T, T)>
     where
         I1: IntoIterator<Item = T> + 't,
         I2: IntoIterator<Item = T> + 't,
     {
         a.into_iter().zip(b.into_iter())
-    }
-
-    /// 用「上抛`Err`」代替直接panic
-    /// * 🎯允许调用者「假定失败」并自行处置错误
-    macro_rules! assert {
-        ($bool:expr) => {
-            if !$bool {
-                return Err(anyhow::anyhow!("assertion failed with {}", stringify!($bool)));
-            }
-        };
-        ($bool:expr, $($fmt_params:tt)*) => {
-            if !$bool {
-                return Err(anyhow::anyhow!($($fmt_params)*));
-            }
-        };
-    }
-
-    /// 用「上抛`Err`」代替直接panic
-    /// * 🎯允许调用者「假定失败」并自行处置错误
-    macro_rules! assert_eq {
-        ($left:expr, $right:expr $(, $($fmt_params:tt)*)?) => {
-            assert!($left == $right $(, $($fmt_params)*)?)
-        };
     }
 
     /// 手动检查俩记忆区是否一致
@@ -295,29 +287,37 @@ pub mod tests {
             &old.parameters, &new.parameters,
             "记忆区不一致——超参数不一致"
         );
+        // 概念袋一致
+        bag_consistent(&old.concepts, &new.concepts, concept_consistent)?;
+        ok!()
+    }
+
+    /// 检查「袋」是否一致
+    /// * 🚩接受一个闭包，以便泛用于各类型的「袋」
+    pub fn bag_consistent<T: Item>(
+        old: &Bag<T>,
+        new: &Bag<T>,
+        consistent_t: impl Fn(&T, &T) -> AResult,
+    ) -> AResult {
         // 排序好的概念列表
-        fn sorted_concepts(m: &Memory) -> Vec<&Concept> {
+        fn sorted_items<T: Item>(m: &Bag<T>) -> Vec<&T> {
             manipulate! {
-                m.iter_concepts().collect::<Vec<_>>()
-                => .sort_by_key(|c| c.term())
+                m.iter().collect::<Vec<_>>()
+                => .sort_by_key(|&t| t.key())
             }
         }
-        let [concepts_old, concepts_new] = f_parallel![sorted_concepts; old; new];
-        // 记忆区概念数
-        assert_eq!(
-            concepts_old.len(),
-            concepts_new.len(),
-            "记忆区不一致——概念数量不相等"
-        );
-        // 记忆区每一对概念一致
-        for (concept_old, concept_new) in zip(concepts_old, concepts_new) {
-            concept_consistent(concept_old, concept_new)?;
+        let [items_old, items_new] = f_parallel![sorted_items; old; new];
+        // 内容量
+        assert_eq!(items_old.len(), items_new.len(), "袋不一致——内容数量不相等");
+        // 袋内每一对内容一致
+        for (item_old, item_new) in zip(items_old, items_new) {
+            consistent_t(item_old, item_new)?;
         }
         ok!()
     }
 
     /// 概念一致
-    fn concept_consistent(concept_old: &Concept, concept_new: &Concept) -> AResult {
+    pub fn concept_consistent(concept_old: &Concept, concept_new: &Concept) -> AResult {
         // 词项一致
         let term = Concept::term;
         let [term_old, term_new] = f_parallel![term; concept_old; concept_new];
@@ -377,7 +377,7 @@ pub mod tests {
 
     /// 任务一致性
     /// * 🎯应对其中「父任务」引用的「无法判等」
-    fn task_consistent(a: &Task, b: &Task) -> AResult {
+    pub fn task_consistent(a: &Task, b: &Task) -> AResult {
         // 常规属性
         assert_eq!(a.key(), b.key(), "任务不一致——key不一致");
         assert_eq!(a.content(), b.content(), "任务不一致——content不一致");

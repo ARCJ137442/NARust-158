@@ -4,11 +4,16 @@
 //! * 📄新近任务袋
 //! * ⚠️不缓存「NAVM输出」：输出保存在[「推理记录器」](super::report)中
 
-use crate::{entity::Task, storage::Bag};
+use crate::{
+    entity::{RCTask, Task},
+    storage::Bag,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 
 /// 🚀推理导出用数据
+/// * 📌【2024-08-12 20:26:44】内部所存储的「任务」暂时无需考虑「任务共享引用归一化」问题
+///   * ⚠️本来要考虑的「任务共享引用」：在每个「任务」内部的「父任务」
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub(in super::super) struct ReasonerDerivationData {
     /// 新任务列表
@@ -67,5 +72,17 @@ impl ReasonerDerivationData {
     #[must_use]
     pub fn take_a_novel_task(&mut self) -> Option<Task> {
         self.novel_tasks.take_out()
+    }
+}
+
+/// 用于「序列反序列化」的功能
+impl ReasonerDerivationData {
+    /// 遍历其中所有「共享任务引用」的可变引用
+    /// * 🚩若直接存储
+    pub(crate) fn iter_mut_task_rcs(&mut self) -> impl Iterator<Item = &mut RCTask> {
+        self.new_tasks
+            .iter_mut()
+            .chain(self.novel_tasks.iter_mut())
+            .flat_map(|t| t.parent_task_mut())
     }
 }

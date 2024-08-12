@@ -45,3 +45,34 @@ macro_rules! debug_assert_matches {
         debug_assert!(matches!($value, $pattern) $(, $($tail)*)?)
     };
 }
+
+/// 用「上抛`Err`」代替直接panic
+/// * 🎯允许调用者「假定失败」并自行处置错误
+/// * 🚩【2024-08-12 21:49:05】提取到crate根目录，以便用于测试
+///   * 否则会有`mods!`的「绝对路径导出问题」
+#[cfg(test)]
+#[macro_export]
+macro_rules! assert {
+    ($bool:expr) => {
+        if !$bool {
+            return Err(anyhow::anyhow!("assertion failed with {}", stringify!($bool)));
+        }
+    };
+    ($bool:expr, $($fmt_params:tt)*) => {
+        if !$bool {
+            return Err(anyhow::anyhow!($($fmt_params)*));
+        }
+    };
+}
+
+/// 用「上抛`Err`」代替直接panic
+/// * 🎯允许调用者「假定失败」并自行处置错误
+/// * 🚩【2024-08-12 21:49:05】提取到crate根目录，以便用于测试
+///   * 否则会有`mods!`的「绝对路径导出问题」
+#[cfg(test)]
+#[macro_export]
+macro_rules! assert_eq {
+    ($left:expr, $right:expr $(, $($fmt_params:tt)*)?) => {
+        $crate::assert!($left == $right $(, $($fmt_params)*)?)
+    };
+}
