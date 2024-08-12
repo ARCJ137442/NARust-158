@@ -7,7 +7,7 @@
 //!   * `status`大多指「当下状态」并且能用于名词
 
 use super::{Reasoner, ReasonerDerivationData};
-use crate::{entity::RCTask, storage::Memory};
+use crate::{entity::RCTask, global::ClockTime, storage::Memory};
 use serde::{Deserialize, Serialize};
 
 /// 推理器状态
@@ -25,8 +25,15 @@ use serde::{Deserialize, Serialize};
 pub(super) struct ReasonerStatusStorage {
     /// 记忆区
     pub memory: Memory,
+
     /// 推导数据
     pub derivation_datas: ReasonerDerivationData,
+
+    /// 系统时钟
+    pub clock: ClockTime,
+
+    /// 时间戳序列号（递增序列号）
+    pub stamp_current_serial: ClockTime,
 }
 
 /// 推理器状态的引用
@@ -35,8 +42,15 @@ pub(super) struct ReasonerStatusStorage {
 pub(super) struct ReasonerStatusStorageRef<'s> {
     /// 记忆区
     pub memory: &'s Memory,
+
     /// 推导数据
     pub derivation_datas: &'s ReasonerDerivationData,
+
+    /// 系统时钟
+    pub clock: ClockTime,
+
+    /// 时间戳序列号（递增序列号）
+    pub stamp_current_serial: ClockTime,
 }
 
 impl ReasonerStatusStorage {
@@ -73,17 +87,26 @@ impl Reasoner {
 
     /// 加载「推理器状态」
     fn load_status(&mut self, status: ReasonerStatusStorage) -> ReasonerStatusStorage {
+        use std::mem::swap;
         let ReasonerStatusStorage {
             memory,
             derivation_datas,
+            mut clock,
+            mut stamp_current_serial,
         } = status;
         // 加载记忆区
         let memory = self.load_memory(memory);
         // 加载推导数据
         let derivation_datas = self.load_derivation_datas(derivation_datas);
+        // 加载其它基础类型
+        swap(&mut clock, &mut self.clock);
+        swap(&mut stamp_current_serial, &mut self.stamp_current_serial);
+        // 将旧的数据返回
         ReasonerStatusStorage {
             memory,
             derivation_datas,
+            clock,
+            stamp_current_serial,
         }
     }
 
@@ -93,6 +116,8 @@ impl Reasoner {
         let storage_ref = ReasonerStatusStorageRef {
             memory: &self.memory,
             derivation_datas: &self.derivation_datas,
+            clock: self.clock,
+            stamp_current_serial: self.stamp_current_serial,
         };
         // 再序列化
         storage_ref.serialize(serializer)
@@ -136,6 +161,13 @@ pub mod test_util_ser_de {
         memory_consistent(&a.memory, &b.memory)?;
         // 推导数据一致性
         derivation_datas_consistent(&a.derivation_datas, &b.derivation_datas)?;
+        // 其它数据一致性
+        assert_eq_try!(a.clock, b.clock, "系统时钟不一致");
+        assert_eq_try!(
+            a.stamp_current_serial,
+            b.stamp_current_serial,
+            "系统时间戳序列号不一致"
+        );
 
         ok!()
     }
