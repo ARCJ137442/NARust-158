@@ -60,7 +60,7 @@ impl Memory {
         Self {
             // * 🚩概念袋
             concepts: Bag::new(
-                parameters.concept_forgetting_cycle,
+                parameters.concept_bag_size,
                 parameters.concept_forgetting_cycle,
             ),
             // * 🚩超参数
