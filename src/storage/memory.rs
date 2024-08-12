@@ -26,10 +26,12 @@ pub struct Memory {
     #[serde(deserialize_with = "Memory::deserialize_concepts")]
     concepts: Bag<Concept>,
 
-    /// 🆕统一所有「超参数」的存储
+    /// 🆕【内部】统一所有「超参数」的存储
+    /// * 🎯便于「不依赖推理器使用参数」
+    ///   * 💭【2024-08-12 14:09:21】后续是否可能用共享引用？
     ///
     /// TODO: 【2024-08-11 23:46:10】后续尽可能跟「推理器」的超参数字段合并
-    parameters: Parameters,
+    pub(crate) parameters: Parameters,
 }
 
 impl Memory {

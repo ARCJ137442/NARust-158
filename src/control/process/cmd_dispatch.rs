@@ -18,7 +18,7 @@ impl Reasoner {
     pub(super) fn input_cmd(&mut self, cmd: Cmd) {
         match cmd {
             Cmd::SAV { target, path } => self.cmd_sav(target, path),
-            // Cmd::LOA { target, path } => (),
+            Cmd::LOA { target, path } => self.cmd_loa(target, path),
             // * 🚩重置：推理器复位
             Cmd::RES { .. } => self.reset(),
             // * 🚩Narsese：输入任务（但不进行推理）
@@ -107,6 +107,19 @@ impl Reasoner {
         let query = target.to_lowercase();
         // 消息分派 | 📌只在此处涉及「报告输出」
         match sav_dispatch(self, query, path) {
+            // 正常信息⇒报告info
+            Ok(message) => self.report_info(message),
+            // 错误信息⇒报告error
+            Err(message) => self.report_error(message),
+        }
+    }
+
+    /// 处理指令[`Cmd::LOA`]
+    fn cmd_loa(&mut self, target: String, data: String) {
+        // 查询
+        let query = target.to_lowercase();
+        // 消息分派 | 📌只在此处涉及「报告输出」
+        match loa_dispatch(self, query, data) {
             // 正常信息⇒报告info
             Ok(message) => self.report_info(message),
             // 错误信息⇒报告error
@@ -624,7 +637,13 @@ mod cmd_sav {
     use super::*;
     use nar_dev_utils::macro_once;
 
-    impl Reasoner {}
+    impl Reasoner {
+        /// 将记忆区转换为JSON字符串
+        /// * ⚠️可能失败：记忆区数据可能无法被序列化
+        pub fn memory_to_json(&self) -> Result<String, serde_json::Error> {
+            serde_json::to_string(&self.memory)
+        }
+    }
 
     /// 指令[`Cmd::SAV`]的入口函数
     /// * 📌传入的`query`默认为小写字串引用
@@ -651,14 +670,294 @@ mod cmd_sav {
             }
 
             // 记忆区
-            "memory" => format!(
-                "{}",
-                serde_json::to_string(&reasoner.memory)
-                    .map_err(|e| format!("Failed to serialize memory: {e}"))?
-            )
+            "memory" => reasoner.memory_to_json()
+                .map_err(|e| format!("Failed to serialize memory: {e}"))?
             // 推理器整体状态
             "status" => "Not implemented yet" // TODO: 记忆区、推导数据（俩缓冲区）等
         }
     }
 }
 use cmd_sav::*;
+
+/// 专用于指令[`Cmd::LOA`]的处理函数
+mod cmd_loa {
+    use super::*;
+    use crate::storage::Memory;
+    use nar_dev_utils::macro_once;
+
+    /// 可复用的「记忆区加载成功」消息
+    /// * 🎯用于在测试用例中重用
+    const MESSAGE_MEMORY_LOAD_SUCCESS: &str = "Memory loading success";
+
+    /// 指令[`Cmd::LOA`]的入口函数
+    /// * 📌传入的`query`默认为小写字串引用
+    /// * 📌输出仅为JSON字符串；若返回[错误值](Err)，则视为「报错」
+    pub fn loa_dispatch(
+        reasoner: &mut Reasoner,
+        query: impl AsRef<str>,
+        data: impl AsRef<str>,
+    ) -> Result<String, String> {
+        macro_once! {
+            macro ( $( $query:literal => $message:expr )* ) => {
+                /// 所有非空查询的列表
+                /// * 📌格式：Markdown无序列表
+                const ALL_QUERIES_LIST: &str = concat!($( "\n- ", $query, )*);
+                match query.as_ref() {
+                    // * 🚩特殊/空字串：列举所有query并转接`HLP INF`
+                    // ! ⚠️【2024-08-09 17:48:15】不能放外边：会被列入非空查询列表中
+                    "" => Ok(format!("Available save target: {ALL_QUERIES_LIST}",)),
+                    // 所有固定模式的分派
+                    $( $query => Ok($message.to_string()), )*
+                    // * 🚩其它⇒告警
+                    other => Err(format!("Unknown save target: {other:?}")),
+                }
+            }
+
+            // 记忆区
+            "memory" => {
+                reasoner.load_memory_from_json(data).map_err(|e| e.to_string())?;
+                MESSAGE_MEMORY_LOAD_SUCCESS
+            }
+            // 推理器整体状态
+            "status" => "Not implemented yet" // TODO: 记忆区、推导数据（俩缓冲区）等
+        }
+    }
+
+    impl Reasoner {
+        /// 从JSON加载记忆区
+        /// * ⚠️覆盖自身原本的「记忆区」
+        fn load_memory_from_json(&mut self, data: impl AsRef<str>) -> anyhow::Result<Memory> {
+            let memory = serde_json::from_str(data.as_ref())?;
+            let old_memory = self.load_memory(memory);
+            Ok(old_memory)
+        }
+
+        /// 加载新的记忆区
+        pub fn load_memory(&mut self, mut memory: Memory) -> Memory {
+            // 先交换记忆区对象
+            std::mem::swap(&mut memory, &mut self.memory);
+            // 返回旧记忆区
+            memory
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use crate::{
+            control::DEFAULT_PARAMETERS,
+            entity::{BudgetValue, Item, TaskLink, TermLink, TruthValue},
+            inference::{
+                match_task_and_belief, process_direct, reason, transform_task, InferenceEngine,
+            },
+            ok,
+            util::AResult,
+        };
+        use nar_dev_utils::*;
+        use navm::output::Output;
+
+        /// 引擎dev
+        /// * 🚩【2024-07-09 16:52:40】目前除了「概念推理」均俱全
+        /// * ✅【2024-07-14 23:50:15】现集成所有四大推理函数
+        const ENGINE_DEV: InferenceEngine = InferenceEngine::new(
+            process_direct,
+            transform_task,
+            match_task_and_belief,
+            reason,
+        );
+
+        fn reasoner_after_inputs(inputs: impl AsRef<str>) -> Reasoner {
+            let mut reasoner = default_reasoner();
+            inputs
+                .as_ref()
+                .lines()
+                .map(str::trim)
+                .filter(|line| !line.is_empty())
+                .map(|line| Cmd::parse(line).expect("NAVM指令{line}解析失败"))
+                .for_each(|cmd| reasoner.input_cmd(cmd));
+            reasoner
+        }
+
+        fn default_reasoner() -> Reasoner {
+            Reasoner::new("test", DEFAULT_PARAMETERS, ENGINE_DEV)
+        }
+
+        /// 顶层实用函数：迭代器zip
+        /// * 🎯让语法`a.zip(b)`变成`zip(a, b)`
+        fn zip<'t, T: 't, I1, I2>(a: I1, b: I2) -> impl Iterator<Item = (T, T)>
+        where
+            I1: IntoIterator<Item = T> + 't,
+            I2: IntoIterator<Item = T> + 't,
+        {
+            a.into_iter().zip(b.into_iter())
+        }
+
+        /// 手动检查俩记忆区是否一致
+        /// * 📝对「记忆区」因为「共享引用无法准确判等（按引用）」只能由此验证
+        fn memory_consistent(old: &Memory, new: &Memory) {
+            // 参数一致
+            assert_eq!(
+                &old.parameters, &new.parameters,
+                "记忆区不一致——超参数不一致"
+            );
+            // 排序好的概念列表
+            fn sorted_concepts(m: &Memory) -> Vec<&Concept> {
+                manipulate! {
+                    m.iter_concepts().collect::<Vec<_>>()
+                    => .sort_by_key(|c| c.term())
+                }
+            }
+            let [concepts_old, concepts_new] = f_parallel![sorted_concepts; old; new];
+            // 记忆区概念数
+            assert_eq!(
+                concepts_old.len(),
+                concepts_new.len(),
+                "记忆区不一致——概念数量不相等"
+            );
+            // 记忆区每一对概念一致
+            for (concept_old, concept_new) in zip(concepts_old, concepts_new) {
+                concept_consistent(concept_old, concept_new);
+            }
+        }
+
+        /// 概念一致
+        fn concept_consistent(concept_old: &Concept, concept_new: &Concept) {
+            // 词项一致
+            let term = Concept::term;
+            let [term_old, term_new] = f_parallel![term; concept_old; concept_new];
+            assert_eq!(term_old, term_new);
+            let term = term_old;
+
+            // 任务链 | ⚠️任务链因内部引用问题，不能直接判等
+            fn sorted_task_links(c: &Concept) -> Vec<&TaskLink> {
+                manipulate! {
+                    c.iter_task_links().collect::<Vec<_>>()
+                    => .sort_by_key(|link| link.key())
+                }
+            }
+            let [task_links_old, task_links_new] =
+                f_parallel![sorted_task_links; concept_old; concept_new];
+            assert_eq!(
+                task_links_old.len(),
+                task_links_new.len(),
+                "概念'{term}'的任务链数量不一致"
+            );
+            for (old, new) in zip(task_links_old, task_links_new) {
+                task_consistent(&old.target(), &new.target());
+            }
+
+            // 词项链 | ℹ️因为是「词项链袋」所以要调整顺序而非直接zip，但✅词项链可以直接判等
+            fn sorted_term_links(c: &Concept) -> Vec<&TermLink> {
+                manipulate! {
+                    c.iter_term_links().collect::<Vec<_>>()
+                    => .sort_by_key(|link| link.key())
+                }
+            }
+            let [links_old, links_new] = f_parallel![sorted_term_links; concept_old; concept_new];
+            assert_eq!(
+                links_old, links_new,
+                "概念'{term}'的词项链不一致\nold = {links_old:?}\nnew = {links_new:?}",
+            );
+
+            // 信念表 | ℹ️顺序也必须一致
+            for (old, new) in zip(concept_old.iter_beliefs(), concept_new.iter_beliefs()) {
+                assert_eq!(
+                    old,
+                    new,
+                    "概念'{term}'的信念列表不一致\nold = {}\nnew = {}",
+                    old.to_display_long(),
+                    new.to_display_long(),
+                );
+            }
+        }
+
+        /// 任务一致性
+        /// * 🎯应对其中「父任务」引用的「无法判等」
+        fn task_consistent(a: &Task, b: &Task) {
+            // 常规属性
+            assert_eq!(a.key(), b.key(), "任务不一致——key不一致");
+            assert_eq!(a.content(), b.content(), "任务不一致——content不一致");
+            assert_eq!(
+                a.as_judgement().map(TruthValue::from),
+                b.as_judgement().map(TruthValue::from),
+                "任务不一致——真值不一致"
+            );
+            assert_eq!(
+                BudgetValue::from(a),
+                BudgetValue::from(b),
+                "任务不一致——预算不一致"
+            );
+            assert_eq!(
+                a.punctuation(),
+                b.punctuation(),
+                "任务不一致——punctuation不一致"
+            );
+            assert_eq!(
+                a.parent_belief(),
+                b.parent_belief(),
+                "任务不一致——parent_belief不一致"
+            );
+            // 父任务 | ⚠️父任务因内部引用问题，不能直接判等
+            match (a.parent_task(), b.parent_task()) {
+                (Some(a), Some(b)) => {
+                    task_consistent(&a.get_(), &b.get_());
+                }
+                (None, None) => {}
+                _ => panic!("任务不一致——父任务不一致"),
+            };
+        }
+
+        #[test]
+        fn load_memory_from_json() -> AResult {
+            // 一定推理后的推理器
+            let mut reasoner = reasoner_after_inputs(
+                "
+                nse <A --> B>.
+                nse <A --> C>.
+                nse <C --> B>?
+                vol 99
+                cyc 20",
+            );
+            // 记忆区序列化成JSON
+            let data = reasoner.memory_to_json()?;
+            // 从JSON加载记忆区
+            let old_memory = reasoner.load_memory_from_json(&data)?;
+            // 旧的记忆区应该与新的一致
+            memory_consistent(&old_memory, &reasoner.memory);
+
+            // 将JSON以指令形式封装
+            let cmd = Cmd::LOA {
+                target: "memory".into(),
+                path: data.clone(),
+            };
+            // 打包成NAVM指令，加载进记忆区
+            reasoner.input_cmd(cmd);
+            let outputs = list![
+                out
+                while let Some(out) = (reasoner.take_output())
+            ];
+            // 记忆区应该被替换了
+            assert!(
+                outputs.iter().any(|o| matches!(
+                    o,
+                    Output::INFO {
+                        message
+                    }
+                    if message == MESSAGE_MEMORY_LOAD_SUCCESS
+                )),
+                "记忆区没有被替换: {outputs:?}",
+            );
+            // 旧的记忆区应该与新的一致
+            memory_consistent(&old_memory, &reasoner.memory);
+
+            // ✅成功，输出附加信息 | ❌【2024-08-12 13:21:22】下面俩太卡了
+            println!("Memory reloading success!");
+            println!("data = {data}");
+            // println!("old = {old_memory:?}");
+            // println!("new = {:?}", reasoner.memory);
+
+            ok!()
+        }
+    }
+}
+use cmd_loa::*;
