@@ -746,11 +746,11 @@ mod cmd_loa {
         use super::*;
         use crate::{
             control::DEFAULT_PARAMETERS,
-            entity::{BudgetValue, Item, TaskLink, TermLink, TruthValue},
             inference::{
                 match_task_and_belief, process_direct, reason, transform_task, InferenceEngine,
             },
             ok,
+            storage::tests::memory_consistent,
             util::AResult,
         };
         use nar_dev_utils::*;
@@ -780,131 +780,6 @@ mod cmd_loa {
 
         fn default_reasoner() -> Reasoner {
             Reasoner::new("test", DEFAULT_PARAMETERS, ENGINE_DEV)
-        }
-
-        /// 顶层实用函数：迭代器zip
-        /// * 🎯让语法`a.zip(b)`变成`zip(a, b)`
-        fn zip<'t, T: 't, I1, I2>(a: I1, b: I2) -> impl Iterator<Item = (T, T)>
-        where
-            I1: IntoIterator<Item = T> + 't,
-            I2: IntoIterator<Item = T> + 't,
-        {
-            a.into_iter().zip(b.into_iter())
-        }
-
-        /// 手动检查俩记忆区是否一致
-        /// * 📝对「记忆区」因为「共享引用无法准确判等（按引用）」只能由此验证
-        fn memory_consistent(old: &Memory, new: &Memory) {
-            // 参数一致
-            assert_eq!(
-                &old.parameters, &new.parameters,
-                "记忆区不一致——超参数不一致"
-            );
-            // 排序好的概念列表
-            fn sorted_concepts(m: &Memory) -> Vec<&Concept> {
-                manipulate! {
-                    m.iter_concepts().collect::<Vec<_>>()
-                    => .sort_by_key(|c| c.term())
-                }
-            }
-            let [concepts_old, concepts_new] = f_parallel![sorted_concepts; old; new];
-            // 记忆区概念数
-            assert_eq!(
-                concepts_old.len(),
-                concepts_new.len(),
-                "记忆区不一致——概念数量不相等"
-            );
-            // 记忆区每一对概念一致
-            for (concept_old, concept_new) in zip(concepts_old, concepts_new) {
-                concept_consistent(concept_old, concept_new);
-            }
-        }
-
-        /// 概念一致
-        fn concept_consistent(concept_old: &Concept, concept_new: &Concept) {
-            // 词项一致
-            let term = Concept::term;
-            let [term_old, term_new] = f_parallel![term; concept_old; concept_new];
-            assert_eq!(term_old, term_new);
-            let term = term_old;
-
-            // 任务链 | ⚠️任务链因内部引用问题，不能直接判等
-            fn sorted_task_links(c: &Concept) -> Vec<&TaskLink> {
-                manipulate! {
-                    c.iter_task_links().collect::<Vec<_>>()
-                    => .sort_by_key(|link| link.key())
-                }
-            }
-            let [task_links_old, task_links_new] =
-                f_parallel![sorted_task_links; concept_old; concept_new];
-            assert_eq!(
-                task_links_old.len(),
-                task_links_new.len(),
-                "概念'{term}'的任务链数量不一致"
-            );
-            for (old, new) in zip(task_links_old, task_links_new) {
-                task_consistent(&old.target(), &new.target());
-            }
-
-            // 词项链 | ℹ️因为是「词项链袋」所以要调整顺序而非直接zip，但✅词项链可以直接判等
-            fn sorted_term_links(c: &Concept) -> Vec<&TermLink> {
-                manipulate! {
-                    c.iter_term_links().collect::<Vec<_>>()
-                    => .sort_by_key(|link| link.key())
-                }
-            }
-            let [links_old, links_new] = f_parallel![sorted_term_links; concept_old; concept_new];
-            assert_eq!(
-                links_old, links_new,
-                "概念'{term}'的词项链不一致\nold = {links_old:?}\nnew = {links_new:?}",
-            );
-
-            // 信念表 | ℹ️顺序也必须一致
-            for (old, new) in zip(concept_old.iter_beliefs(), concept_new.iter_beliefs()) {
-                assert_eq!(
-                    old,
-                    new,
-                    "概念'{term}'的信念列表不一致\nold = {}\nnew = {}",
-                    old.to_display_long(),
-                    new.to_display_long(),
-                );
-            }
-        }
-
-        /// 任务一致性
-        /// * 🎯应对其中「父任务」引用的「无法判等」
-        fn task_consistent(a: &Task, b: &Task) {
-            // 常规属性
-            assert_eq!(a.key(), b.key(), "任务不一致——key不一致");
-            assert_eq!(a.content(), b.content(), "任务不一致——content不一致");
-            assert_eq!(
-                a.as_judgement().map(TruthValue::from),
-                b.as_judgement().map(TruthValue::from),
-                "任务不一致——真值不一致"
-            );
-            assert_eq!(
-                BudgetValue::from(a),
-                BudgetValue::from(b),
-                "任务不一致——预算不一致"
-            );
-            assert_eq!(
-                a.punctuation(),
-                b.punctuation(),
-                "任务不一致——punctuation不一致"
-            );
-            assert_eq!(
-                a.parent_belief(),
-                b.parent_belief(),
-                "任务不一致——parent_belief不一致"
-            );
-            // 父任务 | ⚠️父任务因内部引用问题，不能直接判等
-            match (a.parent_task(), b.parent_task()) {
-                (Some(a), Some(b)) => {
-                    task_consistent(&a.get_(), &b.get_());
-                }
-                (None, None) => {}
-                _ => panic!("任务不一致——父任务不一致"),
-            };
         }
 
         #[test]

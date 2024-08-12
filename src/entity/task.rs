@@ -14,7 +14,7 @@ use narsese::lexical::{Sentence as LexicalSentence, Task as LexicalTask};
 use serde::{Deserialize, Serialize};
 
 /// A task to be processed, consists of a Sentence and a BudgetValue
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Task {
     /// The sentence of the Task
     /// * 📝任务的「内容」
@@ -52,7 +52,7 @@ pub struct Task {
 /// * 📌设计上「序列号」用于在「序列反序列化」前后承担「唯一标识」的角色
 ///   * 📝内容的地址会变，但序列号在序列反序列化中能（相对多个可遍历的引用而言）保持不变
 ///   * 💡核心想法：通过「序列号」实现「内容归一化」——序列号相同的「序列共享引用」可以实现「统一」操作
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SerialRef<T> {
     /// 内部引用
     rc: RC<T>,

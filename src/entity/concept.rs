@@ -26,7 +26,7 @@ use serde::{Deserialize, Serialize};
 /// To make sure the space will be released, the only allowed reference to a  concept are those in a ConceptBag.
 ///
 /// All other access go through the Term that names the concept.
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Concept {
     /// 🆕Item令牌
     token: Token,
