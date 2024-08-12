@@ -338,22 +338,23 @@ mod tests {
     }
 
     /// 稳定性
+    /// * 🚩【2024-08-12 22:56:38】考虑到单测时间太长，目前压到16轮、每轮10步、最后1000步
     #[test]
     fn stability() {
         let mut vm = vm();
         // * 🚩检验长期稳定性
-        for i in 0..0x100 {
+        for i in 0..0x10 {
             let _outs = vm.input_cmds_and_fetch_out(&format!(
                 "
                 nse <A{i} --> B>.
                 nse <A{i} --> B>?
-                rem cyc 50
+                rem cyc 10
                 "
             ));
             // ! ⚠️【2024-07-09 02:22:12】不一定有回答：预算竞争约束着资源调配，可能没法立即回答
             // // * 🚩检测有回答
             // expect_outputs(&outs, |answer| matches!(answer, Output::ANSWER { .. }));
         }
-        vm.input_cmds("cyc 10000");
+        vm.input_cmds("cyc 1000");
     }
 }

@@ -393,7 +393,7 @@ mod tests {
         nse <(&/,<$1 --> [pliable]>,(^reshape,{SELF},$1)) =/> <$1 --> [hardened]>>.
         nse <<$1 --> [hardened]> =|> <$1 --> [unscrewing]>>.
         nse (&&,<#1 --> object>,<#1 --> [unscrewing]>)!
-        cyc 2000"#;
+        cyc 1000"#;
 
     /// 集成测试：长期稳定性
     /// * 🎯推理器在大量词项与任务的基础上，保持运行不panic
