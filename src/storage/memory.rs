@@ -264,9 +264,32 @@ pub mod tests {
         a.into_iter().zip(b.into_iter())
     }
 
+    /// 用「上抛`Err`」代替直接panic
+    /// * 🎯允许调用者「假定失败」并自行处置错误
+    macro_rules! assert {
+        ($bool:expr) => {
+            if !$bool {
+                return Err(anyhow::anyhow!("assertion failed with {}", stringify!($bool)));
+            }
+        };
+        ($bool:expr, $($fmt_params:tt)*) => {
+            if !$bool {
+                return Err(anyhow::anyhow!($($fmt_params)*));
+            }
+        };
+    }
+
+    /// 用「上抛`Err`」代替直接panic
+    /// * 🎯允许调用者「假定失败」并自行处置错误
+    macro_rules! assert_eq {
+        ($left:expr, $right:expr $(, $($fmt_params:tt)*)?) => {
+            assert!($left == $right $(, $($fmt_params)*)?)
+        };
+    }
+
     /// 手动检查俩记忆区是否一致
     /// * 📝对「记忆区」因为「共享引用无法准确判等（按引用）」只能由此验证
-    pub fn memory_consistent(old: &Memory, new: &Memory) {
+    pub fn memory_consistent(old: &Memory, new: &Memory) -> AResult {
         // 参数一致
         assert_eq!(
             &old.parameters, &new.parameters,
@@ -288,17 +311,25 @@ pub mod tests {
         );
         // 记忆区每一对概念一致
         for (concept_old, concept_new) in zip(concepts_old, concepts_new) {
-            concept_consistent(concept_old, concept_new);
+            concept_consistent(concept_old, concept_new)?;
         }
+        ok!()
     }
 
     /// 概念一致
-    fn concept_consistent(concept_old: &Concept, concept_new: &Concept) {
+    fn concept_consistent(concept_old: &Concept, concept_new: &Concept) -> AResult {
         // 词项一致
         let term = Concept::term;
         let [term_old, term_new] = f_parallel![term; concept_old; concept_new];
         assert_eq!(term_old, term_new);
         let term = term_old;
+
+        // 预算值一致
+        assert_eq!(
+            BudgetValue::from(concept_old),
+            BudgetValue::from(concept_new),
+            "概念'{term}'的预算值不一致"
+        );
 
         // 任务链 | ⚠️任务链因内部引用问题，不能直接判等
         fn sorted_task_links(c: &Concept) -> Vec<&TaskLink> {
@@ -315,7 +346,7 @@ pub mod tests {
             "概念'{term}'的任务链数量不一致"
         );
         for (old, new) in zip(task_links_old, task_links_new) {
-            task_consistent(&old.target(), &new.target());
+            task_consistent(&old.target(), &new.target())?;
         }
 
         // 词项链 | ℹ️因为是「词项链袋」所以要调整顺序而非直接zip，但✅词项链可以直接判等
@@ -341,11 +372,12 @@ pub mod tests {
                 new.to_display_long(),
             );
         }
+        ok!()
     }
 
     /// 任务一致性
     /// * 🎯应对其中「父任务」引用的「无法判等」
-    fn task_consistent(a: &Task, b: &Task) {
+    fn task_consistent(a: &Task, b: &Task) -> AResult {
         // 常规属性
         assert_eq!(a.key(), b.key(), "任务不一致——key不一致");
         assert_eq!(a.content(), b.content(), "任务不一致——content不一致");
@@ -372,19 +404,21 @@ pub mod tests {
         // 父任务 | ⚠️父任务因内部引用问题，不能直接判等
         match (a.parent_task(), b.parent_task()) {
             (Some(a), Some(b)) => {
-                task_consistent(&a.get_(), &b.get_());
+                task_consistent(&a.get_(), &b.get_())?;
             }
             (None, None) => {}
             _ => panic!("任务不一致——父任务不一致"),
         };
+        ok!()
     }
 
+    /// 对记忆区「序列反序列化」的可靠性测试
     #[test]
     fn test_soundness() -> AResult {
         fn test(memory: &Memory) -> AResult {
             let ser = serde_json::to_string(memory)?;
             let de = serde_json::from_str::<Memory>(&ser)?;
-            memory_consistent(memory, &de); // 应该相等
+            memory_consistent(memory, &de)?; // 应该相等
 
             // let ser2 = serde_json::to_string(&de)?;
             // assert_eq!(ser, ser2); // ! 可能会有无序对象

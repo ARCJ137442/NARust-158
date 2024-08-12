@@ -766,15 +766,30 @@ mod cmd_loa {
             reason,
         );
 
+        impl Reasoner {
+            /// 测试用：从字符串输入系列NAVM指令
+            fn input_cmds(&mut self, inputs: impl AsRef<str>) {
+                inputs
+                    .as_ref()
+                    .lines()
+                    .map(str::trim)
+                    .filter(|line| !line.is_empty())
+                    .map(|line| Cmd::parse(line).expect("NAVM指令{line}解析失败"))
+                    .for_each(|cmd| self.input_cmd(cmd))
+            }
+
+            /// 测试用：拉取所有已有输出
+            fn fetch_outputs(&mut self) -> Vec<Output> {
+                list![
+                    out
+                    while let Some(out) = (self.take_output())
+                ]
+            }
+        }
+
         fn reasoner_after_inputs(inputs: impl AsRef<str>) -> Reasoner {
             let mut reasoner = default_reasoner();
-            inputs
-                .as_ref()
-                .lines()
-                .map(str::trim)
-                .filter(|line| !line.is_empty())
-                .map(|line| Cmd::parse(line).expect("NAVM指令{line}解析失败"))
-                .for_each(|cmd| reasoner.input_cmd(cmd));
+            reasoner.input_cmds(inputs);
             reasoner
         }
 
@@ -782,35 +797,26 @@ mod cmd_loa {
             Reasoner::new("test", DEFAULT_PARAMETERS, ENGINE_DEV)
         }
 
-        #[test]
-        fn load_memory_from_json() -> AResult {
-            // 一定推理后的推理器
-            let mut reasoner = reasoner_after_inputs(
-                "
-                nse <A --> B>.
-                nse <A --> C>.
-                nse <C --> B>?
-                vol 99
-                cyc 20",
-            );
-            // 记忆区序列化成JSON
-            let data = reasoner.memory_to_json()?;
-            // 从JSON加载记忆区
-            let old_memory = reasoner.load_memory_from_json(&data)?;
-            // 旧的记忆区应该与新的一致
-            memory_consistent(&old_memory, &reasoner.memory);
+        /// 作为样本的输入
+        /// * 🎯构造出「经过一定输入之后的推理器」
+        const SAMPLE_INPUTS: &str = "
+        nse <A --> B>.
+        nse <A --> C>.
+        nse <C --> B>?
+        vol 99
+        cyc 20";
 
+        /// 将JSON数据以NAVM指令形式输入推理器，让推理器加载记忆区
+        /// * 🚩同时检验「是否有加载成功」
+        fn load_memory_by_cmd(reasoner: &mut Reasoner, data: impl Into<String>) {
             // 将JSON以指令形式封装
             let cmd = Cmd::LOA {
                 target: "memory".into(),
-                path: data.clone(),
+                path: data.into(),
             };
             // 打包成NAVM指令，加载进记忆区
             reasoner.input_cmd(cmd);
-            let outputs = list![
-                out
-                while let Some(out) = (reasoner.take_output())
-            ];
+            let outputs = reasoner.fetch_outputs();
             // 记忆区应该被替换了
             assert!(
                 outputs.iter().any(|o| matches!(
@@ -822,8 +828,24 @@ mod cmd_loa {
                 )),
                 "记忆区没有被替换: {outputs:?}",
             );
+        }
+
+        #[test]
+        fn load_memory_from_json() -> AResult {
+            // 一定推理后的推理器
+            let mut reasoner = reasoner_after_inputs(SAMPLE_INPUTS);
+            // 记忆区序列化成JSON
+            let data = reasoner.memory_to_json()?;
+            // 从JSON加载记忆区
+            let old_memory = reasoner.load_memory_from_json(&data)?;
             // 旧的记忆区应该与新的一致
-            memory_consistent(&old_memory, &reasoner.memory);
+            memory_consistent(&old_memory, &reasoner.memory)?;
+
+            // 将JSON以指令形式封装，让推理器从指令中加载记忆区
+            load_memory_by_cmd(&mut reasoner, data.clone());
+
+            // 旧的记忆区应该与新的一致
+            memory_consistent(&old_memory, &reasoner.memory)?;
 
             // ✅成功，输出附加信息 | ❌【2024-08-12 13:21:22】下面俩太卡了
             println!("Memory reloading success!");
@@ -831,6 +853,82 @@ mod cmd_loa {
             // println!("old = {old_memory:?}");
             // println!("new = {:?}", reasoner.memory);
 
+            ok!()
+        }
+
+        /// 将记忆区加载到其它空推理器中，实现「分支」效果
+        #[test]
+        fn load_memory_to_other_reasoners() -> AResult {
+            // 一定推理后的推理器
+            let mut reasoner = reasoner_after_inputs(SAMPLE_INPUTS);
+            // 记忆区序列化成JSON
+            let data = reasoner.memory_to_json()?;
+            // 从JSON加载记忆区
+            let old_memory = reasoner.load_memory_from_json(&data)?;
+            // 旧的记忆区应该与新的一致
+            memory_consistent(&old_memory, &reasoner.memory)?;
+
+            // * 🚩以纯数据形式加载到新的「空白推理器」中 * //
+            // 创建新的空白推理器
+            let mut reasoner2 = default_reasoner();
+            // 从JSON加载记忆区
+            let old_memory2 = reasoner2.load_memory_from_json(&data)?;
+            let consistent_on_clone = |reasoner2: &Reasoner| -> AResult {
+                // 但新的记忆区应该与先前旧的记忆区一致
+                memory_consistent(&old_memory, &reasoner2.memory)?;
+                // 同时，俩推理器现在记忆区一致
+                memory_consistent(&reasoner.memory, &reasoner2.memory)?;
+                ok!()
+            };
+            // 空白的记忆区应该与新的不一致
+            memory_consistent(&old_memory2, &reasoner2.memory).expect_err("意外的记忆区一致");
+            // 被重复加载的记忆区应该一致
+            consistent_on_clone(&reasoner2)?;
+
+            // * 🚩以NAVM指令形式加载到新的「空白推理器」中 * //
+            // 创建新的空白推理器
+            let mut reasoner3 = default_reasoner();
+            // 从JSON加载记忆区
+            load_memory_by_cmd(&mut reasoner3, data.clone());
+            // 被重复加载的记忆区应该一致
+            consistent_on_clone(&reasoner3)?;
+
+            // * 🚩分道扬镳的推理歧路 * //
+            // 推理器2
+            reasoner2.input_cmds(
+                "
+                nse (&&, <A --> C>, <A --> B>).
+                cyc 10
+                inf concepts
+                inf summary
+                ",
+            );
+            // 推理器3
+            reasoner3.input_cmds(
+                "
+                nse <C --> D>.
+                nse <A --> D>?
+                cyc 10
+                inf concepts
+                inf summary
+                ",
+            );
+            fn print_outputs(reasoner: &mut Reasoner) {
+                reasoner
+                    .fetch_outputs()
+                    .iter()
+                    .for_each(|o| println!("[{}] {}", o.type_name(), o.get_content()))
+            }
+            println!("reasoner:");
+            print_outputs(&mut reasoner);
+            println!("reasoner 2:");
+            print_outputs(&mut reasoner2);
+            println!("reasoner 3:");
+            print_outputs(&mut reasoner3);
+            // 现在推理器（的记忆区）应该两两不一致
+            memory_consistent(&reasoner.memory, &reasoner2.memory).expect_err("意外的记忆区一致");
+            memory_consistent(&reasoner.memory, &reasoner3.memory).expect_err("意外的记忆区一致");
+            memory_consistent(&reasoner2.memory, &reasoner3.memory).expect_err("意外的记忆区一致");
             ok!()
         }
     }
