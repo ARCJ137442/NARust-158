@@ -20,6 +20,7 @@ use crate::{
 use nar_dev_utils::list;
 use navm::cmd::Cmd;
 
+/// 推理器步进
 impl Reasoner {
     /* 时钟相关 */
 
@@ -28,50 +29,6 @@ impl Reasoner {
         self.clock
     }
 
-    pub fn init_timer(&mut self) {
-        self.set_timer(0);
-    }
-
-    pub fn tick_timer(&mut self) {
-        self.timer += 1;
-    }
-
-    pub fn timer(&self) -> usize {
-        self.timer
-    }
-
-    pub fn set_timer(&mut self, timer: usize) {
-        self.timer = timer;
-    }
-}
-
-// ! 弃用
-// /// 推理器时钟控制
-// impl Reasoner {
-//     /// # 📄OpenNARS
-//     ///
-//     /// Start the inference process
-//     pub fn run(&mut self) {
-//         self.running = true;
-//     }
-
-//     /// # 📄OpenNARS
-//     ///
-//     /// Will carry the inference process for a certain number of steps
-//     pub fn walk(&mut self, steps: usize) {
-//         self.walking_steps = steps;
-//     }
-
-//     /// # 📄OpenNARS
-//     ///
-//     /// Will stop the inference process
-//     pub fn stop(&mut self) {
-//         self.running = false;
-//     }
-// }
-
-/// 推理器步进
-impl Reasoner {
     /// 推理循环
     /// * 🚩只负责推理，不处理输入输出
     ///   * 📌在「处理输入」的同时，也可能发生「推理循环」（`CYC`指令）
@@ -132,7 +89,6 @@ impl Reasoner {
     fn handle_work_cycle(&mut self) {
         // * 🚩处理时钟
         self.clock += 1;
-        self.tick_timer();
         // * 🚩工作周期
         self.work_cycle();
     }

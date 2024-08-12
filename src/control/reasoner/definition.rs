@@ -53,11 +53,7 @@ pub struct Reasoner {
     // ! ❌不再需要「待步进的步数」，因为NARust-158是单线程的
 
     // ! ❌不复刻`finishedInputs`：仅DEBUG变量
-    /// 最后一个输出之前的步数
-    ///
-    /// TODO: 可简化——无用
-    pub(in super::super) timer: usize,
-
+    // ! ❌不复刻`timer`「最后一个输出之前的步数」：这个量也是多线程OpenNARS才用的
     /// 音量等级（0~100）
     /// * 🚩【2024-06-27 19:06:32】不同于OpenNARS，此处仅使用普通整数
     pub(in super::super) volume: usize,
@@ -90,7 +86,6 @@ impl Reasoner {
             derivation_datas: ReasonerDerivationData::default(),
             // * 🚩默认为0/false
             clock: 0,
-            timer: 0,
             volume: 0,
             stamp_current_serial: 0,
             // * 🚩统一的随机数生成器
@@ -113,7 +108,6 @@ impl Reasoner {
         self.recorder.reset();
 
         // * 🚩重置状态变量
-        self.init_timer();
         self.clock = 0;
         self.stamp_current_serial = 0;
 
