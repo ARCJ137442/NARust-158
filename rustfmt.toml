@@ -1,0 +1,8 @@
+# 参考：https://rust-coding-guidelines.github.io/rust-coding-guidelines-zh/overview.html
+
+imports_granularity="Crate"
+group_imports="StdExternalCrate"
+reorder_imports=true
+
+format_macro_matchers = true
+condense_wildcard_suffixes = true

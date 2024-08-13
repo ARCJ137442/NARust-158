@@ -450,6 +450,7 @@ fn compound_and_statement(
                     unification_q
                         .apply_to(compound.mut_ref(), statement.mut_ref().into_compound_ref());
                     unification_q.unify_map_1.apply_to_term(&mut component); // * 📌独立应用一次，应该和compound一样
+
                     // 解构陈述
                     decompose_statement(compound.get_ref(), &component, compound_from, context);
                 }
