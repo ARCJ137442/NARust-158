@@ -129,7 +129,7 @@ impl<'a> CompoundTermRef<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::io::symbols::*;
+    use crate::symbols::*;
     use crate::test_compound as compound;
     use crate::test_term as term;
     use crate::{ok, util::AResult};

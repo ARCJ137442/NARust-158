@@ -7,8 +7,8 @@ use crate::{
     control::*,
     entity::*,
     inference::rules::{utils::*, *},
-    io::symbols::{IMPLICATION_RELATION, INHERITANCE_RELATION, SIMILARITY_RELATION},
     language::{variable_process, *},
+    symbols::{IMPLICATION_RELATION, INHERITANCE_RELATION, SIMILARITY_RELATION},
     util::RefCount,
 };
 use nar_dev_utils::unwrap_or_return;

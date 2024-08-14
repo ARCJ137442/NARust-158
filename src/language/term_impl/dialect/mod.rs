@@ -3,7 +3,7 @@
 //! * 💡最初启发自「Narsese呈现」中简单的「名称+符号+括号」语法
 //! * 🎯表征并解析NARust数据结构
 
-use crate::io::symbols::*;
+use crate::symbols::*;
 use anyhow::{Ok, Result};
 use nar_dev_utils::list;
 use narsese::{

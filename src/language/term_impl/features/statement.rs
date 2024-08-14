@@ -21,8 +21,8 @@
 //! It can be of either first-order or higher-order.
 
 use super::compound_term::CompoundTermRef;
-use crate::io::symbols::*;
 use crate::language::*;
+use crate::symbols::*;
 use nar_dev_utils::{if_return, matches_or};
 use std::{
     fmt::{Display, Formatter},

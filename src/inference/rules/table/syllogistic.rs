@@ -8,11 +8,11 @@ use crate::{
     inference::rules::{
         intro_var_inner, intro_var_same_subject_or_predicate, syllogistic_rules, utils::*,
     },
-    io::symbols::*,
     language::{
         variable_process::{has_unification_q, unify_find_i, unify_find_q},
         *,
     },
+    symbols::*,
     util::*,
 };
 use syllogistic_figures::*;

@@ -5,8 +5,8 @@
 //!   * 🚧有待在OpenNARS改版中「函数式改造」
 
 use crate::{
-    io::symbols::*,
     language::{CompoundTermRef, CompoundTermRefMut, Term},
+    symbols::*,
 };
 use nar_dev_utils::void;
 use rand::{rngs::StdRng, seq::SliceRandom, RngCore, SeedableRng};

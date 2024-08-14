@@ -6,11 +6,11 @@ pub mod util;
 // 全局
 pub mod global;
 
+// 符号
+pub mod symbols;
+
 // 语言
 pub mod language;
-
-// 输入输出
-pub mod io;
 
 // 实体
 pub mod entity;

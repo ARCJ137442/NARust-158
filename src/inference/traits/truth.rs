@@ -3,7 +3,7 @@
 //! * 🎯只复刻外部读写方法，不限定内部数据字段
 //!   * ❌不迁移「具体类型」特征
 
-use crate::{entity::ShortFloat, global::Float, io::symbols::*, util::ToDisplayAndBrief};
+use crate::{entity::ShortFloat, global::Float, symbols::*, util::ToDisplayAndBrief};
 use nar_dev_utils::join;
 use narsese::lexical::Truth as LexicalTruth;
 

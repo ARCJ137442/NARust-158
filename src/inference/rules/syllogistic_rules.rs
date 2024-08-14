@@ -15,8 +15,8 @@ use crate::{
         rules::{cast_statement, utils::*},
         *,
     },
-    io::symbols::CONJUNCTION_OPERATOR,
     language::*,
+    symbols::CONJUNCTION_OPERATOR,
     util::*,
 };
 use nar_dev_utils::unwrap_or_return;

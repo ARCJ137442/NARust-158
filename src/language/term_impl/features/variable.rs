@@ -18,8 +18,8 @@
 //!
 //! A variable term, which does not correspond to a concept
 
-use crate::io::symbols::*;
 use crate::language::*;
+use crate::symbols::*;
 use nar_dev_utils::matches_or;
 
 impl Term {

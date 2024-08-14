@@ -1,4 +1,15 @@
 //! 有关内置虚拟机「Alpha」的输入输出功能
+//!
+//! # 原`src/io`注释
+//!
+//! 输入输出
+//! * 🎯有关NARS输入输出方面的功能
+//!
+//! # 📄OpenNARS
+//!
+//! Input/output management
+//!
+//! All Narsese-based input/output interfaces of the system are defined in this package.
 
 use nar_dev_utils::mods;
 

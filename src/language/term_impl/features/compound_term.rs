@@ -30,8 +30,8 @@
 //!
 //! This abstract class contains default methods for all CompoundTerms.
 
-use crate::io::symbols::*;
 use crate::language::*;
+use crate::symbols::*;
 use nar_dev_utils::matches_or;
 use narsese::api::{GetCapacity, TermCapacity};
 use std::{

@@ -3,8 +3,6 @@
 use crate::control::Reasoner;
 use navm::cmd::Cmd;
 
-// TODO: 后续仍需抽调分离其中有用的API函数，放在推理器API而非此处
-
 /// 输入指令
 impl RuntimeAlpha {
     /// 模拟`ReasonerBatch.textInputLine`

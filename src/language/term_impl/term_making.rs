@@ -8,7 +8,7 @@
 use super::{
     variable::MaximumVariableId, vec_utils, CompoundTermRef, StatementRef, Term, TermComponents,
 };
-use crate::io::symbols::*;
+use crate::symbols::*;
 
 impl Term {
     /* Word */

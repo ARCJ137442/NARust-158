@@ -7,8 +7,8 @@ use crate::{
     },
     entity::{Sentence, TLink, TruthValue},
     inference::{BudgetInferenceContext, TruthFunctions},
-    io::symbols::*,
     language::{CompoundTermRef, StatementRef, Term},
+    symbols::*,
     util::RefCount,
 };
 use nar_dev_utils::unwrap_or_return;

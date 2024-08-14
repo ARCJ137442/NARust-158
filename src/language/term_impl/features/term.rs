@@ -8,8 +8,8 @@
 //!     * 📌本质上是「缓存」的需求与作用
 //! * ✅【2024-06-14 16:33:57】基本完成对「基础词项」的属性检查
 
-use crate::io::symbols::*;
 use crate::language::*;
+use crate::symbols::*;
 use narsese::api::{GetCategory, TermCategory};
 
 /// 📄OpenNARS `nars.language.Term`

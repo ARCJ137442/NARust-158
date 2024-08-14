@@ -1,6 +1,6 @@
 //! 作为「词项链」与「任务链」共有的特征基础存在
 
-use crate::io::symbols::*;
+use crate::symbols::*;
 use serde::{Deserialize, Serialize};
 use std::ops::{Deref, DerefMut};
 

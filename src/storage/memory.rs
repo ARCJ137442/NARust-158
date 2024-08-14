@@ -393,8 +393,10 @@ pub mod tests_memory {
     /// * 🎯应对其中「父任务」引用的「无法判等」
     pub fn task_consistent(a: &Task, b: &Task) -> AResult {
         // 常规属性
-        assert_eq_try!(a.key(), b.key(), "任务不一致——key不一致");
-        assert_eq_try!(a.content(), b.content(), "任务不一致——content不一致");
+        let [ka, kb] = [a.key(), b.key()];
+        assert_eq_try!(ka, kb, "任务不一致——key不一致：{ka} != {kb}",);
+        let [ca, cb] = [a.content(), b.content()];
+        assert_eq_try!(ca, cb, "任务不一致——content不一致：{ca} != {cb}");
         assert_eq_try!(
             a.as_judgement().map(TruthValue::from),
             b.as_judgement().map(TruthValue::from),

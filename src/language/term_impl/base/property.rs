@@ -3,7 +3,7 @@
 //!   * 📌至少并非OpenNARS原先所定义的
 
 use super::structs::*;
-use crate::io::symbols::*;
+use crate::symbols::*;
 use crate::util::ToDisplayAndBrief;
 use narsese::{
     conversion::string::impl_lexical::format_instances::FORMAT_ASCII, lexical::Term as TermLexical,

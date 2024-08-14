@@ -8,8 +8,8 @@ use crate::{
     control::*,
     entity::*,
     inference::{rules::utils::*, *},
-    io::symbols::*,
     language::*,
+    symbols::*,
     util::RefCount,
 };
 use nar_dev_utils::unwrap_or_return;
