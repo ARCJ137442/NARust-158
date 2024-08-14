@@ -11,7 +11,10 @@ use navm::{
     output::Output,
     vm::{VmLauncher, VmRuntime},
 };
-use std::io::{stdout, Write};
+use std::{
+    io::{stdout, Write},
+    path,
+};
 
 pub fn launcher_void() -> impl VmLauncher {
     LauncherAlpha::new("nar_158", DEFAULT_PARAMETERS, InferenceEngine::VOID)
@@ -89,7 +92,29 @@ fn interpret_cmd(input: &str) -> Option<Cmd> {
         return Some(Cmd::NSE(task));
     }
     // 最后再考虑作为NAVM指令解析
-    Cmd::parse(input).ok_or_run(|err| eprintln!("NAVM cmd parse error: {err}"))
+    let cmd = Cmd::parse(input).ok_or_run(|err| eprintln!("NAVM cmd parse error: {err}"))?;
+    if let Cmd::LOA { target, path } = cmd {
+        let data = match try_load_file_content(path) {
+            Ok(data) => data,
+            Err(err) => {
+                eprintln!("NAVM LOA cmd load error: {err}");
+                return None;
+            }
+        };
+        return Some(Cmd::LOA { target, path: data });
+    }
+    Some(cmd)
+}
+
+/// 尝试读取本地文件，将内容作为`LOA`指令的path参数
+fn try_load_file_content(path: impl AsRef<str>) -> anyhow::Result<String> {
+    // * 🚩尝试读取本地文件
+    let path = path.as_ref();
+    if path::Path::new(path).exists() {
+        let content = std::fs::read_to_string(path)?;
+        return Ok(content);
+    }
+    Err(anyhow::anyhow!("File not found: {}", path))
 }
 
 fn shell_output(output: Output) {
