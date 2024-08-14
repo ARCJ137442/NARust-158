@@ -60,22 +60,8 @@ fn shell(
         if input.is_empty() {
             continue;
         }
-        let cmd = 'cmd: {
-            // 纯数字⇒尝试默认成`CYC`指令
-            if let Ok(n) = input.parse::<usize>() {
-                break 'cmd Some(Cmd::CYC(n));
-            }
-            // 若能解析成词法Narsese任务⇒尝试默认成`NSE`指令
-            if let Ok(Ok(task)) = FORMAT_ASCII
-                .parse(input)
-                .map(|value| value.try_into_task_compatible())
-            {
-                break 'cmd Some(Cmd::NSE(task));
-            }
-            // 最后再考虑作为NAVM指令解析
-            Cmd::parse(input).ok_or_run(|err| eprintln!("NAVM cmd parse error: {err}"))
-        };
-        if let Some(cmd) = cmd {
+        // 尝试预先解释输入
+        if let Some(cmd) = interpret_cmd(input) {
             runtime.input_cmd(cmd)?;
         }
         // out
@@ -83,6 +69,27 @@ fn shell(
             shell_output(output);
         }
     }
+}
+
+/// 从输入中「提前解释」指令
+/// * 💡可以从中对指令作预处理
+///   * 📄绕过生硬的NAVM指令语法，像OpenNARS那样直接输入Narsese与推理步数
+///   * 📄截获解析出的`SAV` `LOA`等指令，解释为其它指令语法
+///     * 💡如：`LOA`指令⇒前端请求文件并读取内容⇒内联到新的`LOA`中⇒虚拟机Alpha实现内容加载
+fn interpret_cmd(input: &str) -> Option<Cmd> {
+    // 纯数字⇒尝试默认成`CYC`指令
+    if let Ok(n) = input.parse::<usize>() {
+        return Some(Cmd::CYC(n));
+    }
+    // 若能解析成词法Narsese任务⇒尝试默认成`NSE`指令
+    if let Ok(Ok(task)) = FORMAT_ASCII
+        .parse(input)
+        .map(|value| value.try_into_task_compatible())
+    {
+        return Some(Cmd::NSE(task));
+    }
+    // 最后再考虑作为NAVM指令解析
+    Cmd::parse(input).ok_or_run(|err| eprintln!("NAVM cmd parse error: {err}"))
 }
 
 fn shell_output(output: Output) {

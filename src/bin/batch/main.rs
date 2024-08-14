@@ -3,6 +3,7 @@
 //! * 🎯对接BabelNAR「原生转译器」接口
 
 use anyhow::Result;
+use nar_dev_utils::ResultBoost;
 use narust_158::{
     control::DEFAULT_PARAMETERS,
     inference::{match_task_and_belief, process_direct, reason, transform_task, InferenceEngine},
@@ -45,15 +46,25 @@ fn batch(
         if input.is_empty() {
             continue;
         }
-        match Cmd::parse(input) {
-            Ok(cmd) => runtime.input_cmd(cmd)?,
-            Err(err) => eprintln!("NAVM cmd parse error: {err}"),
+        // 尝试预先解释输入
+        if let Some(cmd) = interpret_cmd(input) {
+            runtime.input_cmd(cmd)?;
         }
         // out
         while let Some(output) = runtime.try_fetch_output()? {
             batch_output(output);
         }
     }
+}
+
+/// 从输入中「提前解释」指令
+/// * 💡可以从中对指令作预处理
+///   * 📄绕过生硬的NAVM指令语法，像OpenNARS那样直接输入Narsese与推理步数
+///   * 📄截获解析出的`SAV` `LOA`等指令，解释为其它指令语法
+///     * 💡如：`LOA`指令⇒前端请求文件并读取内容⇒内联到新的`LOA`中⇒虚拟机Alpha实现内容加载
+fn interpret_cmd(input: &str) -> Option<Cmd> {
+    // 目前只作为NAVM指令解析
+    Cmd::parse(input).ok_or_run(|err| eprintln!("NAVM cmd parse error: {err}"))
 }
 
 /// 输出：仅打印JSON
