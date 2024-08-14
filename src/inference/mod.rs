@@ -50,23 +50,18 @@ nar_dev_utils::mods! {
 }
 
 /// 单元测试 通用函数
-///
-/// TODO: 此处仍部分依赖NAVM虚拟机的功能
 #[cfg(test)]
 pub(super) mod test_inference {
     use super::{process_direct, reason, transform_task, InferenceEngine};
     use crate::{
-        control::{Parameters, DEFAULT_PARAMETERS},
+        control::{Parameters, Reasoner, DEFAULT_PARAMETERS},
         language::Term,
-        vm::alpha::{LauncherAlpha, RuntimeAlpha},
+        ok,
+        util::AResult,
     };
     use nar_dev_utils::{list, unwrap_or_return};
     use narsese::api::GetTerm;
-    use navm::{
-        cmd::Cmd,
-        output::Output,
-        vm::{VmLauncher, VmRuntime},
-    };
+    use navm::{cmd::Cmd, output::Output};
 
     /// 预期输出词项相等
     /// * 🎯独立的「输出内容与预期词项判等」方法
@@ -94,37 +89,52 @@ pub(super) mod test_inference {
                 matches!(output, navm::output::Output::$type {..}) // ! 📌【2024-08-07 15:15:22】类型匹配必须放宏展开式中
                 && $crate::inference::test_inference::expect_output_eq_term_lexical(
                     // * 🚩【2024-07-15 00:04:43】此处使用了「词法Narsese」的内部分派
-                    output, narsese::lexical_nse_term!(@PARSE $term)
+                    &output, narsese::lexical_nse_term!(@PARSE $term)
                 )
         };
     }
 
     /// 从「超参数」与「推理引擎」创建虚拟机
-    pub fn create_vm(parameters: Parameters, engine: InferenceEngine) -> RuntimeAlpha {
-        let launcher = LauncherAlpha::new("test", parameters, engine);
-        launcher.launch().expect("推理器虚拟机 启动失败")
+    pub fn create_reasoner(parameters: Parameters, engine: InferenceEngine) -> Reasoner {
+        Reasoner::new("test", parameters, engine)
     }
 
     /// 设置虚拟机到「最大音量」
     /// * 🎯使虚拟机得以输出尽可能详尽的信息
-    pub fn set_max_volume(vm: &mut impl VmRuntime) {
-        vm.input_cmd(Cmd::VOL(100)).expect("输入指令失败");
-        let _ = vm.try_fetch_output(); // 📌丢掉其输出
+    pub fn set_max_volume(reasoner: &mut Reasoner) {
+        reasoner.set_volume(100);
     }
 
     /// 从「推理引擎」创建虚拟机
     /// * 📜使用默认参数
     /// * 🚩【2024-08-01 14:34:19】默认最大音量
-    pub fn create_vm_from_engine(engine: InferenceEngine) -> RuntimeAlpha {
-        let mut vm = create_vm(DEFAULT_PARAMETERS, engine);
-        set_max_volume(&mut vm);
-        vm
+    pub fn create_reasoner_from_engine(engine: InferenceEngine) -> Reasoner {
+        let mut reasoner = create_reasoner(DEFAULT_PARAMETERS, engine);
+        set_max_volume(&mut reasoner);
+        reasoner
     }
 
-    /// 增强虚拟机运行时的特征
-    pub trait VmRuntimeBoost: VmRuntime {
+    /// 扩展推理器的功能
+    impl Reasoner {
+        /// 简单解释NAVM指令
+        /// * 🎯轻量级指令分派，不带存取等额外功能
+        pub(crate) fn input_cmd(&mut self, cmd: Cmd) -> AResult<()> {
+            use Cmd::*;
+            match cmd {
+                NSE(task) => self.input_task(task),
+                CYC(steps) => self.cycle(steps),
+                VOL(volume) => self.set_volume(volume),
+                RES { .. } => self.reset(),
+                REM { .. } => (),
+                INF { source } if source == "summary" => self.report_info(self.report_summary()),
+                INF { .. } => (),
+                _ => return Err(anyhow::anyhow!("不支持的NAVM指令：{cmd}")),
+            }
+            ok!()
+        }
+
         /// 输入NAVM指令到虚拟机
-        fn input_cmds(&mut self, cmds: &str) {
+        pub(crate) fn input_cmds(&mut self, cmds: &str) {
             for cmd in cmds
                 .lines()
                 .map(str::trim)
@@ -139,7 +149,7 @@ pub(super) mod test_inference {
 
         /// 输入NAVM指令到虚拟机，但忽略解析错误
         /// * 🎯向后兼容：解析成功则必须稳定，解析失败视作「暂未支持」
-        fn input_cmds_soft(&mut self, cmds: &str) {
+        pub(crate) fn input_cmds_soft(&mut self, cmds: &str) {
             for cmd in cmds
                 .lines()
                 .map(str::trim)
@@ -155,29 +165,33 @@ pub(super) mod test_inference {
         }
 
         /// 拉取虚拟机的输出
-        fn fetch_outputs(&mut self) -> Vec<Output> {
+        pub(crate) fn fetch_outputs(&mut self) -> Vec<Output> {
             list![
                 output
-                while let Some(output) = (self.try_fetch_output().expect("拉取输出失败"))
+                while let Some(output) = (self.take_output())
             ]
         }
 
         /// 输入指令并拉取输出
         #[must_use]
-        fn input_cmds_and_fetch_out(&mut self, cmds: &str) -> Vec<Output> {
+        pub(crate) fn input_cmds_and_fetch_out(&mut self, cmds: &str) -> Vec<Output> {
             self.input_cmds(cmds);
             self.fetch_outputs()
         }
 
-        /// 拉取输出并预期其中的输出
-        fn fetch_expected_outputs(&mut self, expect: impl Fn(&Output) -> bool) -> Vec<Output> {
-            let outputs = self.fetch_outputs();
-            expect_outputs(&outputs, expect);
-            outputs
-        }
+        // !  ❌【2024-08-15 00:58:37】暂时用不到
+        // /// 拉取输出并预期其中的输出
+        // pub(crate) fn fetch_expected_outputs(
+        //     &mut self,
+        //     expect: impl Fn(&Output) -> bool,
+        // ) -> Vec<Output> {
+        //     let outputs = self.fetch_outputs();
+        //     expect_outputs(&outputs, expect);
+        //     outputs
+        // }
 
         /// 输入指令、拉取、打印并预期输出
-        fn input_fetch_print_expect(
+        pub(crate) fn input_fetch_print_expect(
             &mut self,
             cmds: &str,
             expect: impl Fn(&Output) -> bool,
@@ -194,7 +208,6 @@ pub(super) mod test_inference {
             outs
         }
     }
-    impl<T: VmRuntime> VmRuntimeBoost for T {}
 
     /// 打印输出（基本格式）
     pub fn print_outputs<'a>(outs: impl IntoIterator<Item = &'a Output>) {
@@ -243,7 +256,7 @@ pub(super) mod test_inference {
 
     /// 「预期测试」函数
     pub fn expectation_test(inputs: impl AsRef<str>, expectation: impl Fn(&Output) -> bool) {
-        let mut vm = create_vm_from_engine(ENGINE_REASON);
+        let mut vm = create_reasoner_from_engine(ENGINE_REASON);
         // * 🚩OUT
         vm.input_fetch_print_expect(
             inputs.as_ref(),
@@ -303,7 +316,7 @@ pub(super) mod test_inference {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::inference::test_inference::{create_vm_from_engine, print_outputs, VmRuntimeBoost};
+    use crate::inference::test_inference::{create_reasoner_from_engine, print_outputs};
     use crate::{ok, util::AResult};
     use nar_dev_utils::pipe;
 
@@ -323,7 +336,7 @@ mod tests {
     ///   * ⚠️损失了一部分有关「生成输出」的测试
     fn test_line_inputs<S: AsRef<str>>(inputs: impl IntoIterator<Item = S>) -> AResult {
         // 创建
-        let mut runtime = create_vm_from_engine(ENGINE_DEV);
+        let mut runtime = create_reasoner_from_engine(ENGINE_DEV);
         // 静音
         runtime.input_cmds("vol 0");
         // 输入指令（软标准，不要求解析成功⇒向后兼容）

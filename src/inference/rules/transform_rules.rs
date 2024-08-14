@@ -478,7 +478,7 @@ mod tests {
         cmds: impl AsRef<str>,
         expect_terms: impl IntoIterator<Item = narsese::lexical::Term>,
     ) {
-        let mut vm = create_vm_from_engine(ENGINE);
+        let mut vm = create_reasoner_from_engine(ENGINE);
         // * 🚩输入指令并拉取输出
         let outs = vm.input_cmds_and_fetch_out(cmds.as_ref());
         // * 🚩打印输出
@@ -556,7 +556,7 @@ mod tests {
     /// 稳定性
     #[test]
     fn stability() {
-        let mut vm = create_vm_from_engine(ENGINE);
+        let mut vm = create_reasoner_from_engine(ENGINE);
         // * 🚩输入指令并拉取输出
         let outs = vm.input_cmds_and_fetch_out(
             "

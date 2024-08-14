@@ -261,10 +261,11 @@ where
 mod tests {
     use super::*;
     use crate::{
+        control::Reasoner,
         expect_narsese_term,
         inference::{test_inference::*, InferenceEngine},
     };
-    use navm::{output::Output, vm::VmRuntime};
+    use navm::output::Output;
 
     /// 推理引擎
     const ENGINE: InferenceEngine = InferenceEngine::new(
@@ -274,14 +275,14 @@ mod tests {
         InferenceEngine::ECHO.reason_f(),
     );
 
-    fn vm() -> impl VmRuntime {
-        create_vm_from_engine(ENGINE)
+    fn reasoner() -> Reasoner {
+        create_reasoner_from_engine(ENGINE)
     }
 
     /// 直接回答问题
     #[test]
     fn direct_answer_question() {
-        let mut vm = vm();
+        let mut vm = reasoner();
         // * 🚩输入指令并拉取输出
         vm.input_fetch_print_expect(
             "
@@ -297,7 +298,7 @@ mod tests {
     /// 多次回答相同问题
     #[test]
     fn answer_question_multiple_time() {
-        let mut vm = vm();
+        let mut vm = reasoner();
         let has_answer = |answer: &Output| matches!(answer, Output::ANSWER { .. });
 
         // 初次回答
@@ -341,7 +342,7 @@ mod tests {
     /// * 🚩【2024-08-12 22:56:38】考虑到单测时间太长，目前压到16轮、每轮10步、最后1000步
     #[test]
     fn stability() {
-        let mut vm = vm();
+        let mut vm = reasoner();
         // * 🚩检验长期稳定性
         for i in 0..0x10 {
             let _outs = vm.input_cmds_and_fetch_out(&format!(

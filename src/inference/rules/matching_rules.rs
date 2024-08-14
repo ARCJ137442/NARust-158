@@ -134,7 +134,7 @@ mod tests {
     /// 修正判断
     #[test]
     fn revise_after_direct() {
-        let mut vm = create_vm_from_engine(ENGINE);
+        let mut vm = create_reasoner_from_engine(ENGINE);
         // * 🚩输入指令并拉取输出
         vm.input_fetch_print_expect(
             "
@@ -151,7 +151,7 @@ mod tests {
     /// 修正判断+答问
     #[test]
     fn answer_after_revise() {
-        let mut vm = create_vm_from_engine(ENGINE);
+        let mut vm = create_reasoner_from_engine(ENGINE);
 
         // 匹配时回答
         vm.input_fetch_print_expect(
@@ -186,7 +186,7 @@ mod tests {
     /// 回答带变量问题
     #[test]
     fn answer_question_with_variables() {
-        let mut vm = create_vm_from_engine(ENGINE);
+        let mut vm = create_reasoner_from_engine(ENGINE);
         // * 🚩输入指令并拉取输出
         vm.input_fetch_print_expect(
             "
@@ -213,7 +213,7 @@ mod tests {
     /// * 🚩【2024-08-12 22:56:38】考虑到单测时间太长，目前压到16轮
     #[test]
     fn stability() {
-        let mut vm = create_vm_from_engine(ENGINE);
+        let mut vm = create_reasoner_from_engine(ENGINE);
         // * 🚩检验长期稳定性
         for i in 0..0x10 {
             let _outs = vm.input_cmds_and_fetch_out(&format!(
