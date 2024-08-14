@@ -156,11 +156,13 @@ mod cmd_hlp {
 - qualifiers:
   - `#`: Detailed info
 - targets:
-  - `memory`: Memory
-  - `reasoner`: Reasoner
-  - `tasks`: Tasks in reasoner
+  - `tasks`: Tasks in reasoner, or derivation chain on detailed mode
   - `concepts`: Concepts in memory
   - `links`: Task-links and term-links in each concepts
+  - `parameters`: View reasoner parameters
+  - `beliefs`: Beliefs in memory
+  - `questions`: Questions in memory
+  - `summary`: The summary of status of reasoner, no detailed mode yet
 ";
 
     /// 有关「示例输入」的帮助
@@ -213,7 +215,7 @@ mod cmd_inf {
                     // 所有固定模式的分派
                     $( $query => Ok($message.to_string()), )*
                     // * 🚩其它⇒告警
-                    other => Err(format!("Unknown info query: {other:?}")),
+                    other => Err(format!("Unknown info query: {other:?}\nAvailable info queries: {ALL_QUERIES_LIST}")),
                 }
             }
 
