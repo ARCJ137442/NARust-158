@@ -4,7 +4,7 @@ use narsese::conversion::string::impl_lexical::format_instances::FORMAT_ASCII;
 use narust_158::{
     control::DEFAULT_PARAMETERS,
     inference::{match_task_and_belief, process_direct, reason, transform_task, InferenceEngine},
-    vm::Launcher,
+    vm::alpha::LauncherAlpha,
 };
 use navm::{
     cmd::Cmd,
@@ -14,11 +14,11 @@ use navm::{
 use std::io::{stdout, Write};
 
 pub fn launcher_void() -> impl VmLauncher {
-    Launcher::new("nar_158", DEFAULT_PARAMETERS, InferenceEngine::VOID)
+    LauncherAlpha::new("nar_158", DEFAULT_PARAMETERS, InferenceEngine::VOID)
 }
 
 pub fn launcher_echo() -> impl VmLauncher {
-    Launcher::new("nar_158", DEFAULT_PARAMETERS, InferenceEngine::ECHO)
+    LauncherAlpha::new("nar_158", DEFAULT_PARAMETERS, InferenceEngine::ECHO)
 }
 
 pub fn launcher_dev() -> impl VmLauncher {
@@ -29,7 +29,7 @@ pub fn launcher_dev() -> impl VmLauncher {
         match_task_and_belief,
         reason,
     );
-    Launcher::new("nar_158", DEFAULT_PARAMETERS, ENGINE)
+    LauncherAlpha::new("nar_158", DEFAULT_PARAMETERS, ENGINE)
 }
 
 fn create_runtime() -> Result<impl VmRuntime> {

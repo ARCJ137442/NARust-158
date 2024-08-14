@@ -279,9 +279,21 @@ pub mod tests_memory {
         a.into_iter().zip(b.into_iter())
     }
 
+    /// 用于在外部crate中直接用推理器检查记忆区，且不使用[`Reasoner::memory`]字段
+    pub trait GetMemory {
+        fn get_memory(&self) -> &Memory;
+    }
+
+    impl GetMemory for Memory {
+        fn get_memory(&self) -> &Memory {
+            self
+        }
+    }
+
     /// 手动检查俩记忆区是否一致
     /// * 📝对「记忆区」因为「共享引用无法准确判等（按引用）」只能由此验证
-    pub fn memory_consistent(old: &Memory, new: &Memory) -> AResult {
+    pub fn memory_consistent<M1: GetMemory, M2: GetMemory>(old: &M1, new: &M2) -> AResult {
+        let [old, new] = [old.get_memory(), new.get_memory()];
         // 参数一致
         assert_eq_try!(
             &old.parameters,

@@ -16,8 +16,9 @@ impl Reasoner {
     /// 模拟`StringParser.parseTask`
     /// * 🚩直接模仿`parseTask`而非`parseExperience`
     /// * 📌结合自身信息的「词法折叠」
-    /// * 📝OpenNARS在解析时可能会遇到「新词项⇒新建概念」的情形
-    ///   * 🚩因此需要`&mut self`
+    /// * 📌【2024-08-14 17:37:04】目前功能定位成「根据外部序列号生成任务」
+    ///   * ⚠️本身不更新内部的时间戳序列号，因此需要在参数中给予
+    ///   * ℹ️若需将输入的Narsese任务视作「新任务」请移步至[`Reasoner::parse_new_task`]
     pub fn parse_task(
         &self,
         narsese: LexicalTask,
@@ -111,5 +112,11 @@ impl Reasoner {
 
         // 返回
         Ok(task)
+    }
+
+    /// 将任务视作一个「新任务」解析
+    pub fn parse_new_task(&mut self, narsese: LexicalTask) -> Result<Task> {
+        let stamp_current_serial = self.updated_stamp_current_serial();
+        self.parse_task(narsese, stamp_current_serial)
     }
 }

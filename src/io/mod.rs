@@ -9,11 +9,5 @@
 
 nar_dev_utils::mods! {
     // 符号 | 📌【2024-05-13 00:05:34】此处是特例：常量过多，需要封装
-    use pub symbols;
-    // 🆕通道
-    pub use _channel;
-    // 输入通道
-    pub use input_channel;
-    // 输出通道
-    pub use output_channel;
+    use pub symbols; // TODO: 考虑内置到language模块？
 }

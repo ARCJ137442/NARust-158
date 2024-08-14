@@ -2,6 +2,7 @@
 //!
 //! * ✅【2024-05-15 16:57:37】初代全功能实现
 
+use super::{ChannelIn, ChannelOut, ReasonerChannels};
 use crate::{
     control::{Parameters, Reasoner},
     global::RC,
@@ -15,18 +16,14 @@ use navm::{
     vm::{VmRuntime, VmStatus},
 };
 
-// 通道
-mod channel_in;
-pub use channel_in::*;
-mod channel_out;
-pub use channel_out::*;
-
 /// 虚拟机运行时
 /// * 🎯包装一个虚拟机，以跳出孤儿规则的限制
 #[derive(Debug)]
-pub struct Runtime {
+pub struct RuntimeAlpha {
+    /// IO通道
+    pub(super) io_channels: ReasonerChannels,
     /// 内部推理器字段
-    reasoner: Reasoner,
+    pub(super) reasoner: Reasoner,
     /// 输入通道的共享引用
     i_channel: RC<ChannelIn>,
     /// 输出通道的共享引用
@@ -36,7 +33,7 @@ pub struct Runtime {
 }
 
 /// 自身实现
-impl Runtime {
+impl RuntimeAlpha {
     /// 构造函数
     /// * 🚩【2024-05-15 10:40:49】暂不允许「直接由推理器创建」
     ///   * 📌需要更精细地控制「内部推理器」的状态与成员
@@ -48,21 +45,17 @@ impl Runtime {
         inference_engine: InferenceEngine,
     ) -> Self {
         // * 🚩创建推理器
-        let mut reasoner = Reasoner::new(name.into(), hyper_parameters, inference_engine);
+        let reasoner = Reasoner::new(name.into(), hyper_parameters, inference_engine);
 
         // * 🚩创建并加入通道
-        let i_channel = RC::new_(ChannelIn::new());
-        let b = Box::new(i_channel.clone());
-        reasoner.add_input_channel(b); // * ✅解决：在「推理器」中细化生命周期约束，现在不再报错与要求`'static`
-
-        let o_channel = RC::new_(ChannelOut::new());
-        let b = Box::new(o_channel.clone());
-        reasoner.add_output_channel(b); // * ✅解决：在「推理器」中细化生命周期约束，现在不再报错与要求`'static`
+        let (io_channels, i_channel, o_channel) = default_channels();
 
         // * 🚩构造自身
         Self {
             // * 🚩载入推理器
             reasoner,
+            // 通道结构
+            io_channels,
             // * 🚩空通道
             i_channel,
             // * 🚩空通道
@@ -71,15 +64,30 @@ impl Runtime {
     }
 }
 
+fn default_channels() -> (ReasonerChannels, RC<ChannelIn>, RC<ChannelOut>) {
+    let mut io_channels = ReasonerChannels::new();
+
+    let i_channel = RC::new_(ChannelIn::new());
+
+    io_channels.add_input_channel(Box::new(i_channel.clone()));
+    // * ✅解决：在「推理器」中细化生命周期约束，现在不再报错与要求`'static`
+
+    let o_channel = RC::new_(ChannelOut::new());
+    io_channels.add_output_channel(Box::new(o_channel.clone()));
+    // * ✅解决：在「推理器」中细化生命周期约束，现在不再报错与要求`'static`
+
+    (io_channels, i_channel, o_channel)
+}
+
 /// 实现[虚拟机运行时](VmRuntime)
-impl VmRuntime for Runtime {
+impl VmRuntime for RuntimeAlpha {
     fn input_cmd(&mut self, cmd: Cmd) -> Result<()> {
         // ! ⚠️不要直接朝推理器输入NAVM指令，要利用推理器自身的通道机制
         // * 🚩将指令置入通道中
         self.i_channel.mut_().put(cmd);
         // * 🚩让推理器处理一次完整输入输出
         // * 📌其中包括`NSE`指令，会将执行的回执（输出）单独带出
-        self.reasoner.handle_io();
+        self.handle_io();
         Ok(())
     }
 

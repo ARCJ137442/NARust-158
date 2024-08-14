@@ -63,6 +63,9 @@ impl ReasonerStatusStorage {
     }
 }
 
+/// 推理器具体结构加载
+/// * 📄记忆区加载
+/// * 📄推理状态加载
 impl Reasoner {
     /// 加载新的记忆区
     #[must_use]
@@ -86,38 +89,68 @@ impl Reasoner {
     }
 
     /// 加载「推理器状态」
+    #[must_use]
     fn load_status(&mut self, status: ReasonerStatusStorage) -> ReasonerStatusStorage {
-        use std::mem::swap;
         let ReasonerStatusStorage {
             memory,
             derivation_datas,
-            mut clock,
-            mut stamp_current_serial,
+            clock,
+            stamp_current_serial,
         } = status;
         // 加载记忆区
         let memory = self.load_memory(memory);
         // 加载推导数据
         let derivation_datas = self.load_derivation_datas(derivation_datas);
         // 加载其它基础类型
-        swap(&mut clock, &mut self.clock);
-        swap(&mut stamp_current_serial, &mut self.stamp_current_serial);
+        let clock_old = self.time();
+        self.set_time(clock);
+        let stamp_current_serial_old = self.stamp_current_serial();
+        self.set_stamp_current_serial(stamp_current_serial);
         // 将旧的数据返回
         ReasonerStatusStorage {
             memory,
             derivation_datas,
-            clock,
-            stamp_current_serial,
+            clock: clock_old,
+            stamp_current_serial: stamp_current_serial_old,
         }
     }
+}
 
+/// 推理器外部「序列化/反序列化」接口
+/// * 🎯屏蔽具体序列反序列化数据类型
+///   * 📄[JSON](serde_json)
+impl Reasoner {
+    /// 从推理器序列化出「推理器状态」
+    pub fn serialize_memory<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        // 再序列化
+        self.memory.serialize(serializer)
+    }
+
+    /// 反序列化并加载「推理器状态」
+    /// * 🚩【2024-08-12 20:22:42】不返回「推理器状态」数据
+    ///   * 💭出于内部使用考虑，不暴露「推理器状态」数据类型
+    pub fn load_from_deserialized_memory<'de, D>(&mut self, deserializer: D) -> Result<(), D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        // 先反序列化到结构体
+        // * ✅无需做引用归一化：记忆区反序列化时，便已完成
+        let memory = Memory::deserialize(deserializer)?;
+        // 再加载
+        let _ = self.load_memory(memory);
+        Ok(())
+    }
     /// 从推理器序列化出「推理器状态」
     pub fn serialize_status<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         // 先构造引用
         let storage_ref = ReasonerStatusStorageRef {
             memory: &self.memory,
             derivation_datas: &self.derivation_datas,
-            clock: self.clock,
-            stamp_current_serial: self.stamp_current_serial,
+            clock: self.time(),
+            stamp_current_serial: self.stamp_current_serial(),
         };
         // 再序列化
         storage_ref.serialize(serializer)
@@ -126,10 +159,10 @@ impl Reasoner {
     /// 反序列化并加载「推理器状态」
     /// * 🚩【2024-08-12 20:22:42】不返回「推理器状态」数据
     ///   * 💭出于内部使用考虑，不暴露「推理器状态」数据类型
-    pub fn load_from_deserialized_status<'de, D: serde::Deserializer<'de>>(
-        &mut self,
-        deserializer: D,
-    ) -> Result<(), D::Error> {
+    pub fn load_from_deserialized_status<'de, D>(&mut self, deserializer: D) -> Result<(), D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
         // 先反序列化到结构体
         let mut status = ReasonerStatusStorage::deserialize(deserializer)?;
         // 引用归一化
@@ -153,19 +186,59 @@ pub mod test_util_ser_de {
     };
     use std::collections::VecDeque;
 
+    /// 获取记忆区的引用，而不直接暴露字段
+    impl GetMemory for Reasoner {
+        fn get_memory(&self) -> &Memory {
+            &self.memory
+        }
+    }
+
+    /// 获取记忆区的引用，而不直接暴露字段
+    impl GetMemory for ReasonerStatusStorage {
+        fn get_memory(&self) -> &Memory {
+            &self.memory
+        }
+    }
+
+    /// 获取记忆区的引用，而不直接暴露字段
+    impl GetMemory for ReasonerStatusStorageRef<'_> {
+        fn get_memory(&self) -> &Memory {
+            self.memory
+        }
+    }
+
+    /// 用于在外部crate中，从虚拟机引用记忆区
+    pub trait GetReasoner {
+        fn get_reasoner(&self) -> &Reasoner;
+    }
+
+    /// 获取推理器的引用，而不直接暴露字段
+    impl GetReasoner for Reasoner {
+        fn get_reasoner(&self) -> &Reasoner {
+            self
+        }
+    }
+
     /// 判断推理器状态的一致性
     /// * 🚩通过「返回错误」指定「一致性缺失」
     /// * 📌只传入推理器来判断，不暴露内部数据类型
-    pub fn status_consistent(a: &Reasoner, b: &Reasoner) -> AResult {
+    pub fn status_consistent<R1: GetReasoner, R2: GetReasoner>(a: &R1, b: &R2) -> AResult {
+        let [a, b] = [a.get_reasoner(), b.get_reasoner()];
         // 记忆区一致性
         memory_consistent(&a.memory, &b.memory)?;
         // 推导数据一致性
         derivation_datas_consistent(&a.derivation_datas, &b.derivation_datas)?;
         // 其它数据一致性
-        assert_eq_try!(a.clock, b.clock, "系统时钟不一致");
         assert_eq_try!(
-            a.stamp_current_serial,
-            b.stamp_current_serial,
+            a.time(),
+            b.time(),
+            "系统时钟不一致：{} != {}",
+            a.time(),
+            b.time()
+        );
+        assert_eq_try!(
+            a.stamp_current_serial(),
+            b.stamp_current_serial(),
             "系统时间戳序列号不一致"
         );
 

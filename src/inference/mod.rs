@@ -50,13 +50,15 @@ nar_dev_utils::mods! {
 }
 
 /// 单元测试 通用函数
+///
+/// TODO: 此处仍部分依赖NAVM虚拟机的功能
 #[cfg(test)]
 pub(super) mod test_inference {
-    use super::*;
+    use super::{process_direct, reason, transform_task, InferenceEngine};
     use crate::{
         control::{Parameters, DEFAULT_PARAMETERS},
         language::Term,
-        vm::{Launcher, Runtime},
+        vm::alpha::{LauncherAlpha, RuntimeAlpha},
     };
     use nar_dev_utils::{list, unwrap_or_return};
     use narsese::api::GetTerm;
@@ -98,8 +100,8 @@ pub(super) mod test_inference {
     }
 
     /// 从「超参数」与「推理引擎」创建虚拟机
-    pub fn create_vm(parameters: Parameters, engine: InferenceEngine) -> Runtime {
-        let launcher = Launcher::new("test", parameters, engine);
+    pub fn create_vm(parameters: Parameters, engine: InferenceEngine) -> RuntimeAlpha {
+        let launcher = LauncherAlpha::new("test", parameters, engine);
         launcher.launch().expect("推理器虚拟机 启动失败")
     }
 
@@ -113,7 +115,7 @@ pub(super) mod test_inference {
     /// 从「推理引擎」创建虚拟机
     /// * 📜使用默认参数
     /// * 🚩【2024-08-01 14:34:19】默认最大音量
-    pub fn create_vm_from_engine(engine: InferenceEngine) -> Runtime {
+    pub fn create_vm_from_engine(engine: InferenceEngine) -> RuntimeAlpha {
         let mut vm = create_vm(DEFAULT_PARAMETERS, engine);
         set_max_volume(&mut vm);
         vm
@@ -232,11 +234,10 @@ pub(super) mod test_inference {
     }
 
     /// 概念推理专用测试引擎
-    /// * 🚩【2024-07-14 23:51:32】禁掉了转换推理
     pub const ENGINE_REASON: InferenceEngine = InferenceEngine::new(
         process_direct,
         transform_task,
-        InferenceEngine::VOID.matching_f(),
+        InferenceEngine::VOID.matching_f(), // TODO: 预备替换成 match_task_and_belief
         reason,
     );
 

@@ -4,7 +4,7 @@
 //!
 //! * ♻️【2024-06-26 12:02:36】开始根据改版OpenNARS重写
 
-use super::{ReasonRecorder, ReasonerChannels, ReasonerDerivationData};
+use super::{ReasonRecorder, ReasonerDerivationData};
 use crate::{
     control::Parameters, entity::Task, global::ClockTime, inference::InferenceEngine,
     storage::Memory,
@@ -36,9 +36,6 @@ pub struct Reasoner {
     /// 记录器
     pub(super) recorder: ReasonRecorder,
 
-    /// IO通道
-    pub(in super::super) io_channels: ReasonerChannels,
-
     /// 使用的推理引擎
     pub(in super::super) inference_engine: InferenceEngine,
 
@@ -46,7 +43,7 @@ pub struct Reasoner {
     pub(in super::super) derivation_datas: ReasonerDerivationData,
 
     /// 系统时钟
-    pub(in super::super) clock: ClockTime,
+    clock: ClockTime,
 
     // ! ❌不再状态「运行中」，因为NARust-158是始终运行的
 
@@ -56,10 +53,10 @@ pub struct Reasoner {
     // ! ❌不复刻`timer`「最后一个输出之前的步数」：这个量也是多线程OpenNARS才用的
     /// 音量等级（0~100）
     /// * 🚩【2024-06-27 19:06:32】不同于OpenNARS，此处仅使用普通整数
-    pub(in super::super) volume: usize,
+    volume: usize,
 
     /// 时间戳序列号（递增序列号）
-    pub(in super::super) stamp_current_serial: ClockTime,
+    stamp_current_serial: ClockTime,
 
     /// shuffle用随机生成器
     /// * 🚩【2024-07-10 00:27:04】不应设置为全局变量：推理器之间不应共享数据
@@ -81,7 +78,6 @@ impl Reasoner {
             parameters: parameters.into(),
             memory: Memory::default(),
             recorder: ReasonRecorder::default(),
-            io_channels: ReasonerChannels::default(),
             inference_engine: inference_engine.into(),
             derivation_datas: ReasonerDerivationData::default(),
             // * 🚩默认为0/false
@@ -99,6 +95,9 @@ impl Reasoner {
 }
 
 /// 功能性函数
+/// * ℹ️源自OpenNARS `class Reasoner`
+/// * 📄核心字段的存取操作
+///   * 🎯原则：尽量不暴露内部字段
 impl Reasoner {
     /// 重置推理器
     pub fn reset(&mut self) {
@@ -110,10 +109,6 @@ impl Reasoner {
         // * 🚩重置状态变量
         self.clock = 0;
         self.stamp_current_serial = 0;
-
-        // ! ❌【2024-07-31 17:48:49】现弃用「全局伪随机数生成器」的想法：不利于线程安全、已采用「基于推理器的随机数生成器」方法
-        // // * 🚩重置全局变量
-        // crate::control::init_global_reason_parameters(); // 推理过程的全局参数（随机种子等）
 
         // * 🚩最后发送消息
         self.report_info("-----RESET-----");
@@ -146,11 +141,48 @@ impl Reasoner {
         self.volume
     }
 
+    /// 🆕设置推理器「音量」
+    /// * 📄参考内部字段[`Reasoner::volume`]
+    pub fn set_volume(&mut self, volume: usize) {
+        self.volume = volume;
+    }
+
+    /// 获取「当前时间戳序列号」
+    /// * 🎯隔离内部字段实现
+    pub fn stamp_current_serial(&self) -> ClockTime {
+        self.stamp_current_serial
+    }
+
+    /// 设置当前时间戳序列号
+    /// * 🎯序列反序列化中「覆盖当前时间戳序列号」
+    /// * 🚩【2024-08-14 22:43:59】目前不对外公开
+    pub(crate) fn set_stamp_current_serial(&mut self, value: ClockTime) {
+        self.stamp_current_serial = value;
+    }
+
     /// 更新「当前时间戳序列号」
     /// * 📝OpenNARS中「先自增，再使用」
     pub fn updated_stamp_current_serial(&mut self) -> ClockTime {
         self.stamp_current_serial += 1;
         self.stamp_current_serial
+    }
+    /// 获取时钟时间
+    #[doc(alias = "clock")]
+    pub fn time(&self) -> ClockTime {
+        self.clock
+    }
+
+    /// 单步递进时钟时间
+    pub fn tick(&mut self) {
+        self.clock += 1;
+    }
+
+    /// 设置时钟时间
+    /// * 🎯序列反序列化中「覆盖当前时间」
+    /// * 🚩【2024-08-14 22:43:59】目前不对外公开
+    #[doc(alias = "set_clock")]
+    pub(crate) fn set_time(&mut self, value: ClockTime) {
+        self.clock = value;
     }
 
     /// 从内部「记录器」中拉取一个输出
@@ -160,13 +192,15 @@ impl Reasoner {
 
     /// 迭代器：迭代「新任务列表」中的所有任务
     /// * 🎯用于「呈现任务信息」
-    pub fn iter_new_tasks(&self) -> impl Iterator<Item = &Task> {
+    /// * ⚠️不对外公开
+    pub(crate) fn iter_new_tasks(&self) -> impl Iterator<Item = &Task> {
         self.derivation_datas.new_tasks.iter()
     }
 
     /// 迭代器：迭代「新任务列表」中的所有任务
     /// * 🎯用于「呈现任务信息」
-    pub fn iter_novel_tasks(&self) -> impl Iterator<Item = &Task> {
+    /// * ⚠️不对外公开
+    pub(crate) fn iter_novel_tasks(&self) -> impl Iterator<Item = &Task> {
         self.derivation_datas.novel_tasks.iter()
     }
 }

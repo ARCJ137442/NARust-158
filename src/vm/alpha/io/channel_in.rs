@@ -2,8 +2,8 @@
 
 use crate::{
     global::RC,
-    io::{Channel, InputChannel},
     util::RefCount,
+    vm::alpha::io::{Channel, InputChannel},
 };
 use navm::cmd::Cmd;
 use std::collections::VecDeque;

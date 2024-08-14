@@ -9,8 +9,8 @@
 
 use crate::{
     global::RC,
-    io::{Channel, OutputChannel},
     util::RefCount,
+    vm::alpha::io::{Channel, OutputChannel},
 };
 use navm::output::Output;
 use std::collections::VecDeque;

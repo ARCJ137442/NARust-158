@@ -3,7 +3,7 @@
 //!
 //! * ✅【2024-05-15 17:01:58】完成初代实现：名称、超参数
 
-use super::Runtime;
+use super::RuntimeAlpha;
 use crate::{control::Parameters, inference::InferenceEngine};
 use anyhow::Result;
 use navm::vm::VmLauncher;
@@ -11,7 +11,7 @@ use navm::vm::VmLauncher;
 /// 虚拟机启动器
 /// * 🎯作为启动虚拟机的配置与脚手架
 #[derive(Debug, Clone)]
-pub struct Launcher {
+pub struct LauncherAlpha {
     /// 虚拟机名称
     /// * 🚩即「推理器名称」
     name: String,
@@ -21,7 +21,7 @@ pub struct Launcher {
     inference_engine: InferenceEngine,
 }
 
-impl Launcher {
+impl LauncherAlpha {
     /// 构造函数
     pub fn new(
         name: impl Into<String>,
@@ -37,12 +37,12 @@ impl Launcher {
 }
 
 /// 虚拟机启动器
-impl VmLauncher for Launcher {
-    type Runtime = Runtime;
+impl VmLauncher for LauncherAlpha {
+    type Runtime = RuntimeAlpha;
 
     fn launch(self) -> Result<Self::Runtime> {
         // * 🚩创建新运行时
-        let runtime = Runtime::new(self.name, self.hyper_parameters, self.inference_engine);
+        let runtime = RuntimeAlpha::new(self.name, self.hyper_parameters, self.inference_engine);
         // * 🚩返回
         Ok(runtime)
     }

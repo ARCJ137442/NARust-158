@@ -6,13 +6,9 @@ use anyhow::Result;
 use narust_158::{
     control::DEFAULT_PARAMETERS,
     inference::{match_task_and_belief, process_direct, reason, transform_task, InferenceEngine},
-    vm::Launcher,
+    vm::alpha::LauncherAlpha,
 };
-use navm::{
-    cmd::Cmd,
-    output::Output,
-    vm::{VmLauncher, VmRuntime},
-};
+use navm::{cmd::Cmd, output::Output, vm::VmLauncher, vm::VmRuntime};
 
 fn create_runtime() -> Result<impl VmRuntime> {
     // * 🚩【2024-07-09 16:52:40】目前除了「概念推理」均俱全
@@ -22,7 +18,7 @@ fn create_runtime() -> Result<impl VmRuntime> {
         match_task_and_belief,
         reason,
     );
-    let vm = Launcher::new("demo_158", DEFAULT_PARAMETERS, ENGINE);
+    let vm = LauncherAlpha::new("demo_158", DEFAULT_PARAMETERS, ENGINE);
     vm.launch()
 }
 
