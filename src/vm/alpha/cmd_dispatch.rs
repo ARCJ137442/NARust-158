@@ -220,8 +220,6 @@ mod cmd_inf {
             }
 
             // * 🚩普通信息查询
-            "memory" => reasoner.report_memory()         // 整个记忆区
-            "reasoner" => reasoner.report_reasoner()     // 整个推理器
             "parameters" => reasoner.report_parameters() // 推理器的超参数
             "tasks" => reasoner.report_tasks()           // 推理器中所有任务
             "beliefs" => reasoner.report_beliefs()       // 推理器中所有信念
@@ -231,8 +229,6 @@ mod cmd_inf {
             "summary" => reasoner.report_summary()       // 推理器中所有链接
 
             // * 🚩更详尽的信息
-            "#memory" => reasoner.report_memory_detailed()         // 具有缩进层级
-            "#reasoner" => reasoner.report_reasoner_detailed()     // 具有缩进层级
             "#parameters" => reasoner.report_parameters_detailed() // 具有缩进层级
             "#tasks" => reasoner.report_tasks_detailed()           // 推理器中的任务派生链
             "#beliefs" => reasoner.report_beliefs_detailed()       // 推理器中所有信念（详细）

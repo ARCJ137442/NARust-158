@@ -110,42 +110,10 @@ mod information_report {
     use super::*;
 
     impl Reasoner {
-        /// 报告推理器的「记忆区」
-        /// * ⚠️【2024-08-14 21:20:45】不稳定：Rust数据结构时有变化
-        ///
-        /// TODO: ❓【2024-08-14 21:21:02】这个「报告」和「推理器输出」是否有必要 也成问题
-        pub fn report_memory(&self) -> String {
-            format!("Memory: {:?}", self.memory)
-        }
-
-        /// 报告推理器自身
-        /// * ⚠️【2024-08-14 21:20:45】不稳定：Rust数据结构时有变化
-        ///
-        /// TODO: ❓【2024-08-14 21:21:02】这个「报告」和「推理器输出」是否有必要 也成问题
-        pub fn report_reasoner(&self) -> String {
-            format!("Reasoner: {self:?}")
-        }
-
         /// 报告推理器超参数
         /// * ⚠️【2024-08-14 21:20:45】不甚稳定：参数也可能在后续发生变化
         pub fn report_parameters(&self) -> String {
             format!("Parameters: {:?}", self.parameters)
-        }
-
-        /// 报告推理器的「记忆区」（详细）
-        /// * ⚠️【2024-08-14 21:20:45】不稳定：Rust数据结构时有变化
-        ///
-        /// TODO: ❓【2024-08-14 21:21:02】这个「报告」和「推理器输出」是否有必要 也成问题
-        pub fn report_memory_detailed(&self) -> String {
-            format!("Memory: {:#?}", self.memory)
-        }
-
-        /// 报告推理器自身（详细）
-        /// * ⚠️【2024-08-14 21:20:45】不稳定：Rust数据结构时有变化
-        ///
-        /// TODO: ❓【2024-08-14 21:21:02】这个「报告」和「推理器输出」是否有必要 也成问题
-        pub fn report_reasoner_detailed(&self) -> String {
-            format!("Reasoner: {self:#?}")
         }
 
         /// 报告推理器超参数（详细）
