@@ -57,8 +57,11 @@ pub struct SerialRef<T> {
     /// 内部引用
     rc: RC<T>,
     /// 所存储的，作为「唯一标识」的「序列号」
-    serial: usize,
+    serial: Serial,
 }
+/// 序列号的类型
+/// * 🚩【2024-08-15 17:23:23】锁死在64位：避免「64位下保存的数值，在32位中无法加载」
+type Serial = u64;
 
 /// 「任务」的共享引用版本
 pub type RCTask = SerialRef<Task>;
@@ -72,13 +75,13 @@ impl<T: Clone> SerialRef<T> {
     ///
     /// ! 📝【2024-08-11 16:47:37】Rust中「移动语义」的含义：**移动后地址改变**
     ///   * 在`let t1 = inner(); let t2 = t1`时，`t1`和`t2`指向不同的内存地址
-    fn get_serial(inner: &T) -> usize {
+    fn get_serial(inner: &T) -> Serial {
         // 取自身指针地址地址作为序列号
-        inner as *const T as usize
+        inner as *const T as Serial
     }
 
     /// 从一个[`RC`]中获取序列号
-    fn get_serial_rc(inner: &RC<T>) -> usize {
+    fn get_serial_rc(inner: &RC<T>) -> Serial {
         Self::get_serial(&*inner.get_())
     }
 
@@ -86,17 +89,17 @@ impl<T: Clone> SerialRef<T> {
     /// * 📌这个内容的地址将被[`RCTask`]固定
     pub fn new(inner: T) -> Self {
         let rc = RC::new_(inner);
-        let serial = Self::get_serial_rc(&rc);
+        let serial = Self::get_serial_rc(&rc) as Serial;
         Self { rc, serial }
     }
 
     /// 获取自身存储的序列号（字段）
-    fn serial(&self) -> usize {
+    fn serial(&self) -> Serial {
         self.serial
     }
 
     /// 获取内部[`Task`]的序列号
-    fn inner_serial(&self) -> usize {
+    fn inner_serial(&self) -> Serial {
         Self::get_serial(&*self.get_())
     }
 
@@ -424,7 +427,7 @@ impl RCTask {
         use std::collections::HashMap;
 
         // 构建空映射
-        let mut serial_map: HashMap<usize, RCTask> = HashMap::new();
+        let mut serial_map: HashMap<Serial, RCTask> = HashMap::new();
 
         // 一个用于统一每个「任务共享引用」的闭包
         let mut deal_serial = move |task_rc: &mut SerialRef<Task>| {
@@ -485,7 +488,7 @@ mod tests {
 
     /// 方法式语法糖
     impl Task {
-        fn serial(&self) -> usize {
+        fn serial(&self) -> Serial {
             RCTask::get_serial(self)
         }
     }
@@ -495,7 +498,7 @@ mod tests {
         /// 指定序列号创建[`RCTask`]
         /// * 📌序列号需要在`inner`之前：传参时有可能从`inner`中来
         /// * ⚠️构造之后将会出现「序列号字段与现取序列号不一致」的情况
-        fn with_serial(serial: usize, inner: Task) -> Self {
+        fn with_serial(serial: Serial, inner: Task) -> Self {
             Self {
                 rc: RC::new_(inner),
                 serial,
