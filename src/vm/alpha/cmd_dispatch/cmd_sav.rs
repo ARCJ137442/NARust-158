@@ -83,9 +83,9 @@ pub mod public {
         fn as_sav_callback(&self) -> Option<&str> {
             use Output::*;
             match self {
-                // 类型为`INFO`并以指定消息头开头
                 INFO { ref message } if verify_sav_callback(message) => {
-                    let (_, data) = message.split_once('\n')?;
+                    // let (_, data) = message.split_once('\n')?;
+                    let data = message.as_str();
                     Some(data)
                 }
                 // 其它均为否
@@ -95,7 +95,6 @@ pub mod public {
         fn try_into_sav_callback(self) -> Result<String, Self> {
             use Output::*;
             match self {
-                // 类型为`INFO`并以指定消息头开头
                 INFO { message } if verify_sav_callback(&message) => {
                     // 💭【2024-08-15 17:54:52】理论上是可以做到「传递所有权的拆分」，但标准库不提供，也需要unsafe代码
                     // * 🤔会下放到更底层的u8数组去
