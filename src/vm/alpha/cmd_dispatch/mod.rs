@@ -124,6 +124,7 @@ use cmd_inf::*;
 
 /// 专用于指令[`Cmd::SAV`]的处理函数
 mod cmd_sav;
+pub use cmd_sav::public::*;
 use cmd_sav::*;
 
 /// 专用于指令[`Cmd::LOA`]的处理函数
