@@ -1,5 +1,4 @@
 use anyhow::Result;
-use nar_dev_utils::ResultBoost;
 use narsese::conversion::string::impl_lexical::format_instances::FORMAT_ASCII;
 use narust_158::{
     control::DEFAULT_PARAMETERS,
@@ -84,26 +83,39 @@ fn interpret_cmd(input: &str) -> Option<Cmd> {
     if let Ok(n) = input.parse::<usize>() {
         return Some(Cmd::CYC(n));
     }
+    // 尝试作为普通NAVM指令解析
+    if let Ok(cmd) = Cmd::parse(input) {
+        match cmd {
+            // `LOA`指令转译：路径→文件内容
+            Cmd::LOA { target, path } => {
+                let data = match try_load_file_content(path) {
+                    Ok(data) => data,
+                    Err(err) => {
+                        eprintln!("NAVM LOA cmd load error: {err}");
+                        return None;
+                    }
+                };
+                return Some(Cmd::LOA { target, path: data });
+            }
+            // 自定义指令：忽略
+            // * 避免解析范围的扩大，导致输入`A.`不通过
+            Cmd::Custom { .. } => {}
+            // 其它⇒解析成功
+            _ => return Some(cmd),
+        }
+    }
     // 若能解析成词法Narsese任务⇒尝试默认成`NSE`指令
+    // * ⚠️此解析方法容易把范围扩大，因此放到后边
+    //   * 📄已知问题：`nse <A --> B>.`被当作指令`NSE nse.`
     if let Ok(Ok(task)) = FORMAT_ASCII
         .parse(input)
         .map(|value| value.try_into_task_compatible())
     {
         return Some(Cmd::NSE(task));
     }
-    // 最后再考虑作为NAVM指令解析
-    let cmd = Cmd::parse(input).ok_or_run(|err| eprintln!("NAVM cmd parse error: {err}"))?;
-    if let Cmd::LOA { target, path } = cmd {
-        let data = match try_load_file_content(path) {
-            Ok(data) => data,
-            Err(err) => {
-                eprintln!("NAVM LOA cmd load error: {err}");
-                return None;
-            }
-        };
-        return Some(Cmd::LOA { target, path: data });
-    }
-    Some(cmd)
+    // 最终仍然解析失败
+    eprintln!("NAVM cmd parse error: {input:?}");
+    None
 }
 
 /// 尝试读取本地文件，将内容作为`LOA`指令的path参数
