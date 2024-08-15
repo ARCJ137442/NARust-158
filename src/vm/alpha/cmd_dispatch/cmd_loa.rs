@@ -79,7 +79,7 @@ mod tests {
         ok,
         storage::tests_memory::{memory_consistent, GetMemory},
         util::AResult,
-        vm::alpha::RuntimeAlpha,
+        vm::alpha::{RuntimeAlpha, SavCallback},
     };
     use nar_dev_utils::*;
     use navm::{cmd::Cmd, output::Output};
@@ -176,8 +176,8 @@ mod tests {
         // 记忆区应该被替换了
         // 找到一条「INFO」内容，就直接返回
         for o in outputs {
-            if let Output::INFO { message } = o {
-                return message;
+            if let Ok(data) = o.try_into_sav_callback() {
+                return data;
             }
         }
         panic!("未找到序列化后的数据");
