@@ -470,7 +470,7 @@ mod information_report {
             => format_task_brief(root)
             // 逐个加入其父任务
             => (join! {
-                => "\n <- {}".to_string()
+                => "\n <- ".to_string()
                 => format_task_brief(&parent_task.get_())
                 => (format!(
                     " + {}",
