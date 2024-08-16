@@ -80,9 +80,9 @@ mod beliefs {
     type Table = ArrayRankTable<JudgementV1>;
 
     /// 构造一个「信念排行表」
-    pub fn new(parameters: &Parameters) -> Table {
+    pub fn new(capacity: usize) -> Table {
         Table::new(
-            parameters.maximum_belief_length,
+            capacity,
             RANK_F, // * 📌作为「预算函数」的「预算值」
             IS_COMPATIBLE_TO_ADD_F,
         )
@@ -109,23 +109,60 @@ mod beliefs {
     }
 }
 
+/// 用于构造「概念」的结构体
+/// * 🎯构造函数中规范传参
+/// * ⚠️保留后续被修改的可能
+#[derive(Debug, Clone, Copy)]
+pub struct ConceptParameters {
+    task_link_forgetting_cycle: usize,
+    term_link_forgetting_cycle: usize,
+    maximum_questions_length: usize,
+    maximum_belief_length: usize,
+    task_link_bag_size: usize,
+    term_link_bag_size: usize,
+}
+
+impl From<&Parameters> for ConceptParameters {
+    fn from(parameters: &Parameters) -> Self {
+        Self {
+            task_link_forgetting_cycle: parameters.task_link_forgetting_cycle,
+            term_link_forgetting_cycle: parameters.term_link_forgetting_cycle,
+            maximum_questions_length: parameters.maximum_questions_length,
+            maximum_belief_length: parameters.maximum_belief_length,
+            task_link_bag_size: parameters.task_link_bag_size,
+            term_link_bag_size: parameters.term_link_bag_size,
+        }
+    }
+}
+
 impl Concept {
     /// 🆕完全参数构造函数
     /// * 🚩包括两个「超参数」的引入
     /// * 📝OpenNARS改版中不引入任何有关「记忆区」「概念链接」这些控制机制中的元素
+    /// * 🚩【2024-08-16 16:01:01】目前还是直接引入「超参数」类型为好
+    ///   * 💭省去大量传参担忧
     pub fn new(
         term: Term,
-        task_link_forgetting_rate: usize,
-        term_link_forgetting_rate: usize,
+        parameters: ConceptParameters,
         initial_budget: BudgetValue,
         link_templates_to_self: Vec<TermLinkTemplate>,
     ) -> Self {
-        const PARAMETERS: Parameters = DEFAULT_PARAMETERS;
+        // 解构参数
+        let ConceptParameters {
+            maximum_questions_length,
+            maximum_belief_length,
+            task_link_bag_size,
+            term_link_bag_size,
+            task_link_forgetting_cycle,
+            term_link_forgetting_cycle,
+        } = parameters;
+        // 创建内部字段
         let token = Token::new(term.name(), initial_budget);
-        let questions = ArrayBuffer::new(PARAMETERS.maximum_questions_length);
-        let beliefs = beliefs::new(&PARAMETERS);
-        let task_links = Bag::new(task_link_forgetting_rate, PARAMETERS.task_link_bag_size);
-        let term_links = Bag::new(term_link_forgetting_rate, PARAMETERS.term_link_bag_size);
+        let questions = ArrayBuffer::new(maximum_questions_length);
+        let beliefs = beliefs::new(maximum_belief_length);
+        let task_links = Bag::new(task_link_forgetting_cycle, task_link_bag_size);
+        let term_links = Bag::new(term_link_forgetting_cycle, term_link_bag_size);
+        // 创建结构体
         Self {
             token,
             term,

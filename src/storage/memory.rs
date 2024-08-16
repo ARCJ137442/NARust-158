@@ -129,8 +129,7 @@ impl Memory {
         // * 🚩创建新概念
         let concept = Concept::new(
             term.clone(),
-            self.task_link_forgetting_rate(),
-            self.term_link_forgetting_rate(),
+            (&self.parameters).into(),
             self.concept_initial_budget(),
             prepare_term_link_templates(term),
         );
