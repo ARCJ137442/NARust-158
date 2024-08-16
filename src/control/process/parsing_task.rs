@@ -7,6 +7,7 @@ use crate::{
     global::ClockTime,
     inference::BudgetFunctions,
     language::Term,
+    util::Serial,
 };
 use anyhow::{anyhow, Result};
 use narsese::lexical::{Sentence as LexicalSentence, Task as LexicalTask};
@@ -23,6 +24,7 @@ impl Reasoner {
         &self,
         narsese: LexicalTask,
         stamp_current_serial: ClockTime,
+        task_current_serial: Serial,
     ) -> Result<Task> {
         use Punctuation::*;
 
@@ -103,7 +105,7 @@ impl Reasoner {
         let budget = BudgetValue::from_lexical(budget, [priority, durability, quality])?;
 
         // 构造任务
-        let task = Task::from_input(sentence, budget);
+        let task = Task::from_input(task_current_serial, sentence, budget);
 
         // 返回
         Ok(task)
@@ -112,6 +114,7 @@ impl Reasoner {
     /// 将任务视作一个「新任务」解析
     pub fn parse_new_task(&mut self, narsese: LexicalTask) -> Result<Task> {
         let stamp_current_serial = self.updated_stamp_current_serial();
-        self.parse_task(narsese, stamp_current_serial)
+        let task_current_serial = self.updated_task_current_serial();
+        self.parse_task(narsese, stamp_current_serial, task_current_serial)
     }
 }

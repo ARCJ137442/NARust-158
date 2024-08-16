@@ -46,6 +46,8 @@ pub struct Task {
     /// For Question and Goal: best solution found so far
     best_solution: Option<JudgementV1>,
 
+    /// 任务序列号
+    /// * 🎯在「序列反序列化」中替代**不稳定的指针地址**作为「任务共享引用唯一标识符」
     serial: Serial,
 }
 
@@ -54,6 +56,7 @@ impl Task {
     /// * 🚩【2024-06-21 23:35:53】对传入的参数「零信任」
     ///   * 💭此处全部传递所有权（除了「父任务」的共享引用），避免意料之外的所有权共享
     pub fn new(
+        serial: Serial,
         sentence: SentenceV1,
         budget: BudgetValue,
         parent_task: Option<RCTask>,
@@ -61,10 +64,6 @@ impl Task {
         best_solution: Option<JudgementV1>,
     ) -> Self {
         let token = Token::new(sentence.to_key(), budget);
-        let serial = unsafe {
-            TASK_SERIAL_COUNTER += 1;
-            TASK_SERIAL_COUNTER
-        };
         Self {
             token,
             sentence,
@@ -77,19 +76,31 @@ impl Task {
 
     /// 从「输入」中构造
     /// * 🎯在「用户输入任务」中解析
-    pub fn from_input(sentence: impl Into<SentenceV1>, budget: impl Into<BudgetValue>) -> Self {
-        Self::new(sentence.into(), budget.into(), None, None, None)
+    pub fn from_input(
+        serial: Serial,
+        sentence: impl Into<SentenceV1>,
+        budget: impl Into<BudgetValue>,
+    ) -> Self {
+        Self::new(serial, sentence.into(), budget.into(), None, None, None)
     }
 
     /// 从「导出结论」构造
     /// * 🚩默认没有「最优解」
     pub fn from_derived(
+        serial: Serial,
         sentence: SentenceV1,
         budget: impl Into<BudgetValue>,
         parent_task: Option<RCTask>,
         parent_belief: Option<JudgementV1>,
     ) -> Self {
-        Self::new(sentence, budget.into(), parent_task, parent_belief, None)
+        Self::new(
+            serial,
+            sentence,
+            budget.into(),
+            parent_task,
+            parent_belief,
+            None,
+        )
     }
 }
 
@@ -315,8 +326,6 @@ impl Sentence for Task {
 /// 「任务」的共享引用版本
 pub type RCTask = SerialRef<Task>;
 
-static mut TASK_SERIAL_COUNTER: Serial = 0;
-
 impl RcSerial for Task {
     fn rc_serial(&self) -> Serial {
         // 取自身指针地址地址作为序列号
@@ -337,7 +346,6 @@ impl IterInnerRcSelf for Task {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::util::tests_serial_rc::*;
     use crate::{
         budget,
         entity::{QuestionV1, Stamp},
@@ -348,56 +356,27 @@ mod tests {
 
     /// 样本任务
     /// * 🎯不考虑内部所持有的内容，只考虑其地址与指针位置
-    fn task_sample() -> Task {
+    fn task_sample(serial: Serial) -> Task {
         Task::from_input(
+            serial,
             QuestionV1::new(term!("A").unwrap(), stamp!({0: 1})),
             budget![1.0; 1.0; 1.0],
         )
     }
-
-    /// 方法式语法糖
-    impl Task {
-        fn serial(&self) -> Serial_ {
-            RCTask::get_serial_(self)
-        }
-    }
-
-    mod task {
-        use super::*;
-
-        /// 序列号 特性：clone后改变
-        #[test]
-        fn serial_clone() -> AResult {
-            let t1 = task_sample();
-            let t2 = t1.clone();
-            let [s1, s2] = [t1.serial(), t2.serial()];
-            println!("pointer:\tt1->{:p},\tt2->{:p}", &t1, &t2);
-            println!("serial: \tt1#0x{s1:x},\tt2#0x{s2:x}");
-            assert_ne!(s1, s2);
-            ok!()
-        }
-
-        /// 序列号 特性：移动后~~不变~~改变
-        ///
-        /// ! ⚠️【2024-08-11 16:41:28】移动语义是改变地址的，但需要的是Rc本身不变
-        #[test]
-        fn serial_move() -> AResult {
-            let t1 = task_sample();
-            print!("pointer:\tt1->{:p}, \t", &t1);
-            let s1 = t1.serial();
-            let t2 = t1;
-            let s2 = t2.serial();
-            println!("t2->{:p}", &t2);
-            println!("serial: \tt1#0x{s1:x},\tt2#0x{s2:x}");
-            assert_ne!(s1, s2); // ! 移动后地址改变
-            ok!()
+    fn task_samples(serial_begin: Serial) -> impl FnMut() -> Task {
+        let mut serial = serial_begin;
+        move || {
+            task_sample({
+                serial += 1;
+                serial
+            })
         }
     }
 
     /// [样本任务](task_sample)的共享引用
     /// * ✅一并测试了[`RCTask::new`]
-    fn task_sample_rc() -> RCTask {
-        RCTask::new(task_sample())
+    fn task_sample_rc(serial: Serial) -> RCTask {
+        RCTask::new(task_sample(serial))
     }
 
     mod rc_task {
@@ -406,7 +385,7 @@ mod tests {
         /// 构造稳定性
         #[test]
         fn new() -> AResult {
-            let t = task_sample_rc();
+            let t = task_sample_rc(0);
             let s = t.serial_(); // 取序列号
 
             // ! 序列号必须与现取的一致
@@ -415,42 +394,14 @@ mod tests {
             ok!()
         }
 
-        /// 序列号 特性：[`RCTask`]clone后不变
-        #[test]
-        fn serial_clone() -> AResult {
-            let t1 = task_sample_rc();
-            let t2 = t1.clone();
-            let [s1, s2] = [t1.get_().serial(), t2.get_().serial()];
-            println!("pointer:\tt1->{:p},\tt2->{:p}", &t1, &t2);
-            println!("serial: \tt1#0x{s1:x},\tt2#0x{s2:x}");
-            assert_eq!(s1, s2);
-            ok!()
-        }
-
-        /// 序列号 特性：移动[`RCTask`]后内部[`Task`]的地址不变
-        ///
-        /// ! ⚠️【2024-08-11 16:41:28】移动语义改变了[`RCTask`]的地址，但没有改变内部[`Task`]的地址
-        #[test]
-        fn serial_move() -> AResult {
-            let t1 = task_sample_rc();
-            print!("pointer:\tt1->{:p}, \t", &t1);
-            let s1 = t1.get_().serial();
-            let t2 = t1;
-            let s2 = t2.get_().serial();
-            println!("t2->{:p}", &t2);
-            println!("serial: \tt1#0x{s1:x},\tt2#0x{s2:x}");
-            assert_eq!(s1, s2); // ! RC移动后，内部Task的地址不变
-            ok!()
-        }
-
         #[test]
         fn sync_serial() -> AResult {
-            let task = task_sample();
-            let t = RCTask::new(task.clone()); // 参照
+            let mut other_task = task_samples(0);
+            let t = RCTask::new(other_task()); // 参照
             let s = t.serial_(); // 取序列号
             let mut t1 = t.clone(); // 直接拷贝 | 序列号和引用都不同
-            let mut t2 = RCTask::with_serial(s, task.clone()); // 序列号相同的实例，哪怕引用不同
-            let mut t3 = RCTask::new(task.clone()); // 完全不相关的实例
+            let mut t2 = RCTask::with_serial(s, other_task()); // 序列号相同的实例，哪怕引用不同
+            let mut t3 = RCTask::new(other_task()); // 完全不相关的实例
 
             println!("t->{:p}\nt1->{:p}\nt2->{:p}\nt3->{:p}", &t, &t1, &t2, &t3); // 三个共享引用的地址
             println!(
@@ -503,7 +454,7 @@ mod tests {
         #[test]
         fn clone_stability() -> AResult {
             const N: usize = 10;
-            let t = task_sample_rc();
+            let t = task_sample_rc(0);
 
             let ts = [&t]
                 .iter()
@@ -544,12 +495,12 @@ mod tests {
 
         #[test]
         fn unify_rcs() -> AResult {
-            let task = task_sample();
-            let mut t = RCTask::new(task.clone()); // 参照
+            let mut other_task = task_samples(0);
+            let mut t = RCTask::new(other_task()); // 参照
             let s = t.serial_(); // 取序列号
             let t1 = t.clone(); // 直接拷贝 | 序列号和引用都不同
-            let t2 = RCTask::with_serial(s, task.clone()); // 序列号相同的实例，哪怕引用不同
-            let t3 = RCTask::new(task.clone()); // 完全不相关的实例
+            let t2 = RCTask::with_serial(s, other_task()); // 序列号相同的实例，哪怕引用不同
+            let t3 = RCTask::new(other_task()); // 完全不相关的实例
 
             /// 展示所有四个引用
             macro_rules! show {
@@ -633,8 +584,12 @@ mod tests {
 
             for n in RANGE_N {
                 let n_groups = (n % MAX_N_GROUPS) + 1;
+                let mut serial = 1;
                 let tasks = list![
-                    (vec![task_sample_rc(); n / n_groups]) // 每次添加 n / n_groups个任务
+                    (vec![task_sample_rc({
+                        serial += 1;
+                        serial
+                    }); n / n_groups]) // 每次添加 n / n_groups个任务
                     for _ in (0..n_groups) // 此处会重复n_groups次
                 ]
                 .concat(); // 总共 n 个任务

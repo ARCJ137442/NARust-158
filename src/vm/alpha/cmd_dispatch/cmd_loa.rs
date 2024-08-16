@@ -440,9 +440,27 @@ mod tests {
         ok!()
     }
 
+    /// 共享引用序列号的稳定性
+    /// * ❌杜绝「基于指针地址的、多次无法稳定复现的 序列号不稳定」问题
+    ///
+    /// ## 📄失败时笔记
+    ///
+    /// 1:
+    /// ```plaintext
+    /// fix: :test_tube: 尝试修复「共享引用序列号一致性」的问题，但仍然失败
+    /// ——共享引用Rc指向的对象序列号，可能并不是永久的，会在运行过程中重分配！
+    /// ```
+    ///
+    /// 2:
+    /// ```plaintext
+    /// fix: :technologist: 尝试debug仍然失败：问题指向「用指针地址代表序列号，根本不能保证可持续的稳定」
+    /// 即便对「带序列号共享引用」采用了「延时取地址序列化」的措施以避免「共享引用中途改变取地址的结果」，
+    /// 并采取「即便额外增加开销也要遍历完所有可能的共享引用，
+    /// 即便是在内部『父任务』的字段中」……也无法解决「序列反序列化后，不定期偶发出现『袋中俩任务其它内容相同，父任务却完全不一致』」的问题
+    /// ```
     #[test]
-    fn test_reallocated_rc() {
-        for _ in 0..0xff {
+    fn rc_serial_stability() {
+        for _ in 0..0x40 {
             load_memory_from_json().expect("Shouldn't err from load_memory_from_json");
             load_memory_to_other_reasoners()
                 .expect("Shouldn't err from load_memory_to_other_reasoners");

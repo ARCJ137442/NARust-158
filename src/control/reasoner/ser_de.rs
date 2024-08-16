@@ -7,7 +7,7 @@
 //!   * `status`大多指「当下状态」并且能用于名词
 
 use super::{Reasoner, ReasonerDerivationData};
-use crate::{entity::RCTask, global::ClockTime, storage::Memory};
+use crate::{entity::RCTask, global::ClockTime, storage::Memory, util::Serial};
 use serde::{Deserialize, Serialize};
 
 /// 推理器状态
@@ -34,6 +34,9 @@ pub(super) struct ReasonerStatusStorage {
 
     /// 时间戳序列号（递增序列号）
     pub stamp_current_serial: ClockTime,
+
+    /// 任务序列号（递增序列号）
+    pub task_current_serial: Serial,
 }
 
 /// 推理器状态的引用
@@ -51,6 +54,9 @@ pub(super) struct ReasonerStatusStorageRef<'s> {
 
     /// 时间戳序列号（递增序列号）
     pub stamp_current_serial: ClockTime,
+
+    /// 任务序列号（递增序列号）
+    pub task_current_serial: Serial,
 }
 
 impl ReasonerStatusStorage {
@@ -96,6 +102,7 @@ impl Reasoner {
             derivation_datas,
             clock,
             stamp_current_serial,
+            task_current_serial,
         } = status;
         // 加载记忆区
         let memory = self.load_memory(memory);
@@ -106,12 +113,15 @@ impl Reasoner {
         self.set_time(clock);
         let stamp_current_serial_old = self.stamp_current_serial();
         self.set_stamp_current_serial(stamp_current_serial);
+        let task_current_serial_old = self.task_current_serial();
+        self.set_task_current_serial(task_current_serial);
         // 将旧的数据返回
         ReasonerStatusStorage {
             memory,
             derivation_datas,
             clock: clock_old,
             stamp_current_serial: stamp_current_serial_old,
+            task_current_serial: task_current_serial_old,
         }
     }
 }
@@ -151,6 +161,7 @@ impl Reasoner {
             derivation_datas: &self.derivation_datas,
             clock: self.time(),
             stamp_current_serial: self.stamp_current_serial(),
+            task_current_serial: self.task_current_serial(),
         };
         // 再序列化
         storage_ref.serialize(serializer)

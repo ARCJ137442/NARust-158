@@ -7,7 +7,7 @@
 use super::{ReasonRecorder, ReasonerDerivationData};
 use crate::{
     control::Parameters, entity::Task, global::ClockTime, inference::InferenceEngine,
-    storage::Memory,
+    storage::Memory, util::Serial,
 };
 use navm::output::Output;
 use rand::{rngs::StdRng, SeedableRng};
@@ -58,6 +58,9 @@ pub struct Reasoner {
     /// 时间戳序列号（递增序列号）
     stamp_current_serial: ClockTime,
 
+    /// 任务序列号（递增序列号）
+    task_current_serial: Serial,
+
     /// shuffle用随机生成器
     /// * 🚩【2024-07-10 00:27:04】不应设置为全局变量：推理器之间不应共享数据
     /// * 🎯让推理结果可重复（而非随进程变化）
@@ -84,6 +87,7 @@ impl Reasoner {
             clock: 0,
             volume: 0,
             stamp_current_serial: 0,
+            task_current_serial: 0,
             // * 🚩统一的随机数生成器
             shuffle_rng: Self::new_shuffle_rng(),
         }
@@ -109,6 +113,7 @@ impl Reasoner {
         // * 🚩重置状态变量
         self.clock = 0;
         self.stamp_current_serial = 0;
+        self.task_current_serial = 0;
 
         // * 🚩最后发送消息
         self.report_info("-----RESET-----");
@@ -166,6 +171,27 @@ impl Reasoner {
         self.stamp_current_serial += 1;
         self.stamp_current_serial
     }
+
+    /// 获取「当前任务序列号」
+    /// * 🎯隔离内部字段实现
+    pub fn task_current_serial(&self) -> Serial {
+        self.task_current_serial
+    }
+
+    /// 设置当前任务序列号
+    /// * 🎯序列反序列化中「覆盖当前任务序列号」
+    /// * 🚩【2024-08-14 22:43:59】目前不对外公开
+    pub(crate) fn set_task_current_serial(&mut self, value: Serial) {
+        self.task_current_serial = value;
+    }
+
+    /// 更新「当前任务序列号」
+    /// * 📝OpenNARS中「先自增，再使用」
+    pub fn updated_task_current_serial(&mut self) -> Serial {
+        self.task_current_serial += 1;
+        self.task_current_serial
+    }
+
     /// 获取时钟时间
     #[doc(alias = "clock")]
     pub fn time(&self) -> ClockTime {

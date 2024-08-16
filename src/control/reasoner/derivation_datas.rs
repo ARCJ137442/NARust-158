@@ -86,6 +86,8 @@ impl ReasonerDerivationData {
             .chain(self.novel_tasks.iter_mut())
             .flat_map(|t| t.iter_inner_rc_self())
     }
+
+    #[cfg(test)]
     pub(crate) fn iter_task_rcs(&self) -> impl Iterator<Item = &RCTask> {
         self.new_tasks
             .iter()

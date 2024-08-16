@@ -28,6 +28,7 @@ pub trait ContextDerivation: ReasonContext {
     ) {
         let parent_task = self.current_task().clone();
         let task = Task::new(
+            self.reasoner_mut().updated_task_current_serial(),
             solution.clone().into(),
             new_budget.into(),
             Some(parent_task),
@@ -82,11 +83,11 @@ pub trait ContextDerivation: ReasonContext {
         drop(current_task); // ! 先抛掉引用代理
         match new_sentence {
             Ok(new_sentence) => {
-                let new_task = Task::new(
+                let new_task = Task::from_derived(
+                    self.reasoner_mut().updated_task_current_serial(),
                     new_sentence,
                     new_budget.into(),
                     Some(self.current_task().clone()),
-                    None,
                     None,
                 );
                 self.derived_task(new_task);
@@ -221,6 +222,7 @@ pub trait ContextDerivationConcept: ReasonContextWithLinks {
         );
         if let Ok(sentence) = new_sentence {
             let new_task = Task::from_derived(
+                self.reasoner_mut().updated_task_current_serial(),
                 sentence,
                 new_budget,
                 Some(self.current_task().clone()),
@@ -261,6 +263,8 @@ pub trait ContextDerivationConcept: ReasonContextWithLinks {
             // * 🚩判断句⇒返回实际的「可修订」
             // * 🚩疑问句⇒返回一个用不到的空值
             .map_or(false, Judgement::revisable);
+        drop(current_task); // ! 先释放「借用代理」
+        drop(current_task_ref);
         // * 🚩判断句⇒返回实际的「可修订」
         // * 🚩疑问句⇒返回一个用不到的空值
         let new_sentence = SentenceV1::with_punctuation(
@@ -276,6 +280,7 @@ pub trait ContextDerivationConcept: ReasonContextWithLinks {
         };
         // * 🚩构造新任务
         let new_task = Task::from_derived(
+            self.reasoner_mut().updated_task_current_serial(),
             new_sentence,
             new_budget,
             // * 🚩拷贝共享引用
@@ -283,8 +288,6 @@ pub trait ContextDerivationConcept: ReasonContextWithLinks {
             None,
         );
         // * 🚩导出
-        drop(current_task); // ! 先释放「借用代理」
-        drop(current_task_ref);
         self.derived_task(new_task);
     }
 

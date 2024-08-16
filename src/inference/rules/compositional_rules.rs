@@ -317,17 +317,22 @@ pub fn decompose_statement(
                 context.time(),
                 context.max_evidence_base_length(),
             );
-            // * 🚩【2024-06-07 13:41:16】现在直接从「任务」构造新的「预算值」
-            let content_task = Task::from_input(content_belief.clone(), task);
-            // ! 🚩【2024-05-19 20:29:17】现在移除：直接在「导出结论」处指定
+            let task_budget = BudgetValue::from(task);
+            drop(task_ref);
+            drop(task_rc);
             let conjunction = unwrap_or_return!(
                 ?Term::make_conjunction(component.clone(), content)
             );
             // * ↓不会用到`context.getCurrentTask()`、`newStamp`
             let truth = content_belief.intersection(&belief_truth);
+            // * 🚩【2024-06-07 13:41:16】现在直接从「任务」构造新的「预算值」
+            let sentence = content_belief.clone(); // 提取出变量以规避借用问题
+            let content_task = Task::from_input(
+                context.reasoner_mut().updated_task_current_serial(),
+                sentence,
+                task_budget,
+            );
             // * ↓不会用到`context.getCurrentTask()`、`newStamp`
-            drop(task_ref);
-            drop(task_rc);
             let budget = context.budget_compound_forward(&truth, &conjunction);
             // ! ⚠️↓会用到`context.getCurrentTask()`、`newStamp`：构建新结论时要用到
             // * ✅【2024-05-21 22:38:52】现在通过「参数传递」抵消了对`context.getCurrentTask`的访问

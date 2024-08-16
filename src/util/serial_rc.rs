@@ -163,9 +163,6 @@ impl<'t, T: RcSerial + IterInnerRcSelf + 't> SerialRef<T> {
 pub(crate) mod tests_serial_rc {
     use super::*;
 
-    /// 测试用例中公开类型
-    pub type Serial_ = Serial;
-
     impl<T: RcSerial> SerialRef<T> {
         /// 测试用例中公开获取序列号
         pub fn serial_(&self) -> Serial {

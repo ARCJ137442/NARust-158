@@ -6,3 +6,6 @@ reorder_imports=true
 
 format_macro_matchers = true
 condense_wildcard_suffixes = true
+
+blank_lines_lower_bound = 1
+blank_lines_upper_bound = 1
