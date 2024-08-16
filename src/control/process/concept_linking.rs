@@ -3,7 +3,7 @@
 //! * 📍复合词项「链接到任务」的功能
 
 use crate::{
-    control::{util_outputs, ReasonContext, ReasonContextDirect},
+    control::{ReasonContext, ReasonContextDirect},
     entity::{
         BudgetValue, Concept, Item, RCTask, TLink, TLinkType, TaskLink, TermLink, TermLinkTemplate,
     },
@@ -171,21 +171,23 @@ impl ReasonContextDirect<'_> {
 
         // * 🚩缓存的「输出值」
         let mut outputs = vec![]; // 使用缓存延迟输出，避免借用问题
-        let mut add_overflowed_task_link = |overflowed_task_link: &TaskLink| {
-            // 使用闭包封装逻辑
-            let output = util_outputs::output_comment(format!(
-                "!!! Overflowed TaskLink: {}",
-                overflowed_task_link.to_display_long()
-            ));
-            outputs.push(output);
-        };
+        let mut deal_overflowed_task_link =
+            |overflowed_task_link: Option<TaskLink>| -> Option<TaskLink> {
+                let overflowed_task_link = overflowed_task_link?;
+                // 使用闭包封装逻辑
+                let message = format!(
+                    "!!! Overflowed TaskLink: {}",
+                    overflowed_task_link.to_display_long()
+                );
+                outputs.push(message);
+                Some(overflowed_task_link) // 返回，然后被立即抛弃
+            };
 
         // 对自身 //
         // * 🚩对当前任务构造任务链，链接到传入的任务 | 构造「自身」
         let self_link = TaskLink::new_self(task.clone()); // link type: SELF
-        if let Some(overflowed_task_link) = concept.insert_task_link_outer(memory, self_link) {
-            add_overflowed_task_link(&overflowed_task_link);
-        }
+        let result = concept.insert_task_link_outer(memory, self_link);
+        deal_overflowed_task_link(result);
 
         // 对子项 //
         // * 🚩仅在「自身为复合词项」且「词项链模板非空」时准备
@@ -204,17 +206,16 @@ impl ReasonContextDirect<'_> {
         }
         // * 🚩仅在「预算达到阈值」时：遍历预先构建好的所有「子项词项链模板」，递归链接到任务
         for template in concept.link_templates_to_self() {
+            let result = memory.link_task_link_from_template(template, task, &sub_budget);
             // * 🚩对「溢出的任务链」作报告
-            if let Some(overflowed_task_link) =
-                memory.link_task_link_from_template(template, task, &sub_budget)
-            {
-                add_overflowed_task_link(&overflowed_task_link);
-            }
+            deal_overflowed_task_link(result);
         }
 
         // * 🚩🆕汇报「溢出的任务链」
+        // * 🚩【2024-08-16 11:46:48】此处「延迟汇报」是为了避免对`self`的借用问题
+        // * 📌【2024-08-16 11:43:06】目前仅从「消息」开始，以便让推理器能根据音量过滤
         for output in outputs {
-            self.report(output);
+            self.report_comment(output);
         }
     }
 
