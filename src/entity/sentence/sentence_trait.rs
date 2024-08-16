@@ -65,7 +65,7 @@ pub trait Sentence: ToDisplayAndBrief + Evidential {
         self.content().clone()
     }
 
-    // * ⚠️Rust中必须预先定义其中的「判断句」「问题句」类型
+    // * ⚠️Rust中必须预先定义其中的「判断句」「疑问句」类型
     //   * 📌直接原因：对于带泛型的`as_XXX`，需要知道其中的类型参数，才能正常参与编译
     type Judgement: Judgement;
     type Question: Question;

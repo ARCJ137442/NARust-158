@@ -72,36 +72,6 @@ impl Reasoner {
             self.handle_work_cycle();
         }
     }
-
-    fn handle_work_cycle(&mut self) {
-        // * 🚩时钟步进
-        self.tick();
-        // * 🚩工作周期
-        self.work_cycle();
-    }
-
-    /* 工作周期 */
-    fn work_cycle(&mut self) {
-        self.report_comment(format!("--- {} ---", self.time()));
-
-        // * 🚩本地任务直接处理 阶段 * //
-        let has_result = self.process_direct();
-
-        // * 🚩内部概念高级推理 阶段 * //
-        // * 📝OpenNARS的逻辑：一次工作周期，只能在「直接推理」与「概念推理」中选择一个
-        if !has_result {
-            self.process_reason();
-        }
-
-        // * 🚩最后收尾 阶段 * //
-        // * 🚩原「清空上下文」已迁移至各「推理」阶段
-        // ! ❌不复刻「显示呈现」相关功能
-    }
-
-    // ! 🚩【2024-06-28 00:09:12】方法「吸收推理上下文」不再需要被「推理器」实现
-    // * 📌原因：现在「推理上下文」内置「推理器」的引用
-
-    // * ℹ️【2024-08-10 14:58:02】有关「输入指令」的代码参见 `cmd_dispatch`模块
 }
 
 /// 信息输出
@@ -491,12 +461,4 @@ mod information_report {
                 .join_to_new("\n")
         )
     }
-}
-
-/// 保存加载
-/// * 📄推理器记忆区、推理器状态 保存加载
-mod save_load {
-    use super::*;
-
-    impl Reasoner {}
 }

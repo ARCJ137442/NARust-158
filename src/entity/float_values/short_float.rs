@@ -467,6 +467,7 @@ impl BitOr for ShortFloat {
     type Output = Self;
 
     fn bitor(self, rhs: Self) -> Self::Output {
+        // a ∨ b = ¬(¬a ∧ ¬b)
         // pipe! {
         //     // 非
         //     self.not()

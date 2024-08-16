@@ -21,7 +21,7 @@ pub trait TruthFunctions: Truth + Sized {
     ///
     /// {<(*, A, B) --> R>} |- <A --> (/, R, _, B)>
     ///
-    /// @param v1 [&] Truth value of the premise
+    /// @param v1 Truth value of the premise
     /// @return Truth value of the conclusion
     fn identity(&self) -> TruthValue {
         let [f1, c1] = self.fc();
@@ -409,7 +409,7 @@ pub trait TruthFunctions: Truth + Sized {
     /// @param v2 Truth value of the second premise
     /// @return Truth value of the conclusion
     #[doc(alias = "union")]
-    fn nal_union(&self, v2: &impl Truth) -> TruthValue {
+    fn union_(&self, v2: &impl Truth) -> TruthValue {
         let ([f1, c1], [f2, c2]) = self.fc_with(v2);
         // * 📝频率=双频之析取
         // * 📝信度=双信之合取
@@ -538,7 +538,7 @@ mod tests {
         let desire_weak: TruthFDouble = TruthValue::desire_weak;
         let desire_deduction: TruthFDouble = TruthValue::desire_deduction;
         let desire_induction: TruthFDouble = TruthValue::desire_induction;
-        let nal_union: TruthFDouble = TruthValue::nal_union;
+        let nal_union: TruthFDouble = TruthValue::union_;
         let intersection: TruthFDouble = TruthValue::intersection;
         let reduce_disjunction: TruthFDouble = TruthValue::reduce_disjunction;
         let reduce_conjunction: TruthFDouble = TruthValue::reduce_conjunction;

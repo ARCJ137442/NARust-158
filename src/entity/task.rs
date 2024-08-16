@@ -5,9 +5,9 @@
 use super::{BudgetValue, Item, JudgementV1, Sentence, SentenceV1, Token};
 use crate::{
     entity::MergeOrder,
-    global::{ClockTime, RC},
+    global::ClockTime,
     inference::{Budget, Evidential},
-    util::{RefCount, ToDisplayAndBrief},
+    util::{IterInnerRcSelf, RefCount, SerialRef, ToDisplayAndBrief},
 };
 use nar_dev_utils::join;
 use narsese::lexical::{Sentence as LexicalSentence, Task as LexicalTask};
@@ -45,110 +45,6 @@ pub struct Task {
     ///
     /// For Question and Goal: best solution found so far
     best_solution: Option<JudgementV1>,
-}
-
-/// 拥有「序列号」的共享引用
-/// * 🎯【2024-08-11 16:16:44】用于实现序列反序列化，独立成一个特殊的类型
-/// * 📌设计上「序列号」用于在「序列反序列化」前后承担「唯一标识」的角色
-///   * 📝内容的地址会变，但序列号在序列反序列化中能（相对多个可遍历的引用而言）保持不变
-///   * 💡核心想法：通过「序列号」实现「内容归一化」——序列号相同的「序列共享引用」可以实现「统一」操作
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SerialRef<T> {
-    /// 内部引用
-    rc: RC<T>,
-    /// 所存储的，作为「唯一标识」的「序列号」
-    serial: Serial,
-}
-/// 序列号的类型
-/// * 🚩【2024-08-15 17:23:23】锁死在64位：避免「64位下保存的数值，在32位中无法加载」
-type Serial = u64;
-
-/// 「任务」的共享引用版本
-pub type RCTask = SerialRef<Task>;
-
-impl<T: Clone> SerialRef<T> {
-    /// 从「内容」对象生成一个【随数据位置唯一】的「序列号」
-    /// * 📌这个「序列号」必须对[`clone`](Clone::clone)敏感，即：
-    ///   * `clone`之后的序列号必须与原始序列号【不同】
-    ///   * 若被移入了类似[`RC`]这样的共享引用结构，不会因为[`RC`]的`clone`而改变
-    /// * 🚩【2024-08-11 16:23:11】目前使用自身的指针地址
-    ///
-    /// ! 📝【2024-08-11 16:47:37】Rust中「移动语义」的含义：**移动后地址改变**
-    ///   * 在`let t1 = inner(); let t2 = t1`时，`t1`和`t2`指向不同的内存地址
-    fn get_serial(inner: &T) -> Serial {
-        // 取自身指针地址地址作为序列号
-        inner as *const T as Serial
-    }
-
-    /// 从一个[`RC`]中获取序列号
-    fn get_serial_rc(inner: &RC<T>) -> Serial {
-        Self::get_serial(&*inner.get_())
-    }
-
-    /// 使用所传入内容的地址创建一个[`RCTask`]
-    /// * 📌这个内容的地址将被[`RCTask`]固定
-    pub fn new(inner: T) -> Self {
-        let rc = RC::new_(inner);
-        let serial = Self::get_serial_rc(&rc) as Serial;
-        Self { rc, serial }
-    }
-
-    /// 获取自身存储的序列号（字段）
-    fn serial(&self) -> Serial {
-        self.serial
-    }
-
-    /// 获取内部[`Task`]的序列号
-    fn inner_serial(&self) -> Serial {
-        Self::get_serial(&*self.get_())
-    }
-
-    /// 同步化
-    /// * 🚩将自身的序列号变为内部内容的指针地址
-    ///   * 📝后者不会因为引用的拷贝而改变
-    fn sync_serial(&mut self) {
-        self.serial = self.inner_serial();
-    }
-}
-
-/// 委托内部rc: RC<Task>字段
-impl<T: Clone> RefCount<T> for SerialRef<T> {
-    // 直接委托
-    type Ref<'r> = <RC<T> as RefCount<T>>::Ref<'r> where T: 'r;
-    type RefMut<'r> = <RC<T> as RefCount<T>>::RefMut<'r> where T: 'r;
-
-    fn new_(t: T) -> Self {
-        Self::new(t)
-    }
-
-    #[inline(always)]
-    fn get_<'r, 's: 'r>(&'s self) -> Self::Ref<'r> {
-        self.rc.get_()
-    }
-
-    #[inline(always)]
-    fn mut_<'r, 's: 'r>(&'s mut self) -> Self::RefMut<'r> {
-        self.rc.mut_()
-    }
-
-    fn n_strong_(&self) -> usize {
-        self.rc.n_strong_()
-    }
-
-    fn n_weak_(&self) -> usize {
-        self.rc.n_weak_()
-    }
-
-    fn ref_eq(&self, other: &Self) -> bool {
-        // 只比对内部rc
-        self.rc.ref_eq(&other.rc)
-    }
-}
-
-impl<T: Clone> From<T> for SerialRef<T> {
-    fn from(value: T) -> Self {
-        Self::new(value)
-    }
 }
 
 /// 构造函数
@@ -409,66 +305,22 @@ impl Sentence for Task {
     }
 }
 
+/// 「任务」的共享引用版本
+pub type RCTask = SerialRef<Task>;
+
 /// 有关「序列反序列化」的实用方法
-impl Task {
-    /// 获取其「父任务」的可变引用
-    /// * 🎯用于「推理器推导数据」的序列反序列化（共享引用归一）
-    pub(crate) fn parent_task_mut(&mut self) -> Option<&mut RCTask> {
-        self.parent_task.as_mut()
-    }
-}
-/// 有关「序列反序列化」的实用方法
-impl RCTask {
-    /// 将[`serde`]反序列化后【分散】了的引用按「标识符」重新统一
-    pub fn unify_rcs<'t>(refs: impl IntoIterator<Item = &'t mut RCTask>)
-    where
-        Task: 't,
-    {
-        use std::collections::HashMap;
-
-        // 构建空映射
-        let mut serial_map: HashMap<Serial, RCTask> = HashMap::new();
-
-        // 一个用于统一每个「任务共享引用」的闭包
-        let mut deal_serial = move |task_rc: &mut SerialRef<Task>| {
-            // 先尝试获取已有同序列号的引用
-            match serial_map.get(&task_rc.serial()) {
-                // 若已有同序列号的引用，则检查引用是否相等并尝试归一化
-                // * ✅此时归一化后被`clone`的`rc`已经被【同步序列号】了
-                Some(rc) => {
-                    // 若引用不相等，则尝试归一化
-                    // * 🎯【2024-08-12 20:29:14】在「已归一化后的任务共享引用」中 尽可能避免重复拷贝
-                    if !task_rc.ref_eq(rc) {
-                        *task_rc = rc.clone()
-                    }
-                }
-                // 若无已有同序列号的引用，则同步序列号，并以旧序列号为键进入表中
-                // * ℹ️自身序列号已更新，但旧序列号仍用于映射索引
-                None => {
-                    let serial_to_identify = task_rc.serial();
-                    task_rc.sync_serial();
-                    serial_map.insert(serial_to_identify, task_rc.clone());
-                }
-            }
-        };
-
-        // 遍历所有引用，开始归一化
-        for task_rc in refs {
-            // 遍历「任务」中的所有「任务共享引用」字段
-            // * 🎯【2024-08-12 02:15:01】为了避免遗漏「父任务」这个字段
-            // TODO: 后续或许能通用化成 `T::遍历内部所有与自身有关的共享引用(&mut self, mut 探针: impl Fn(&mut Self))`
-            if let Some(parent) = task_rc.mut_().parent_task.as_mut() {
-                deal_serial(parent) // 有父任务⇒处理父任务
-            }
-            // 总是先处理自身
-            deal_serial(task_rc)
-        }
+impl IterInnerRcSelf for Task {
+    fn iter_inner_rc_self(&mut self) -> impl Iterator<Item = &mut SerialRef<Self>> {
+        // 遍历「任务」中的所有「任务共享引用」字段
+        // * 🎯【2024-08-12 02:15:01】为了避免遗漏「父任务」这个字段
+        self.parent_task.as_mut().into_iter()
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::util::tests_serial_rc::*;
     use crate::{
         budget,
         entity::{QuestionV1, Stamp},
@@ -488,27 +340,8 @@ mod tests {
 
     /// 方法式语法糖
     impl Task {
-        fn serial(&self) -> Serial {
-            RCTask::get_serial(self)
-        }
-    }
-
-    /// 方法式语法糖
-    impl RCTask {
-        /// 指定序列号创建[`RCTask`]
-        /// * 📌序列号需要在`inner`之前：传参时有可能从`inner`中来
-        /// * ⚠️构造之后将会出现「序列号字段与现取序列号不一致」的情况
-        fn with_serial(serial: Serial, inner: Task) -> Self {
-            Self {
-                rc: RC::new_(inner),
-                serial,
-            }
-        }
-
-        /// 判断序列号是否已同步
-        /// * 🚩判断自身序列号是否与内部内容的地址相同
-        fn is_synced_serial(&self) -> bool {
-            self.serial == self.inner_serial()
+        fn serial(&self) -> Serial_ {
+            RCTask::get_serial_(self)
         }
     }
 
@@ -557,10 +390,10 @@ mod tests {
         #[test]
         fn new() -> AResult {
             let t = task_sample_rc();
-            let s = t.serial(); // 取序列号
+            let s = t.serial_(); // 取序列号
 
             // ! 序列号必须与现取的一致
-            assert_eq!(s, t.inner_serial());
+            assert_eq!(s, t.inner_serial_());
 
             ok!()
         }
@@ -597,7 +430,7 @@ mod tests {
         fn sync_serial() -> AResult {
             let task = task_sample();
             let t = RCTask::new(task.clone()); // 参照
-            let s = t.serial(); // 取序列号
+            let s = t.serial_(); // 取序列号
             let mut t1 = t.clone(); // 直接拷贝 | 序列号和引用都不同
             let mut t2 = RCTask::with_serial(s, task.clone()); // 序列号相同的实例，哪怕引用不同
             let mut t3 = RCTask::new(task.clone()); // 完全不相关的实例
@@ -617,15 +450,15 @@ mod tests {
                 !t.ref_eq(&t2), // 另俩都指向不同的任务
                 !t.ref_eq(&t3), // 另俩都指向不同的任务
 
-                t.serial() == t1.serial(), // 序列号相同
-                t.serial() == t2.serial(), // 序列号相同
-                t.serial() != t3.serial(), // 序列号不同
+                t.serial_() == t1.serial_(), // 序列号相同
+                t.serial_() == t2.serial_(), // 序列号相同
+                t.serial_() != t3.serial_(), // 序列号不同
             }
 
             // 归一
-            t1.sync_serial();
-            t2.sync_serial();
-            t3.sync_serial();
+            t1.sync_serial_();
+            t2.sync_serial_();
+            t3.sync_serial_();
 
             println!("synced:");
             println!("t->{:p}\nt1->{:p}\nt2->{:p}\nt3->{:p}", &t, &t1, &t2, &t3); // 三个共享引用的地址
@@ -643,9 +476,9 @@ mod tests {
                 !t.ref_eq(&t2), // 本身仍然指向不同的任务
                 !t.ref_eq(&t3), // 仍不相同的还指向不同的任务
 
-                t.serial() == t1.serial(), // 序列号仍然相同
-                t.serial() != t2.serial(), // 序列号变得不同
-                t.serial() != t3.serial(), // 序列号仍然不同
+                t.serial_() == t1.serial_(), // 序列号仍然相同
+                t.serial_() != t2.serial_(), // 序列号变得不同
+                t.serial_() != t3.serial_(), // 序列号仍然不同
             }
             ok!()
         }
@@ -672,8 +505,8 @@ mod tests {
 
             // 假定：拷贝之后序列号不变
             for t in ts {
-                assert_eq!(t.serial(), t.serial());
-                assert_eq!(t.serial(), t.inner_serial());
+                assert_eq!(t.serial_(), t.serial_());
+                assert_eq!(t.serial_(), t.inner_serial_());
             }
 
             ok!()
@@ -696,7 +529,7 @@ mod tests {
         fn unify_rcs() -> AResult {
             let task = task_sample();
             let mut t = RCTask::new(task.clone()); // 参照
-            let s = t.serial(); // 取序列号
+            let s = t.serial_(); // 取序列号
             let t1 = t.clone(); // 直接拷贝 | 序列号和引用都不同
             let t2 = RCTask::with_serial(s, task.clone()); // 序列号相同的实例，哪怕引用不同
             let t3 = RCTask::new(task.clone()); // 完全不相关的实例
@@ -727,9 +560,9 @@ mod tests {
                 !t.ref_eq(&t2), // 另俩都指向不同的任务
                 !t.ref_eq(&t3), // 另俩都指向不同的任务
 
-                t.serial() == t1.serial(), // 序列号相同
-                t.serial() == t2.serial(), // 序列号相同
-                t.serial() != t3.serial(), // 序列号不同
+                t.serial_() == t1.serial_(), // 序列号相同
+                t.serial_() == t2.serial_(), // 序列号相同
+                t.serial_() != t3.serial_(), // 序列号不同
             }
 
             // 破坏引用
@@ -748,9 +581,9 @@ mod tests {
                 t.ref_eq(&t2), // 应该被统一
                 !t.ref_eq(&t3), // 仍然独立
 
-                t.serial() == t1.serial(), // 序列号相同
-                t.serial() == t2.serial(), // 序列号相同
-                t.serial() != t3.serial(), // 序列号不同
+                t.serial_() == t1.serial_(), // 序列号相同
+                t.serial_() == t2.serial_(), // 序列号相同
+                t.serial_() != t3.serial_(), // 序列号不同
             }
             // 确保序列号均已同步
             for t in [&t, &t1, &t2, &t3] {
@@ -776,7 +609,7 @@ mod tests {
                     // 检查「序列号一致」
                     assert!(t.is_synced_serial());
                     // 检查「引用相等⇔序列号相等」
-                    let is_serial_eq = t0.serial() == t.serial();
+                    let is_serial_eq = t0.serial_() == t.serial_();
                     assert!(t0.ref_eq(t) == is_serial_eq);
                 }
             }

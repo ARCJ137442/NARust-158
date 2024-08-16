@@ -73,7 +73,7 @@ pub trait ContextDerivation: ReasonContext {
         // * 🚩仅在「任务内容」可用时构造
         let current_task = self.current_task(); // 不能当场变为引用：后续可能要再借用自身
         let new_punctuation = current_task.get_().punctuation();
-        let new_sentence = SentenceV1::new_sentence_from_punctuation(
+        let new_sentence = SentenceV1::with_punctuation(
             new_content,
             new_punctuation,
             new_stamp,
@@ -213,7 +213,7 @@ pub trait ContextDerivationConcept: ReasonContextWithLinks {
         let new_punctuation = current_task
             .unwrap_or(&*self.current_task().get_()) // 立即使用的不可变引用
             .punctuation();
-        let new_sentence = SentenceV1::new_sentence_from_punctuation(
+        let new_sentence = SentenceV1::with_punctuation(
             new_content,
             new_punctuation,
             new_stamp,
@@ -263,7 +263,7 @@ pub trait ContextDerivationConcept: ReasonContextWithLinks {
             .map_or(false, Judgement::revisable);
         // * 🚩判断句⇒返回实际的「可修订」
         // * 🚩疑问句⇒返回一个用不到的空值
-        let new_sentence = SentenceV1::new_sentence_from_punctuation(
+        let new_sentence = SentenceV1::with_punctuation(
             new_content,
             punctuation,
             new_stamp,

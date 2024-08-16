@@ -48,7 +48,7 @@ pub fn compose_as_set(
 
     let truth_t = TruthValue::from(context.current_task().get_().unwrap_judgement());
     let truth_b = context.current_belief().unwrap();
-    let truth_or = Some(truth_t.nal_union(truth_b)); // 后续统一类型
+    let truth_or = Some(truth_t.union_(truth_b)); // 后续统一类型
     let truth_and = Some(truth_t.intersection(truth_b)); // 后续统一类型
     let truth_dif;
     let [term_or, term_and, term_dif];

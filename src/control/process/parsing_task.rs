@@ -78,12 +78,7 @@ impl Reasoner {
         };
 
         // 构造语句
-        let sentence = SentenceV1::new_sentence_from_punctuation(
-            content,
-            punctuation,
-            stamp,
-            truth_revisable,
-        )?;
+        let sentence = SentenceV1::with_punctuation(content, punctuation, stamp, truth_revisable)?;
 
         // * 🚩解析任务
 

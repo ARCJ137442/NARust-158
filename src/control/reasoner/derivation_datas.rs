@@ -7,6 +7,7 @@
 use crate::{
     entity::{RCTask, Task},
     storage::Bag,
+    util::IterInnerRcSelf,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
@@ -83,6 +84,6 @@ impl ReasonerDerivationData {
         self.new_tasks
             .iter_mut()
             .chain(self.novel_tasks.iter_mut())
-            .flat_map(|t| t.parent_task_mut())
+            .flat_map(|t| t.iter_inner_rc_self())
     }
 }

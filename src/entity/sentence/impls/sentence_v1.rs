@@ -1,7 +1,10 @@
-use super::{JudgementV1, PunctuatedSentenceRef, Punctuation, QuestionV1, Sentence, SentenceInner};
+use super::{JudgementV1, QuestionV1};
 use crate::{
     __impl_to_display_and_display,
-    entity::{Stamp, TruthValue},
+    entity::{
+        sentence::{PunctuatedSentenceRef, Punctuation, Sentence, SentenceInner},
+        Stamp, TruthValue,
+    },
     global::ClockTime,
     inference::Evidential,
     language::Term,
@@ -29,7 +32,7 @@ impl SentenceV1 {
     /// * 🚩根据「标点」分发到各具体类型
     /// * 💭应该挑出到「语句」之外，但暂且放置于此
     /// * 🎯自「导出结论」和「输入构造」被使用
-    pub fn new_sentence_from_punctuation(
+    pub fn with_punctuation(
         new_content: Term,
         punctuation: Punctuation,
         new_stamp: Stamp,
@@ -49,7 +52,7 @@ impl SentenceV1 {
     }
 
     /// 不论是何种类型（判断/问题），获取其中的「内部语句」
-    pub fn get_inner(&self) -> &SentenceInner {
+    fn inner(&self) -> &SentenceInner {
         match self {
             SentenceV1::JudgementV1(JudgementV1 { inner, .. })
             | SentenceV1::QuestionV1(QuestionV1 { inner, .. }) => inner,
@@ -57,7 +60,7 @@ impl SentenceV1 {
     }
 
     /// 不论是何种类型（判断/问题），获取其中的「内部语句」
-    pub fn get_inner_mut(&mut self) -> &mut SentenceInner {
+    fn inner_mut(&mut self) -> &mut SentenceInner {
         match self {
             SentenceV1::JudgementV1(JudgementV1 { inner, .. })
             | SentenceV1::QuestionV1(QuestionV1 { inner, .. }) => inner,
@@ -67,15 +70,15 @@ impl SentenceV1 {
 
 impl Evidential for SentenceV1 {
     fn evidential_base(&self) -> &[ClockTime] {
-        self.get_inner().stamp().evidential_base()
+        self.inner().stamp().evidential_base()
     }
 
     fn creation_time(&self) -> ClockTime {
-        self.get_inner().stamp().creation_time()
+        self.inner().stamp().creation_time()
     }
 
     fn stamp_to_lexical(&self) -> narsese::lexical::Stamp {
-        self.get_inner().stamp().stamp_to_lexical()
+        self.inner().stamp().stamp_to_lexical()
     }
 }
 
@@ -95,11 +98,11 @@ impl Sentence for SentenceV1 {
     }
 
     fn content(&self) -> &Term {
-        self.get_inner().content()
+        self.inner().content()
     }
 
     fn content_mut(&mut self) -> &mut Term {
-        self.get_inner_mut().content_mut()
+        self.inner_mut().content_mut()
     }
 
     type Judgement = JudgementV1;

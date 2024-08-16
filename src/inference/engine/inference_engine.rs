@@ -62,7 +62,7 @@ impl InferenceEngine {
     /// 空指针引擎
     /// * 📌这个引擎「什么都不做」
     pub const VOID: Self = {
-        // 三个空函数
+        // 空函数
         fn direct(_: &mut ReasonContextDirect) {}
         fn transform(_: &mut ReasonContextTransform) {}
         fn matching(_: &mut ReasonContextConcept) {}

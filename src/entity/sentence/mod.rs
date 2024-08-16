@@ -18,12 +18,5 @@ mod question;
 pub use question::*;
 
 // 初代实现
-
-mod sentence_v1;
-pub use sentence_v1::*;
-
-mod judgement_v1;
-pub use judgement_v1::*;
-
-mod question_v1;
-pub use question_v1::*;
+mod impls;
+pub use impls::*;
