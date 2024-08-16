@@ -2,39 +2,40 @@ use super::RefCount;
 use crate::global::RC;
 use serde::{Deserialize, Serialize};
 
+/// 序列号的类型
+/// * 🚩【2024-08-15 17:23:23】锁死在64位：避免「64位下保存的数值，在32位中无法加载」
+pub type Serial = u64;
+
+/// 统一的特征「共享引用序列号」
+/// * 🎯用于将「序列号」属性绑定在实现者上
+///   * 每个实现者的「序列号」应该唯一
+pub trait RcSerial: Sized + Clone {
+    /// 获取【仅由自身决定】且【每个值唯一】的
+    /// * ⚠️如果按自身地址来分配，万一「自身被移动了，然后正好另一个相同的对象移动到了」就会导致「序列号冲突」
+    ///   * 📌虽说是小概率事件，但并非不可能发生
+    fn rc_serial(&self) -> Serial;
+}
+
 /// 拥有「序列号」的共享引用
 /// * 🎯【2024-08-11 16:16:44】用于实现序列反序列化，独立成一个特殊的类型
 /// * 📌设计上「序列号」用于在「序列反序列化」前后承担「唯一标识」的角色
 ///   * 📝内容的地址会变，但序列号在序列反序列化中能（相对多个可遍历的引用而言）保持不变
 ///   * 💡核心想法：通过「序列号」实现「内容归一化」——序列号相同的「序列共享引用」可以实现「统一」操作
+/// * ⚠️共享指针可能会在运行时改变被引用对象的位置
+///   * 🔗https://users.rust-lang.org/t/can-a-rc-move-location-behind-my-back/28828
+///   * 🔗https://users.rust-lang.org/t/can-you-get-the-raw-pointer-of-a-pinned-arc/28276/2
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SerialRef<T> {
+pub struct SerialRef<T: RcSerial> {
     /// 内部引用
     rc: RC<T>,
     /// 所存储的，作为「唯一标识」的「序列号」
     serial: Serial,
 }
-/// 序列号的类型
-/// * 🚩【2024-08-15 17:23:23】锁死在64位：避免「64位下保存的数值，在32位中无法加载」
-type Serial = u64;
 
-impl<T: Clone> SerialRef<T> {
-    /// 从「内容」对象生成一个【随数据位置唯一】的「序列号」
-    /// * 📌这个「序列号」必须对[`clone`](Clone::clone)敏感，即：
-    ///   * `clone`之后的序列号必须与原始序列号【不同】
-    ///   * 若被移入了类似[`RC`]这样的共享引用结构，不会因为[`RC`]的`clone`而改变
-    /// * 🚩【2024-08-11 16:23:11】目前使用自身的指针地址
-    ///
-    /// ! 📝【2024-08-11 16:47:37】Rust中「移动语义」的含义：**移动后地址改变**
-    ///   * 在`let t1 = inner(); let t2 = t1`时，`t1`和`t2`指向不同的内存地址
-    fn get_serial(inner: &T) -> Serial {
-        // 取自身指针地址地址作为序列号
-        inner as *const T as Serial
-    }
-
+impl<T: RcSerial> SerialRef<T> {
     /// 从一个[`RC`]中获取序列号
     fn get_serial_rc(inner: &RC<T>) -> Serial {
-        Self::get_serial(&*inner.get_())
+        inner.get_().rc_serial()
     }
 
     /// 使用所传入内容的地址创建一个[`RCTask`]
@@ -52,7 +53,7 @@ impl<T: Clone> SerialRef<T> {
 
     /// 获取内部[`Task`]的序列号
     fn inner_serial(&self) -> Serial {
-        Self::get_serial(&*self.get_())
+        self.get_().rc_serial()
     }
 
     /// 同步化
@@ -64,7 +65,7 @@ impl<T: Clone> SerialRef<T> {
 }
 
 /// 委托内部rc: RC<Task>字段
-impl<T: Clone> RefCount<T> for SerialRef<T> {
+impl<T: RcSerial> RefCount<T> for SerialRef<T> {
     // 直接委托
     type Ref<'r> = <RC<T> as RefCount<T>>::Ref<'r> where T: 'r;
     type RefMut<'r> = <RC<T> as RefCount<T>>::RefMut<'r> where T: 'r;
@@ -97,21 +98,21 @@ impl<T: Clone> RefCount<T> for SerialRef<T> {
     }
 }
 
-impl<T: Clone> From<T> for SerialRef<T> {
+impl<T: RcSerial> From<T> for SerialRef<T> {
     fn from(value: T) -> Self {
         Self::new(value)
     }
 }
 
 /// 工具性特征：可变迭代内部共享引用
-pub trait IterInnerRcSelf: Sized {
+pub trait IterInnerRcSelf: RcSerial {
     /// 可变迭代内部共享引用
     /// * 📄[任务](crate::entity::Task)的「父任务」字段
     fn iter_inner_rc_self(&mut self) -> impl Iterator<Item = &mut SerialRef<Self>>;
 }
 
 /// 有关「序列反序列化」的实用方法
-impl<'t, T: Clone + IterInnerRcSelf + 't> SerialRef<T> {
+impl<'t, T: RcSerial + IterInnerRcSelf + 't> SerialRef<T> {
     /// 将[`serde`]反序列化后【分散】了的引用按「标识符」重新统一
     pub fn unify_rcs(refs: impl IntoIterator<Item = &'t mut Self>) {
         use std::collections::HashMap;
@@ -165,7 +166,7 @@ pub(crate) mod tests_serial_rc {
     /// 测试用例中公开类型
     pub type Serial_ = Serial;
 
-    impl<T: Clone> SerialRef<T> {
+    impl<T: RcSerial> SerialRef<T> {
         /// 测试用例中公开获取序列号
         pub fn serial_(&self) -> Serial {
             self.serial
@@ -179,7 +180,7 @@ pub(crate) mod tests_serial_rc {
 
         /// 获取内部[`Task`]的序列号
         pub fn inner_serial_(&self) -> Serial {
-            Self::get_serial(&*self.get_())
+            self.get_().rc_serial()
         }
 
         /// 测试用例中公开同步序列号

@@ -7,7 +7,7 @@ use crate::{
     entity::MergeOrder,
     global::ClockTime,
     inference::{Budget, Evidential},
-    util::{IterInnerRcSelf, RefCount, SerialRef, ToDisplayAndBrief},
+    util::{IterInnerRcSelf, RcSerial, RefCount, Serial, SerialRef, ToDisplayAndBrief},
 };
 use nar_dev_utils::join;
 use narsese::lexical::{Sentence as LexicalSentence, Task as LexicalTask};
@@ -45,6 +45,8 @@ pub struct Task {
     ///
     /// For Question and Goal: best solution found so far
     best_solution: Option<JudgementV1>,
+
+    serial: Serial,
 }
 
 /// 构造函数
@@ -59,12 +61,17 @@ impl Task {
         best_solution: Option<JudgementV1>,
     ) -> Self {
         let token = Token::new(sentence.to_key(), budget);
+        let serial = unsafe {
+            TASK_SERIAL_COUNTER += 1;
+            TASK_SERIAL_COUNTER
+        };
         Self {
             token,
             sentence,
             parent_task,
             parent_belief,
             best_solution,
+            serial,
         }
     }
 
@@ -307,6 +314,16 @@ impl Sentence for Task {
 
 /// 「任务」的共享引用版本
 pub type RCTask = SerialRef<Task>;
+
+static mut TASK_SERIAL_COUNTER: Serial = 0;
+
+impl RcSerial for Task {
+    fn rc_serial(&self) -> Serial {
+        // 取自身指针地址地址作为序列号
+        // self as *const Self as Serial
+        self.serial
+    }
+}
 
 /// 有关「序列反序列化」的实用方法
 impl IterInnerRcSelf for Task {

@@ -70,14 +70,14 @@ mod tests {
     use super::*;
     use crate::{
         control::{
-            test_util_ser_de::{status_consistent, GetReasoner},
+            test_util_ser_de::{status_consistent, status_synced, GetReasoner},
             DEFAULT_PARAMETERS,
         },
         inference::{
             match_task_and_belief, process_direct, reason, transform_task, InferenceEngine,
         },
         ok,
-        storage::tests_memory::{memory_consistent, GetMemory},
+        storage::tests_memory::{memory_consistent, memory_synced, GetMemory},
         util::AResult,
         vm::alpha::{RuntimeAlpha, SavCallback},
     };
@@ -236,6 +236,7 @@ mod tests {
     fn load_memory_from_json() -> AResult {
         // 一定推理后的推理器
         let mut vm = vm_after_inputs(SAMPLE_INPUTS);
+        status_synced(&vm);
         // 记忆区序列化成JSON
         let data = save_xxx_by_cmd(&mut vm, "memory", "");
         // 从JSON加载记忆区
@@ -245,13 +246,14 @@ mod tests {
 
         // 将JSON以指令形式封装，让推理器从指令中加载记忆区
         load_memory_by_cmd(&mut vm, data.clone());
+        memory_synced(&vm);
 
         // 旧的记忆区应该与新的一致
         memory_consistent(&old_memory, &vm)?;
 
         // ✅成功，输出附加信息 | ❌【2024-08-12 13:21:22】下面俩太卡了
         println!("Memory reloading success!");
-        println!("data = {data}");
+        // println!("data = {data}");
 
         ok!()
     }
@@ -261,6 +263,7 @@ mod tests {
     fn load_memory_to_other_reasoners() -> AResult {
         // 一定推理后的推理器
         let mut vm = vm_after_inputs(SAMPLE_INPUTS);
+        status_synced(&vm);
         // 记忆区序列化成JSON
         let data = save_xxx_by_cmd(&mut vm, "memory", "");
         // 从JSON加载记忆区
@@ -335,22 +338,26 @@ mod tests {
         // 一定推理后的推理器 样本
         let vm_old = vm_after_inputs(SAMPLE_INPUTS);
         let mut vm = vm_after_inputs(SAMPLE_INPUTS);
+        status_synced(&vm);
+        status_synced(&vm_old);
         // 状态序列化成JSON
         let data = save_xxx_by_cmd(&mut vm, "status", "");
         // 从JSON加载状态
         vm.reasoner.load_status_from_json(&data)?;
+        status_synced(&vm);
         // 旧的状态应该与新的一致
         status_consistent(&vm_old, &vm)?;
 
         // 将JSON以指令形式封装，让推理器从指令中加载状态
         load_status_by_cmd(&mut vm, data.clone());
+        status_synced(&vm);
 
         // 旧的状态应该与新的一致
         status_consistent(&vm_old, &vm)?;
 
         // ✅成功，输出附加信息 | ❌【2024-08-12 13:21:22】下面俩太卡了
         println!("Status reloading success!");
-        println!("data = {data}");
+        // println!("data = {data}");
 
         ok!()
     }
@@ -361,10 +368,13 @@ mod tests {
         // 一定推理后的推理器
         let old_vm = vm_after_inputs(SAMPLE_INPUTS);
         let mut vm = vm_after_inputs(SAMPLE_INPUTS);
+        status_synced(&vm);
+        status_synced(&old_vm);
         // 状态序列化成JSON
         let data = save_xxx_by_cmd(&mut vm, "status", "");
         // 从JSON加载状态
         vm.reasoner.load_status_from_json(&data)?;
+        status_synced(&vm);
         // 旧的状态应该与新的一致
         status_consistent(&old_vm, &vm)?;
 
@@ -374,6 +384,7 @@ mod tests {
         let mut vm2 = default_vm();
         // 从JSON加载状态
         vm2.reasoner.load_status_from_json(&data)?;
+        status_synced(&vm2);
         let consistent_on_clone = |vm2: &RuntimeAlpha| -> AResult {
             // 但新的状态应该与先前旧的状态一致
             status_consistent(&old_vm, vm2)?;
@@ -427,5 +438,17 @@ mod tests {
         status_consistent(&vm, &vm3).expect_err("意外的状态一致");
         status_consistent(&vm2, &vm3).expect_err("意外的状态一致");
         ok!()
+    }
+
+    #[test]
+    fn test_reallocated_rc() {
+        for _ in 0..0xff {
+            load_memory_from_json().expect("Shouldn't err from load_memory_from_json");
+            load_memory_to_other_reasoners()
+                .expect("Shouldn't err from load_memory_to_other_reasoners");
+            load_status_from_json().expect("Shouldn't err from load_status_from_json");
+            load_status_to_other_reasoners()
+                .expect("Shouldn't err from load_status_to_other_reasoners");
+        }
     }
 }

@@ -219,6 +219,17 @@ pub mod test_util_ser_de {
         }
     }
 
+    /// 保存前判断是否同步
+    /// * 判断「[`Rc`]是否在『传入值所有权』后仍尝试移动内部值」
+    pub fn status_synced(reasoner: &impl GetReasoner) {
+        let reasoner = reasoner.get_reasoner();
+        memory_synced(&reasoner.memory);
+        reasoner
+            .derivation_datas
+            .iter_task_rcs()
+            .for_each(rc_synced);
+    }
+
     /// 判断推理器状态的一致性
     /// * 🚩通过「返回错误」指定「一致性缺失」
     /// * 📌只传入推理器来判断，不暴露内部数据类型

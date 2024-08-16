@@ -268,6 +268,25 @@ pub mod tests_memory {
     };
     use nar_dev_utils::*;
 
+    /// 保存前判断是否同步
+    /// * 判断「[`Rc`]是否在『传入值所有权』后仍尝试移动内部值」
+    pub fn memory_synced(memory: &impl GetMemory) {
+        memory
+            .get_memory()
+            .iter_concepts()
+            .flat_map(Concept::iter_tasks)
+            .for_each(rc_synced)
+    }
+
+    pub fn rc_synced(rc: &RCTask) {
+        assert!(
+            rc.is_synced_serial(),
+            "共享指针不同步：{} != {}",
+            rc.serial_(),
+            rc.inner_serial_()
+        )
+    }
+
     /// 顶层实用函数：迭代器zip
     /// * 🎯让语法`a.zip(b)`变成`zip(a, b)`
     pub fn zip<'t, T: 't, I1, I2>(a: I1, b: I2) -> impl Iterator<Item = (T, T)>
