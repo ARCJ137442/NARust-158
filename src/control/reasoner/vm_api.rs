@@ -396,26 +396,9 @@ mod information_report {
         }
     }
 
-    /// 派生证据基序列号
-    trait EvidentialSerial: Evidential {
-        /// 获取证据基序列号
-        /// * 📌目前认定「证据基」的第一个数值是序列号
-        fn evidential_serial(&self) -> usize {
-            match self.evidential_base() {
-                [serial, ..] => *serial, // 获取第一个元素
-                _ => 0,                  // 默认是0（这个极少发生）
-            }
-        }
-    }
-    impl<T: Evidential> EvidentialSerial for T {}
-
     /// 组织一个[任务](Task)的格式
     fn format_task(task: &Task) -> String {
-        format!(
-            "Task#{} {}",
-            task.evidential_serial(),
-            task.to_display_long()
-        )
+        format!("Task#{} {}", task.creation_time(), task.to_display_long())
     }
 
     /// 简略组织一个[任务](Task)的格式
@@ -423,7 +406,7 @@ mod information_report {
     fn format_task_brief(task: &Task) -> String {
         format!(
             "Task#{} \"{}{}\"",
-            task.evidential_serial(), // ! 这个不保证不重复
+            task.creation_time(), // ! 这个不保证不重复
             task.content(),
             task.punctuation() // * 🚩【2024-08-09 00:28:05】目前从简：不显示真值、预算值（后两者可从`tasks`中查询）
         )
@@ -431,11 +414,7 @@ mod information_report {
 
     /// 组织一个[信念](Judgement)的格式
     fn format_belief(belief: &impl Judgement) -> String {
-        format!(
-            "Belief#{} {}",
-            belief.evidential_serial(),
-            belief.to_display()
-        )
+        format!("Belief#{} {}", belief.creation_time(), belief.to_display())
     }
 
     /// 简略组织一个[任务](Task)的格式
@@ -443,7 +422,7 @@ mod information_report {
     fn format_belief_detailed(belief: &impl Judgement) -> String {
         format!(
             "Belief#{} {}",
-            belief.evidential_serial(), // ! 这个不保证不重复
+            belief.creation_time(), // ! 这个不保证不重复
             belief.to_display_long()
         )
     }
