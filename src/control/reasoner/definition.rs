@@ -174,20 +174,22 @@ impl Reasoner {
 
     /// 获取「当前任务序列号」
     /// * 🎯隔离内部字段实现
-    pub fn task_current_serial(&self) -> Serial {
+    /// * ⚠️【2024-08-18 01:14:18】仅供内部「序列反序列化」使用
+    pub(crate) fn task_current_serial(&self) -> Serial {
         self.task_current_serial
     }
 
     /// 设置当前任务序列号
     /// * 🎯序列反序列化中「覆盖当前任务序列号」
-    /// * 🚩【2024-08-14 22:43:59】目前不对外公开
+    /// * ⚠️【2024-08-18 01:14:18】仅供内部「序列反序列化」使用
     pub(crate) fn set_task_current_serial(&mut self, value: Serial) {
         self.task_current_serial = value;
     }
 
     /// 更新「当前任务序列号」
     /// * 📝OpenNARS中「先自增，再使用」
-    pub fn updated_task_current_serial(&mut self) -> Serial {
+    /// * ⚠️【2024-08-18 01:14:18】仅供内部「序列反序列化」使用
+    pub(crate) fn updated_task_current_serial(&mut self) -> Serial {
         self.task_current_serial += 1;
         self.task_current_serial
     }
