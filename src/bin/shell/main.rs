@@ -3,7 +3,7 @@ use narsese::conversion::string::impl_lexical::format_instances::FORMAT_ASCII;
 use narust_158::{
     control::DEFAULT_PARAMETERS,
     inference::{match_task_and_belief, process_direct, reason, transform_task, InferenceEngine},
-    vm::alpha::LauncherAlpha,
+    vm::alpha::{LauncherAlpha, SavCallback},
 };
 use navm::{
     cmd::Cmd,
@@ -12,7 +12,7 @@ use navm::{
 };
 use std::{
     io::{stdout, Write},
-    path,
+    path::Path,
 };
 
 pub fn launcher_void() -> impl VmLauncher {
@@ -68,7 +68,9 @@ fn shell(
         }
         // out
         while let Some(output) = runtime.try_fetch_output()? {
-            shell_output(output);
+            if let Some(output) = shell_intercept_output(output)? {
+                shell_print_output(output);
+            }
         }
     }
 }
@@ -122,14 +124,36 @@ fn interpret_cmd(input: &str) -> Option<Cmd> {
 fn try_load_file_content(path: impl AsRef<str>) -> anyhow::Result<String> {
     // * 🚩尝试读取本地文件
     let path = path.as_ref();
-    if path::Path::new(path).exists() {
+    if Path::new(path).exists() {
         let content = std::fs::read_to_string(path)?;
         return Ok(content);
     }
-    Err(anyhow::anyhow!("File not found: {}", path))
+    Err(anyhow::anyhow!("File not found: {path}"))
 }
 
-fn shell_output(output: Output) {
+/// 终端拦截输出
+/// * 🎯根据「有路径的SAV」输出文件
+fn shell_intercept_output(output: Output) -> anyhow::Result<Option<Output>> {
+    // * 🚩拦截「SAV」回调
+    let output = match output.try_into_sav_callback() {
+        // 空路径⇒不保存⇒重组回「消息」并继续（输出到终端）
+        Ok((path, data)) if path.is_empty() => Output::format_sav_callback(path, data),
+        // 有路径⇒保存到文件
+        Ok((path, data)) => {
+            // * 🚩将终端输出重定向到文件
+            let mut file = std::fs::File::create(path)?;
+            file.write_all(data.as_bytes())?;
+            return Ok(None); // 正常消耗掉输出
+        }
+        // 未消耗⇒继续
+        Err(output) => output,
+    };
+    // 正常未消耗输出
+    Ok(Some(output))
+}
+
+/// 终端打印输出
+fn shell_print_output(output: Output) {
     use Output::*;
     match &output {
         // 带Narsese输出
@@ -161,8 +185,13 @@ fn shell_output(output: Output) {
             description: content,
         }
         | OTHER { content } => println!("[{}] {}", output.get_type(), content),
+        // 操作
+        EXE {
+            content_raw,
+            operation,
+        } => println!("[{}] {} by '{}'", output.get_type(), operation, content_raw),
         // 其它
-        output => {
+        output @ UNCLASSIFIED { .. } => {
             println!("{}", output.to_json_string());
             stdout().flush().unwrap();
         }

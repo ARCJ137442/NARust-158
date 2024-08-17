@@ -3,13 +3,13 @@
 //! * 🎯对接BabelNAR「原生转译器」接口
 
 use anyhow::Result;
-use nar_dev_utils::ResultBoost;
 use narust_158::{
     control::DEFAULT_PARAMETERS,
     inference::{match_task_and_belief, process_direct, reason, transform_task, InferenceEngine},
-    vm::alpha::LauncherAlpha,
+    vm::alpha::{LauncherAlpha, SavCallback},
 };
 use navm::{cmd::Cmd, output::Output, vm::VmLauncher, vm::VmRuntime};
+use std::{io::Write, path::Path};
 
 fn create_runtime() -> Result<impl VmRuntime> {
     // * 🚩【2024-07-09 16:52:40】目前除了「概念推理」均俱全
@@ -52,7 +52,10 @@ fn batch(
         }
         // out
         while let Some(output) = runtime.try_fetch_output()? {
-            batch_output(output);
+            // 提前解释输出
+            if let Some(output) = batch_intercept_output(output)? {
+                batch_output(output);
+            }
         }
     }
 }
@@ -63,8 +66,62 @@ fn batch(
 ///   * 📄截获解析出的`SAV` `LOA`等指令，解释为其它指令语法
 ///     * 💡如：`LOA`指令⇒前端请求文件并读取内容⇒内联到新的`LOA`中⇒虚拟机Alpha实现内容加载
 fn interpret_cmd(input: &str) -> Option<Cmd> {
-    // 目前只作为NAVM指令解析
-    Cmd::parse(input).ok_or_run(|err| eprintln!("NAVM cmd parse error: {err}"))
+    // 尝试作为普通NAVM指令解析
+    if let Ok(cmd) = Cmd::parse(input) {
+        match cmd {
+            // `LOA`指令转译：路径→文件内容
+            Cmd::LOA { target, path } => {
+                let data = match try_load_file_content(path) {
+                    Ok(data) => data,
+                    Err(err) => {
+                        eprintln!("NAVM LOA cmd load error: {err}");
+                        return None;
+                    }
+                };
+                return Some(Cmd::LOA { target, path: data });
+            }
+            // 自定义指令：忽略
+            // * 避免解析范围的扩大，导致输入`A.`不通过
+            Cmd::Custom { .. } => {}
+            // 其它⇒解析成功
+            _ => return Some(cmd),
+        }
+    }
+    // 最终仍然解析失败
+    eprintln!("NAVM cmd parse error: {input:?}");
+    None
+}
+
+/// 尝试读取本地文件，将内容作为`LOA`指令的path参数
+fn try_load_file_content(path: impl AsRef<str>) -> anyhow::Result<String> {
+    // * 🚩尝试读取本地文件
+    let path = path.as_ref();
+    if Path::new(path).exists() {
+        let content = std::fs::read_to_string(path)?;
+        return Ok(content);
+    }
+    Err(anyhow::anyhow!("File not found: {path}"))
+}
+
+/// 终端拦截输出
+/// * 🎯根据「有路径的SAV」输出文件
+fn batch_intercept_output(output: Output) -> anyhow::Result<Option<Output>> {
+    // * 🚩拦截「SAV」回调
+    let output = match output.try_into_sav_callback() {
+        // 空路径⇒不保存⇒重组回「消息」并继续（输出到终端）
+        Ok((path, data)) if path.is_empty() => Output::format_sav_callback(path, data),
+        // 有路径⇒保存到文件
+        Ok((path, data)) => {
+            // * 🚩将终端输出重定向到文件
+            let mut file = std::fs::File::create(path)?;
+            file.write_all(data.as_bytes())?;
+            return Ok(None); // 正常消耗掉输出
+        }
+        // 未消耗⇒继续
+        Err(output) => output,
+    };
+    // 正常未消耗输出
+    Ok(Some(output))
 }
 
 /// 输出：仅打印JSON

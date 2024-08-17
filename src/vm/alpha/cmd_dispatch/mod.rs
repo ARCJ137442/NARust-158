@@ -101,7 +101,14 @@ impl RuntimeAlpha {
         let query = target.to_lowercase();
         // 获取并报告消息
         let result = sav_dispatch(&mut self.reasoner, query, path);
-        self.report_result(result)
+        // 消息分派 | 🚩【2024-08-18 00:56:40】现在需要特殊考虑
+        match result {
+            // 正常信息⇒报告消息 // ! 一般不会是「COMMENT」注释
+            // * 🎯【2024-08-18 00:57:34】用于锁定「格式化『保存回调』」的消息类型
+            Ok(output) => self.reasoner.report(output),
+            // 错误信息⇒报告error
+            Err(message) => self.reasoner.report_error(message),
+        }
     }
 
     /// 处理指令[`Cmd::LOA`]

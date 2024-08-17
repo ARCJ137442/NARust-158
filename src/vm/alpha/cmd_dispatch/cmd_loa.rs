@@ -176,7 +176,8 @@ mod tests {
         // 记忆区应该被替换了
         // 找到一条「INFO」内容，就直接返回
         for o in outputs {
-            if let Ok(data) = o.try_into_sav_callback() {
+            if let Ok((target, data)) = o.try_into_sav_callback() {
+                println!("截获到目标为{target:?}的数据");
                 return data;
             }
         }
