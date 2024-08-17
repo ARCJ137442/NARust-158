@@ -6,3 +6,6 @@
 
 # 无用日志
 debug.log
+
+# 本机依赖配置
+Cargo.lock
