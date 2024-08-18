@@ -10,15 +10,11 @@
 
 ## 简介
 
-![NARust Logo](docs\image\opennars-logo-modified-with-rust.svg)
+![NARust Logo](./docs/image/opennars-logo-modified-with-rust.svg)
 
 一个 [非公理推理系统](http://www.opennars.org/) 的 [Rust](https://www.rust-lang.org/) 版本，复刻自 [OpenNARS 1.5.8](https://github.com/patham9/opennars_declarative_core)。
 
-## 在线演示
-
-<iframe src="https://arcj137442.github.io/demo-158-dev/" width="800" height="400">
-  <p>无法显示iframe内容。请确保你的浏览器支持iframe标签。</p>
-</iframe>
+## 在线演
 
 最新版本请 [点击这里](https://arcj137442.github.io/demo-158-dev/)
 
