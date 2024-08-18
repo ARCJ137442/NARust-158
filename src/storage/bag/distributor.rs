@@ -6,6 +6,7 @@
 //! # 📄OpenNARS
 //!
 //! A pseudo-random number generator, used in Bag.
+#![allow(dead_code)] // ! 📌允许「暂且不用」的「分派迭代器」：在最新版Rust中有编译警告
 
 use nar_dev_utils::{manipulate, pipe};
 use serde::{Deserialize, Serialize};
@@ -223,6 +224,7 @@ impl Debug for Distributor {
     }
 }
 
+/// 将数组截断展示，对多余的内容用「省略号+长度」代替
 fn debug_truncated_arr<T: Debug>(arr: &[T], max_len: usize) -> String {
     if arr.len() <= max_len {
         format!("{:?}", arr)

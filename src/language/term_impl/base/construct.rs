@@ -380,27 +380,4 @@ mod tests {
         空集_外延像 t!(unwrap r"(/, _)");
         空集_内涵像 t!(unwrap r"(\, _)");
     }
-
-    #[test]
-    #[cfg(弃用_20240614000254_对后续变量命名等机制无用)]
-    #[deprecated]
-    fn from_var_clone() -> AResult {
-        macro_once! {
-            // * 🚩模式：词项字符串 ⇒ 预期词项字符串
-            macro from_var_clone($($origin:literal x $new_name:expr => $expected:expr )*) {
-                asserts! {$(
-                    Term::from_var_clone(&t!($origin), $new_name) => t!($expected)
-                    // 比对
-                    // dbg!(&term);
-                    // assert_eq!(term, t!($expected));
-                )*}
-            }
-            // 原子词项
-            "A" x "B" => "B"
-            "$A" x "B" => "$B"
-            "#A" x "B" => "#B"
-            "?A" x "B" => "?B"
-        }
-        ok!()
-    }
 }
