@@ -14,13 +14,51 @@
 
 一个 [非公理推理系统](http://www.opennars.org/) 的 [Rust](https://www.rust-lang.org/) 版本，复刻自 [OpenNARS 1.5.8](https://github.com/patham9/opennars_declarative_core)。
 
-## 在线演
+## 在线演示
 
 最新版本请 [点击这里](https://arcj137442.github.io/demo-158-dev/)
 
 <!-- TODO: 【2024-08-19 00:48:50】继续根据其它NARS版本 丰富文档 -->
 
-## 工程日志纪要
+## 快速开始
+
+### 获取源码
+
+TODO
+
+### 本地编译
+
+TODO
+
+### 构建运行
+
+TODO
+
+## 项目概览
+
+### 系统模块架构
+
+#### 知识表示语言
+
+TODO
+
+#### 推理控制机制
+
+TODO
+
+#### 对外应用接口
+
+TODO
+
+### 所用语言特性
+
+TODO
+
+### 潜在应用领域
+
+## 贡献指南
+
+## 工程日志
 
 ### 【2024-08-19 00:28:53】
 
