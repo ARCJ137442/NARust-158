@@ -1,14 +1,43 @@
-# NARust
+# NARust 158
 
-[English](README.en.md) | **简体中文**
+**简体中文** | [English](README.en.md)
+
+<!-- TODO: 【2024-08-19 00:49:56】英文版有待翻译同步 -->
+
+## 声明
+
+关于术语「OpenNARS」的含义：未经详细区分，默认指代[`OpenNARS 1.5.8`](https://github.com/patham9/opennars_declarative_core)。
 
 ## 简介
 
-一个实验性[NARS](http://www.opennars.org/)实现，旨在复现OpenNARS 1.5.8。
+![NARust Logo](docs\image\opennars-logo-modified-with-rust.svg)
 
-## 工程纪要
+一个 [非公理推理系统](http://www.opennars.org/) 的 [Rust](https://www.rust-lang.org/) 版本，复刻自 [OpenNARS 1.5.8](https://github.com/patham9/opennars_declarative_core)。
 
-最后更新时间：【2024-06-14 00:41:48】
+## 在线演示
+
+<iframe src="https://arcj137442.github.io/demo-158-dev/" width="800" height="400">
+  <p>无法显示iframe内容。请确保你的浏览器支持iframe标签。</p>
+</iframe>
+
+最新版本请 [点击这里](https://arcj137442.github.io/demo-158-dev/)
+
+<!-- TODO: 【2024-08-19 00:48:50】继续根据其它NARS版本 丰富文档 -->
+
+## 工程日志纪要
+
+### 【2024-08-19 00:28:53】
+
+📌指导原则：**固定基础，分支延伸**
+
+1. 📍对外提供一个接近[「声明性内核」](https://github.com/patham9/opennars_declarative_core)的**基础版本**（LTS 长期支持）
+    - 🏗️为整个NARS工程生态做一份实实在在的贡献
+    - 🔦为后人（特别是Rustacean）在工程上研究NARS提供一个奠基石
+2. 💡在「基础版本」的基石之上，鉴于自己对Rust的熟悉，继续延伸并扩展，发掘其特有的研究与应用价值
+    - 🔬研究：凭借自己对内核的熟悉，向NAL 7~9「事件推理」「过程推理」方向探索
+    - 🪛应用：凭借Rust程序在性能、安全性、可集成性方面的优势，发掘其在Rust擅长的高性能工业生产、嵌入式、互联网等方面的应用潜力
+
+### 【2024-06-14 00:41:48】
 
 📌核心原则：**先重构，再迁移，最后独立**
 
@@ -18,7 +47,3 @@
     - 🎯力求「多次验证，一次迁移，一次稳定」
 3. 🏗️迁移到Rust并基本稳定后，开始对齐已有的测试工具链，并在「对齐OpenNARS 1.5.8」后开源公布
     - 🎯公开发帖，力求在七月前完成
-
-## 声明
-
-关于术语「OpenNARS」的含义：未经详细区分，默认指代[`OpenNARS 1.5.8`](https://github.com/patham9/opennars_declarative_core)。
