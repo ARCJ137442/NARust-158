@@ -15,7 +15,7 @@ nar_dev_utils::mods! {
     pub use report;
 
     // 功能：序列反序列化
-    pub use ser_de;
+    pub use serde;
 
     // 功能：NAVM接口
     pub use vm_api;
