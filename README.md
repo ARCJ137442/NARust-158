@@ -6,7 +6,8 @@
 
 ## 简介
 
-<!-- <image src="./docs/image/opennars-logo-modified-with-rust.svg" width=200 style="display: block; margin: auto;"></image> -->
+<!-- 📝尺寸参考：<https://stackoverflow.com/questions/14675913/changing-image-size-in-markdown> -->
+![logo](./docs/image/opennars-logo-modified-with-rust.svg)
 
 一个 [非公理推理系统](http://www.opennars.org/) 的 [Rust](https://www.rust-lang.org/) 版本，复刻自 [OpenNARS 1.5.8](https://github.com/patham9/opennars_declarative_core)。
 
