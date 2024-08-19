@@ -230,10 +230,10 @@ storage
 ├── bag: Basic container "bag" based on the control mechanism of "pseudo-random priority queue"
 │   ├── distributor.rs: Pseudo-random distributor based on priority with a triangular distribution
 │   ├── impl_tables.rs: Auxiliary "name table" and "level table" structures
-│   ├── impl_v1.rs: The final exported "first generation implementation"
+│   ├── impl_v1.rs:     The final exported "first generation implementation"
 │   └── ...
-├── buffer.rs: "Buffer" structure used in "concepts"
-├── memory.rs: Overall container "memory area" for storing "concepts"
+├── buffer.rs:     "Buffer" structure used in "concepts"
+├── memory.rs:     Overall container "memory area" for storing "concepts"
 ├── rank_table.rs: "Ranking table" structure used in "concepts"
 └── ...
 ```
@@ -246,30 +246,30 @@ inference
 │   ├── inference_engine.rs: Definition and interface of the inference engine
 │   └── ...
 ├── functions: Truth functions, budget functions, etc.
-│   ├── budget_functions.rs: Code related to "budget functions" in NAL, corresponding to `nars.inference.BudgetFunctions`
-│   ├── truth_functions.rs: "Truth functions" in NAL, corresponding to `nars.inference.TruthFunctions`
+│   ├── budget_functions.rs:  Code related to "budget functions" in NAL, corresponding to `nars.inference.BudgetFunctions`
+│   ├── truth_functions.rs:   "Truth functions" in NAL, corresponding to `nars.inference.TruthFunctions`
 │   ├── utility_functions.rs: Code related to "extended logical operations" in NAL, corresponding to `nars.inference.UtilityFunctions`
 │   └── ...
 ├── rules: Specific NAL inference rules
 │   ├── table: Rule dispatch table
-│   │   ├── entry.rs: Rule dispatch entry, corresponding to `nars.inference.RuleTables`
-│   │   ├── syllogistic.rs: Dispatch related to "syllogistic rules"
+│   │   ├── entry.rs:         Rule dispatch entry, corresponding to `nars.inference.RuleTables`
+│   │   ├── syllogistic.rs:   Dispatch related to "syllogistic rules"
 │   │   ├── compositional.rs: Dispatch related to "compositional rules"
 │   │   └── ...
 │   ├── compositional_rules.rs: Compositional rules, corresponding to `nars.inference.CompositionalRules`
-│   ├── local_rules.rs: Local rules, corresponding to `nars.inference.LocalRules`
-│   ├── matching_rules.rs: Matching rules, corresponding to `nars.inference.MatchingRules`
-│   ├── structural_rules.rs: Structural rules, corresponding to `nars.inference.StructuralRules`
-│   ├── syllogistic_rules.rs: Syllogistic rules, corresponding to `nars.inference.SyllogisticRules`
-│   ├── transform_rules.rs: Transformation rules, corresponding to `nars.inference.TransformRules`
+│   ├── local_rules.rs:         Local rules, corresponding to `nars.inference.LocalRules`
+│   ├── matching_rules.rs:      Matching rules, corresponding to `nars.inference.MatchingRules`
+│   ├── structural_rules.rs:    Structural rules, corresponding to `nars.inference.StructuralRules`
+│   ├── syllogistic_rules.rs:   Syllogistic rules, corresponding to `nars.inference.SyllogisticRules`
+│   ├── transform_rules.rs:     Transformation rules, corresponding to `nars.inference.TransformRules`
 │   └── ...
 ├── traits
-│   ├── budget.rs: Abstract interface related to "budget", shared by "budget value", "task", "concept", etc.
+│   ├── budget.rs:     Abstract interface related to "budget", shared by "budget value", "task", "concept", etc.
 │   ├── evidential.rs: Abstract interface related to "evidence base", shared by "timestamp", "statement", "task", etc.
-│   ├── truth.rs: Abstract interface related to "truth", shared by "truth value", "judgment", etc.
+│   ├── truth.rs:      Abstract interface related to "truth", shared by "truth value", "judgment", etc.
 │   └── ...
 ├── budget_inference.rs: "Budget inference" involving "link feedback"
-├── local_inference.rs: "Direct inference" involving "belief revision" and "question answering"
+├── local_inference.rs:  "Direct inference" involving "belief revision" and "question answering"
 └── ...
 ```
 
@@ -278,25 +278,25 @@ NARS Control Mechanism `src/control`: Functions closely related to the "reasoner
 ```plaintext
 control
 ├── context: "Inference context" function in the control mechanism
-│   ├── context_concept.rs: Concept inference context
-│   ├── context_direct.rs: Direct inference context
+│   ├── context_concept.rs:   Concept inference context
+│   ├── context_direct.rs:    Direct inference context
 │   ├── context_transform.rs: Transformation inference context
-│   ├── derivation.rs: Related functions of inference derivation
-│   ├── reason_context.rs: Unified "inference context" interface
+│   ├── derivation.rs:        Related functions of inference derivation
+│   ├── reason_context.rs:    Unified "inference context" interface
 │   └── ...
 ├── process: Runtime functions related to "work cycle"
 │   ├── concept_linking.rs: Concept linking (building task chains, word chains)
-│   ├── parsing_task.rs: Narsese task parsing function
-│   ├── process_direct.rs: Control process involving "direct inference"
-│   ├── process_reason.rs: Control process involving "concept inference"
-│   ├── work_cycle.rs: Work cycle control
+│   ├── parsing_task.rs:    Narsese task parsing function
+│   ├── process_direct.rs:  Control process involving "direct inference"
+│   ├── process_reason.rs:  Control process involving "concept inference"
+│   ├── work_cycle.rs:      Work cycle control
 │   └── ...
 ├── reasoner: The definition of the reasoner itself and its external API
-│   ├── definition.rs: Data structure definition
-│   ├── derivation_datas.rs: Work cycle control
-│   ├── report.rs: Output report function
-│   ├── serde.rs: Serialization and deserialization function
-│   ├── vm_api.rs: NAVM virtual machine API
+│   ├── definition.rs:       Data structure definition of the reasoner
+│   ├── derivation_datas.rs: Accessory data structures, including "New Task Queue" and "Novel Task Bag"
+│   ├── report.rs:           Output report function
+│   ├── serde.rs:            Serialization and deserialization function
+│   ├── vm_api.rs:           NAVM virtual machine API
 │   └── ...
 ├── parameters.rs: Hyper-parameters of the reasoner
 └── ...
@@ -316,16 +316,16 @@ vm
 │   │   ├── cmd_sav.rs: Handling instruction `SAV`
 │   │   └── mod.rs: Top-level dispatch function
 │   ├── io: Input and output at the virtual machine level, corresponding to the original OpenNARS channel mechanism
-│   │   ├── _channel.rs: Abstract traits related to "channels"
-│   │   ├── channel_in.rs: Preliminary implementation of input channels
-│   │   ├── channel_out.rs: Preliminary implementation of output channels
-│   │   ├── channels.rs: Managing input and output channels on top of the reasoner
-│   │   ├── handle_io.rs: Actual logic of channel input and output
-│   │   ├── input_channel.rs: Abstract traits of input channels
+│   │   ├── _channel.rs:       Abstract traits related to "channels"
+│   │   ├── channel_in.rs:     Preliminary implementation of input channels
+│   │   ├── channel_out.rs:    Preliminary implementation of output channels
+│   │   ├── channels.rs:       Managing input and output channels on top of the reasoner
+│   │   ├── handle_io.rs:      Actual logic of channel input and output
+│   │   ├── input_channel.rs:  Abstract traits of input channels
 │   │   ├── output_channel.rs: Abstract traits of output channels
 │   │   └── ...
 │   ├── launcher.rs: Virtual machine launcher
-│   ├── runtime.rs: Virtual machine runtime
+│   ├── runtime.rs:  Virtual machine runtime
 │   └── ...
 └── ...
 ```

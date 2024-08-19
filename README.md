@@ -293,8 +293,8 @@ control
 │   ├── work_cycle.rs:      工作周期控制
 │   └── ...
 ├── reasoner: 推理器自身定义及其外部API
-│   ├── definition.rs:       数据结构定义
-│   ├── derivation_datas.rs: 工作周期控制
+│   ├── definition.rs:       推理器的数据结构定义
+│   ├── derivation_datas.rs: 附属数据结构，包括「新任务队列」与「新近任务袋」
 │   ├── report.rs:           输出报告功能
 │   ├── serde.rs:            序列反序列化功能
 │   ├── vm_api.rs:           NAVM虚拟机API
