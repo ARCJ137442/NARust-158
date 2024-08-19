@@ -21,11 +21,14 @@ use ReasonDirection::*;
 
 /// 索引⇒图式
 fn index_to_figure<T, U>(link1: &impl TLink<T>, link2: &impl TLink<U>) -> SyllogismFigure {
-    let side1 = SyllogismPosition::from_index(*link1.get_index(0).unwrap());
-    let side2 = SyllogismPosition::from_index(*link2.get_index(0).unwrap());
+    fn get_side<T>(link: &impl TLink<T>) -> SyllogismPosition {
+        SyllogismPosition::from_index(*link.get_index(0).expect("来自三段论推理的链接一定有首索引"))
+    }
+    let [side1, side2] = [get_side(link1), get_side(link2)];
     side1.build_figure(side2)
 }
 
+/// 三段论分派 主要入口
 pub fn syllogisms(
     task_term: Statement,
     belief_term: Statement,
