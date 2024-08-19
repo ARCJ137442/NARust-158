@@ -6,7 +6,7 @@
 
 ## Introduction
 
-![NARust Logo](./docs/image/opennars-logo-modified-with-rust.svg)
+<!-- <image src="./docs/image/opennars-logo-modified-with-rust.svg" width=200 style="display: block; margin: auto;"></image> -->
 
 A [Non-Axiomatic Reasoning System](http://www.opennars.org/) implemented in [Rust](https://www.rust-lang.org/), based on [OpenNARS 1.5.8](https://github.com/patham9/opennars_declarative_core).
 

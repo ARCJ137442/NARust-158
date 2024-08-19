@@ -6,7 +6,7 @@
 
 ## 简介
 
-![NARust Logo](./docs/image/opennars-logo-modified-with-rust.svg)
+<!-- <image src="./docs/image/opennars-logo-modified-with-rust.svg" width=200 style="display: block; margin: auto;"></image> -->
 
 一个 [非公理推理系统](http://www.opennars.org/) 的 [Rust](https://www.rust-lang.org/) 版本，复刻自 [OpenNARS 1.5.8](https://github.com/patham9/opennars_declarative_core)。
 
