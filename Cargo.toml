@@ -68,3 +68,15 @@ dialect_parser = [
     # 📌依赖`pest`解析器
     "dep:pest", "dep:pest_derive"
 ]
+
+# 有关二进制构建目标的参考：
+# * 🔗<https://rustwiki.org/zh-CN/cargo/reference/manifest.html#configuring-a-target>
+# * ⚠️【2024-08-19 14:28:15】建议name使用下划线：所有短横线将被重命名为下划线
+
+[[bin]]
+name = "narust_158_shell"
+path = "src/bin/shell/main.rs"
+
+[[bin]]
+name = "narust_158_batch"
+path = "src/bin/batch/main.rs"
