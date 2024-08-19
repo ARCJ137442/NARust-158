@@ -1349,5 +1349,19 @@ mod tests {
             "
             => ANSWER "<A --> [B]>" in outputs
         }
+
+        intro_var_inner_bug_20240819_another_example: {
+            "
+            vol 99
+            nse <<A --> [$1, $2]> ==> <A --> (*, $1, $2)>>.
+            nse <A --> [B, C]>.
+            nse <A --> [B]>.
+            nse <A --> (*, B, C)>?
+            rem ↓下面这个不行
+            nse <A --> (*, B, B)>?
+            cyc 1000
+            "
+            => ANSWER "<A --> (*, B, C)>" in outputs
+        }
     }
 }
