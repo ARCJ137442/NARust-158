@@ -57,10 +57,7 @@ impl VarSubstitution {
         loop {
             match self.get(end_point) {
                 Some(next_point) => {
-                    debug_assert!(
-                        end_point != next_point,
-                        "不应有循环替换之情况！{key} @ {self:?}"
-                    );
+                    debug_assert!(end_point != key, "不应有循环替换之情况！{key} @ {self:?}");
                     end_point = next_point
                 }
                 None => break Some(end_point),
@@ -108,18 +105,17 @@ impl VarSubstitution {
 }
 
 impl CompoundTermRefMut<'_> {
-    /// 📄OpenNARS `CompoundTerm.applySubstitute` 方法
-    /// * 🚩直接分派给其组分
-    /// * 📝OpenNARS中「原子词项」不参与「变量替代」：执行无效果
-    ///
-    /// # 📄OpenNARS
-    ///
-    /// Recursively apply a substitute to the current CompoundTerm
-    pub fn apply_substitute(&mut self, substitution: &VarSubstitution) {
+    /// 带函数指针的「递归替换词项」方法
+    /// * 🎯区分「变量重命名中的『非链式替换』」与「变量归一化中的『链式替换』」
+    fn _apply_substitute(
+        &mut self,
+        substitution: &VarSubstitution,
+        get_f: for<'t> fn(&'t VarSubstitution, &Term) -> Option<&'t Term>,
+    ) {
         // * 🚩遍历替换内部所有元素
         for inner in self.components() {
             // * 🚩若有「替换方案」⇒替换
-            if let Some(substitute_term) = substitution.chain_get(inner) {
+            if let Some(substitute_term) = get_f(substitution, inner) {
                 // * ⚠️此处的「被替换词项」可能不是「变量词项」
                 // * 📄NAL-6变量引入时会建立「临时共同变量」匿名词项，以替换非变量词项
                 // * 🚩一路追溯到「没有再被传递性替换」的词项（最终点）
@@ -129,7 +125,7 @@ impl CompoundTermRefMut<'_> {
             }
             // * 🚩复合词项⇒递归深入
             if let Some(mut inner_compound) = inner.as_compound_mut() {
-                inner_compound.apply_substitute(substitution);
+                inner_compound._apply_substitute(substitution, get_f);
             }
         }
         // * 🚩可交换⇒替换之后重排顺序
@@ -150,6 +146,18 @@ impl CompoundTermRefMut<'_> {
         //     });
         // }
         // * ✅不再需要重新生成名称
+    }
+
+    /// 📄OpenNARS `CompoundTerm.applySubstitute` 方法
+    /// * 🚩直接分派给其组分
+    /// * 📝OpenNARS中「原子词项」不参与「变量替代」：执行无效果
+    /// * 🚩
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// Recursively apply a substitute to the current CompoundTerm
+    pub fn apply_substitute(&mut self, substitution: &VarSubstitution) {
+        self._apply_substitute(substitution, VarSubstitution::chain_get)
     }
 
     /// 📄OpenNARS `Term.renameVariables` 方法
@@ -183,9 +191,11 @@ impl CompoundTermRefMut<'_> {
                 substitution.put(atom, Term::make_var_similar(atom, substitution.len() + 1));
             }
         });
+        // 清理无关变量
         substitution.reduce_identities();
         // 应用
-        self.apply_substitute(&substitution);
+        // * 🚩【2024-08-19 22:11:58】非链式应用：对于「重命名变量」只需浅层替换
+        self._apply_substitute(&substitution, VarSubstitution::get);
     }
 }
 

@@ -1336,5 +1336,32 @@ mod tests {
             "
             => OUT "(&&,<#1 --> key>,<{lock1} --> (/,open,#1,_)>)" in outputs
         }
+
+        // * ✅【2024-08-19 22:12:47】bug解决，测试通过
+        intro_var_inner_bug_20240819_loop_substitute: {
+            "
+            nse <<A --> (*, $1, $2)> ==> <A --> [$1, $2]>>.
+            nse <A --> (*, B, C)>.
+            nse <A --> (*, B, B)>.
+            nse <A --> [B, C]>?
+            nse <A --> [B]>?
+            cyc 20
+            "
+            => ANSWER "<A --> [B]>" in outputs
+        }
+
+        intro_var_inner_bug_20240819_another_example: {
+            "
+            vol 99
+            nse <<A --> [$1, $2]> ==> <A --> (*, $1, $2)>>.
+            nse <A --> [B, C]>.
+            nse <A --> [B]>.
+            nse <A --> (*, B, C)>?
+            rem ↓下面这个不行
+            nse <A --> (*, B, B)>?
+            cyc 1000
+            "
+            => ANSWER "<A --> (*, B, C)>" in outputs
+        }
     }
 }
