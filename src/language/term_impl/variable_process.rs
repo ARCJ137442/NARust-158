@@ -58,7 +58,7 @@ impl VarSubstitution {
             match self.get(end_point) {
                 Some(next_point) => {
                     debug_assert!(
-                        end_point != next_point,
+                        end_point != key,
                         "不应有循环替换之情况！{key} @ {self:?}"
                     );
                     end_point = next_point
@@ -917,4 +917,7 @@ mod tests {
         }
         ok!()
     }
+
+    #[test]
+    fn loop_substitute() {}
 }
