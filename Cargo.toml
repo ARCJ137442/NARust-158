@@ -3,7 +3,7 @@ name = "narust-158"
 version = "0.2.1"
 edition = "2021"
 description = """
-A Rust reproduction of OpenNARS 1.5.8
+A Rust reimplementation of OpenNARS 1.5.8
 """
 
 readme = "README.md"
@@ -11,7 +11,7 @@ keywords = ["NARS", "Non-Axiomatic-Logic", "OpenNARS"]
 
 license = "MIT OR Apache-2.0"
 categories = [] # 🔗<https://crates.io/category_slugs>
-repository = "https://github.com/ARCJ137442/NARust/tree/narust-158"
+repository = "https://github.com/ARCJ137442/narust-158"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
