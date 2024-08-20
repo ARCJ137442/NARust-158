@@ -112,16 +112,35 @@ fn batch_intercept_output(output: Output) -> anyhow::Result<Option<Output>> {
         Ok((path, data)) if path.is_empty() => Output::format_sav_callback(path, data),
         // 有路径⇒保存到文件
         Ok((path, data)) => {
+            // * 🚩尝试保存文件
+            let result = save_file(&path, &data);
             // * 🚩将终端输出重定向到文件
-            let mut file = std::fs::File::create(path)?;
-            file.write_all(data.as_bytes())?;
-            return Ok(None); // 正常消耗掉输出
+            let message = match result {
+                // * 🚩生成「已保存」的消息
+                Ok(..) => format!(
+                    "Data has been saved to {path:?} with {} bytes",
+                    data.as_bytes().len()
+                ),
+                // * 🚩或报错消息
+                Err(e) => format!("Failed to save data to {path:?}! Error: {e}"),
+            };
+            // * 🚩替换为「已保存」的回显
+            let out = Output::INFO { message };
+            return Ok(Some(out));
         }
         // 未消耗⇒继续
         Err(output) => output,
     };
     // 正常未消耗输出
     Ok(Some(output))
+}
+
+/// 路径+数据→保存文件
+fn save_file(path: impl Into<String>, data: &str) -> Result<()> {
+    use std::fs::File;
+    let mut file = File::create(path.into())?;
+    file.write_all(data.as_bytes())?;
+    Ok(())
 }
 
 /// 输出：仅打印JSON
