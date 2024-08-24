@@ -20,6 +20,42 @@ pub struct VarSubstitution {
     map: HashMap<Term, Term>,
 }
 
+/// 快捷构造宏
+///
+/// ## 语法
+///
+/// ```
+/// use narust_158::substitution;
+/// use narust_158::language::Term;
+///
+/// // 直接像一个字典那样构造
+/// substitution! {
+///     "A" => "B" // 无需逗号
+///     "C" => "D"
+/// };
+/// substitution! {
+///     "A" => "B", // 有逗号的版本
+///     "C" => "D",
+/// };
+/// ```
+#[macro_export]
+macro_rules! substitution {
+    (
+        $(
+            $to_be_substitute:expr => $substituted:expr $(,)?
+        )*
+    ) => {
+        $crate::language::variable_process::VarSubstitution::from_pairs([
+            $(
+                (
+                    $to_be_substitute.parse::<Term>().unwrap(),
+                    $substituted.parse::<Term>().unwrap(),
+                )
+            ),*
+        ])
+    };
+}
+
 impl VarSubstitution {
     /// 构造函数
     pub fn new() -> Self {
@@ -124,7 +160,7 @@ impl CompoundTermRefMut<'_> {
                 *inner = substitute;
             }
             // * 🚩复合词项⇒递归深入
-            if let Some(mut inner_compound) = inner.as_compound_mut() {
+            else if let Some(mut inner_compound) = inner.as_compound_mut() {
                 inner_compound._apply_substitute(substitution, get_f);
             }
         }
@@ -736,12 +772,15 @@ mod tests {
             assert_eq!(term, expected);
         }
         // 映射表
-        let substitution = VarSubstitution::from_pairs([
-            (term!("var_word"), term!("word")),
-            (term!("$1"), term!("1")),
-            (term!("?1"), term!("(/, A, <lock --> swan>, _, [1])")), // 变量⇒复合词项（实际情况不出现）
-            (term!("[#1]"), term!("<X --> (*, Y, [Z])>")), // 复合词项⇒复合词项（实际情况不出现）
-        ]);
+        let substitution = substitution!(
+            "var_word" => "word"
+            "$1" => "1"
+            "?1" => "(/, A, <lock --> swan>, _, [1])" // 变量⇒复合词项（实际情况不出现）
+            "[#1]" => "<X --> (*, Y, [Z])>" // 复合词项⇒复合词项（实际情况不出现）
+        );
+        let substitution2 = substitution!(
+            "$1" => "(/,$1,_,{L2})" // ! ⚠️注意：嵌套变量
+        );
         macro_once! {
             // * 🚩模式：待替换词项, 替换 => 替换后词项
             macro test(
@@ -751,7 +790,7 @@ mod tests {
                 )*
             ) {
                 $(
-                    test(&substitution, term!($term_str), term!($substituted_str));
+                    test(&$substitution, term!($term_str), term!($substituted_str));
                 )*
             }
             // * 🚩一般复合词项
@@ -775,6 +814,8 @@ mod tests {
             "<<$1 --> var_word> ==> <var_word --> $1>>", substitution => "<<1 --> word> ==> <word --> 1>>"
             "<<var_word --> A> ==> [#1]>", substitution => "<<word --> A> ==> <X --> (*, Y, [Z])>>"
             "(--, (&&, (||, (&, (|, (*, ?1))))))", substitution => "(--, (&&, (||, (&, (|, (*, (/, A, <lock --> swan>, _, [1])))))))"
+            // ! from issue #1: unsafe可变引用迭代器的迭代器失效——边迭代边修改，且在修改后又递归深入
+            "<<{O1} --> $1> ==> <{O2} --> $1>>", substitution2 => "<<{O1} --> (/,$1,_,{L2})> ==> <{O2} --> (/,$1,_,{L2})>>"
         }
         ok!()
     }
