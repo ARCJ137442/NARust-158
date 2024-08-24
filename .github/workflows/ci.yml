@@ -1,11 +1,16 @@
 name: CI - test and lint
+# 🔗CI语法参考：https://docs.github.com/zh/actions/writing-workflows/workflow-syntax-for-github-actions
 
 on:
-  push:
+  push: # 推送到特定分支
     branches:
       - main
       - dev
       - 'test**'
+  label: # 创建标签
+    types:
+      - created
+  pull_request: # 拉取请求
 
 env:
   CARGO_TERM_COLOR: always
