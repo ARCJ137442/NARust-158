@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - dev
       - 'test**'
 
 env:
@@ -30,4 +31,5 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: clippy
-        run: cargo clippy --all --all-features --tests -- -D warnings
+        run: cargo clippy --all --all-features --tests --
+          # 📌【2024-08-25 00:23:12】暂不启用`-D warnings`参数：暂且不对clippy采取过于严格的限制

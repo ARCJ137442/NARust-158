@@ -248,9 +248,12 @@ impl ShortFloat {
     ///
     /// ! ⚠️在「范围越界」时直接panic
     /// * 🎯降低代码冗余量（减少过多的「错误处理」）
+    ///
+    /// ```plaintext
     /// conflicting implementation in crate `core`:
     /// - impl<T, U> std::convert::TryFrom<U> for T
     /// where U: std::convert::Into<T>;
+    /// ```
     #[inline(always)]
     pub fn from_float(value: Float) -> Self {
         // ! ⚠️【2024-05-02 20:41:19】直接unwrap

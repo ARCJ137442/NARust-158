@@ -294,7 +294,7 @@ pub mod tests_memory {
         I1: IntoIterator<Item = T> + 't,
         I2: IntoIterator<Item = T> + 't,
     {
-        a.into_iter().zip(b.into_iter())
+        a.into_iter().zip(b)
     }
 
     /// 用于在外部crate中直接用推理器检查记忆区，且不使用[`Reasoner::memory`]字段

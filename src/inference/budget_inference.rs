@@ -2,8 +2,6 @@
 //! * 📄跟从改版OpenNARS的代码安排
 //! * 🎯存储【非纯函数式】【与控制机制直接相关】的预算函数
 
-//! 🎯复刻OpenNARS `nars.inference.BudgetFunctions`
-
 use super::{BudgetInferenceFunction, BudgetInferenceResult, Truth};
 use crate::{
     control::ReasonContextWithLinks,

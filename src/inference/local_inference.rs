@@ -228,14 +228,14 @@ fn find_existed_question<'c>(concept: &'c Concept, task_content: &Term) -> Optio
 /// # 📄OpenNARS
 ///
 /// Evaluate a query against beliefs (and desires in the future)
-fn evaluation<'a, S, J: 'a>(
+fn evaluation<'a, S, J>(
     query: &S,
     list: impl IntoIterator<Item = &'a J>,
     solution_quality: fn(&S, &J) -> ShortFloat,
 ) -> Option<(&'a J, ShortFloat)>
 where
     S: Sentence,
-    J: Judgement,
+    J: Judgement + 'a,
 {
     // * 🚩筛选出其中排行最前的回答
     let mut current_best = ShortFloat::default();

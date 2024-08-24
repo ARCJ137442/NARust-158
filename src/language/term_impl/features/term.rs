@@ -38,14 +38,14 @@ impl Term {
     /// 模拟`Term.getComplexity`
     /// * 🚩逻辑 from OpenNARS
     ///   * 原子 ⇒ 1
-    /// //  * 变量 ⇒ 0
+    ///   * ~~变量 ⇒ 0~~
     ///   * 复合 ⇒ 1 + 所有组分复杂度之和
     ///
     /// # 📄OpenNARS
     ///
     /// - The syntactic complexity, for constant atomic Term, is 1.
     /// - The complexity of the term is the sum of those of the components plus 1
-    /// // - The syntactic complexity of a variable is 0, because it does not refer to * any concept.
+    /// - ~~The syntactic complexity of a variable is 0, because it does not refer to * any concept.~~
     ///
     /// @return The complexity of the term, an integer
     #[doc(alias = "get_complexity")]
