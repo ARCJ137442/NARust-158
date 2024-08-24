@@ -34,3 +34,22 @@ jobs:
         run: cargo clippy --all --all-features --tests -- -D warnings
           # 📌【2024-08-25 00:23:12】暂不启用``参数：暂且不对clippy采取过于严格的限制
           # 📝【2024-08-25 00:33:21】现在可在Cargo.toml中 允许特定clippy限制（诸如：放宽对文档注释的要求）
+
+  test_coverage:
+    name: Rust project
+    runs-on: ubuntu-latest
+    steps:
+      # the action needs a nightly toolchain with llvm-tools
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: nightly
+          components: llvm-tools-preview
+
+      # runs cargo with defaults flags, using the default `lcov` output
+      - uses: Swatinem/fucov@v1
+
+      # afterwards, upload the report to codecov
+      - uses: codecov/codecov-action@v1
+        with:
+          directory: coverage
