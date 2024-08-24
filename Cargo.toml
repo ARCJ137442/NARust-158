@@ -80,3 +80,15 @@ path = "src/bin/shell/main.rs"
 [[bin]]
 name = "narust_158_batch"
 path = "src/bin/batch/main.rs"
+
+# 有关Clippy的参考：
+# * 🔗<https://doc.rust-lang.org/clippy/configuration.html>
+[lints.clippy]
+
+# 📌【2024-08-25 00:31:01】允许文档注释中出现以下情况
+# ```markdown
+# * 📝这是一个笔记
+# ? 💭这是一个问题
+#   * 📍这是问题下的一个小点
+# ```
+doc_lazy_continuation = "allow"
