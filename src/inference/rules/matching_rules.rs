@@ -120,7 +120,7 @@ mod tests {
     use super::*;
     use crate::{
         expect_narsese_term,
-        inference::{process_direct, test_inference::*, InferenceEngine},
+        inference::{process_direct, tools::*, InferenceEngine},
     };
 
     /// 引擎

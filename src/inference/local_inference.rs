@@ -263,7 +263,7 @@ mod tests {
     use crate::{
         control::Reasoner,
         expect_narsese_term,
-        inference::{test_inference::*, InferenceEngine},
+        inference::{tools::*, InferenceEngine},
     };
     use navm::output::Output;
 
