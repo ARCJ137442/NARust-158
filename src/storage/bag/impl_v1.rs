@@ -908,6 +908,7 @@ mod tests {
     /// * 🎯挑出 [`Bag::pick_out`]
     /// * 🎯放回 [`Bag::put_back`]
     /// * 🎯取出 [`Bag::take_out`]
+    /// * 🎯一瞥 [`Bag::peek`]
     #[test]
     fn single_item() -> AResult {
         // 构造测试用「袋」
@@ -955,10 +956,14 @@ mod tests {
             bag.mass() == 1, // 放进第0层，获得(0+1)的重量
         }
 
+        // 一瞥元素
+        let peeked = bag.peek().unwrap().clone();
+
         // 取出元素
         let mut taken = bag.take_out().unwrap();
         asserts! {
             taken == item1, // 取出的就是放回了的
+            peeked == *taken.key(), // 所取出之元素的key就是一瞥出来的key
             bag.size() == 0, // 取走了
             bag.mass() == 0, // 取走了
             bag.empty_level(0) => true, // 取走的是第0层
@@ -998,6 +1003,7 @@ mod tests {
     /// * 🎯挑出 [`Bag::pick_out`]
     /// * 🎯放回 [`Bag::put_back`]
     /// * 🎯取出 [`Bag::take_out`]
+    /// * 🎯一瞥 [`Bag::peek`]
     #[test]
     fn multi_item() -> AResult {
         // 构造测试用「袋」并初始化
@@ -1077,11 +1083,13 @@ mod tests {
         }
         println!("第一次放回后：{bag:#?}");
 
-        // 取出元素
+        // 取出&一瞥 元素
         let mut taken_items = vec![];
         for i in 0..=N {
+            let peeked = bag.peek().unwrap().clone();
             let taken = bag.take_out().unwrap(); // 一定拿得出来
             asserts! {
+                peeked == *taken.key() // 一瞥出来的元素，应该和取出来的元素一致
                 bag.size() == N - i, // 取走了
                 // bag._empty_level(0) => true, // 取走的是第0层
             }
