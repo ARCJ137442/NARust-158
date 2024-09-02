@@ -288,8 +288,7 @@ impl<E: Item> Bag<E> {
     /// # 📄OpenNARS
     ///
     /// current sum of occupied level
-    pub fn mass(&self) -> usize {
-        // TODO: 私有化：不应暴露在外
+    fn mass(&self) -> usize {
         self.status.mass
     }
 
