@@ -540,24 +540,52 @@ impl<E: Item> Bag<E> {
         selected
     }
 
+    /// 🆕对整个袋进行「一瞥」
+    /// * 🎯在不修改袋结构的情况下，获取下一个要取出的元素
+    pub fn peek(&self) -> Option<&String> {
+        if self.item_map.is_empty() {
+            return None;
+        }
+        let (level, ..) =
+            self.calculate_next_level(self.current_level, self.level_index, self.current_counter);
+        self.peek_first(level)
+    }
+
     /// 为[`Self::take_out`]选择下一个要被取走的level
-    /// * 🚩计算并返回「下一个level值」
+    /// * 🚩计算并返回「下一个level值」，并**同时修改自身状态**
     fn select_next_level_for_take(&mut self) -> usize {
-        if self.empty_level(self.current_level) || (self.current_counter) == 0 {
-            self.current_level = self.distributor.pick(self.level_index);
-            self.level_index = self.distributor.next(self.level_index);
-            while self.empty_level(self.current_level) {
+        // 直接并行赋值
+        (self.current_level, self.level_index, self.current_counter) =
+            self.calculate_next_level(self.current_level, self.level_index, self.current_counter);
+        self.current_level // 新的「当前层级」即为返回值
+    }
+
+    /// 🆕根据自身不可变引用，拆分出「计算下一待取层级」的函数
+    /// * 📌在计算过程中会修改「当前层级」「层级索引」「当前计数器」等内部状态变量
+    ///   * 📝【2024-09-02 15:23:58】目前将这些「内部状态变量」提取出来，以便在不可变上下文中集成
+    ///   * 📄不修改自身，只获取不修改的「一瞥」函数
+    #[inline]
+    fn calculate_next_level(
+        &self,
+        mut current_level: usize,
+        mut level_index: usize,
+        mut current_counter: usize,
+    ) -> (usize, usize, usize) {
+        if self.empty_level(current_level) || current_counter == 0 {
+            current_level = self.distributor.pick(level_index);
+            level_index = self.distributor.next(level_index);
+            while self.empty_level(current_level) {
                 // * 📝这里实际上就是一个do-while
-                self.current_level = self.distributor.pick(self.level_index);
-                self.level_index = self.distributor.next(self.level_index);
+                current_level = self.distributor.pick(level_index);
+                level_index = self.distributor.next(level_index);
             }
-            self.current_counter = match self.current_level < Self::__THRESHOLD {
+            current_counter = match current_level < Self::__THRESHOLD {
                 true => 1,
-                false => self.level_map.get(self.current_level).size(),
+                false => self.level_map.get(current_level).size(),
             };
         }
-        self.current_counter -= 1;
-        self.current_level
+        current_counter -= 1;
+        (current_level, level_index, current_counter)
     }
 
     /// 模拟`Bag.pickOut`
@@ -686,6 +714,12 @@ impl<E: Item> Bag<E> {
         self.level_map.get_mut(in_level).add(new_key.to_string());
         // self.refresh(); // ! ❌【2024-05-04 11:16:55】不复刻这个有关「观察者」的方法
         old_item
+    }
+
+    /// 🆕对某一层的首个元素进行「一瞥」
+    /// * 🎯获取某一层的首个元素
+    fn peek_first(&self, level: usize) -> Option<&String> {
+        self.level_map.get(level).get_first()
     }
 
     /// 模拟`Bag.takeOutFirst`
