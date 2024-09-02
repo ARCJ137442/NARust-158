@@ -2,7 +2,7 @@
 
 use super::{BagItemTable, BagNameTable, Distribute, Distributor, NameValue};
 use crate::{
-    control::DEFAULT_PARAMETERS,
+    control::{Parameters, DEFAULT_PARAMETERS},
     entity::{Item, MergeOrder, ShortFloat},
     global::Float,
     inference::{Budget, BudgetFunctions, BudgetInference},
@@ -112,7 +112,7 @@ pub struct Bag<E: Item> {
 
 /// 有关「袋」的参数
 /// * 🎯分离出「袋」的「参数变量」
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 struct BagParameters {
     /// 袋容量
     /// * 📌在不同地方有不同的定义
@@ -138,6 +138,114 @@ struct BagParameters {
     ///
     /// @return The number of times for a decay factor to be fully applied
     forget_rate: usize,
+
+    /// 模拟`Bag.TOTAL_LEVEL`
+    /// *📌总层数
+    /// * 🚩【2024-05-04 01:44:29】根据OpenNARS中「常量」的定义，在此将其全局化
+    ///   * 📌`static final` ⇒ `const`
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// priority levels
+    #[serde(default = "default::total_level")]
+    total_level: usize,
+
+    /// 模拟`Bag.THRESHOLD`
+    /// * 📌触发阈值
+    /// * 📝触发の阈值
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// firing threshold
+    #[serde(default = "default::threshold")]
+    threshold: usize,
+
+    /// 模拟`Bag.RELATIVE_THRESHOLD`
+    /// 相对阈值
+    /// * 🚩由`触发阈值 / 总层数`计算得来
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// relative threshold, only calculate once
+    #[serde(default = "default::relative_threshold")]
+    relative_threshold: Float,
+
+    /// 模拟`Bag.LOAD_FACTOR`
+    /// * 📌加载因子
+    /// * ❓尚不清楚其含义
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// hash table load factor
+    #[serde(default = "default::load_factor")]
+    load_factor: Float,
+}
+
+/// 所有「默认超参数」的函数
+mod default {
+    // TODO: 是否要和control包耦合——有待将Parameters外迁出全局
+    use super::BagParameters;
+    use crate::{control::DEFAULT_PARAMETERS, global::Float};
+
+    /// 📜为缺省字段提供默认值
+    /// * 🎯兼容旧版本中无此字段的[`Bag`]
+    pub const fn total_level() -> usize {
+        DEFAULT_PARAMETERS.bag_level
+    }
+
+    /// 📜为缺省字段提供默认值
+    /// * 🎯兼容旧版本中无此字段的[`Bag`]
+    pub const fn threshold() -> usize {
+        DEFAULT_PARAMETERS.bag_threshold
+    }
+
+    /// 📜为缺省字段提供默认值
+    /// * 🎯兼容旧版本中无此字段的[`Bag`]
+    ///
+    /// ! ❌【2024-09-02 16:51:01】无法变为常量函数：常量函数中不允许浮点计算
+    pub fn relative_threshold() -> Float {
+        const TOTAL_LEVEL: usize = total_level();
+        const THRESHOLD: usize = threshold();
+        BagParameters::calculate_relative_threshold(TOTAL_LEVEL, THRESHOLD)
+    }
+
+    /// 📜为缺省字段提供默认值
+    /// * 🎯兼容旧版本中无此字段的[`Bag`]
+    pub const fn load_factor() -> Float {
+        DEFAULT_PARAMETERS.load_factor
+    }
+}
+
+impl BagParameters {
+    /// 根据「总层级」与「触发阈值」计算「相对阈值」
+    ///
+    /// ! ❌【2024-09-02 16:51:01】无法变为常量函数：常量函数中不允许浮点计算
+    fn calculate_relative_threshold(total_level: usize, threshold: usize) -> Float {
+        threshold as Float / total_level as Float
+    }
+
+    /// 从全局的「超参数」中生成「袋参数」
+    /// * 🎯解耦硬编码的「默认超参数」
+    fn from_parameters(capacity: usize, forget_rate: usize, parameters: &Parameters) -> Self {
+        // 提取所需参数
+        let &Parameters {
+            bag_level: total_level,
+            bag_threshold: threshold,
+            load_factor,
+            ..
+        } = parameters;
+        // 计算附加参数
+        let relative_threshold = Self::calculate_relative_threshold(total_level, threshold);
+        // 初始化参数
+        Self {
+            capacity,
+            forget_rate,
+            total_level,
+            threshold,
+            relative_threshold,
+            load_factor,
+        }
+    }
 }
 
 /// 有关「袋」的状态
@@ -193,27 +301,35 @@ impl<E: Item> Default for Bag<E> {
 
 // impl<E: Item> BagConcrete<E> for Bag<E> {
 impl<E: Item> Bag<E> {
+    pub fn from_parameters(capacity: usize, forget_rate: usize, parameters: &Parameters) -> Self {
+        Self::with_parameters(BagParameters::from_parameters(
+            capacity,
+            forget_rate,
+            parameters,
+        ))
+    }
     pub fn new(capacity: usize, forget_rate: usize) -> Self {
+        let parameters = BagParameters::from_parameters(capacity, forget_rate, &DEFAULT_PARAMETERS);
+        Self::with_parameters(parameters)
+    }
+    fn with_parameters(parameters: BagParameters) -> Self {
         /* 📄OpenNARS源码：
         self.memory = memory;
         capacity = capacity();
         init(); */
-        let parameters = BagParameters {
-            // 这两个是「超参数」要因使用者而异
-            capacity,
-            forget_rate,
-        };
         // 构造
         let mut this = Self {
-            parameters,
             // 后续都是「内部状态变量」
-            distributor: Distributor::new(Self::__TOTAL_LEVEL),
+            distributor: Distributor::new(parameters.total_level),
             // ? ❓【2024-05-04 12:32:58】因为上边这个不支持[`Default`]，所以就要写这些模板代码吗？
             // * 💭以及，这个`new`究竟要不要照抄OpenNARS的「先创建全空属性⇒再全部init初始化」特性
             //   * 毕竟Rust没有`null`要担心
             item_map: BagNameTable::default(),
             level_map: BagItemTable::default(),
             status: BagStatus::default(),
+            // 参数变量
+            // * 🚩【2024-09-02 16:43:31】最后再初始化：内部有字段要在初始化之前用
+            parameters,
         };
         this.init();
         this
@@ -225,42 +341,6 @@ impl<E: Item> Bag<E> {
 // impl<E: Item> Bagging<E> for Bag<E> {
 impl<E: Item> Bag<E> {
     // * ↑此处`Item`泛型仿OpenNARS`Bag`
-    /// 模拟`Bag.TOTAL_LEVEL`
-    /// *📌总层数
-    /// * 🚩【2024-05-04 01:44:29】根据OpenNARS中「常量」的定义，在此将其全局化
-    ///   * 📌`static final` ⇒ `const`
-    ///
-    /// # 📄OpenNARS
-    ///
-    /// priority levels
-    const __TOTAL_LEVEL: usize = DEFAULT_PARAMETERS.bag_level;
-
-    /// 模拟`Bag.THRESHOLD`
-    /// * 📌触发阈值
-    /// * 📝触发の阈值
-    ///
-    /// # 📄OpenNARS
-    ///
-    /// firing threshold
-    const __THRESHOLD: usize = DEFAULT_PARAMETERS.bag_threshold;
-
-    /// 模拟`Bag.RELATIVE_THRESHOLD`
-    /// 相对阈值
-    /// * 🚩由`触发阈值 / 总层数`计算得来
-    ///
-    /// # 📄OpenNARS
-    ///
-    /// relative threshold, only calculate once
-    const __RELATIVE_THRESHOLD: Float = Self::__THRESHOLD as Float / Self::__TOTAL_LEVEL as Float;
-
-    /// 模拟`Bag.LOAD_FACTOR`
-    /// * 📌加载因子
-    /// * ❓尚不清楚其含义
-    ///
-    /// # 📄OpenNARS
-    ///
-    /// hash table load factor
-    const __LOAD_FACTOR: Float = DEFAULT_PARAMETERS.load_factor;
 
     /// 模拟`Bag.capacity`
     /// * 📌一个「袋」的「容量」
@@ -309,15 +389,15 @@ impl<E: Item> Bag<E> {
         levelIndex = capacity % TOTAL_LEVEL; // so that different bags start at different point
         mass = 0;
         currentCounter = 0; */
-        self.level_map = BagItemTable::new(Self::__TOTAL_LEVEL);
-        for level in 0..Self::__TOTAL_LEVEL {
+        self.level_map = BagItemTable::new(self.parameters.total_level);
+        for level in 0..self.parameters.total_level {
             self.level_map.add_new(level);
         }
         self.item_map = BagNameTable::new();
         // 状态初始化
         self.status = BagStatus {
-            current_level: Self::__TOTAL_LEVEL - 1,
-            level_index: self.capacity() % Self::__TOTAL_LEVEL, // 不同的「袋」在分派器中有不同的起点
+            current_level: self.parameters.total_level - 1,
+            level_index: self.capacity() % self.parameters.total_level, // 不同的「袋」在分派器中有不同的起点
             mass: 0,
             current_counter: 0,
         }; // * 📌【2024-09-02 15:45:01】此处直接用新结构体覆盖，可由此检查穷尽性
@@ -359,7 +439,7 @@ impl<E: Item> Bag<E> {
         }
         Float::min(
             // 复刻最后一个条件判断
-            (self.mass() as Float) / (self.size() * Self::__TOTAL_LEVEL) as Float,
+            (self.mass() as Float) / (self.size() * self.parameters.total_level) as Float,
             1.0,
         )
     }
@@ -520,7 +600,7 @@ impl<E: Item> Bag<E> {
     pub fn forget(&self, item: &mut impl Budget) {
         let new_priority = item.forget(
             self.parameters.forget_rate as Float,
-            Self::__RELATIVE_THRESHOLD,
+            self.parameters.relative_threshold,
         );
         item.set_priority(ShortFloat::from_float(new_priority));
     }
@@ -624,7 +704,7 @@ impl<E: Item> Bag<E> {
                 current_level = self.distributor.pick(level_index);
                 level_index = self.distributor.next(level_index);
             }
-            current_counter = match current_level < Self::__THRESHOLD {
+            current_counter = match current_level < self.parameters.threshold {
                 true => 1,
                 false => self.level_map.get(current_level).size(),
             };
@@ -689,7 +769,7 @@ impl<E: Item> Bag<E> {
         float fl = item.getPriority() * TOTAL_LEVEL;
         int level = (int) Math.ceil(fl) - 1;
         return (level < 0) ? 0 : level; // cannot be -1 */
-        let fl = item.priority().to_float() * Self::__TOTAL_LEVEL as Float;
+        let fl = item.priority().to_float() * self.parameters.total_level as Float;
         let level = (fl.ceil()) as usize; // ! 此处不提前-1，避免溢出
         level.saturating_sub(1) // * 🚩↓相当于如下代码
                                 /* if level < 1 {
@@ -744,9 +824,9 @@ impl<E: Item> Bag<E> {
         if self.size() > self.capacity() {
             // * 📝逻辑：低优先级溢出——从低到高找到「第一个非空层」然后弹出其中第一个（最先的）元素
             // * 🚩【2024-05-04 13:14:02】实际上与Java代码等同；但若直接按源码来做就会越界
-            let out_level = (0..Self::__TOTAL_LEVEL)
+            let out_level = (0..self.parameters.total_level)
                 .find(|level| !self.empty_level(*level))
-                .unwrap_or(Self::__TOTAL_LEVEL);
+                .unwrap_or(self.parameters.total_level);
             if out_level > in_level {
                 // 若到了自身所在层⇒弹出自身（相当于「添加失败」）
                 self.status.mass -= in_level + 1; // 🆕失败，减去原先相加的数
@@ -884,7 +964,7 @@ impl<E: Item> Bag<E> {
         return buf.toString(); */
         let mut buf = String::new();
         // * 🚩倒序遍历所有非空层
-        for level in (0..Self::__TOTAL_LEVEL)
+        for level in (0..self.parameters.total_level)
             .rev()
             .filter(|&level| !self.empty_level(level))
         {
@@ -1030,8 +1110,8 @@ mod tests {
             overflowed => None, // 没有溢出
             bag.size() == 1, // 放回了
             bag.empty_level(0) => true, // 放入的不再是第0层
-            bag.empty_level(Bag1::__TOTAL_LEVEL-1) => false, // 放入的是最高层
-            bag.mass() == Bag1::__TOTAL_LEVEL, // 放进第最高层，获得 层数 的重量
+            bag.empty_level(bag.parameters.total_level-1) => false, // 放入的是最高层
+            bag.mass() == bag.parameters.total_level, // 放进第最高层，获得 层数 的重量
         }
 
         // 最后完成
@@ -1074,8 +1154,9 @@ mod tests {
         // * 📌层级计算公式：
         //   * 层级百分比：`i / N`
         //   * 层级：`ceil(百分比 * 层数) - 1`
+        let total_level = bag.parameters.total_level;
         let expected_level = |i| {
-            let level_percent = priority(i) as Float * Bag1::__TOTAL_LEVEL as Float;
+            let level_percent = priority(i) as Float * total_level as Float;
             (level_percent.ceil() as usize).saturating_sub(1)
         };
         let items = list![
