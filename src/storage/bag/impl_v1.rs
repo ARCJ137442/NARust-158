@@ -96,6 +96,24 @@ pub struct Bag<E: Item> {
     /// array of lists of items, for items on different level
     level_map: BagItemTable,
 
+    /// 🆕所有「袋参数」
+    /// * 🎯存储「袋」的所有「参数变量」
+    ///   * 📌往往在构造后不再修改
+    #[serde(flatten)]
+    parameters: BagParameters,
+
+    /// 🆕所有「状态变量」
+    /// * 🎯存储「袋」在「状态指示」「取出元素」时需要 暂存/缓存 的变量
+    /// * 📝【2024-09-02 16:17:03】通过serde的「结构体展平」兼容先前序列反序列化布局
+    ///   * 🔗<https://serde.rs/attr-flatten.html>
+    #[serde(flatten)]
+    status: BagStatus,
+}
+
+/// 有关「袋」的参数
+/// * 🎯分离出「袋」的「参数变量」
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct BagParameters {
     /// 袋容量
     /// * 📌在不同地方有不同的定义
     /// * 📝参数属性：是一个「构造后固定」的属性
@@ -120,13 +138,6 @@ pub struct Bag<E: Item> {
     ///
     /// @return The number of times for a decay factor to be fully applied
     forget_rate: usize,
-
-    /// 🆕所有「状态变量」
-    /// * 🎯存储「袋」在「状态指示」「取出元素」时需要 暂存/缓存 的变量
-    /// * 📝【2024-09-02 16:17:03】通过serde的「结构体展平」兼容先前序列反序列化布局
-    ///   * 🔗<https://serde.rs/attr-flatten.html>
-    #[serde(flatten)]
-    status: BagStatus,
 }
 
 /// 有关「袋」的状态
@@ -187,10 +198,14 @@ impl<E: Item> Bag<E> {
         self.memory = memory;
         capacity = capacity();
         init(); */
-        let mut this = Self {
+        let parameters = BagParameters {
             // 这两个是「超参数」要因使用者而异
             capacity,
             forget_rate,
+        };
+        // 构造
+        let mut this = Self {
+            parameters,
             // 后续都是「内部状态变量」
             distributor: Distributor::new(Self::__TOTAL_LEVEL),
             // ? ❓【2024-05-04 12:32:58】因为上边这个不支持[`Default`]，所以就要写这些模板代码吗？
@@ -261,7 +276,7 @@ impl<E: Item> Bag<E> {
     /// * 【作为方法】To get the capacity of the concrete subclass
     ///   * @return Bag capacity, in number of Items allowed
     pub fn capacity(&self) -> usize {
-        self.capacity
+        self.parameters.capacity
     }
 
     /// 模拟`Bag.mass`
@@ -274,6 +289,7 @@ impl<E: Item> Bag<E> {
     ///
     /// current sum of occupied level
     pub fn mass(&self) -> usize {
+        // TODO: 私有化：不应暴露在外
         self.status.mass
     }
 
@@ -503,7 +519,10 @@ impl<E: Item> Bag<E> {
     /// 🆕以一定函数修改某个Item的优先级
     /// * 🚩改成泛型函数，以便适用在所有地方
     pub fn forget(&self, item: &mut impl Budget) {
-        let new_priority = item.forget(self.forget_rate as Float, Self::__RELATIVE_THRESHOLD);
+        let new_priority = item.forget(
+            self.parameters.forget_rate as Float,
+            Self::__RELATIVE_THRESHOLD,
+        );
         item.set_priority(ShortFloat::from_float(new_priority));
     }
 
