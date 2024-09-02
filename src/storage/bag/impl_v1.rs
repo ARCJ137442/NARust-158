@@ -535,12 +535,9 @@ impl<E: Item> Bag<E> {
         let level = self.select_next_level_for_take();
         let selected_key = self.take_out_first(level);
         // * 此处需要对内部可能有的「元素id」进行转换
-        let overflowed = match selected_key {
-            Some(key) => self.item_map.remove_item(&key),
-            None => None,
-        };
-        self.assert_valid();
-        overflowed
+        let selected = selected_key.and_then(|key| self.item_map.remove_item(&key));
+        self.assert_valid(); // 在移除元素后检查
+        selected
     }
 
     /// 为[`Self::take_out`]选择下一个要被取走的level
