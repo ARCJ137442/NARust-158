@@ -26,9 +26,24 @@ macro_once! {
         pub struct $struct_name {
             $(
                 $(#[$attr])*
+                // #[serde(default = concat!("default_values::", $name))]
+                // ! ❌【2024-09-02 17:22:32】无法在宏展开后的属性宏中使用宏展开结果
+                //   * ℹ️期望`concat`先展开，实则先输入进了`#[serde(default = ...)]`中
+                //   * ❌也无法使用「展开成`#[serde]`的宏」：展开前被提前代入，语法错误
                 $v $name: $type,
             )*
         }
+        /// 所有字段的默认值
+        #[doc(hidden)]
+        mod default_values {
+            use super::*;
+            $(
+                // 作为常量函数的「默认值函数」
+                #[doc(hidden)]
+                pub const fn $name() -> $type { $default }
+            )*
+        }
+        /// 内部功能
         impl $struct_name {
             /// 实现「常量化默认函数」
             /// * 🎯构建自身，并直接可作为`const`常量
@@ -36,13 +51,15 @@ macro_once! {
             pub const fn default_const() -> Self {
                 Self {
                     $(
-                        $name: $default,
+                        // 使用模块路径下的函数
+                        $name: default_values::$name(),
                     )*
                 }
             }
         }
         /// 实现[`Default`]
         impl Default for $struct_name {
+            #[inline]
             fn default() -> Self {
                 // 直接使用「常量函数」
                 Self::default_const()
@@ -56,7 +73,6 @@ macro_once! {
     /// Collected system parameters. To be modified before compiling.
     #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
     pub struct Parameters {
-
         /// # 📄OpenNARS
         ///
         /// Concept decay rate in ConceptBag, in [1, 99].
@@ -221,6 +237,18 @@ macro_once! {
         ///
         /// Maximum number of goals kept in a Concept
         pub maximum_questions_length: usize = 5,
+
+        /// 🆕新近任务袋容量
+        /// * 🎯【2024-09-02 17:29:22】分离自「概念袋遗忘周期」
+        ///   * 📌默认值数据来自「概念袋」
+        #[serde(default = "default_values::novel_task_bag_size")] // ! 使用宏自动生成的默认值，以便向下兼容
+        pub novel_task_bag_size: usize = 1000,
+
+        /// 🆕新近任务的遗忘周期
+        /// * 🎯【2024-09-02 17:29:22】分离自「概念袋遗忘周期」
+        ///   * 📌默认值数据来自「概念袋」
+        #[serde(default = "default_values::novel_task_forgetting_cycle")]
+        pub novel_task_forgetting_cycle: usize = 10,
     }
 }
 
@@ -296,6 +324,8 @@ mod tests {
             term_link_record_length          => 10
             maximum_belief_length            => 7
             maximum_questions_length         => 5
+            novel_task_bag_size              => 1000
+            novel_task_forgetting_cycle      => 10
         }
     }
 

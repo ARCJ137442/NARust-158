@@ -33,15 +33,12 @@ pub(in super::super) struct ReasonerDerivationData {
 
 impl Default for ReasonerDerivationData {
     fn default() -> Self {
-        // 对「新近任务袋」当「概念袋」使
-        // TODO: 🏗️后续仍有待解耦与「概念袋」的联系——分离「超参数」中的默认值
-        let novel_tasks = Bag::new(
-            DEFAULT_PARAMETERS.concept_bag_size,
-            DEFAULT_PARAMETERS.concept_forgetting_cycle,
-        );
         Self {
             new_tasks: Default::default(),
-            novel_tasks,
+            novel_tasks: Bag::new(
+                DEFAULT_PARAMETERS.novel_task_bag_size,
+                DEFAULT_PARAMETERS.novel_task_forgetting_cycle,
+            ),
         }
     }
 }
