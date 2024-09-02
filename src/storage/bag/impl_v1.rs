@@ -28,8 +28,6 @@ use serde::{Deserialize, Serialize};
 ///   * 📝此中之`E`其实亦代表「Entity」（首字母）
 /// * 🚩【2024-06-22 15:19:14】目前基于OpenNARS改版，将特征窄化为具体结构，以简化代码
 ///
-/// TODO: 【2024-05-08 17:25:24】🏗️日后需要统一所有的「DEFAULT_PARAMETERS」：考虑引用计数
-///
 /// * ✅【2024-05-04 16:38:16】初步完成设计与测试
 
 /// 复刻 `nars.storage.bag`
@@ -287,16 +285,6 @@ struct BagStatus {
     ///
     /// maximum number of items to be taken out at current level
     current_counter: usize,
-}
-
-impl<E: Item> Default for Bag<E> {
-    /// * 🚩【2024-05-04 16:26:53】默认当「概念袋」使
-    fn default() -> Self {
-        Self::new(
-            DEFAULT_PARAMETERS.concept_bag_size,
-            DEFAULT_PARAMETERS.concept_forgetting_cycle,
-        )
-    }
 }
 
 // impl<E: Item> BagConcrete<E> for Bag<E> {
@@ -1132,7 +1120,10 @@ mod tests {
     #[test]
     fn multi_item() -> AResult {
         // 构造测试用「袋」并初始化
-        let mut bag = Bag1::default();
+        let mut bag = Bag1::new(
+            DEFAULT_PARAMETERS.concept_bag_size,
+            DEFAULT_PARAMETERS.concept_forgetting_cycle,
+        );
         bag.init();
         dbg!(&bag);
         asserts! {

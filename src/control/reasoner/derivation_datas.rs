@@ -5,6 +5,7 @@
 //! * ⚠️不缓存「NAVM输出」：输出保存在[「推理记录器」](super::report)中
 
 use crate::{
+    control::DEFAULT_PARAMETERS,
     entity::{RCTask, Task},
     storage::Bag,
     util::IterInnerRcSelf,
@@ -15,7 +16,7 @@ use std::collections::VecDeque;
 /// 🚀推理导出用数据
 /// * 📌【2024-08-12 20:26:44】内部所存储的「任务」暂时无需考虑「任务共享引用归一化」问题
 ///   * ⚠️本来要考虑的「任务共享引用」：在每个「任务」内部的「父任务」
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub(in super::super) struct ReasonerDerivationData {
     /// 新任务列表
     /// * 🚩没有上限，不适合作为「缓冲区」使用
@@ -28,6 +29,21 @@ pub(in super::super) struct ReasonerDerivationData {
     /// 新近任务袋
     /// * ⚠️因「作为【共享引用】的任务」不满足[`Item`]，故不使用[`RCTask`]
     pub novel_tasks: Bag<Task>,
+}
+
+impl Default for ReasonerDerivationData {
+    fn default() -> Self {
+        // 对「新近任务袋」当「概念袋」使
+        // TODO: 🏗️后续仍有待解耦与「概念袋」的联系——分离「超参数」中的默认值
+        let novel_tasks = Bag::new(
+            DEFAULT_PARAMETERS.concept_bag_size,
+            DEFAULT_PARAMETERS.concept_forgetting_cycle,
+        );
+        Self {
+            new_tasks: Default::default(),
+            novel_tasks,
+        }
+    }
 }
 
 impl ReasonerDerivationData {
