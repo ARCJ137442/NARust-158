@@ -98,7 +98,7 @@ pub struct Bag<E: Item> {
 
     /// 袋容量
     /// * 📌在不同地方有不同的定义
-    /// * 📝是一个「构造时固定」的属性
+    /// * 📝参数属性：是一个「构造后固定」的属性
     ///
     /// # 📄OpenNARS
     ///
@@ -110,7 +110,7 @@ pub struct Bag<E: Item> {
 
     /// 遗忘速率
     /// * 📌在不同地方有不同的定义
-    /// * 📝是一个「构造时固定」的属性
+    /// * 📝参数属性：是一个「构造后固定」的属性
     /// * 📝OpenNARS用于[`Bag::put_back`]的「放回时遗忘」中
     ///
     /// # 📄OpenNARS
@@ -121,8 +121,21 @@ pub struct Bag<E: Item> {
     /// @return The number of times for a decay factor to be fully applied
     forget_rate: usize,
 
+    /// 🆕所有「状态变量」
+    /// * 🎯存储「袋」在「状态指示」「取出元素」时需要 暂存/缓存 的变量
+    /// * 📝【2024-09-02 16:17:03】通过serde的「结构体展平」兼容先前序列反序列化布局
+    ///   * 🔗<https://serde.rs/attr-flatten.html>
+    #[serde(flatten)]
+    status: BagStatus,
+}
+
+/// 有关「袋」的状态
+/// * 🎯分离出「常修改的部分」与「不常修改的部分」
+/// * 📌【2024-09-02 15:52:18】基本用于存储基础类型数据
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+struct BagStatus {
     /// 质量
-    /// * ❓暂且不能完全明白其含义
+    /// * 📝状态变量：袋内所有物品所在层级的和
     ///
     /// # 📄OpenNARS
     ///
@@ -130,7 +143,8 @@ pub struct Bag<E: Item> {
     mass: usize,
 
     /// 层级索引
-    /// * ❓暂且不能完全明白其含义
+    /// * 📝状态变量：当前层级的索引
+    ///   * 📄参考：[「概率随机性选取物品」](Self::select_next_level_for_take)
     ///
     /// # 📄OpenNARS
     ///
@@ -138,15 +152,17 @@ pub struct Bag<E: Item> {
     level_index: usize,
 
     /// 当前层级
-    /// * ❓暂且不能完全明白其含义
+    /// * 📝状态变量：当前选中的层级
+    ///   * 📄参考：[「概率随机性选取物品」](Self::select_next_level_for_take)
     ///
     /// # 📄OpenNARS
     ///
     /// current take out level
     current_level: usize,
 
-    /// 当前层级
-    /// * ❓暂且不能完全明白其含义
+    /// 当前计数器
+    /// * 📝状态变量：当前所选中之链接的计数器
+    ///   * 📄参考：[「概率随机性选取物品」](Self::select_next_level_for_take)
     ///
     /// # 📄OpenNARS
     ///
@@ -182,10 +198,7 @@ impl<E: Item> Bag<E> {
             //   * 毕竟Rust没有`null`要担心
             item_map: BagNameTable::default(),
             level_map: BagItemTable::default(),
-            mass: usize::default(),
-            level_index: usize::default(),
-            current_level: usize::default(),
-            current_counter: usize::default(),
+            status: BagStatus::default(),
         };
         this.init();
         this
@@ -261,7 +274,7 @@ impl<E: Item> Bag<E> {
     ///
     /// current sum of occupied level
     pub fn mass(&self) -> usize {
-        self.mass
+        self.status.mass
     }
 
     /// 模拟`Bag.init`
@@ -286,10 +299,13 @@ impl<E: Item> Bag<E> {
             self.level_map.add_new(level);
         }
         self.item_map = BagNameTable::new();
-        self.current_level = Self::__TOTAL_LEVEL - 1;
-        self.level_index = self.capacity() % Self::__TOTAL_LEVEL; // 不同的「袋」在分派器中有不同的起点
-        self.mass = 0;
-        self.current_counter = 0;
+        // 状态初始化
+        self.status = BagStatus {
+            current_level: Self::__TOTAL_LEVEL - 1,
+            level_index: self.capacity() % Self::__TOTAL_LEVEL, // 不同的「袋」在分派器中有不同的起点
+            mass: 0,
+            current_counter: 0,
+        }; // * 📌【2024-09-02 15:45:01】此处直接用新结构体覆盖，可由此检查穷尽性
     }
 
     // ! 🚩`Bag.capacity`已在`self.__capacity`中实现
@@ -546,8 +562,8 @@ impl<E: Item> Bag<E> {
         if self.item_map.is_empty() {
             return None;
         }
-        let (level, ..) =
-            self.calculate_next_level(self.current_level, self.level_index, self.current_counter);
+        // 只获取下一个层级，不改变当前层级
+        let (level, ..) = self.calculate_next_level();
         self.peek_first(level)
     }
 
@@ -555,9 +571,13 @@ impl<E: Item> Bag<E> {
     /// * 🚩计算并返回「下一个level值」，并**同时修改自身状态**
     fn select_next_level_for_take(&mut self) -> usize {
         // 直接并行赋值
-        (self.current_level, self.level_index, self.current_counter) =
-            self.calculate_next_level(self.current_level, self.level_index, self.current_counter);
-        self.current_level // 新的「当前层级」即为返回值
+        (
+            self.status.current_level,
+            self.status.level_index,
+            self.status.current_counter,
+        ) = self.calculate_next_level();
+        // 新的「当前层级」即为返回值
+        self.status.current_level
     }
 
     /// 🆕根据自身不可变引用，拆分出「计算下一待取层级」的函数
@@ -565,12 +585,19 @@ impl<E: Item> Bag<E> {
     ///   * 📝【2024-09-02 15:23:58】目前将这些「内部状态变量」提取出来，以便在不可变上下文中集成
     ///   * 📄不修改自身，只获取不修改的「一瞥」函数
     #[inline]
-    fn calculate_next_level(
-        &self,
-        mut current_level: usize,
-        mut level_index: usize,
-        mut current_counter: usize,
-    ) -> (usize, usize, usize) {
+    fn calculate_next_level(&self) -> (usize, usize, usize) {
+        // 获取自身的状态变量
+        // * 🎯创建新状态变量，用于后续「计算出新的状态」
+        // * ✨可选性赋值：计算出的「新状态变量」可以合并入自身（取出）也可丢弃（一瞥）
+        let BagStatus {
+            mut current_level,
+            mut level_index,
+            mut current_counter,
+            ..
+        } = self.status;
+        // 根据这几个状态变量，计算新的状态变量
+        // * 🚩此中计算出的新「当前层级」将会作为返回值「下一层级」
+        // ! ⚠️此后不访问`self.status`
         if self.empty_level(current_level) || current_counter == 0 {
             current_level = self.distributor.pick(level_index);
             level_index = self.distributor.next(level_index);
@@ -695,7 +722,7 @@ impl<E: Item> Bag<E> {
         let in_level = self.calculate_level_for_item(new_item);
 
         // 🆕先假设「新元素已被置入」，「先加后减」防止usize溢出
-        self.mass += in_level + 1;
+        self.status.mass += in_level + 1;
         if self.size() > self.capacity() {
             // * 📝逻辑：低优先级溢出——从低到高找到「第一个非空层」然后弹出其中第一个（最先的）元素
             // * 🚩【2024-05-04 13:14:02】实际上与Java代码等同；但若直接按源码来做就会越界
@@ -704,7 +731,7 @@ impl<E: Item> Bag<E> {
                 .unwrap_or(Self::__TOTAL_LEVEL);
             if out_level > in_level {
                 // 若到了自身所在层⇒弹出自身（相当于「添加失败」）
-                self.mass -= in_level + 1; // 🆕失败，减去原先相加的数
+                self.status.mass -= in_level + 1; // 🆕失败，减去原先相加的数
                 return Some(new_key.to_string()); // 提早返回
             } else {
                 old_item = self.take_out_first(out_level);
@@ -741,7 +768,7 @@ impl<E: Item> Bag<E> {
         if selected.is_some() {
             // * 🚩仅在「有选择到」时移除 | ✅【2024-05-04 14:31:30】此举修复了「mass溢出」的bug！
             self.level_map.get_mut(level).remove_first();
-            self.mass -= level + 1;
+            self.status.mass -= level + 1;
         }
         selected
     }
@@ -761,7 +788,7 @@ impl<E: Item> Bag<E> {
         mass -= (level + 1);
         refresh(); */
         self.level_map.remove_element(old_item.key());
-        self.mass -= level + 1;
+        self.status.mass -= level + 1;
     }
 
     fn debug_display(&self) -> String {
