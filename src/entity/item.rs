@@ -3,7 +3,19 @@
 
 use super::BudgetValue;
 use crate::{inference::Budget, util::ToDisplayAndBrief};
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use std::{fmt::Debug, hash::Hash};
+
+/// 与「键」有关的特征
+/// * 🎯基本要求：可被索引（[`Hash`]）
+///   * 用于散列映射
+/// * 📌【2024-09-02 22:24:58】其它特征约束仅为与字符串对齐
+///   * TODO: 解耦字符串相关方法，并减少约束量
+pub trait ItemKey:
+    Debug + Clone + Default + Eq + Ord + Hash + Serialize + DeserializeOwned
+{
+}
+impl ItemKey for String {}
 
 /// 模拟`nars.entity.Item`
 /// * 📌袋中的「物品」类型
@@ -21,10 +33,12 @@ use serde::{Deserialize, Serialize};
 ///
 /// It has a key and a budget. Cannot be cloned
 pub trait Item: Budget {
+    /// 绑定的「键」类型
+    type Key: ItemKey;
     /// 获取其元素id
     /// * 🎯应该只与自身数据绑定
     ///   * 📄概念的「词项名」
-    fn key(&self) -> &String;
+    fn key(&self) -> &Self::Key;
 
     /// 🆕决定「袋」中俩[`Item`]的合并顺序
     /// * 📜默认的「合并顺序」：旧→新（然后抛掉旧的）
@@ -119,6 +133,7 @@ impl Budget for Token {
 }
 
 impl Item for Token {
+    type Key = String;
     /// 键（只读）
     fn key(&self) -> &String {
         &self.key

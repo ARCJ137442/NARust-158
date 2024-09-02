@@ -1,6 +1,6 @@
 //! 存放与内部「映射表」有关的结构
 
-use crate::entity::Item;
+use crate::entity::{Item, ItemKey};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, VecDeque},
@@ -9,7 +9,7 @@ use std::{
 
 /// 初代「元素映射」实现
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct BagNameTable<E: Item>(HashMap<String, NameValue<E>>);
+pub struct BagNameTable<E: Item>(HashMap<E::Key, NameValue<E>>);
 
 /// 「元素映射」最终从「名称」映射到的结构
 /// * 🎯允许「一个键对多个值」
@@ -57,20 +57,20 @@ impl<E: Item> BagNameTable<E> {
     /// * 🎯预期是「在映射查找值；找到⇒Some，没找到⇒None」
     /// * 🚩【2024-06-30 18:28:02】现在获取指定键下的物品和层级
     ///   * 🎯防止「物品在袋内优先级变化导致mass计算错误」的问题
-    pub fn get(&self, key: &str) -> Option<&NameValue<E>> {
+    pub fn get(&self, key: &E::Key) -> Option<&NameValue<E>> {
         self.0.get(key)
     }
 
     /// [`Self::get`]的可变引用版本
     /// * 🎯【2024-04-28 09:27:23】备用
-    pub fn get_mut(&mut self, key: &str) -> Option<&mut NameValue<E>> {
+    pub fn get_mut(&mut self, key: &E::Key) -> Option<&mut NameValue<E>> {
         self.0.get_mut(key)
     }
 
     /// 🆕判断「是否包含元素」
     /// * 🎯用于[`Bag`]的[「是否有元素」查询](Bag::has)
     /// * 📜默认实现：`self.get(key).is_some()`
-    pub fn has(&self, key: &str) -> bool {
+    pub fn has(&self, key: &E::Key) -> bool {
         self.get(key).is_some()
     }
 
@@ -78,22 +78,22 @@ impl<E: Item> BagNameTable<E> {
     /// * 🎯预期是「向映射插入值」
     /// * 📄出现在`putIn`方法中
     /// * 🚩需要返回「被替换出的旧有项」
-    pub fn put(&mut self, key: &str, item: E, level: usize) -> Option<NameValue<E>> {
+    pub fn put(&mut self, key: &E::Key, item: E, level: usize) -> Option<NameValue<E>> {
         // * 🚩【2024-05-04 13:06:22】始终尝试插入（在「从无到有」的时候需要）
         let name_value = (item, level);
-        self.0.insert(key.to_string(), name_value)
+        self.0.insert(key.clone(), name_value)
     }
 
     /// 模拟`Bag.nameTable.remove`方法
     /// * 🎯预期是「从映射移除值」
     /// * 📄出现在`putIn`方法中
     /// * 🚩【2024-05-01 23:03:15】现在需要返回「被移除的元素」作为[`Bag::put_in`]的返回值
-    pub fn remove(&mut self, key: &str) -> Option<NameValue<E>> {
+    pub fn remove(&mut self, key: &E::Key) -> Option<NameValue<E>> {
         self.0.remove(key)
     }
 
     /// 移除物品，然后只返回移除出来的物品
-    pub fn remove_item(&mut self, key: &str) -> Option<E> {
+    pub fn remove_item(&mut self, key: &E::Key) -> Option<E> {
         self.0.remove(key).map(|(item, _)| item)
     }
 
@@ -105,7 +105,7 @@ impl<E: Item> BagNameTable<E> {
 
     /// 从0到「层数」遍历所有元素
     /// * 🎯调试用输出
-    pub(super) fn iter(&self) -> impl Iterator<Item = (&String, &NameValue<E>)> {
+    pub(super) fn iter(&self) -> impl Iterator<Item = (&E::Key, &NameValue<E>)> {
         self.0.iter()
     }
 
@@ -124,17 +124,27 @@ impl<E: Item> BagNameTable<E> {
 }
 
 /// 初代「层级映射」实现
-#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
-pub struct BagItemTable(Box<[BagItemLevel]>);
+#[derive(Clone, Default, PartialEq, Serialize)]
+pub struct BagItemTable<K: ItemKey>(Box<[BagItemLevel<K>]>);
 
-impl BagItemTable {
+impl<'de, K: ItemKey> Deserialize<'de> for BagItemTable<K> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let items: Box<[BagItemLevel<K>]> = Box::deserialize(deserializer)?;
+        Ok(Self(items))
+    }
+}
+
+impl<K: ItemKey> BagItemTable<K> {
     pub fn new(levels: usize) -> Self {
         let inner = vec![BagItemLevel::new(); levels].into_boxed_slice();
         Self(inner)
     }
 }
 
-impl Debug for BagItemTable {
+impl<K: ItemKey> Debug for BagItemTable<K> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // 默认做法
         // f.debug_list().entries(self.0.iter()).finish()
@@ -155,7 +165,7 @@ impl Debug for BagItemTable {
 /// 📜为[`BagItemTableV1`]实现「层级映射」
 /// * 🚩基于「元素id」的索引：不存储元素值
 ///   * 📝Java的情况可被视作`Arc`
-impl BagItemTable // * 需要在「具体值匹配删除」时用到
+impl<K: ItemKey> BagItemTable<K> // * 需要在「具体值匹配删除」时用到
 {
     /// 模拟`Bag.itemTable.add(new ...)`
     /// * 📝OpenNARS目的：填充新的「一层」
@@ -168,11 +178,11 @@ impl BagItemTable // * 需要在「具体值匹配删除」时用到
 
     /// 模拟`Bag.itemTable.get`
     /// * 📝OpenNARS目的：多样
-    pub fn get(&self, level: usize) -> &BagItemLevel {
+    pub fn get(&self, level: usize) -> &BagItemLevel<K> {
         &self.0[level]
     }
 
-    pub fn get_mut(&mut self, level: usize) -> &mut BagItemLevel {
+    pub fn get_mut(&mut self, level: usize) -> &mut BagItemLevel<K> {
         &mut self.0[level]
     }
 
@@ -183,14 +193,14 @@ impl BagItemTable // * 需要在「具体值匹配删除」时用到
 
     /// 从0到「层数」遍历所有层级
     /// * 🎯调试用输出
-    pub(super) fn iter(&self) -> impl Iterator<Item = &BagItemLevel> {
+    pub(super) fn iter(&self) -> impl Iterator<Item = &BagItemLevel<K>> {
         self.0.iter()
     }
 
     /// 移除一个元素，无论其所在层级为何
     /// * 🎯【2024-07-09 16:33:19】解决「在外部修改优先级后，重新加入导致『重复引用』」的问题
     ///   * 📄原bug情况：变更层级后，删除元素结果没有删除完（因为在其它层级）
-    pub fn remove_element(&mut self, key: &str) {
+    pub fn remove_element(&mut self, key: &K) {
         for level in self.0.iter_mut() {
             for i in (0..level.size()).rev() {
                 let item_key = &level.0[i];
@@ -203,11 +213,21 @@ impl BagItemTable // * 需要在「具体值匹配删除」时用到
 }
 
 /// 实现一个「层级队列」
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
-pub struct BagItemLevel(VecDeque<String>);
+#[derive(Debug, Clone, PartialEq, Default, Serialize)]
+pub struct BagItemLevel<K: ItemKey>(VecDeque<K>);
+
+impl<'de, K: ItemKey> Deserialize<'de> for BagItemLevel<K> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let vec = Vec::deserialize(deserializer)?;
+        Ok(Self(vec.into()))
+    }
+}
 
 /// 📜实现「层级」
-impl BagItemLevel // * 需要在「具体值匹配删除」时用到
+impl<K: ItemKey> BagItemLevel<K> // * 需要在「具体值匹配删除」时用到
 {
     /// 构造函数（空）
     pub fn new() -> Self {
@@ -229,10 +249,10 @@ impl BagItemLevel // * 需要在「具体值匹配删除」时用到
     /// * ❓不能引入一个新的元素，因为它所有权在「元素映射」里边
     /// * 🚩【2024-04-28 10:38:45】目前直接索引「键」而非「值」
     /// * 📌【2024-07-09 02:29:01】在调试阶段增加「不重复」断言
-    pub fn add(&mut self, key: String) {
+    pub fn add(&mut self, key: K) {
         debug_assert!(
             self.0.iter().all(|k| k != &key),
-            "不允许添加重复值：key={key}, self={self:?}"
+            "不允许添加重复值：key={key:?}, self={self:?}"
         );
         self.0.push_back(key)
     }
@@ -240,14 +260,14 @@ impl BagItemLevel // * 需要在「具体值匹配删除」时用到
     /// 模拟`LinkedList.get`
     /// * ❓不能引入一个新的元素，因为它所有权在「元素映射」里边
     /// * 🚩【2024-04-28 10:38:45】目前直接索引「键」而非「值」
-    pub fn get(&self, index: usize) -> Option<&String> {
+    pub fn get(&self, index: usize) -> Option<&K> {
         self.0.get(index)
     }
 
     /// 模拟`LinkedList.getFirst`
     /// * 📜默认转发[`Self::get`]
     #[inline(always)]
-    pub fn get_first(&self) -> Option<&String> {
+    pub fn get_first(&self) -> Option<&K> {
         self.0.front()
     }
 
@@ -258,7 +278,7 @@ impl BagItemLevel // * 需要在「具体值匹配删除」时用到
 
     /// 从0到「层数」遍历所有元素
     /// * 🎯调试用输出
-    pub(super) fn iter(&self) -> impl DoubleEndedIterator<Item = &String> {
+    pub(super) fn iter(&self) -> impl DoubleEndedIterator<Item = &K> {
         self.0.iter()
     }
 }

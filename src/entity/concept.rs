@@ -386,6 +386,7 @@ impl Budget for Concept {
 }
 
 impl Item for Concept {
+    type Key = String;
     fn key(&self) -> &String {
         self.token.key()
     }

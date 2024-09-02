@@ -100,6 +100,7 @@ impl Budget for TaskLink {
 
 /// 委托token
 impl Item for TaskLink {
+    type Key = String;
     fn key(&self) -> &String {
         self.token.key()
     }

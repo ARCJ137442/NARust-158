@@ -220,6 +220,7 @@ impl Budget for Task {
 }
 
 impl Item for Task {
+    type Key = String;
     fn key(&self) -> &String {
         self.token.key()
     }

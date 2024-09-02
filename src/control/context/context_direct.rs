@@ -4,7 +4,7 @@ use super::{ReasonContext, ReasonContextCore, ReasonContextCoreOut};
 use crate::{
     __delegate_from_core,
     control::{Parameters, Reasoner},
-    entity::{Concept, RCTask, Task},
+    entity::{Concept, Item, RCTask, Task},
     global::{ClockTime, Float},
     language::Term,
     storage::Memory,
@@ -46,8 +46,8 @@ impl<'this> ReasonContextDirect<'this> {
 
     /// 获取「已存在的概念」（从「键」出发，可变引用）
     /// * 🎯在「概念链接到任务」中使用
-    pub fn key_to_concept_mut(&mut self, key: &str) -> Option<&mut Concept> {
-        match key == Memory::term_to_key(self.current_term()) {
+    pub fn key_to_concept_mut(&mut self, key: &<Concept as Item>::Key) -> Option<&mut Concept> {
+        match *key == Memory::term_to_key(self.current_term()) {
             true => Some(self.current_concept_mut()),
             false => self.memory_mut().key_to_concept_mut(key),
         }

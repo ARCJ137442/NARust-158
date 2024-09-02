@@ -80,16 +80,16 @@ impl Memory {
     ///
     /// called from Term and ConceptWindow.
     #[doc(alias = "name_to_concept")]
-    pub fn key_to_concept(&self, key: &str) -> Option<&Concept> {
+    pub fn key_to_concept(&self, key: &<Concept as Item>::Key) -> Option<&Concept> {
         self.concepts.get(key)
     }
     #[doc(alias = "name_to_concept_mut")]
-    pub fn key_to_concept_mut(&mut self, key: &str) -> Option<&mut Concept> {
+    pub fn key_to_concept_mut(&mut self, key: &<Concept as Item>::Key) -> Option<&mut Concept> {
         self.concepts.get_mut(key)
     }
 
     /// 统一集中「词项→袋索引」的逻辑
-    pub fn term_to_key(term: &Term) -> String {
+    pub fn term_to_key(term: &Term) -> <Concept as Item>::Key {
         term.name()
     }
 
@@ -198,7 +198,7 @@ impl Memory {
 
     /// 🆕对外接口：从「概念袋」中挑出一个概念
     /// * 🚩用于「直接推理」中的「拿出概念」
-    pub fn pick_out_concept(&mut self, key: &str) -> Option<Concept> {
+    pub fn pick_out_concept(&mut self, key: &<Concept as Item>::Key) -> Option<Concept> {
         self.concepts.pick_out(key)
     }
 

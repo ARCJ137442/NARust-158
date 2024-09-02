@@ -228,7 +228,7 @@ impl ReasonContextDirect<'_> {
         self.build_term_links_sub(&concept_key);
     }
 
-    fn build_term_links_sub(&mut self, concept_key: &str) {
+    fn build_term_links_sub(&mut self, concept_key: &<Concept as Item>::Key) {
         // * 🚩获取「当前概念」（对「推理上下文的当前概念」也有效）
         let concept = unwrap_or_return!(?self.key_to_concept(concept_key));
         // * 🚩仅在有「词项链模板」时
@@ -342,7 +342,11 @@ impl Memory {
     /// * 📌该方法针对【在记忆区中】的概念
     ///   * 📝此时需要考虑借用问题
     #[must_use]
-    fn insert_task_link_inner(&mut self, key: &str, link: TaskLink) -> Option<TaskLink> {
+    fn insert_task_link_inner(
+        &mut self,
+        key: &<Concept as Item>::Key,
+        link: TaskLink,
+    ) -> Option<TaskLink> {
         // * 🚩先拿出对应的概念
         // * 📝【2024-06-29 02:45:55】此处通过「先拿出概念，再激活，最后才放回」暂且解决了「长期稳定性中袋mass下溢」问题
         let mut component_concept = self.pick_out_concept(key)?;

@@ -11,7 +11,8 @@
 use crate::{
     control::{util_outputs, Parameters, Reasoner},
     entity::{
-        Concept, JudgementV1, Punctuation, RCTask, Sentence, ShortFloat, Task, TaskLink, TermLink,
+        Concept, Item, JudgementV1, Punctuation, RCTask, Sentence, ShortFloat, Task, TaskLink,
+        TermLink,
     },
     global::{ClockTime, Float},
     language::Term,
@@ -161,8 +162,8 @@ pub trait ReasonContext {
     /// 获取「已存在的概念」（从「键」出发）
     /// * 🎯让「概念推理」可以在「拿出概念」的时候运行，同时不影响具体推理过程
     /// * 🚩先与「当前概念」做匹配，若没有再在记忆区中寻找
-    fn key_to_concept(&self, key: &str) -> Option<&Concept> {
-        match key == Memory::term_to_key(self.current_term()) {
+    fn key_to_concept(&self, key: &<Concept as Item>::Key) -> Option<&Concept> {
+        match *key == Memory::term_to_key(self.current_term()) {
             true => Some(self.current_concept()),
             false => self.memory().key_to_concept(key),
         }

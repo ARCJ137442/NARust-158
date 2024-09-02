@@ -92,7 +92,7 @@ pub struct Bag<E: Item> {
     /// # 📄OpenNARS
     ///
     /// array of lists of items, for items on different level
-    level_map: BagItemTable,
+    level_map: BagItemTable<E::Key>,
 
     /// 🆕所有「袋参数」
     /// * 🎯存储「袋」的所有「参数变量」
@@ -470,7 +470,7 @@ impl<E: Item> Bag<E> {
     /// @return The Item with the given key
     #[inline(always)]
     #[must_use]
-    pub fn get(&self, key: &str) -> Option<&E> {
+    pub fn get(&self, key: &E::Key) -> Option<&E> {
         self.item_map.get(key).map(|(e, _)| e)
     }
     /// [`Self::get`]的可变版本
@@ -478,13 +478,13 @@ impl<E: Item> Bag<E> {
     /// * 🚩转发内部`name_table`成员
     #[inline(always)]
     #[must_use]
-    pub fn get_mut(&mut self, key: &str) -> Option<&mut E> {
+    pub fn get_mut(&mut self, key: &E::Key) -> Option<&mut E> {
         self.item_map.get_mut(key).map(|(e, _)| e)
     }
 
     /// 🆕提供「元素id是否对应值」的功能
     /// * 🎯【2024-05-07 22:19:07】在「记忆区」查找时，为规避「直接带Concept [`Option`]」带来的借用问题，采用「只查询是否有」的方式
-    pub fn has(&self, key: &str) -> bool {
+    pub fn has(&self, key: &E::Key) -> bool {
         self.item_map.has(key)
     }
 
@@ -644,7 +644,7 @@ impl<E: Item> Bag<E> {
 
     /// 🆕对整个袋进行「一瞥」
     /// * 🎯在不修改袋结构的情况下，获取下一个要取出的元素
-    pub fn peek(&self) -> Option<&String> {
+    pub fn peek(&self) -> Option<&E::Key> {
         if self.item_map.is_empty() {
             return None;
         }
@@ -711,7 +711,7 @@ impl<E: Item> Bag<E> {
     /// @param key The given key
     /// @return The Item with the key
     #[must_use]
-    pub fn pick_out(&mut self, key: &str) -> Option<E> {
+    pub fn pick_out(&mut self, key: &E::Key) -> Option<E> {
         /* 📄OpenNARS源码：
         E picked = nameTable.get(key);
         if (picked != null) {
@@ -784,7 +784,7 @@ impl<E: Item> Bag<E> {
     ///
     /// @param newItem The Item to put in
     /// @return The overflow Item
-    fn item_into_base(&mut self, new_key: &str) -> Option<String> {
+    fn item_into_base(&mut self, new_key: &E::Key) -> Option<E::Key> {
         /* 📄OpenNARS源码：
         E oldItem = null;
         int inLevel = getLevel(newItem);
@@ -818,20 +818,20 @@ impl<E: Item> Bag<E> {
             if out_level > in_level {
                 // 若到了自身所在层⇒弹出自身（相当于「添加失败」）
                 self.status.mass -= in_level + 1; // 🆕失败，减去原先相加的数
-                return Some(new_key.to_string()); // 提早返回
+                return Some(new_key.clone()); // 提早返回
             } else {
                 old_item = self.take_out_first(out_level);
             }
         }
         // 继续增加元素
-        self.level_map.get_mut(in_level).add(new_key.to_string());
+        self.level_map.get_mut(in_level).add(new_key.clone());
         // self.refresh(); // ! ❌【2024-05-04 11:16:55】不复刻这个有关「观察者」的方法
         old_item
     }
 
     /// 🆕对某一层的首个元素进行「一瞥」
     /// * 🎯获取某一层的首个元素
-    fn peek_first(&self, level: usize) -> Option<&String> {
+    fn peek_first(&self, level: usize) -> Option<&E::Key> {
         self.level_map.get(level).get_first()
     }
 
@@ -843,7 +843,7 @@ impl<E: Item> Bag<E> {
     ///
     /// @param level The current level
     /// @return The first Item
-    fn take_out_first(&mut self, level: usize) -> Option<String> {
+    fn take_out_first(&mut self, level: usize) -> Option<E::Key> {
         /* 📄OpenNARS源码：
         E selected = itemTable.get(level).getFirst();
         itemTable.get(level).removeFirst();
@@ -924,7 +924,7 @@ impl<E: Item> Bag<E> {
                     .iter()
                     .map(|l| l.iter().filter(|k| *k == key).count())
                     .sum::<usize>(),
-                "发现重复元素：{key}\nlevel_map: \n{}",
+                "发现重复元素：{key:?}\nlevel_map: \n{}",
                 self.debug_display()
             );
         }
@@ -1038,7 +1038,7 @@ mod tests {
         }
 
         // 放入元素
-        let key1 = "item001";
+        let key1 = &"item001".to_string();
         let item1 = new_item(key1, 0.0, 0.0, 0.0); // * 🚩固定为「全零预算」
         let overflowed = bag.put_in(dbg!(item1.clone()));
         asserts! {
@@ -1246,7 +1246,7 @@ mod tests {
         }
 
         // 生成元素
-        let key = "item";
+        let key = &"item".to_string();
         // * 🚩固定的初始预算值
         let budget_initial = BudgetValue::new(ShortFloat::ONE, ShortFloat::HALF, ShortFloat::ONE);
         let item = Item1::new(key, budget_initial);
@@ -1295,7 +1295,7 @@ mod tests {
         bag.init();
 
         // 放入元素
-        let key = "item001";
+        let key = &"item001".to_string();
         let item = new_item(key, 0.0, 0.0, 0.0); // * 🚩固定为「全零预算」
         let overflowed = bag.put_in(dbg!(item.clone()));
         asserts! {

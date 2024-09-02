@@ -119,6 +119,7 @@ impl Budget for TermLink {
 
 // 委托[`Token`]实现
 impl Item for TermLink {
+    type Key = String;
     fn key(&self) -> &String {
         self.token.key()
     }
