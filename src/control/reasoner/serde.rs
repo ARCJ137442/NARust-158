@@ -6,7 +6,7 @@
 //!   * `state`范围更广，且常用于描述【离散】的状态
 //!   * `status`大多指「当下状态」并且能用于名词
 
-use super::{Reasoner, ReasonerDerivationData};
+use super::{Reasoner, TaskBuffer};
 use crate::{entity::RCTask, global::ClockTime, storage::Memory, util::Serial};
 use serde::{Deserialize, Serialize};
 
@@ -27,7 +27,7 @@ pub(super) struct ReasonerStatusStorage {
     pub memory: Memory,
 
     /// 推导数据
-    pub derivation_datas: ReasonerDerivationData,
+    pub derivation_datas: TaskBuffer,
 
     /// 系统时钟
     pub clock: ClockTime,
@@ -47,7 +47,7 @@ pub(super) struct ReasonerStatusStorageRef<'s> {
     pub memory: &'s Memory,
 
     /// 推导数据
-    pub derivation_datas: &'s ReasonerDerivationData,
+    pub derivation_datas: &'s TaskBuffer,
 
     /// 系统时钟
     pub clock: ClockTime,
@@ -84,10 +84,7 @@ impl Reasoner {
 
     /// 加载「推导数据」
     #[must_use]
-    fn load_derivation_datas(
-        &mut self,
-        mut derivation_datas: ReasonerDerivationData,
-    ) -> ReasonerDerivationData {
+    fn load_derivation_datas(&mut self, mut derivation_datas: TaskBuffer) -> TaskBuffer {
         // 先交换记忆区对象
         std::mem::swap(&mut derivation_datas, &mut self.derivation_datas);
         // 返回旧记忆区
@@ -267,10 +264,7 @@ pub mod test_util_ser_de {
         ok!()
     }
 
-    fn derivation_datas_consistent(
-        a: &ReasonerDerivationData,
-        b: &ReasonerDerivationData,
-    ) -> AResult {
+    fn derivation_datas_consistent(a: &TaskBuffer, b: &TaskBuffer) -> AResult {
         // 新任务队列一致性
         task_deque_consistent(&a.new_tasks, &b.new_tasks)?;
         // 任务袋一致性

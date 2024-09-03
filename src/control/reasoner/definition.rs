@@ -4,7 +4,7 @@
 //!
 //! * ♻️【2024-06-26 12:02:36】开始根据改版OpenNARS重写
 
-use super::{ReasonRecorder, ReasonerDerivationData};
+use super::{ReasonRecorder, TaskBuffer};
 use crate::{
     control::Parameters, entity::Task, global::ClockTime, inference::InferenceEngine,
     storage::Memory, util::Serial,
@@ -40,7 +40,7 @@ pub struct Reasoner {
     pub(in super::super) inference_engine: InferenceEngine,
 
     /// 推理过程的「中间数据」
-    pub(in super::super) derivation_datas: ReasonerDerivationData,
+    pub(in super::super) derivation_datas: TaskBuffer,
 
     /// 系统时钟
     clock: ClockTime,
@@ -82,7 +82,7 @@ impl Reasoner {
             memory: Memory::default(),
             recorder: ReasonRecorder::default(),
             inference_engine: inference_engine.into(),
-            derivation_datas: ReasonerDerivationData::default(),
+            derivation_datas: TaskBuffer::default(),
             // * 🚩默认为0/false
             clock: 0,
             volume: 0,
