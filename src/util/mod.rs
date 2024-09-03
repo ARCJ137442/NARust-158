@@ -15,7 +15,11 @@ nar_dev_utils::mods! {
 
     // 均值
     pub use average;
+
 }
+// 一次性实现
+// TODO: 🏗️【2024-09-04 01:07:42】有待提取到`nar_dev_utils`中
+mod impl_once;
 
 // 字符串呈现 | 内含导出的宏
 mod to_display;

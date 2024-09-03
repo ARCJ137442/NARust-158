@@ -140,6 +140,28 @@ impl TaskBuffer {
     }
 }
 
+/// 「任务缓冲区」对外暴露的「加载上下文」
+/// * 🎯简化在「外部交互」时用到的外部功能
+///   * 📄外包「是否有相应概念」逻辑到「特征实现者」手中
+///   * ✨可进一步分离「方法提供」与「方法调用」二者逻辑
+/// * 📝【2024-09-04 00:32:13】适用于「固定方法」的实现者
+///   * ⚠️会限制一定的自由性——若需「不同地方调用不同传参」则需定义新结构体
+pub trait TaskBufferLoadingContext {
+    /// 对外输出一个任务
+    /// ! 📌【2024-09-04 00:49:34】目前要求「对外输出任务」功能
+    /// * 💭该功能做成「传入某个闭包」也合适
+    /// * 🎯调用者决定任务输出的去向
+    fn output_task(&mut self, task: Task);
+
+    /// 输出一条注释信息
+    /// * 🎯调用者决定消息的去向
+    fn report_comment(&mut self, message: String);
+
+    /// 判断任务是否在记忆区中存在
+    /// * 🎯由调用者访问记忆区
+    fn has_concept(&self, task: &Task) -> bool;
+}
+
 /// 对外暴露的接口
 impl TaskBuffer {
     /// 向任务缓冲区中添加任务
@@ -154,17 +176,12 @@ impl TaskBuffer {
     /// * 📝逻辑上不影响：
     /// * 1. 「直接推理」的过程中不会用到「新任务」与「新近任务」
     /// * 2. 仍然保留了「在『从新任务获取将处理任务』时，将部分任务放入『新近任务袋』」的逻辑
-    pub fn load_from_tasks(
-        &mut self,
-        output_task: impl FnMut(Task),
-        report_comment: impl FnMut(String),
-        has_concept: impl FnMut(&Task) -> bool,
-    ) -> Vec<Task> {
+    pub fn load_from_tasks(&mut self, context: &mut impl TaskBufferLoadingContext) -> Vec<Task> {
         // * 🚩创建并装载「将要处理的任务」
         // 创建容器
         let mut vec = vec![];
         // 装载「新任务」
-        self.load_from_new_tasks(output_task, has_concept, report_comment);
+        self.load_from_new_tasks(context);
         // 装载「新近任务」
         self.load_from_novel_tasks(&mut vec);
         // 返回
@@ -174,20 +191,15 @@ impl TaskBuffer {
     /// 获取「要处理的新任务」列表
     /// * 🎯分离「缓冲区结构」与「推理器逻辑」
     /// * 🚩【2024-09-03 13:09:24】目前将「是否有概念」
-    fn load_from_new_tasks(
-        &mut self,
-        mut output_task: impl FnMut(Task),
-        mut has_concept: impl FnMut(&Task) -> bool,
-        mut report_comment: impl FnMut(String),
-    ) {
+    fn load_from_new_tasks(&mut self, context: &mut impl TaskBufferLoadingContext) {
         // * 🚩处理新输入：立刻处理 or 加入「新近任务」 or 忽略
         // don't include new tasks produced in the current workCycle
         // * 🚩处理「新任务缓冲区」中的所有任务
         // * 📝此处因为与「记忆区」借用冲突，故需特化到字段
         while let Some(task) = self.pop_new_task() {
             // * 🚩是输入 或 已有对应概念 ⇒ 取出
-            if task.is_input() || has_concept(&task) {
-                output_task(task);
+            if task.is_input() || context.has_concept(&task) {
+                context.output_task(task);
             }
             // * 🚩否则：继续筛选以放进「新近任务」
             else {
@@ -204,14 +216,16 @@ impl TaskBuffer {
                     true => {
                         if let Some(overflowed) = self.put_in_novel_tasks(task) {
                             // 🆕🚩报告「任务溢出」
-                            report_comment(format!(
+                            context.report_comment(format!(
                                 "!!! NovelTasks overflowed: {}",
                                 overflowed.to_display_long()
                             ))
                         }
                     }
                     // * 🚩忽略
-                    false => report_comment(format!("!!! Neglected: {}", task.to_display_long())),
+                    false => {
+                        context.report_comment(format!("!!! Neglected: {}", task.to_display_long()))
+                    }
                 }
             }
         }

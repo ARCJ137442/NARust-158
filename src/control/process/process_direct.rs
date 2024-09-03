@@ -23,7 +23,9 @@
 use crate::{
     control::{ReasonContext, ReasonContextDirect, Reasoner},
     entity::{Item, RCTask, Sentence, Task},
+    impl_once,
     inference::Budget,
+    storage::{Memory, TaskBufferLoadingContext},
     util::{RefCount, ToDisplayAndBrief},
 };
 use nar_dev_utils::unwrap_or_return;
@@ -37,11 +39,34 @@ impl Reasoner {
         // * 🚩加载任务 | 新任务/新近任务
         let mut messages = vec![]; // 待输出的消息
         let mut tasks_to_process = vec![];
-        self.task_buffer.load_from_tasks(
-            |task| tasks_to_process.push(task),
-            |message| messages.push(message),
-            |task| self.memory.has_concept(task.content()),
-        );
+        // * 🚩构建一次性「上下文」对象，针对性实现「检查是否已有概念」「对外输出消息」功能
+        let context = impl_once! {
+            /// * 🚩针对此处功能定义一个结构体并初始化
+            struct LoadingContext in 'a {
+                memory: &'a Memory                  = &self.memory,
+                messages: &'a mut Vec<String>       = &mut messages,
+                tasks_to_process: &'a mut Vec<Task> = &mut tasks_to_process,
+            }
+            /// * 🚩实现功能
+            impl TaskBufferLoadingContext {
+                fn output_task(&mut self, task: Task) {
+                    // * 🚩向缓存的数组中添加任务
+                    self.tasks_to_process.push(task);
+                }
+
+                fn report_comment(&mut self, message: String) {
+                    // * 🚩向外部数组中添加消息
+                    self.messages.push(message);
+                }
+
+                fn has_concept(&self, task: &Task) -> bool {
+                    // * 🚩检查是否已有概念
+                    self.memory.has_concept(task.content())
+                }
+            }
+        };
+        // * 🚩调用功能
+        self.task_buffer.load_from_tasks(context);
         // * 🚩报告消息
         for message in messages {
             self.report_comment(message)
