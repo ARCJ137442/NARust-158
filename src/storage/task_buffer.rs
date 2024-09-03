@@ -39,7 +39,7 @@ pub struct TaskBuffer {
     /// # 📄OpenNARS
     ///
     /// List of new tasks accumulated in one cycle, to be processed in the next cycle
-    new_tasks: VecDeque<Task>, // TODO: 封闭访问，主要暴露「置入任务」「遍历任务」「取出任务」这三者
+    new_tasks: VecDeque<Task>,
 
     /// 新近任务袋
     /// * 📌因「进来的任务不会被其它任务/记忆区所引用」故**不设置为共享引用**
@@ -49,7 +49,7 @@ pub struct TaskBuffer {
     /// > 暂存入「新近任务袋」的任务，在「获取待处理任务」时被按优先级随机取出一个，可被理解为「具备一定随机兼顾性的注意力过程」。
     /// >
     /// > 「新近任务袋」具有容量，此意味着「若新任务量过多，相对不优先的任务将被抛弃」，可被理解为「短期工作记忆的遗忘机制」
-    novel_tasks: Bag<Task>, // TODO: 封闭访问，主要暴露「置入任务」「遍历任务」「取出任务」这三者
+    novel_tasks: Bag<Task>,
 
     /// 🆕相关的「参数变量」
     #[serde(default)] // 🎯向下兼容旧有序列反序列化机制
