@@ -52,7 +52,6 @@ pub struct TaskBuffer {
     novel_tasks: Bag<Task>, // TODO: 封闭访问，主要暴露「置入任务」「遍历任务」「取出任务」这三者
 
     /// 🆕相关的「参数变量」
-    #[serde(flatten)]
     #[serde(default)] // 🎯向下兼容旧有序列反序列化机制
     parameters: TaskBufferParameters,
 }
