@@ -6,8 +6,13 @@
 //!   * `state`范围更广，且常用于描述【离散】的状态
 //!   * `status`大多指「当下状态」并且能用于名词
 
-use super::{Reasoner, TaskBuffer};
-use crate::{entity::RCTask, global::ClockTime, storage::Memory, util::Serial};
+use super::Reasoner;
+use crate::{
+    entity::RCTask,
+    global::ClockTime,
+    storage::{Memory, TaskBuffer},
+    util::Serial,
+};
 use serde::{Deserialize, Serialize};
 
 /// 推理器状态

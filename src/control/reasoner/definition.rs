@@ -4,10 +4,14 @@
 //!
 //! * ♻️【2024-06-26 12:02:36】开始根据改版OpenNARS重写
 
-use super::{ReasonRecorder, TaskBuffer};
+use super::ReasonRecorder;
 use crate::{
-    control::Parameters, entity::Task, global::ClockTime, inference::InferenceEngine,
-    storage::Memory, util::Serial,
+    control::Parameters,
+    entity::Task,
+    global::ClockTime,
+    inference::InferenceEngine,
+    storage::{Memory, TaskBuffer},
+    util::Serial,
 };
 use navm::output::Output;
 use rand::{rngs::StdRng, SeedableRng};

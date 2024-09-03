@@ -8,9 +8,6 @@ nar_dev_utils::mods! {
     // 定义
     pub use definition;
 
-    // 功能：推理数据
-    pub use derivation_datas;
-
     // 功能：输出报告
     pub use report;
 
