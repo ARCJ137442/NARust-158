@@ -39,7 +39,7 @@ impl Reasoner {
             // * 🚩此处两个输出合而为一
             self.report_in(&task);
             // * 📝只追加到「新任务」里边，并不进行推理
-            self.derivation_datas.add_new_task(task);
+            self.task_buffer.add_task(task);
         } else {
             // 此时还是输出一个「被忽略」好
             self.report_comment(format!("!!! Neglected: {}", task.to_display_long()));
@@ -130,9 +130,7 @@ mod information_report {
                 .for_each(|task_cell| deal_ref(&task_cell.get_())); // 取引用并添加
 
             // 新任务列表、新近任务袋中的「所有任务」
-            let new_tasks = self.iter_new_tasks();
-            let novel_tasks = self.iter_novel_tasks();
-            new_tasks.chain(novel_tasks).for_each(deal_ref); // 添加
+            self.task_buffer.iter_tasks().for_each(deal_ref); // 添加
 
             // 输出
             outputs
@@ -318,8 +316,8 @@ mod information_report {
                 "current time" => self.time()
                 "current stamp serial" => self.stamp_current_serial()
                 "current volume" => self.volume()
-                "current count of new tasks" => self.derivation_datas.new_tasks.len()
-                "current count of novel tasks" => self.derivation_datas.novel_tasks.size()
+                "current count of new tasks" => self.task_buffer.n_new_tasks()
+                "current count of novel tasks" => self.task_buffer.n_novel_tasks()
 
                 // * 🚩总数有关的信息
                 "total concepts" => n_concepts

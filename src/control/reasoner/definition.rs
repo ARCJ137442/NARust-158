@@ -7,7 +7,6 @@
 use super::ReasonRecorder;
 use crate::{
     control::Parameters,
-    entity::Task,
     global::ClockTime,
     inference::InferenceEngine,
     storage::{Memory, TaskBuffer},
@@ -44,7 +43,7 @@ pub struct Reasoner {
     pub(in super::super) inference_engine: InferenceEngine,
 
     /// 推理过程的「中间数据」
-    pub(in super::super) derivation_datas: TaskBuffer,
+    pub(in super::super) task_buffer: TaskBuffer,
 
     /// 系统时钟
     clock: ClockTime,
@@ -86,7 +85,7 @@ impl Reasoner {
             memory: Memory::default(),
             recorder: ReasonRecorder::default(),
             inference_engine: inference_engine.into(),
-            derivation_datas: TaskBuffer::default(),
+            task_buffer: TaskBuffer::default(),
             // * 🚩默认为0/false
             clock: 0,
             volume: 0,
@@ -111,7 +110,7 @@ impl Reasoner {
     pub fn reset(&mut self) {
         // * 🚩重置容器
         self.memory.init();
-        self.derivation_datas.reset();
+        self.task_buffer.reset();
         self.recorder.reset();
 
         // * 🚩重置状态变量
@@ -220,19 +219,5 @@ impl Reasoner {
     /// 从内部「记录器」中拉取一个输出
     pub fn take_output(&mut self) -> Option<Output> {
         self.recorder.take()
-    }
-
-    /// 迭代器：迭代「新任务列表」中的所有任务
-    /// * 🎯用于「呈现任务信息」
-    /// * ⚠️不对外公开
-    pub(crate) fn iter_new_tasks(&self) -> impl Iterator<Item = &Task> {
-        self.derivation_datas.new_tasks.iter()
-    }
-
-    /// 迭代器：迭代「新任务列表」中的所有任务
-    /// * 🎯用于「呈现任务信息」
-    /// * ⚠️不对外公开
-    pub(crate) fn iter_novel_tasks(&self) -> impl Iterator<Item = &Task> {
-        self.derivation_datas.novel_tasks.iter()
     }
 }

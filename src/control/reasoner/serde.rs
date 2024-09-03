@@ -91,7 +91,7 @@ impl Reasoner {
     #[must_use]
     fn load_derivation_datas(&mut self, mut derivation_datas: TaskBuffer) -> TaskBuffer {
         // 先交换记忆区对象
-        std::mem::swap(&mut derivation_datas, &mut self.derivation_datas);
+        std::mem::swap(&mut derivation_datas, &mut self.task_buffer);
         // 返回旧记忆区
         derivation_datas
     }
@@ -160,7 +160,7 @@ impl Reasoner {
         // 先构造引用
         let storage_ref = ReasonerStatusStorageRef {
             memory: &self.memory,
-            derivation_datas: &self.derivation_datas,
+            derivation_datas: &self.task_buffer,
             clock: self.time(),
             stamp_current_serial: self.stamp_current_serial(),
             task_current_serial: self.task_current_serial(),
@@ -191,13 +191,10 @@ impl Reasoner {
 pub mod test_util_ser_de {
     use super::*;
     use crate::{
-        assert_eq_try,
-        entity::Task,
-        ok,
-        storage::{tests_memory::*, Bag},
+        assert_eq_try, ok,
+        storage::{tests_memory::*, tests_task_buffer::*},
         util::AResult,
     };
-    use std::collections::VecDeque;
 
     /// 获取记忆区的引用，而不直接暴露字段
     impl GetMemory for Reasoner {
@@ -237,10 +234,7 @@ pub mod test_util_ser_de {
     pub fn status_synced(reasoner: &impl GetReasoner) {
         let reasoner = reasoner.get_reasoner();
         memory_synced(&reasoner.memory);
-        reasoner
-            .derivation_datas
-            .iter_task_rcs()
-            .for_each(rc_synced);
+        reasoner.task_buffer.iter_task_rcs().for_each(rc_synced);
     }
 
     /// 判断推理器状态的一致性
@@ -251,7 +245,7 @@ pub mod test_util_ser_de {
         // 记忆区一致性
         memory_consistent(&a.memory, &b.memory)?;
         // 推导数据一致性
-        derivation_datas_consistent(&a.derivation_datas, &b.derivation_datas)?;
+        task_buffer_consistent(&a.task_buffer, &b.task_buffer)?;
         // 其它数据一致性
         assert_eq_try!(
             a.time(),
@@ -266,33 +260,6 @@ pub mod test_util_ser_de {
             "系统时间戳序列号不一致"
         );
 
-        ok!()
-    }
-
-    fn derivation_datas_consistent(a: &TaskBuffer, b: &TaskBuffer) -> AResult {
-        // 新任务队列一致性
-        task_deque_consistent(&a.new_tasks, &b.new_tasks)?;
-        // 任务袋一致性
-        task_bag_consistent(&a.novel_tasks, &b.novel_tasks)?;
-        // 推导数据一致性
-        ok!()
-    }
-
-    /// 任务队列一致性
-    /// * 🎯新任务队列
-    fn task_deque_consistent(a: &VecDeque<Task>, b: &VecDeque<Task>) -> AResult {
-        assert_eq_try!(a.len(), b.len(), "任务队列不一致——长度不一致");
-        for (a, b) in zip(a, b) {
-            task_consistent(a, b)?;
-        }
-        // 任务一致性
-        ok!()
-    }
-
-    /// 任务袋一致性
-    /// * 🎯新近任务袋
-    fn task_bag_consistent(a: &Bag<Task>, b: &Bag<Task>) -> AResult {
-        bag_consistent(a, b, task_consistent)?;
         ok!()
     }
 }

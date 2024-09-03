@@ -289,6 +289,7 @@ struct BagStatus {
 
 // impl<E: Item> BagConcrete<E> for Bag<E> {
 impl<E: Item> Bag<E> {
+    /// 结合传入的「超参数」构建
     pub fn from_parameters(capacity: usize, forget_rate: usize, parameters: &Parameters) -> Self {
         Self::with_parameters(BagParameters::from_parameters(
             capacity,
@@ -296,10 +297,14 @@ impl<E: Item> Bag<E> {
             parameters,
         ))
     }
+
+    /// 兼容旧有构造函数
     pub fn new(capacity: usize, forget_rate: usize) -> Self {
         let parameters = BagParameters::from_parameters(capacity, forget_rate, &DEFAULT_PARAMETERS);
         Self::with_parameters(parameters)
     }
+
+    /// 与「袋超参数」一同构建
     fn with_parameters(parameters: BagParameters) -> Self {
         /* 📄OpenNARS源码：
         self.memory = memory;

@@ -370,7 +370,7 @@ impl ReasonContextCoreOut {
     pub fn absorbed_by_reasoner(self, reasoner: &mut Reasoner) {
         // * 🚩将推理导出的「新任务」添加到自身新任务中（先进先出）
         for new_task in self.new_tasks {
-            reasoner.derivation_datas.add_new_task(new_task);
+            reasoner.task_buffer.add_task(new_task);
         }
         // * 🚩将推理导出的「NAVM输出」添加进自身「NAVM输出」中（先进先出）
         for output in self.outputs {

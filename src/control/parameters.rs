@@ -125,11 +125,21 @@ macro_once! {
         /// The budget threshold rate for task to be accepted.
         pub budget_threshold: Float = 0.01,
 
+
+        /// 用于各类「预期达标」的阈值
+        /// * 📝仅在OpenNARS 3.x中使用
+        ///   * 📄目标预期
+        ///
         /// # 📄OpenNARS
         ///
         /// Default expectation for confirmation.
         pub default_confirmation_expectation: Float = 0.8,
 
+        /// 用于「任务缓冲区」的「新任务/新近任务」筛选
+        /// * 📌目前使用「创建の预期」而非「确认の预期」
+        ///   * 📄OpenNARS 1.5.8中即使用此参数
+        ///   * 📝在OpenNARS 3.x中用于「创建预期」，对应词项`TRUE`/`FALSE`
+        ///
         /// # 📄OpenNARS
         ///
         /// Default expectation for confirmation.
