@@ -1,2 +1,11 @@
 # 构建目标
 /target
+
+# 测试用文件
+*.test.*
+
+# 无用日志
+debug.log
+
+# 本机依赖配置
+Cargo.lock
