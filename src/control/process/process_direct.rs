@@ -23,12 +23,11 @@
 use crate::{
     control::{ReasonContext, ReasonContextDirect, Reasoner},
     entity::{Item, RCTask, Sentence, Task},
-    impl_once,
     inference::Budget,
     storage::{Memory, TaskBufferLoadingContext},
     util::{RefCount, ToDisplayAndBrief},
 };
-use nar_dev_utils::unwrap_or_return;
+use nar_dev_utils::{impl_once, unwrap_or_return};
 
 /// 为「推理器」添加功能
 /// * 📌入口函数

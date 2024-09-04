@@ -27,7 +27,7 @@ features = ["rc"] # ! 引入不完备的「共享引用」实现，后续将通�
 
 # 用于开发NARS的实用工具
 [dependencies.nar_dev_utils]
-version = "0.38.0"
+version = "0.40.0"
 features = ["bundled"]
 
 # Narsese支持：API、枚举Narsese & 词法Narsese
