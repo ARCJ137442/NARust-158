@@ -9,7 +9,7 @@ use crate::{
     entity::{RCTask, Sentence, Task},
     global::Float,
     inference::Truth,
-    storage::Bag,
+    storage::{Bag, Memory},
     util::{IterInnerRcSelf, ToDisplayAndBrief},
 };
 use serde::{Deserialize, Serialize};
@@ -176,16 +176,66 @@ impl TaskBuffer {
     /// * 📝逻辑上不影响：
     /// * 1. 「直接推理」的过程中不会用到「新任务」与「新近任务」
     /// * 2. 仍然保留了「在『从新任务获取将处理任务』时，将部分任务放入『新近任务袋』」的逻辑
-    pub fn load_from_tasks(&mut self, context: &mut impl TaskBufferLoadingContext) -> Vec<Task> {
-        // * 🚩创建并装载「将要处理的任务」
-        // 创建容器
-        let mut vec = vec![];
+    pub fn load_from_tasks<ReportComment>(
+        &mut self,
+        memory: &Memory,
+        report_comment: ReportComment,
+    ) -> Vec<Task>
+    where
+        ReportComment: FnMut(String),
+    {
+        // * 🚩加载任务 | 新任务/新近任务
+        let mut tasks_to_process = vec![];
+        // * 🚩构建一次性「上下文」对象，针对性实现「检查是否已有概念」「对外输出消息」功能
+        let context = {
+            /// * 🚩针对此处功能定义一个结构体并初始化
+            struct LoadingContext<'a, ReportComment>
+            where
+                ReportComment: FnMut(String),
+            {
+                memory: &'a Memory,
+                report_comment: ReportComment,
+                tasks_to_process: &'a mut Vec<Task>,
+            }
+            /// * 🚩实现功能
+            impl<'a, ReportComment> TaskBufferLoadingContext for LoadingContext<'a, ReportComment>
+            where
+                ReportComment: FnMut(String),
+            {
+                fn output_task(&mut self, task: Task) {
+                    // * 🚩向缓存的数组中添加任务
+                    self.tasks_to_process.push(task);
+                }
+                fn report_comment(&mut self, message: String) {
+                    // * 🚩向外部数组中添加消息
+                    (self.report_comment)(message);
+                }
+                fn has_concept(&self, task: &Task) -> bool {
+                    // * 🚩检查是否已有概念
+                    // ! 📝【2024-09-05 00:55:08】「部分闭包」问题：在「结构体功能的一部分要作为闭包执行」时，此实现就变得脆弱
+                    self.memory.has_concept(task.content())
+                }
+            }
+            &mut LoadingContext {
+                memory,
+                report_comment,
+                tasks_to_process: (&mut tasks_to_process),
+            }
+        };
+        // * 🚩调用功能
+        self.load_from_tasks_with_context(context);
+        // * 🚩返回
+        tasks_to_process
+    }
+
+    /// 基于完整的「上下文对象」的方法
+    /// * 🎯对外封装简洁API，同时不失可定制性
+    /// * 🚩基于上下文输出「将要处理的任务」与「将要传出的消息」
+    pub fn load_from_tasks_with_context(&mut self, context: &mut impl TaskBufferLoadingContext) {
         // 装载「新任务」
         self.load_from_new_tasks(context);
         // 装载「新近任务」
-        self.load_from_novel_tasks(&mut vec);
-        // 返回
-        vec
+        self.load_from_novel_tasks(context);
     }
 
     /// 获取「要处理的新任务」列表
@@ -232,10 +282,10 @@ impl TaskBuffer {
     }
 
     /// 获取「要处理的新任务」列表
-    fn load_from_novel_tasks(&mut self, tasks_to_process: &mut Vec<Task>) {
+    fn load_from_novel_tasks(&mut self, context: &mut impl TaskBufferLoadingContext) {
         // * 🚩从「新近任务袋」中拿出一个任务，若有⇒添加进列表
         if let Some(task) = self.take_a_novel_task() {
-            tasks_to_process.push(task);
+            context.output_task(task);
         }
     }
 }
