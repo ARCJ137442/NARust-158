@@ -9,7 +9,7 @@ use crate::{
     entity::{RCTask, Sentence, Task},
     global::Float,
     inference::Truth,
-    storage::{Bag, Memory},
+    storage::Bag,
     util::{IterInnerRcSelf, ToDisplayAndBrief},
 };
 use serde::{Deserialize, Serialize};
@@ -182,28 +182,28 @@ impl TaskBuffer {
     /// ! 📝【2024-09-05 00:55:08】「部分闭包」问题：在「结构体功能的一部分要作为闭包执行」时，此实现就变得脆弱
     ///   * ℹ️代码因为要接纳「闭包类型」而需引入泛型，导致源码变得复杂、更难理解
     ///   * 🚩目前仍对外封装简单API，原「上下文特征」只开放给特殊需求调用
-    pub fn load_from_tasks<ReportComment>(
+    pub fn load_from_tasks(
         &mut self,
-        memory: &Memory,
-        report_comment: ReportComment,
-    ) -> Vec<Task>
-    where
-        ReportComment: FnMut(String), // ℹ️传入一个闭包，就要一条泛型约束
-    {
+        has_concept: impl Fn(&Task) -> bool,
+        report_comment: impl FnMut(String),
+    ) -> Vec<Task> {
         // * 🚩构建一次性「上下文」对象，针对性实现「检查是否已有概念」「对外输出消息」功能
         let mut context = {
             /// * 🚩针对此处功能定义一个结构体并初始化
-            struct LoadingContext<'a, ReportComment>
+            struct LoadingContext<HasConcept, ReportComment>
             where
+                HasConcept: Fn(&Task) -> bool, // ℹ️传入一个闭包，就要一条泛型约束
                 ReportComment: FnMut(String),
             {
-                memory: &'a Memory,
+                has_concept: HasConcept,
                 report_comment: ReportComment,
                 tasks_to_process: Vec<Task>,
             }
             /// * 🚩实现功能
-            impl<'a, ReportComment> TaskBufferLoadingContext for LoadingContext<'a, ReportComment>
+            impl<HasConcept, ReportComment> TaskBufferLoadingContext
+                for LoadingContext<HasConcept, ReportComment>
             where
+                HasConcept: Fn(&Task) -> bool, // ℹ️传入一个闭包，就要一条泛型约束
                 ReportComment: FnMut(String),
             {
                 /// * 🚩向缓存的数组中添加任务
@@ -218,12 +218,12 @@ impl TaskBuffer {
 
                 /// * 🚩检查是否已有概念
                 fn has_concept(&self, task: &Task) -> bool {
-                    self.memory.has_concept(task.content())
+                    (self.has_concept)(task)
                 }
             }
             // * 🚩传出一个「上下文对象」以便利用
             LoadingContext {
-                memory,
+                has_concept,
                 report_comment,
                 tasks_to_process: vec![], // 在此初始化
             }

@@ -38,9 +38,10 @@ impl Reasoner {
         let mut messages = vec![]; // 待输出的消息
 
         // * 🚩调用功能
-        let tasks_to_process = self
-            .task_buffer
-            .load_from_tasks(&self.memory, |message| messages.push(message));
+        let tasks_to_process = self.task_buffer.load_from_tasks(
+            |task| self.memory.has_concept(task.content()),
+            |message| messages.push(message),
+        );
 
         // * 🚩报告消息
         for message in messages {
