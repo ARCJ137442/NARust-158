@@ -421,6 +421,21 @@ pub struct EventBuffer {
     n: usize,
 }
 
+/// 缓冲区循环周期的上下文
+pub trait BufferCycleContext {
+    /// 获取记忆区
+    fn memory(&self) -> &Memory;
+
+    /// 输出任务（到记忆区，或其它地方）
+    fn output_task(&mut self, task: Task);
+
+    /// 弹出任务（到别的地方）
+    fn popped_task(&mut self, task: Task);
+
+    /// 循环参数
+    fn parameters(&self) -> &BufferCycleParameters;
+}
+
 impl EventBuffer {
     pub fn new(
         num_slot: usize,
@@ -863,17 +878,21 @@ impl EventBuffer {
     /// 1. 检查预期
     /// 2. 基于预期生成预测性蕴含
     /// 3. 输出预测性蕴含
-    fn local_evaluation(
-        &mut self,
-        memory: &Memory,
-        output_task: impl FnMut(Task),
-        threshold_f: &ShortFloat,
-        threshold_c: &ShortFloat,
-        default_cooldown: usize,
-    ) {
-        self.check_anticipation(memory);
-        self.predictive_implication_application(memory);
-        self.output_predictive_implication(output_task, threshold_f, threshold_c, default_cooldown);
+    ///
+    /// ? ❓【2024-09-04 23:46:13】是否应该将此处的「阈值」「冷却时长」放在缓冲区的参数之中
+    /// * TODO: 🏗️后续尝试放在缓冲区自身参数之中，而非总是让「周期上下文」提供
+    fn local_evaluation(&mut self, context: &mut impl BufferCycleContext) {
+        let threshold_f = context.parameters().threshold_f;
+        let threshold_c = context.parameters().threshold_c;
+        let default_cooldown = context.parameters().default_cooldown;
+        self.check_anticipation(context.memory());
+        self.predictive_implication_application(context.memory());
+        self.output_predictive_implication(
+            |task| context.output_task(task),
+            &threshold_f,
+            &threshold_c,
+            default_cooldown,
+        );
     }
 
     /// 📝基于记忆区的执行
@@ -972,39 +991,37 @@ impl EventBuffer {
         let new_slot = Slot::new(self.num_events, self.num_anticipations, self.num_operations);
         self.slots.push_back(new_slot);
     }
+}
 
+/// 事件缓冲区循环
+impl EventBuffer {
     /// 📝事件缓冲区循环
     pub fn buffer_cycle(
         &mut self,
         tasks: impl IntoIterator<Item = Task>,
-        memory: &Memory,
-        output_task: impl FnMut(Task),
-        popped_task: impl FnMut(Task),
-        cycle_parameters: &BufferCycleParameters, // * ✨缓冲区循环参数
+        context: &mut impl BufferCycleContext,
+        // memory: &Memory,
+        // output_task: impl FnMut(Task),
+        // popped_task: impl FnMut(Task),
+        // parameters: &BufferCycleParameters, // * ✨缓冲区循环参数
     ) {
         // put all tasks to the current slot
-        self.push(tasks, memory);
+        self.push(tasks, context.memory());
 
         // 组合复合词项
-        self.compound_composition(memory);
+        self.compound_composition(context.memory());
 
         // 本地执行（此时输出新任务）
-        self.local_evaluation(
-            memory,
-            output_task,
-            &cycle_parameters.threshold_f,
-            &cycle_parameters.threshold_c,
-            cycle_parameters.default_cooldown,
-        );
+        self.local_evaluation(context);
 
         // 基于记忆区的执行
-        self.memory_based_evaluation(memory);
+        self.memory_based_evaluation(context.memory());
 
         // 生成新预测
-        self.prediction_generation(cycle_parameters.max_events_per_slot, memory);
+        self.prediction_generation(context.parameters().max_events_per_slot, context.memory());
 
         // 弹出旧任务
-        self.pop(popped_task);
+        self.pop(|task| context.popped_task(task));
 
         // 时间窗口轮替
         self.slots_cycle();
@@ -1025,6 +1042,7 @@ pub struct BufferCycleParameters {
 mod tests {
     use super::*;
     use crate::{control::Reasoner, global::ClockTime, util::ToDisplayAndBrief};
+    use nar_dev_utils::impl_once;
     use narsese::conversion::string::impl_lexical::format_instances::FORMAT_ASCII;
 
     fn parse_task(s: impl AsRef<str>, stamp_time: ClockTime) -> Task {
@@ -1072,43 +1090,70 @@ mod tests {
         dbg!(buffer);
     }
 
+    /// 共用的「缓冲区循环」逻辑
+    fn buffer_cycle_echo(
+        buffer: &mut EventBuffer,
+        tasks: impl IntoIterator<Item = Task>,
+        memory: &Memory,
+        parameters: &BufferCycleParameters,
+    ) {
+        buffer.buffer_cycle(
+            tasks,
+            impl_once! {
+                struct Context in 'a {
+                    memory: &'a Memory = memory,
+                    parameters: &'a BufferCycleParameters = parameters,
+                } impl BufferCycleContext {
+                    fn memory(&self) -> &Memory {
+                        self.memory
+                    }
+
+                    fn output_task(&mut self, task: Task) {
+                        println!("output: {}", task.to_display_long())
+                    }
+
+                    fn popped_task(&mut self, task: Task) {
+                        println!("popped: {}", task.to_display_long())
+                    }
+
+                    fn parameters(&self) -> &BufferCycleParameters {
+                        self.parameters
+                    }
+                }
+            },
+        )
+    }
+
     #[test]
     fn test_cycle_1_per() {
-        let (cycle_parameters, mut buffer, memory, mut clock) = test_setup();
+        let (parameters, mut buffer, memory, mut clock) = test_setup();
         let tasks = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
         let tasks = parse_tasks(tasks.chars().map(|c| c.to_string() + "."), &mut clock);
         for task in tasks {
-            buffer.buffer_cycle(
+            buffer_cycle_echo(
+                &mut buffer,
                 [task], // ! 📌【2024-07-25 17:38:52】单个任务会直接被pop忽略？
                 &memory,
-                |task| println!("output: {}", task.to_display_long()),
-                |task| println!("popped: {}", task.to_display_long()),
-                &cycle_parameters,
-            )
+                &parameters,
+            );
         }
         dbg!(buffer);
     }
 
     #[test]
     fn test_cycle_multi_single() {
-        let (cycle_parameters, mut buffer, memory, mut clock) = test_setup();
+        let (parameters, mut buffer, memory, mut clock) = test_setup();
         let tasks = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
         let tasks = parse_tasks(tasks.chars().map(|c| c.to_string() + "."), &mut clock);
         for task in tasks {
-            buffer.buffer_cycle(
-                [task.clone(), task],
-                &memory,
-                |task| println!("output: {}", task.to_display_long()),
-                |task| println!("popped: {}", task.to_display_long()),
-                &cycle_parameters,
-            )
+            buffer_cycle_echo(&mut buffer, [task.clone(), task], &memory, &parameters);
         }
         // dbg!(buffer);
     }
 
     #[test]
     fn test_cycle_multi_multi() {
-        let (cycle_parameters, mut buffer, memory, mut clock) = test_setup();
+        let (parameters, mut buffer, memory, mut clock) = test_setup();
         let tasks1 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
         let tasks2 = "abcdefghijklmnopqrstuvwxyz";
         let tasks1 = tasks1.chars().map(|c| c.to_string() + ".");
@@ -1117,13 +1162,12 @@ mod tests {
         for (task1, task2) in tasks {
             let task1 = parse_task_inc(task1, &mut clock);
             let task2 = parse_task_inc(task2, &mut clock);
-            buffer.buffer_cycle(
+            buffer_cycle_echo(
+                &mut buffer,
                 [task1.clone(), task2.clone(), task1, task2],
                 &memory,
-                |task| println!("output: {}", task.to_display_long()),
-                |task| println!("popped: {}", task.to_display_long()),
-                &cycle_parameters,
-            )
+                &parameters,
+            );
         }
         // dbg!(buffer);
     }
