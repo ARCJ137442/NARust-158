@@ -10,7 +10,9 @@
 
 use crate::{
     control::{util_outputs, Parameters, Reasoner},
-    entity::{Concept, JudgementV1, Punctuation, RCTask, Sentence, Task, TaskLink, TermLink},
+    entity::{
+        Concept, JudgementV1, Punctuation, RCTask, Sentence, ShortFloat, Task, TaskLink, TermLink,
+    },
     global::{ClockTime, Float},
     language::Term,
     storage::Memory,
@@ -47,15 +49,44 @@ pub trait ReasonContext {
         self.parameters().maximum_stamp_length
     }
 
-    /// 获取「静默值」
+    /// 🆕访问「当前超参数」中的「单前提推理依赖度」
+    /// * 🎯结构规则中的「单前提推理」情形
+    /// * 🚩返回短浮点类型
+    #[doc(alias = "reliance")]
+    fn reasoning_reliance(&self) -> ShortFloat {
+        ShortFloat::from_float(self.parameters().reliance)
+    }
+
+    /// 获取「音量百分比」
     /// * 🎯在「推理上下文」中无需获取「推理器」`getReasoner`
+    /// * 📌音量越大，允许的输出越多
     /// * ️📝可空性：非空
     /// * 📝可变性：只读
-    fn silence_percent(&self) -> Float;
+    fn volume_percent(&self) -> Float;
+
+    /// 获取「静默百分比」
+    /// * 📌静默百分比越大，音量越小，输出越少
+    /// * 🚩默认为「1-音量百分比」
+    fn silence_percent(&self) -> Float {
+        1.0 - self.volume_percent()
+    }
 
     /// 获取「打乱用随机数生成器」
-    fn shuffle_rng_seed(&mut self) -> u64 {
-        self.reasoner_mut().shuffle_rng.next_u64()
+    /// * ✨基于特征[`ContextRngSeedGen`]支持一次多个
+    /// * 🎯用于「随要随取」获取不定数目的随机种子
+    /// * ♻️【2024-08-05 15:04:49】出于类型兼容（省方法）的考虑，将其从「一个简单生成函数」扩宽为「多类型兼容」的特征函数
+    ///   * 📝Rust知识点：闭包、泛型函数、特征方法、特征实现
+    #[inline]
+    fn shuffle_rng_seeds<T: ContextRngSeedGen>(&mut self) -> T {
+        // 获取内部随机数生成器的引用
+        // * 🚩尽可能缩小闭包捕获的值范围
+        let rng = &mut self.reasoner_mut().shuffle_rng;
+        // 生成一个闭包，捕获self而不直接使用self
+        // * ✅避免传入`self`导致的`Sized`编译问题
+        let generate = || rng.next_u64();
+        // 使用这个可重复闭包，结合T的各类实现，允许扩展各种随机数生成方式
+        // * ✅包括「单个值」与「多个值」
+        T::generate_seed_from_context(generate)
     }
 
     /// 复刻自改版`DerivationContext.noNewTask`
@@ -88,7 +119,7 @@ pub trait ReasonContext {
     ///   * 🚩只有「音量在最小值以上」才报告输出
     fn report_comment(&mut self, message: impl ToString) {
         // * 🚩音量阈值
-        if self.silence_percent() >= util_outputs::COMMENT_VOLUME_THRESHOLD_PERCENT {
+        if self.volume_percent() >= util_outputs::COMMENT_VOLUME_THRESHOLD_PERCENT {
             self.report(util_outputs::output_comment(message));
         }
     }
@@ -217,14 +248,7 @@ pub trait ReasonContextWithLinks: ReasonContext {
     fn current_task_link_mut(&mut self) -> &mut TaskLink;
 }
 
-/// 重置全局状态
-/// * 🚩重置「全局随机数生成器」
-/// * 📌【2024-06-26 23:36:06】目前计划做一个全局的「伪随机数生成器初始化」
-///
-#[doc(alias = "init")]
-pub fn init_global_reason_parameters() {
-    eprintln!("// TODO: 功能实装")
-}
+// ! ❌【2024-07-31 17:48:49】现弃用「全局伪随机数生成器」的想法：不利于线程安全、已采用「基于推理器的随机数生成器」方法
 
 /// 🆕内置公开结构体，用于公共读取
 #[derive(Debug)]
@@ -240,9 +264,9 @@ pub struct ReasonContextCore<'this> {
     /// * 🎯与「记忆区」解耦
     time: ClockTime,
 
-    /// 缓存的「静默值」
+    /// 缓存的「音量」
     /// * 🚩【2024-05-30 09:02:10】现仅在构造时赋值，其余情况不变
-    silence_value: usize,
+    volume: usize,
 
     /// 当前概念
     ///
@@ -258,7 +282,7 @@ impl<'this> ReasonContextCore<'this> {
     pub fn new<'p: 'this>(reasoner: &'p mut Reasoner, current_concept: Concept) -> Self {
         Self {
             time: reasoner.time(),
-            silence_value: reasoner.silence_value(),
+            volume: reasoner.volume(),
             current_concept,
             reasoner,
         }
@@ -291,8 +315,8 @@ impl ReasonContextCore<'_> {
         &self.reasoner.parameters
     }
 
-    pub fn silence_percent(&self) -> Float {
-        self.silence_value as Float / 100.0
+    pub fn volume_percent(&self) -> Float {
+        self.volume as Float / 100.0
     }
 
     pub fn current_concept(&self) -> &Concept {
@@ -346,7 +370,7 @@ impl ReasonContextCoreOut {
     pub fn absorbed_by_reasoner(self, reasoner: &mut Reasoner) {
         // * 🚩将推理导出的「新任务」添加到自身新任务中（先进先出）
         for new_task in self.new_tasks {
-            reasoner.derivation_datas.add_new_task(new_task);
+            reasoner.task_buffer.add_task(new_task);
         }
         // * 🚩将推理导出的「NAVM输出」添加进自身「NAVM输出」中（先进先出）
         for output in self.outputs {
@@ -391,8 +415,8 @@ macro_rules! __delegate_from_core {
             self.core.parameters()
         }
 
-        fn silence_percent(&self) -> Float {
-            self.core.silence_percent()
+        fn volume_percent(&self) -> Float {
+            self.core.volume_percent()
         }
 
         fn num_new_tasks(&self) -> usize {
@@ -415,4 +439,56 @@ macro_rules! __delegate_from_core {
             self.core.current_concept_mut()
         }
     };
+}
+
+/// 目前基于[`rand`] crate 确认的随机种子类型
+pub type RngSeed = u64;
+
+/// 上下文随机数生成
+/// * 🎯用于「随机种子生成时支持一个或多个」
+/// * 🚩实现者必须是随机种子本身，或【能容纳随机种子】的容器
+///   * ⚠️返回`Self`，做不了特征对象
+pub trait ContextRngSeedGen: Sized {
+    /// 从「推理上下文」（给的闭包）中生成一个【填充满随机种子】的自身类型值
+    fn generate_seed_from_context(generate: impl FnMut() -> RngSeed) -> Self;
+}
+
+/// 对随机种子类型实现：直接生成一个
+impl ContextRngSeedGen for RngSeed {
+    #[inline(always)]
+    fn generate_seed_from_context(mut generate: impl FnMut() -> RngSeed) -> Self {
+        generate()
+    }
+}
+
+/// 对随机种子的数组实现：逐个生成一系列的随机种子
+impl<const N: usize> ContextRngSeedGen for [u64; N] {
+    /// * 💭【2024-08-05 14:34:45】性能问题暂时不用担忧：函数内联后，编译器能自动优化
+    ///
+    /// ## 📝Rust笔记：给定内容定长数组的初始化
+    ///
+    /// ! ⚠️【2024-08-05 14:40:15】目前Rust没有safe的办法「申请到空间后直接按逻辑填充」，总是需要先初始填充个空值
+    ///
+    /// 以下的代码无效：只会生成一个值，并拷贝到其余的值
+    ///
+    /// ```rs,no-doctest
+    /// fn main() {
+    ///     let mut i = 1;
+    ///     dbg!([{i += 1; i}; 10]);
+    /// }
+    /// ```
+    ///
+    /// ℹ️【2024-08-05 14:46:30】ℹ或许其它一些参考资料有效，但目前暂无引入其它crate的想法，故搁置
+    /// * 🔗有关「数组序列初始化」的讨论：<https://www.reddit.com/r/rust/comments/ns1zu3/initarray_a_crate_to_initialize_arrays_itemwise/>
+    /// * 📦一个大致可行的crate `array-init`：<https://crates.io/crates/array-init>
+    #[inline]
+    fn generate_seed_from_context(mut generate: impl FnMut() -> u64) -> Self {
+        // 初始化一个数组（优化的点即源自于此）
+        let mut result = [0; N];
+        for value_ref in result.iter_mut() {
+            // 不管索引如何，直接遍历可变迭代器，获取随机种子并填充
+            *value_ref = generate();
+        }
+        result
+    }
 }

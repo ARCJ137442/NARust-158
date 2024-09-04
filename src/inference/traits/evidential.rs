@@ -1,7 +1,7 @@
 //! 复刻抽象的「证据基」特征
 //! * 🎯以「时间戳」为基本结构，使「语句」「任务」直接支持其中的功能
 
-use crate::{global::ClockTime, io::symbols::*, util::ToDisplayAndBrief};
+use crate::{global::ClockTime, symbols::*, util::ToDisplayAndBrief};
 use nar_dev_utils::{join, JoinTo};
 use narsese::lexical::Stamp as LexicalStamp;
 

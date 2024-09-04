@@ -74,16 +74,6 @@ impl ShortFloat {
     /// @param arr The inputs, each in [0, 1]
     /// @return The output that is no smaller than each input
     pub fn or(self, value: Self) -> Self {
-        // a ∨ b = ¬(¬a ∧ ¬b)
-        // (self.not().and(value.not())).not()
-        // pipe! {
-        //     // 非
-        //     self.not()
-        //     // 与
-        //     => .and(value.not())
-        //     // 非
-        //     => .not()
-        // }
         self | value
     }
 

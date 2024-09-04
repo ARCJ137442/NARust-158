@@ -8,12 +8,12 @@ nar_dev_utils::mods! {
     // 定义
     pub use definition;
 
-    // 功能：输入输出通道
-    pub use channels;
-
-    // 功能：推理数据
-    pub use derivation_datas;
-
     // 功能：输出报告
     pub use report;
+
+    // 功能：序列反序列化
+    pub use serde;
+
+    // 功能：NAVM接口
+    pub use vm_api;
 }

@@ -55,7 +55,7 @@
 use crate::language::*;
 use nar_dev_utils::matches_or;
 
-impl CompoundTermRef<'_> {
+impl<'a> CompoundTermRef<'a> {
     // * ✅现在「判别函数」统一迁移至[`super::compound`]
 
     /// 📄OpenNARS `getRelationIndex` 属性
@@ -77,7 +77,7 @@ impl CompoundTermRef<'_> {
     ///
     /// @return the index of relation
     #[doc(alias = "get_relation_index")]
-    pub fn get_placeholder_index(&self) -> usize {
+    pub fn get_placeholder_index(self) -> usize {
         self.components
             .iter()
             .position(Term::is_placeholder)
@@ -94,7 +94,7 @@ impl CompoundTermRef<'_> {
     /// Get the relation term in the Image
     ///
     /// @return The term representing a relation
-    pub fn get_relation(&self) -> &Term {
+    pub fn get_relation(self) -> &'a Term {
         &self.components[0]
     }
 
@@ -107,7 +107,7 @@ impl CompoundTermRef<'_> {
     /// Get the other term in the Image
     ///
     /// @return The term related
-    pub fn get_the_other_component(&self) -> Option<&Term> {
+    pub fn get_the_other_component(self) -> Option<&'a Term> {
         /* 📄OpenNARS源码：
         if (components.size() != 2) {
             return null;
@@ -129,7 +129,7 @@ impl CompoundTermRef<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::io::symbols::*;
+    use crate::symbols::*;
     use crate::test_compound as compound;
     use crate::test_term as term;
     use crate::{ok, util::AResult};

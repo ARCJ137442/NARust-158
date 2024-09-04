@@ -3,7 +3,7 @@
 //! * 📍复合词项「链接到任务」的功能
 
 use crate::{
-    control::{util_outputs, ReasonContext, ReasonContextDirect},
+    control::{ReasonContext, ReasonContextDirect},
     entity::{
         BudgetValue, Concept, Item, RCTask, TLink, TLinkType, TaskLink, TermLink, TermLinkTemplate,
     },
@@ -171,21 +171,23 @@ impl ReasonContextDirect<'_> {
 
         // * 🚩缓存的「输出值」
         let mut outputs = vec![]; // 使用缓存延迟输出，避免借用问题
-        let mut add_overflowed_task_link = |overflowed_task_link: &TaskLink| {
-            // 使用闭包封装逻辑
-            let output = util_outputs::output_comment(format!(
-                "!!! Overflowed TaskLink: {}",
-                overflowed_task_link.to_display_long()
-            ));
-            outputs.push(output);
-        };
+        let mut deal_overflowed_task_link =
+            |overflowed_task_link: Option<TaskLink>| -> Option<TaskLink> {
+                let overflowed_task_link = overflowed_task_link?;
+                // 使用闭包封装逻辑
+                let message = format!(
+                    "!!! Overflowed TaskLink: {}",
+                    overflowed_task_link.to_display_long()
+                );
+                outputs.push(message);
+                Some(overflowed_task_link) // 返回，然后被立即抛弃
+            };
 
         // 对自身 //
         // * 🚩对当前任务构造任务链，链接到传入的任务 | 构造「自身」
         let self_link = TaskLink::new_self(task.clone()); // link type: SELF
-        if let Some(overflowed_task_link) = concept.insert_task_link_outer(memory, self_link) {
-            add_overflowed_task_link(&overflowed_task_link);
-        }
+        let result = concept.insert_task_link_outer(memory, self_link);
+        deal_overflowed_task_link(result);
 
         // 对子项 //
         // * 🚩仅在「自身为复合词项」且「词项链模板非空」时准备
@@ -204,17 +206,16 @@ impl ReasonContextDirect<'_> {
         }
         // * 🚩仅在「预算达到阈值」时：遍历预先构建好的所有「子项词项链模板」，递归链接到任务
         for template in concept.link_templates_to_self() {
+            let result = memory.link_task_link_from_template(template, task, &sub_budget);
             // * 🚩对「溢出的任务链」作报告
-            if let Some(overflowed_task_link) =
-                memory.link_task_link_from_template(template, task, &sub_budget)
-            {
-                add_overflowed_task_link(&overflowed_task_link);
-            }
+            deal_overflowed_task_link(result);
         }
 
         // * 🚩🆕汇报「溢出的任务链」
+        // * 🚩【2024-08-16 11:46:48】此处「延迟汇报」是为了避免对`self`的借用问题
+        // * 📌【2024-08-16 11:43:06】目前仅从「消息」开始，以便让推理器能根据音量过滤
         for output in outputs {
-            self.report(output);
+            self.report_comment(output);
         }
     }
 
@@ -256,13 +257,17 @@ impl ReasonContextDirect<'_> {
                 continue;
             }
             // * 🚩仅在「元素词项所对应概念」存在时
-            let component = template.target();
+            let component = &*template.target();
 
             // * 🚩建立双向链接：整体⇒元素
             let link = TermLink::from_template(component.clone(), template, sub_budget);
             self.outs.report_comment(
-                format!("Term-link built @ {self_term}: {}", link.to_display_long()),
-                self.silence_percent(),
+                format!(
+                    "Term-link built @ '{self_term}' ~ '{component}' #{:?}: {}",
+                    link.link_type(),
+                    link.to_display_long()
+                ),
+                self.volume_percent(),
             );
             let self_concept = unwrap_or_return!(?self.key_to_concept_mut(concept_key) => continue);
             self_concept.put_in_term_link(link); // this termLink to that
@@ -272,14 +277,14 @@ impl ReasonContextDirect<'_> {
             let link = TermLink::from_template(self_term.clone(), template, sub_budget);
             self.outs.report_comment(
                 format!(
-                    "Term-link built @ {}: {}",
-                    &*component,
+                    "Term-link built @ '{component}' ~> '{self_term}' #{:?}: {}",
+                    link.link_type(),
                     link.to_display_long()
                 ),
-                self.silence_percent(),
+                self.volume_percent(),
             );
             let component_concept =
-                unwrap_or_return!(?self.get_concept_or_create(&component) => continue);
+                unwrap_or_return!(?self.get_concept_or_create(component) => continue);
             component_concept.put_in_term_link(link);
 
             // * 🚩对复合子项 继续深入递归
@@ -357,6 +362,163 @@ impl Memory {
     }
 }
 
-// TODO: 单元测试
 #[cfg(test)]
-mod tests {}
+mod tests {
+    use super::*;
+    use crate::test_term as term;
+    use crate::{ok, util::AResult};
+    use nar_dev_utils::{join, macro_once, JoinTo};
+    use narsese::conversion::string::impl_lexical::format_instances::FORMAT_ASCII;
+    use std::fmt::Display;
+
+    /// 快捷构造词项链模板
+    /// * 📌语法：【目标】 #【链接类型】 @【链接位置】
+    macro_rules! link {
+        ($target:literal #$type:ident @ $index:expr) => {
+            // ! ⚠️要用`new_direct`不要用`new_template`：后者会自动「添油加醋」生成索引
+            TermLinkTemplate::new_direct(term!($target), TLinkType::$type, Vec::from($index))
+        };
+    }
+    /// 快捷构造词项链模板数组
+    macro_rules! links {
+        [
+            $( $target:literal #$type:ident @ $index:expr $(,)?)*
+        ] => {
+            [
+                $( link!($target #$type @ $index ) ),*
+            ]
+        };
+    }
+
+    impl Display for TermLinkTemplate {
+        /// 展示词项链模板
+        /// * 📝格式：`"词项" #链接类型 @索引`
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(
+                f,
+                "\"{}\" #{:?} @{:?}",
+                FORMAT_ASCII.format(&self.target().to_lexical()),
+                self.link_type(),
+                self.indexes()
+            )
+        }
+    }
+
+    /// 展示词项链
+    fn display_term_link_templates(vec: &[TermLinkTemplate]) -> String {
+        join! {
+            => "[".into()
+            => vec.iter().map(ToString::to_string).join_to_new(", ")
+            => "]"
+        }
+    }
+
+    /// 测试「构建词项链模板」
+    /// * ✅连带[`prepare_component_links`]也一并测过
+    #[test]
+    fn prepare_term_link_templates() -> AResult {
+        fn test(term: Term, expected: Vec<TermLinkTemplate>) -> AResult {
+            let templates = super::prepare_term_link_templates(&term);
+
+            println!("prepared: {}", display_term_link_templates(&templates));
+            assert_eq!(
+                templates,
+                expected,
+                "Test fail on {term} with templates != expected by\n{}\n!=\n{}",
+                display_term_link_templates(&templates),
+                display_term_link_templates(&expected)
+            );
+
+            ok!()
+        }
+        macro_once! {
+            macro test($( $term:literal => $expected:expr )*) {
+                $(
+                    test(term!($term), $expected.into())?;
+                )*
+            }
+            // 原子词项不产生链接模板
+            "A" => []
+            "_" => []
+            "$1" => []
+            // 有序复合词项 正常产生模板
+            "(*, A, B)" => links![
+                "A" #Compound @ [0]
+                "B" #Compound @ [1]
+            ]
+            // 可交换复合词项 正常产生模板
+            "{A, B, C, D}" => links![
+                "A" #Compound @ [0]
+                "B" #Compound @ [1]
+                "C" #Compound @ [2]
+                "D" #Compound @ [3]
+            ]
+            // ! 「像」：占位符不产生链接模板
+            "(/, R, _, A)" => links![
+                "R" #Compound @ [0] // ! ⚠️注意：与OpenNARS机制的不同
+                "A" #Compound @ [2]
+            ]
+            // ! 「像」：与OpenNARS机制的不同，其占位符处是没有链接模板的
+            "(/, R, A, _, B)" => links![
+                "R" #Compound @ [0]
+                "A" #Compound @ [1]
+             // "_" #Compound @ [2] // ! 占位符不能成链接
+                "B" #Compound @ [3]
+            ]
+            // 陈述：类型为「复合陈述」
+            "<A --> B>" => links![
+                "A" #CompoundStatement @ [0]
+                "B" #CompoundStatement @ [1]
+            ]
+            // 蕴含+合取：包含有类型为「复合条件」的模板
+            "<(&&, A, B) ==> C>" => links![
+                "(&&, A, B)" #CompoundStatement @ [0]
+                "A" #CompoundCondition @ [0, 0]
+                "B" #CompoundCondition @ [0, 1]
+                "C" #CompoundStatement @ [1]
+            ]
+            // 实际运行中产生的复合词项
+            "<<$1 --> key> ==> <{lock1} --> (/, open, $1, _)>>" => links![
+                // ! 📝不会给变量`$1`产生模板
+                // ! 📝不会给占位符`_`产生模板
+                "key" #CompoundStatement @[0, 1], // 蕴含→继承
+                "{lock1}" #CompoundStatement @[1, 0], // 蕴含→继承
+                "open" #Transform @[1, 1, 0] // 蕴含→继承→外延像
+            ]
+            "<(&&,<#1 --> lock>,<#1 --> (/,open,$2,_)>) ==> <$2 --> key>>" => links![
+                // ! 📝不会给变量`$1`产生模板
+                // ! 📝不会给占位符`_`产生模板
+                // * 📌实际只有仨词项
+                "lock" #CompoundCondition @[0, 0, 1], // 蕴含→合取→继承 + 条件句
+                "open" #Transform @[0, 1, 1, 0] // 蕴含→合取→继承→外延像
+                "key" #CompoundStatement @[1, 1], // 蕴含→继承
+            ]
+            "<(&&,<robin --> [chirping]>,<robin --> [flying]>) ==> <robin --> bird>>" => links![
+                // 大的纯常量词项 会进行「分层」操作
+                "(&&, <robin --> [chirping]>, <robin --> [flying]>)" #CompoundStatement @[0],
+                    // 蕴含→合取 ⇒ 自动变成「复合条件」
+                    "<robin --> [chirping]>"                         #CompoundCondition @[0, 0],
+                        "robin"                                      #CompoundCondition @[0, 0, 0],
+                        "[chirping]"                                 #CompoundCondition @[0, 0, 1],
+                            // ! ❌下一层不再细分`chirping`
+                    "<robin --> [flying]>"                           #CompoundCondition @[0, 1],
+                        "robin"                                      #CompoundCondition @[0, 1, 0],
+                        "[flying]"                                   #CompoundCondition @[0, 1, 1],
+                // 其它默认「复合陈述」
+                "<robin --> bird>"                                   #CompoundStatement @[1],
+                    "robin"                                          #CompoundStatement @[1, 0],
+                    "bird"                                           #CompoundStatement @[1, 1]
+            ]
+        }
+        ok!()
+    }
+
+    // TODO: 更多单测
+    // * link_concept_to_task
+    // * build_task_links
+    // * build_term_links
+    // * build_term_links_sub
+    // * insert_task_link_outer
+    // * link_task_link_from_template
+    // * insert_task_link_inner
+}

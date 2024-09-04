@@ -1,9 +1,9 @@
 [package]
 name = "narust-158"
-version = "0.1.1"
+version = "0.2.5"
 edition = "2021"
 description = """
-A Rust reproduction of OpenNARS 1.5.8
+A Rust reimplementation of OpenNARS 1.5.8
 """
 
 readme = "README.md"
@@ -11,14 +11,19 @@ keywords = ["NARS", "Non-Axiomatic-Logic", "OpenNARS"]
 
 license = "MIT OR Apache-2.0"
 categories = [] # 🔗<https://crates.io/category_slugs>
-repository = "https://github.com/ARCJ137442/NARust/tree/narust-158"
+repository = "https://github.com/ARCJ137442/narust-158"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.83"
+anyhow = "1.0.86"
 rand = "0.8.5"
-thiserror = "1.0.60"
+serde_json = "1.0.122"
+thiserror = "1.0.63"
+
+[dependencies.serde]
+version = "1.0.206"
+features = ["rc"] # ! 引入不完备的「共享引用」实现，后续将通过「归一化」的方式修复
 
 # 用于开发NARS的实用工具
 [dependencies.nar_dev_utils]
@@ -35,17 +40,17 @@ features = [
 
 # NAVM：统IO模型
 [dependencies.navm]
-version = "0.16"
+version = "0.17"
 features = ["bundled"]
 
 # 用于方言解析的词法解析器
 [dependencies.pest]
-version = "2.7.10"
+version = "2.7.11"
 optional = true
 
 # 用于方言解析的词法解析器
 [dependencies.pest_derive]
-version = "2.7.10"
+version = "2.7.11"
 optional = true
 
 [features]
@@ -63,3 +68,27 @@ dialect_parser = [
     # 📌依赖`pest`解析器
     "dep:pest", "dep:pest_derive"
 ]
+
+# 有关二进制构建目标的参考：
+# * 🔗<https://rustwiki.org/zh-CN/cargo/reference/manifest.html#configuring-a-target>
+# * ⚠️【2024-08-19 14:28:15】建议name使用下划线：所有短横线将被重命名为下划线
+
+[[bin]]
+name = "narust_158_shell"
+path = "src/bin/shell/main.rs"
+
+[[bin]]
+name = "narust_158_batch"
+path = "src/bin/batch/main.rs"
+
+# 有关Clippy的参考：
+# * 🔗<https://doc.rust-lang.org/clippy/configuration.html>
+[lints.clippy]
+
+# 📌【2024-08-25 00:31:01】允许文档注释中出现以下情况
+# ```markdown
+# * 📝这是一个笔记
+# ? 💭这是一个问题
+#   * 📍这是问题下的一个小点
+# ```
+doc_lazy_continuation = "allow"

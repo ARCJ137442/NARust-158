@@ -10,12 +10,13 @@ use crate::{
     util::{RefCount, ToDisplayAndBrief},
 };
 use nar_dev_utils::join;
+use serde::{Deserialize, Serialize};
 use std::ops::{Deref, DerefMut};
 
 /// Reference to a Task.
 ///
 /// The reason to separate a Task and a TaskLink is that the same Task can be linked from multiple Concepts, with different BudgetValue.
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct TaskLink {
     /// 内部链接到的任务（共享引用）
     inner: TLinkage<RCTask>,
@@ -45,6 +46,18 @@ pub struct TaskLink {
 }
 
 impl TaskLink {
+    /// 直接获取内部链接到的「任务引用」
+    /// * 🎯用于上级「概念」收集所有「任务引用」
+    pub(in crate::entity) fn target_rc_ref(&self) -> &RCTask {
+        &self.inner.target
+    }
+    /// 直接获取内部链接到的「任务引用」（可变）
+    /// * 🎯用于「序列反序列化」「归一化任务共享引用」
+    /// * ⚠️慎用
+    pub(in crate::entity) fn target_rc_ref_mut(&mut self) -> &mut RCTask {
+        &mut self.inner.target
+    }
+
     pub fn target_rc<'r, 's: 'r>(&'s self) -> impl Deref<Target = RCTask> + 'r {
         // ! 🚩【2024-06-22 12:21:12】要直接引用target字段，不能套两层`impl Deref`
         // * * ️📝会导致「临时变量引用」问题

@@ -1,7 +1,7 @@
 //! 存放特定的「标点」类型
 
 use super::{Judgement, Question};
-use crate::io::symbols::*;
+use crate::symbols::*;
 use anyhow::Result;
 use nar_dev_utils::unwrap_or_return;
 use narsese::lexical::Punctuation as LexicalPunctuation;

@@ -2,6 +2,8 @@ use super::Sentence;
 use nar_dev_utils::join;
 use narsese::lexical::Sentence as LexicalSentence;
 
+/// 统一的「疑问句」特征
+/// * 📌相比「判断句」没有「真值」
 pub trait Question: Sentence {
     // ! ❌不能在此自动实现`isQuestion` `asQuestion`
     // * 📝或者，Rust不允许类似「继承」的「实现一部分，丢给别的类型再实现另一部分」的做法

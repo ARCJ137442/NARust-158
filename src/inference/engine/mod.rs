@@ -7,7 +7,4 @@
 nar_dev_utils::mods! {
     // 🚀推理引擎
     pub use inference_engine;
-
-    // 🛠️初代实现
-    pub use impl_v1;
 }

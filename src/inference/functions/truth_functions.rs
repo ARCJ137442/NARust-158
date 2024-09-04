@@ -21,7 +21,7 @@ pub trait TruthFunctions: Truth + Sized {
     ///
     /// {<(*, A, B) --> R>} |- <A --> (/, R, _, B)>
     ///
-    /// @param v1 [&] Truth value of the premise
+    /// @param v1 Truth value of the premise
     /// @return Truth value of the conclusion
     fn identity(&self) -> TruthValue {
         let [f1, c1] = self.fc();
@@ -409,7 +409,7 @@ pub trait TruthFunctions: Truth + Sized {
     /// @param v2 Truth value of the second premise
     /// @return Truth value of the conclusion
     #[doc(alias = "union")]
-    fn nal_union(&self, v2: &impl Truth) -> TruthValue {
+    fn union_(&self, v2: &impl Truth) -> TruthValue {
         let ([f1, c1], [f2, c2]) = self.fc_with(v2);
         // * 📝频率=双频之析取
         // * 📝信度=双信之合取
@@ -505,7 +505,14 @@ pub trait TruthFunctions: Truth + Sized {
 /// 为「真值」自动实现「真值函数」
 impl<T: Truth + Sized> TruthFunctions for T {}
 
-/// TODO: 单元测试
+/// 单真值函数
+pub type TruthFSingle = fn(&TruthValue) -> TruthValue;
+/// 双真值函数
+pub type TruthFDouble = fn(&TruthValue, &TruthValue) -> TruthValue;
+/// 单真值依赖函数（分析性函数）
+pub type TruthFAnalytic = fn(&TruthValue, ShortFloat) -> TruthValue;
+
+/// TODO: 对每个真值函数的单元测试
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -515,9 +522,6 @@ mod tests {
     /// * 🚩无需真正创建实例
     #[test]
     fn function_table() {
-        type TruthFSingle = fn(&TruthValue) -> TruthValue;
-        type TruthFDouble = fn(&TruthValue, &TruthValue) -> TruthValue;
-        type TruthFAnalytic = fn(&TruthValue, ShortFloat) -> TruthValue;
         // * 📌单真值函数
         let conversion: TruthFSingle = TruthValue::conversion;
         let negation: TruthFSingle = TruthValue::negation;
@@ -534,7 +538,7 @@ mod tests {
         let desire_weak: TruthFDouble = TruthValue::desire_weak;
         let desire_deduction: TruthFDouble = TruthValue::desire_deduction;
         let desire_induction: TruthFDouble = TruthValue::desire_induction;
-        let nal_union: TruthFDouble = TruthValue::nal_union;
+        let nal_union: TruthFDouble = TruthValue::union_;
         let intersection: TruthFDouble = TruthValue::intersection;
         let reduce_disjunction: TruthFDouble = TruthValue::reduce_disjunction;
         let reduce_conjunction: TruthFDouble = TruthValue::reduce_conjunction;

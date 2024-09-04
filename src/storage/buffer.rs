@@ -2,6 +2,7 @@
 //! * 📌复刻自OpenNARS改版
 
 use crate::util::Iterable;
+use serde::{Deserialize, Serialize};
 
 /// 🆕新的 缓冲区 抽象类型
 /// * 📌本质上是一个先进先出队列
@@ -38,7 +39,7 @@ pub trait Buffer<T>: Iterable<T> {
 }
 
 /// 🆕使用「变长数组」实现的「缓冲区」类型
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ArrayBuffer<T> {
     /// 内部数组
     inner: Vec<T>,

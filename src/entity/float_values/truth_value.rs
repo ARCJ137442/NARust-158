@@ -30,6 +30,38 @@ pub struct TruthValue {
     a: bool,
 }
 
+/// 定制的序列反序列化方法
+/// * 🎯节省序列化后的占用空间
+///   * 📄在JSON中不再需要是一个object，是一个`[f, c, a]`三元组就行
+mod serde {
+    use super::TruthValue;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    impl Serialize for TruthValue {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: Serializer,
+        {
+            // 构造[f,c,a]三元组
+            let v = (self.f, self.c, self.a);
+            // 直接委托到表示三元组
+            v.serialize(serializer)
+        }
+    }
+
+    impl<'de> Deserialize<'de> for TruthValue {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: Deserializer<'de>,
+        {
+            // 先反序列化到内部整数值
+            let (f, c, a) = Deserialize::deserialize(deserializer)?;
+            // 然后尝试创建，并在其中转换Error类型
+            Ok(Self { f, c, a })
+        }
+    }
+}
+
 impl Truth for TruthValue {
     #[inline(always)]
     fn frequency(&self) -> ShortFloat {

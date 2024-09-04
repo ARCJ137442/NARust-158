@@ -1,7 +1,5 @@
 //! 词项链
 
-use std::ops::{Deref, DerefMut};
-
 use super::{TLink, TLinkType, TLinkage, TermLinkTemplate};
 use crate::{
     entity::{BudgetValue, Item, ShortFloat, Token},
@@ -10,6 +8,8 @@ use crate::{
     util::ToDisplayAndBrief,
 };
 use nar_dev_utils::join;
+use serde::{Deserialize, Serialize};
+use std::ops::{Deref, DerefMut};
 
 /// 词项链
 ///
@@ -24,7 +24,7 @@ use nar_dev_utils::join;
 /// The index value(s) indicates the location of the component in the compound.///
 ///
 /// This class is mainly used in inference.RuleTable to dispatch premises to inference rules
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct TermLink {
     /// 🆕纯粹的T链接类型
     inner: TLinkage<Term>,

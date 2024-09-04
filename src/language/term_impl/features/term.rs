@@ -8,8 +8,8 @@
 //!     * 📌本质上是「缓存」的需求与作用
 //! * ✅【2024-06-14 16:33:57】基本完成对「基础词项」的属性检查
 
-use crate::io::symbols::*;
 use crate::language::*;
+use crate::symbols::*;
 use narsese::api::{GetCategory, TermCategory};
 
 /// 📄OpenNARS `nars.language.Term`
@@ -38,14 +38,14 @@ impl Term {
     /// 模拟`Term.getComplexity`
     /// * 🚩逻辑 from OpenNARS
     ///   * 原子 ⇒ 1
-    /// //  * 变量 ⇒ 0
+    ///   * ~~变量 ⇒ 0~~
     ///   * 复合 ⇒ 1 + 所有组分复杂度之和
     ///
     /// # 📄OpenNARS
     ///
     /// - The syntactic complexity, for constant atomic Term, is 1.
     /// - The complexity of the term is the sum of those of the components plus 1
-    /// // - The syntactic complexity of a variable is 0, because it does not refer to * any concept.
+    /// - ~~The syntactic complexity of a variable is 0, because it does not refer to * any concept.~~
     ///
     /// @return The complexity of the term, an integer
     #[doc(alias = "get_complexity")]

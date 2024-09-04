@@ -7,12 +7,19 @@ use crate::{
     global::ClockTime,
     inference::BudgetFunctions,
     language::Term,
+    util::Serial,
 };
 use anyhow::{anyhow, Result};
 use narsese::lexical::{Sentence as LexicalSentence, Task as LexicalTask};
 
 /// 为「推理器」扩展功能
 impl Reasoner {
+    /// 模拟`StringParser.parseTask`
+    /// * 🚩直接模仿`parseTask`而非`parseExperience`
+    /// * 📌结合自身信息的「词法折叠」
+    /// * 📌【2024-08-14 17:37:04】目前功能定位成「根据外部序列号生成任务」
+    ///   * ⚠️本身不更新内部的时间戳序列号，因此需要在参数中给予
+    ///   * ℹ️若需将输入的Narsese任务视作「新任务」请移步至[`Reasoner::parse_new_task`]
     /// 🆕完整参数，不依赖推理器的「任务解析」
     /// * 🎯外部代码需要用于解析
     pub fn parse_task_full(
@@ -20,6 +27,7 @@ impl Reasoner {
         stamp_time: ClockTime,
         narsese: LexicalTask,
         stamp_current_serial: ClockTime,
+        task_current_serial: Serial,
     ) -> Result<Task> {
         use Punctuation::*;
 
@@ -74,12 +82,7 @@ impl Reasoner {
         };
 
         // 构造语句
-        let sentence = SentenceV1::new_sentence_from_punctuation(
-            content,
-            punctuation,
-            stamp,
-            truth_revisable,
-        )?;
+        let sentence = SentenceV1::with_punctuation(content, punctuation, stamp, truth_revisable)?;
 
         // * 🚩解析任务
 
@@ -104,7 +107,7 @@ impl Reasoner {
         let budget = BudgetValue::from_lexical(budget, [priority, durability, quality])?;
 
         // 构造任务
-        let task = Task::from_input(sentence, budget);
+        let task = Task::from_input(task_current_serial, sentence, budget);
 
         // 返回
         Ok(task)
@@ -119,7 +122,21 @@ impl Reasoner {
         &self,
         narsese: LexicalTask,
         stamp_current_serial: ClockTime,
+        task_current_serial: Serial,
     ) -> Result<Task> {
-        Self::parse_task_full(&self.parameters, self.time(), narsese, stamp_current_serial)
+        Self::parse_task_full(
+            &self.parameters,
+            self.time(),
+            narsese,
+            stamp_current_serial,
+            task_current_serial,
+        )
+    }
+
+    /// 将任务视作一个「新任务」解析
+    pub fn parse_new_task(&mut self, narsese: LexicalTask) -> Result<Task> {
+        let stamp_current_serial = self.updated_stamp_current_serial();
+        let task_current_serial = self.updated_task_current_serial();
+        self.parse_task(narsese, stamp_current_serial, task_current_serial)
     }
 }

@@ -5,8 +5,10 @@
 //!   * 简化其表达
 //! * 🎯用于「制作词项」
 
-use super::{vec_utils, CompoundTermRef, StatementRef, Term, TermComponents};
-use crate::io::symbols::*;
+use super::{
+    variable::MaximumVariableId, vec_utils, CompoundTermRef, StatementRef, Term, TermComponents,
+};
+use crate::symbols::*;
 
 impl Term {
     /* Word */
@@ -21,20 +23,20 @@ impl Term {
 
     /// 制作「独立变量」
     #[inline]
-    pub fn make_var_i(id: usize) -> Term {
-        Term::new_var_i(id)
+    pub fn make_var_i(to_max: impl MaximumVariableId) -> Term {
+        Term::new_var_i(to_max.maximum_variable_id() + 1)
     }
 
     /// 制作「非独变量」
     #[inline]
-    pub fn make_var_d(id: usize) -> Term {
-        Term::new_var_d(id)
+    pub fn make_var_d(to_max: impl MaximumVariableId) -> Term {
+        Term::new_var_d(to_max.maximum_variable_id() + 1)
     }
 
     /// 制作「查询变量」
     #[inline]
-    pub fn make_var_q(id: usize) -> Term {
-        Term::new_var_q(id)
+    pub fn make_var_q(to_max: impl MaximumVariableId) -> Term {
+        Term::new_var_q(to_max.maximum_variable_id() + 1)
     }
 
     /// 制作「与现有变量类型相同」的变量
@@ -68,12 +70,14 @@ impl Term {
             // * 🚩其它
             return makeCompoundTerm(compound.operator(), components); */
         let term = template.inner;
-        if term.instanceof_image_ext() {
-            Self::make_image_ext_arg(components, template.get_placeholder_index())
-        } else if term.instanceof_image_int() {
-            Self::make_image_int_arg(components, template.get_placeholder_index())
-        } else {
-            Self::make_compound_term_from_identifier(&term.identifier, components)
+        match term.identifier.as_str() {
+            IMAGE_EXT_OPERATOR => {
+                Self::make_image_ext_arg(components, template.get_placeholder_index())
+            }
+            IMAGE_INT_OPERATOR => {
+                Self::make_image_int_arg(components, template.get_placeholder_index())
+            }
+            identifier => Self::make_compound_term_from_identifier(identifier, components),
         }
     }
 
@@ -468,34 +472,35 @@ impl Term {
         Some(Term::new_product(argument))
     }
 
-    /// * 🚩从「外延像/内涵像」构造，用某个词项替换掉指定索引处的元素
-    /// * 📝<a --> (/, R, _, b)> => <(*, a, b) --> R>，其中就要用 a 替换 [R,b] 中的R
+    /// * 🚩从「外延像/内涵像」构造，用某个词项替换掉占位符处的元素，并返回新的关系词项
+    ///   * 📄`(/, R, _, b)`, `a` => [`(*, a, b)`, `R`]
+    /// * 📝`<a --> (/, R, _, b)>` => `<(*, a, b) --> R>`，其中就要用 a 替换 [R,b] 中的R
     /// * ⚠️【2024-06-16 16:29:18】后续要留意其中与OpenNARS「占位符不作词项」逻辑的不同
-    pub fn make_product(image: CompoundTermRef, component: &Term, index: usize) -> Option<Term> {
+    pub fn make_product(image: CompoundTermRef, component: &Term) -> Option<[Term; 2]> {
         let mut terms = vec![];
-        let mut current_i = 0;
-        for term in image.components {
+        let mut image_components = image.components.iter();
+        let relation = image_components.next()?.clone();
+        for term in image_components {
             // * 🚩占位符⇒跳过
             if term.is_placeholder() {
                 // ! ⚠️不递增索引：相当于「先移除占位符，再添加元素」
+                terms.push(component.clone());
                 continue;
             }
             // * 🚩模拟「替换词项」，但使用「惰性复制」的方式（被替换处的词项不会被复制）
-            match current_i == index {
-                // ! 📌只会复制一次，但编译器看不出这个假设，用所有权则报错"use of moved value: `component`"
-                // ! 🚩【2024-06-16 16:36:16】目前解决方案：作为引用「惰性使用所有权」
-                true => terms.push(component.clone()),
-                false => terms.push(term.clone()),
-            }
-            current_i += 1;
+            terms.push(term.clone());
         }
         // * 🚩制作 & 返回
-        Self::make_product_arg(terms)
+        Self::make_product_arg(terms).map(|product| [product, relation])
     }
 
     /* Image */
 
     /// * 📌作为模板的「像」提供「占位符位置」，但作为「组分」的`argument`可能没有占位符
+    ///   * ⚠️时刻注意OpenNARS内部存储方式的不同
+    ///     * 📄"`(/,neutralization,_,base)` => `[neutralization,base]`+relation_index=0"
+    ///     * 📄"`(/,reaction,acid,_)` => `[acid,reaction]`+relation_index=1"
+    ///   * ❓【2024-08-05 22:59:21】后续是否要完全革新，不按照OpenNARS的构造方式来
     /// * 📄"(/,num,_)", ["0"] => "(/,0,_)"
     /// * 📄"(/,neutralization,_,base)", ["reaction", "base"] => "(/,reaction,_,base)"
     /// * 📄"(/,reaction,acid,_)", ["acid", "neutralization"] => "(/,neutralization,acid,_)"
@@ -507,16 +512,22 @@ impl Term {
     ) -> Option<Term> {
         // * 🚩按占位符位置找到「关系词项」并放在最前边（占位符位置>0）
         debug_assert!(placeholder_index > 0);
-        let relation = argument.remove(placeholder_index - 1);
-        argument.insert(0, relation);
-        // * 🚩再插入占位符
-        // * 🎯处理edge case: "(/,num,_)", ["0"] => "(/,0,_)"
-        if placeholder_index >= argument.len() {
-            argument.push(Term::new_placeholder());
+        // * 🚩【2024-08-05 22:57:53】补丁：若参数表中有占位符，先移除占位符
+        if let Some(old_placeholder_index) = argument.iter().position(|term| term.is_placeholder())
+        {
+            // * 🚩先移除旧位置的占位符
+            argument.remove(old_placeholder_index);
+        } else {
+            // * 🚩OpenNARS旧情况：先将对应位置的词项当作「关系词项」挪到最开头
+            let relation = argument.remove(placeholder_index - 1);
+            argument.insert(0, relation);
         }
-        // * 🚩否则⇒插入
-        else {
-            argument.insert(placeholder_index, Term::new_placeholder());
+        // * 🚩再插入占位符
+        match placeholder_index >= argument.len() {
+            // * 🎯处理edge case: "(/,num,_)", ["0"] => "(/,0,_)"
+            true => argument.push(Term::new_placeholder()),
+            // * 🚩否则⇒插入
+            false => argument.insert(placeholder_index, Term::new_placeholder()),
         }
         // * 🚩制作词项
         make_image_vec(argument)
@@ -530,6 +541,8 @@ impl Term {
         if argument.len() < 2 {
             return None;
         }
+        // ! 📌【2024-08-05 22:08:05】断言：构造的「像」中只能有正好一个占位符
+        debug_assert!(argument.iter().filter(|term| term.is_placeholder()).count() == 1);
         // * 🚩因为「词项中自带占位符」所以无需「特别决定索引」
         new_image(argument).ok()
     }
@@ -580,16 +593,48 @@ impl Term {
     /// 共用的「从像构造像」逻辑
     /// * 📌从一个已知的外延像中构造新外延像，并切换占位符的位置
     /// * 🚩关系词项位置不变，后头词项改变位置，原占位符填充词项
+    ///   * ℹ️输出`[新像, 被换出来的词项]`
+    /// * ⚠️`index`的语义：除了第一个「关系词项」外，新的占位符要处在的相对位置
+    ///   * 📌最大值：长度-1
+    ///   * 📄`(/, R, a, _)`中`index = 0` => 指代位置`a`（而非`R`）
+    ///   * 📄`(/, R, a, _)`中`index = 1` => 指代位置`_`（而非`a`，index最大值）
+    ///   * 📄`(/, R, a, _)`中`index = 2` => 超出位置
+    ///   * ℹ️【2024-08-01 15:53:40】此设定旨在与OpenNARS方案对齐
+    /// * 📝本质上是个「替换&插入」的过程
+    ///   * 🚩总体过程：
+    ///     * `component`插入到原来占位符的位置上
+    ///     * `index + 1`处替换为占位符
+    ///   * ⚠️index不会指向占位符位置上：
+    ///     * 为兼容考虑，此情况将返回`[拷贝的原像, component]`
     fn make_image_from_image(
         old_image: CompoundTermRef,
         component: &Term,
         index: usize,
         make_image_vec: fn(Vec<Term>) -> Option<Term>,
-    ) -> Option<Term> {
+    ) -> Option<[Term; 2]> {
         // * 🚩提取信息 | `old_placeholder_index`算入了「关系词项」
-        let mut argument = vec![];
         let old_placeholder_index = old_image.get_placeholder_index();
+        // * 🚩判断index是否指向了占位符：若为占位符，直接弹出
+        if index + 1 == old_placeholder_index {
+            return Some([old_image.inner.clone(), component.clone()]);
+        }
+        // ! ⚠️【2024-08-08 15:32:34】防御性代码：索引越界⇒驳回
+        /* from：
+        println!("old_image = {old_image}, component = {component}, index = {index}");
+        old_image = /(open _ {}(lock1)), component = $1, index = 2
+            at .\src\language\term_impl\term_making.rs:614
+            at .\src\language\term_impl\term_making.rs:692
+            at .\src\inference\rules\transform_rules.rs:304
+            at .\src\inference\rules\transform_rules.rs:154
+            at .\src\inference\rules\transform_rules.rs:75
+        TODO: 彻查如上bug | 💭思路：可能是在构建「二层转换索引」时出现了问题
+         */
+        if index + 1 >= old_image.components.len() {
+            return None;
+        }
         // * 🚩开始选择性添加词项（关系词项也算在内）
+        let mut argument = vec![];
+        let outer = old_image.components[index + 1].clone();
         for (i, term) in old_image.components.iter().enumerate() {
             let term = if i == index + 1 {
                 // * 🚩要替换的位置（要相对「关系词项」后移）⇒占位符
@@ -604,7 +649,7 @@ impl Term {
             argument.push(term);
         }
         // * 🚩构造出新词项
-        make_image_vec(argument)
+        make_image_vec(argument).map(|image| [image, outer])
     }
 
     /* ImageExt */
@@ -665,7 +710,7 @@ impl Term {
         old_image: CompoundTermRef,
         component: &Term,
         index: usize,
-    ) -> Option<Term> {
+    ) -> Option<[Term; 2]> {
         // * 🚩现在统一在一个「『像』构造」逻辑中
         Self::make_image_from_image(old_image, component, index, Self::make_image_ext_vec)
     }
@@ -691,19 +736,19 @@ impl Term {
 
     /// ## 📄OpenNARS中的例子
     ///
-    /// * 📄oldImage=`(\,(\,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish)`, component=`cat`, index=`2` => `(\,(\,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),cat,eat,_)`
-    /// * 📄oldImage=`(\,reaction,acid,_)`, component=`soda`, index=`0` => `(\,reaction,_,soda)`
-    /// * 📄oldImage=`(\,(\,REPRESENT,_,<(*,$1,FISH) --> FOOD>),_,eat,fish)`, component=`(\,REPRESENT,_,$1)`, index=`2` => `(\,(\,REPRESENT,_,<(*,$1,FISH) --> FOOD>),(\,REPRESENT,_,$1),eat,_)`
+    /// * 📄oldImage=`(\,X,_,eat,fish)`,          component=`cat`,  index=`2` => `(\,X,cat,eat,_)`
+    /// * 📄oldImage=`(\,reaction,acid,_)`,       component=`soda`, index=`0` => `(\,reaction,_,soda)`
+    /// * 📄oldImage=`(\,X,_,eat,fish)`,          component=`Y`,    index=`2` => `(\,X,Y,eat,_)`
     /// * 📄oldImage=`(\,neutralization,_,soda)`, component=`acid`, index=`1` => `(\,neutralization,acid,_)`
-    /// * 📄oldImage=`(\,neutralization,acid,_)`, component=`$1`, index=`0` => `(\,neutralization,_,$1)`
-    /// * 📄oldImage=`(\,REPRESENT,_,$1)`, component=`(\,(\,REPRESENT,_,<(*,$1,FISH) --> FOOD>),_,eat,fish)`, index=`1` => `(\,REPRESENT,(\,(\,REPRESENT,_,<(*,$1,FISH) --> FOOD>),_,eat,fish),_)`
+    /// * 📄oldImage=`(\,neutralization,acid,_)`, component=`$1`,   index=`0` => `(\,neutralization,_,$1)`
+    /// * 📄oldImage=`(\,REPRESENT,_,$1)`,        component=`Y`,    index=`1` => `(\,REPRESENT,Y,_)`
     ///
     /// ℹ️更多例子详见单元测试用例
     pub fn make_image_int_from_image(
         old_image: CompoundTermRef,
         component: &Term,
         index: usize,
-    ) -> Option<Term> {
+    ) -> Option<[Term; 2]> {
         // * 🚩现在统一在一个「『像』构造」逻辑中
         Self::make_image_from_image(old_image, component, index, Self::make_image_int_vec)
     }
@@ -841,13 +886,17 @@ impl Term {
     /* Statement */
 
     /// 从一个「陈述系词」中构造
-    pub fn make_statement_relation(copula: &str, subject: Term, predicate: Term) -> Option<Term> {
+    pub fn make_statement_relation(
+        copula: impl AsRef<str>,
+        subject: Term,
+        predicate: Term,
+    ) -> Option<Term> {
         // * 🚩无效⇒制作失败
         if StatementRef::invalid_statement(&subject, &predicate) {
             return None;
         }
         // * 🚩按照「陈述系词」分派
-        match copula {
+        match copula.as_ref() {
             INHERITANCE_RELATION => Self::make_inheritance(subject, predicate),
             SIMILARITY_RELATION => Self::make_similarity(subject, predicate),
             INSTANCE_RELATION => Self::make_instance(subject, predicate),
@@ -866,23 +915,12 @@ impl Term {
     /// * 🎯推理规则
     /// * 🚩【2024-07-08 11:45:32】放宽对「词项类型」的限制
     ///   * 📌实际上只需识别标识符
+    /// * ♻️【2024-08-05 00:58:29】直接使用[`Self::make_statement_relation`]
+    ///   * 📌目前保持「依照『模板词项』的标识符制作陈述」的语义
+    ///   * ✅由此也兼容了「实例/属性/实例属性」等外部系词
     pub fn make_statement(template: &Term, subject: Term, predicate: Term) -> Option<Term> {
-        // * 🚩无效⇒制作失败
-        if StatementRef::invalid_statement(&subject, &predicate) {
-            return None;
-        }
-        // * 🚩按照「陈述系词」分派
-        match template.identifier() {
-            INHERITANCE_RELATION => Self::make_inheritance(subject, predicate),
-            SIMILARITY_RELATION => Self::make_similarity(subject, predicate),
-            IMPLICATION_RELATION => Self::make_implication(subject, predicate),
-            EQUIVALENCE_RELATION => Self::make_equivalence(subject, predicate),
-            // ! ↓这三者不会在实际中出现
-            // INSTANCE_RELATION => Self::make_instance(subject, predicate),
-            // PROPERTY_RELATION => Self::make_property(subject, predicate),
-            // INSTANCE_PROPERTY_RELATION => Self::make_instance_property(subject, predicate),
-            _ => None,
-        }
+        // * 🚩直接是`make_statement_relation`的链接
+        Term::make_statement_relation(template.identifier(), subject, predicate)
     }
 
     /// 📄OpenNARS `Statement.makeSym`
@@ -1104,15 +1142,11 @@ impl CompoundTermRef<'_> {
     /// * 🚩若要替换上的词项为空（⚠️t可空），则与「删除元素」等同
     /// * ⚠️结果可空
     #[must_use]
-    pub fn set_component(
-        compound: CompoundTermRef,
-        index: usize,
-        term: Option<Term>,
-    ) -> Option<Term> {
-        let mut list = compound.clone_components();
+    pub fn set_component(self, index: usize, term: Option<Term>) -> Option<Term> {
+        let mut list = self.clone_components();
         list.remove(index);
         if let Some(term) = term {
-            match (compound.is_same_type(&term), term.as_compound()) {
+            match (self.is_same_type(&term), term.as_compound()) {
                 // * 🚩同类⇒所有元素并入 | (*, 1, a)[1] = (*, 2, 3) => (*, 1, 2, 3)
                 (
                     true,
@@ -1130,7 +1164,7 @@ impl CompoundTermRef<'_> {
             }
         }
         // * 🚩以当前词项为模板构造新词项
-        Term::make_compound_term(compound, list)
+        Term::make_compound_term(self, list)
     }
 }
 #[cfg(test)]
@@ -1250,14 +1284,18 @@ mod tests {
         }
 
         fn test_make_image_from_image_f(
-            make: fn(CompoundTermRef, &Term, usize) -> Option<Term>,
-        ) -> impl Fn(Term, Term, usize, Term) {
-            move |i, component, index, expected| {
+            make: fn(CompoundTermRef, &Term, usize) -> Option<[Term; 2]>,
+        ) -> impl Fn(Term, Term, usize, Term, Term) {
+            move |i, component, index, expected, expected_outer| {
                 let old_image = i.as_compound().expect("解析出的不是复合词项！");
-                let image = make(old_image, &component, index).expect("词项制作失败！");
+                let [image, outer] = make(old_image, &component, index).expect("词项制作失败！");
                 assert_eq!(
                     image, expected,
                     "{old_image}, {component}, {index} => {image} != {expected}"
+                );
+                assert_eq!(
+                    outer, expected_outer,
+                    "{old_image}, {component}, {index} => {outer} != {expected_outer}"
                 );
             }
         }
@@ -1632,16 +1670,18 @@ mod tests {
             let test = test_make_image_from_image_f(Term::make_image_ext_from_image);
             macro_once! {
                 // * 🚩模式：参数列表 ⇒ 预期词项
-                macro test($($image:tt, $component:tt, $index:tt => $expected:expr;)*) {
-                    $( test( term!($image), term!($component), $index, term!($expected) ); )*
+                macro test($($image:tt, $component:tt, $index:tt => [$expected:expr, $expected_outer:expr];)*) {
+                    $( test( term!($image), term!($component), $index, term!($expected), term!($expected_outer) ); )*
                 }
+                // * 📌特殊用例：误打误撞占位符
+                "(/,open,{key1},_)",   "lock",   1 => ["(/,open,{key1},_)", "lock"];
                 // * ℹ️用例均源自OpenNARS实际运行
-                "(/,open,{key1},_)",   "lock",   0 => "(/,open,_,lock)";
-                "(/,uncle,_,tom)",     "tim",    1 => "(/,uncle,tim,_)";
-                "(/,open,{key1},_)",   "$2",     0 => "(/,open,_,$2)";
-                "(/,open,{key1},_)",   "#1",     0 => "(/,open,_,#1)";
-                "(/,like,_,a)",        "b",      1 => "(/,like,b,_)";
-                "(/,like,b,_)",        "a",      0 => "(/,like,_,a)";
+                "(/,open,{key1},_)",   "lock",   0 => ["(/,open,_,lock)", "{key1}"];
+                "(/,uncle,_,tom)",     "tim",    1 => ["(/,uncle,tim,_)", "tom"];
+                "(/,open,{key1},_)",   "$2",     0 => ["(/,open,_,$2)", "{key1}"];
+                "(/,open,{key1},_)",   "#1",     0 => ["(/,open,_,#1)", "{key1}"];
+                "(/,like,_,a)",        "b",      1 => ["(/,like,b,_)", "a"];
+                "(/,like,b,_)",        "a",      0 => ["(/,like,_,a)", "b"];
             }
             ok!()
         }
@@ -1715,28 +1755,30 @@ mod tests {
             let test = test_make_image_from_image_f(Term::make_image_int_from_image);
             macro_once! {
                 // * 🚩模式：参数列表 ⇒ 预期词项
-                macro test($($image:tt, $component:tt, $index:tt => $expected:expr;)*) {
-                    $( test( term!($image), term!($component), $index, term!($expected) ); )*
+                macro test($($image:tt, $component:tt, $index:tt => [$expected:expr, $expected_outer:expr];)*) {
+                    $( test( term!($image), term!($component), $index, term!($expected), term!($expected_outer) ); )*
                 }
+                // * 📌特殊用例：误打误撞占位符
+                r"(\,R,_,eat,fish)",           "cat",                       0 => [r"(\,R,_,eat,fish)", "cat"];
                 // * ℹ️用例均源自OpenNARS实际运行
-                r"(\,R,_,eat,fish)",           "cat",                       2 => r"(\,R,cat,eat,_)";
-                r"(\,reaction,acid,_)",        "soda",                      0 => r"(\,reaction,_,soda)";
-                r"(\,R,_,eat,fish)",          r"(\,REPRESENT,_,$1)",        2 => r"(\,R,(\,REPRESENT,_,$1),eat,_)";
-                r"(\,neutralization,_,soda)",  "acid",                      1 => r"(\,neutralization,acid,_)";
-                r"(\,neutralization,acid,_)",  "$1",                        0 => r"(\,neutralization,_,$1)";
-                r"(\,REPRESENT,_,$1)",        r"(\,R,_,eat,fish)",          1 => r"(\,REPRESENT,(\,R,_,eat,fish),_)";
-                r"(\,neutralization,acid,_)",  "soda",                      0 => r"(\,neutralization,_,soda)";
-                r"(\,neutralization,acid,_)",  "?1",                        0 => r"(\,neutralization,_,?1)";
-                r"(\,reaction,acid,_)",       r"(\,neutralization,acid,_)", 0 => r"(\,reaction,_,(\,neutralization,acid,_))";
-                r"(\,REPRESENT,_,CAT)",        "(/,R,_,eat,fish)",          1 => r"(\,REPRESENT,(/,R,_,eat,fish),_)";
-                r"(\,R,_,eat,fish)",          r"(\,REPRESENT,_,$1)",        1 => r"(\,R,(\,REPRESENT,_,$1),_,fish)";
-                r"(\,R,_,eat,fish)",           "cat",                       1 => r"(\,R,cat,_,fish)";
-                r"(\,reaction,_,soda)",        "acid",                      1 => r"(\,reaction,acid,_)";
-                r"(\,reaction,_,base)",       r"(\,reaction,_,soda)",       1 => r"(\,reaction,(\,reaction,_,soda),_)";
-                r"(\,neutralization,acid,_)",  "#1",                        0 => r"(\,neutralization,_,#1)";
-                r"(\,neutralization,acid,_)",  "base",                      0 => r"(\,neutralization,_,base)";
-                r"(\,reaction,_,base)",        "acid",                      1 => r"(\,reaction,acid,_)";
-                r"(\,neutralization,acid,_)",  "(/,reaction,acid,_)",       0 => r"(\,neutralization,_,(/,reaction,acid,_))";
+                r"(\,R,_,eat,fish)",           "cat",                       2 => [r"(\,R,cat,eat,_)", "fish"];
+                r"(\,reaction,acid,_)",        "soda",                      0 => [r"(\,reaction,_,soda)", "acid"];
+                r"(\,R,_,eat,fish)",          r"(\,REPRESENT,_,$1)",        2 => [r"(\,R,(\,REPRESENT,_,$1),eat,_)", "fish"];
+                r"(\,neutralization,_,soda)",  "acid",                      1 => [r"(\,neutralization,acid,_)", "soda"];
+                r"(\,neutralization,acid,_)",  "$1",                        0 => [r"(\,neutralization,_,$1)", "acid"];
+                r"(\,REPRESENT,_,$1)",        r"(\,R,_,eat,fish)",          1 => [r"(\,REPRESENT,(\,R,_,eat,fish),_)", "$1"];
+                r"(\,neutralization,acid,_)",  "soda",                      0 => [r"(\,neutralization,_,soda)", "acid"];
+                r"(\,neutralization,acid,_)",  "?1",                        0 => [r"(\,neutralization,_,?1)", "acid"];
+                r"(\,reaction,acid,_)",       r"(\,neutralization,acid,_)", 0 => [r"(\,reaction,_,(\,neutralization,acid,_))", "acid"];
+                r"(\,REPRESENT,_,CAT)",        "(/,R,_,eat,fish)",          1 => [r"(\,REPRESENT,(/,R,_,eat,fish),_)", "CAT"];
+                r"(\,R,_,eat,fish)",          r"(\,REPRESENT,_,$1)",        1 => [r"(\,R,(\,REPRESENT,_,$1),_,fish)", "eat"];
+                r"(\,R,_,eat,fish)",           "cat",                       1 => [r"(\,R,cat,_,fish)", "eat"];
+                r"(\,reaction,_,soda)",        "acid",                      1 => [r"(\,reaction,acid,_)", "soda"];
+                r"(\,reaction,_,base)",       r"(\,reaction,_,soda)",       1 => [r"(\,reaction,(\,reaction,_,soda),_)", "base"];
+                r"(\,neutralization,acid,_)",  "#1",                        0 => [r"(\,neutralization,_,#1)", "acid"];
+                r"(\,neutralization,acid,_)",  "base",                      0 => [r"(\,neutralization,_,base)", "acid"];
+                r"(\,reaction,_,base)",        "acid",                      1 => [r"(\,reaction,acid,_)", "base"];
+                r"(\,neutralization,acid,_)",  "(/,reaction,acid,_)",       0 => [r"(\,neutralization,_,(/,reaction,acid,_))", "acid"];
             }
             ok!()
         }

@@ -28,6 +28,7 @@ pub trait ContextDerivation: ReasonContext {
     ) {
         let parent_task = self.current_task().clone();
         let task = Task::new(
+            self.reasoner_mut().updated_task_current_serial(),
             solution.clone().into(),
             new_budget.into(),
             Some(parent_task),
@@ -73,7 +74,7 @@ pub trait ContextDerivation: ReasonContext {
         // * 🚩仅在「任务内容」可用时构造
         let current_task = self.current_task(); // 不能当场变为引用：后续可能要再借用自身
         let new_punctuation = current_task.get_().punctuation();
-        let new_sentence = SentenceV1::new_sentence_from_punctuation(
+        let new_sentence = SentenceV1::with_punctuation(
             new_content,
             new_punctuation,
             new_stamp,
@@ -82,11 +83,11 @@ pub trait ContextDerivation: ReasonContext {
         drop(current_task); // ! 先抛掉引用代理
         match new_sentence {
             Ok(new_sentence) => {
-                let new_task = Task::new(
+                let new_task = Task::from_derived(
+                    self.reasoner_mut().updated_task_current_serial(),
                     new_sentence,
                     new_budget.into(),
                     Some(self.current_task().clone()),
-                    None,
                     None,
                 );
                 self.derived_task(new_task);
@@ -157,14 +158,14 @@ pub trait ContextDerivationConcept: ReasonContextWithLinks {
     /// * 🎯避免对`newStamp`的复制，解耦调用（让「新时间戳」的赋值止步在「推理开始」之前）
     fn double_premise_task_compositional(
         &mut self,
-        current_task: Option<&Task>,
+        current_task: &Task,
         new_content: Term,
         new_truth: Option<TruthValue>,
         new_budget: impl Into<BudgetValue>,
         new_stamp: Stamp,
     ) {
         self.double_premise_task_full(
-            current_task,
+            Some(current_task),
             new_content,
             // * 🚩默认「可修正」
             new_truth.map(|truth| (truth, true)),
@@ -213,7 +214,7 @@ pub trait ContextDerivationConcept: ReasonContextWithLinks {
         let new_punctuation = current_task
             .unwrap_or(&*self.current_task().get_()) // 立即使用的不可变引用
             .punctuation();
-        let new_sentence = SentenceV1::new_sentence_from_punctuation(
+        let new_sentence = SentenceV1::with_punctuation(
             new_content,
             new_punctuation,
             new_stamp,
@@ -221,6 +222,7 @@ pub trait ContextDerivationConcept: ReasonContextWithLinks {
         );
         if let Ok(sentence) = new_sentence {
             let new_task = Task::from_derived(
+                self.reasoner_mut().updated_task_current_serial(),
                 sentence,
                 new_budget,
                 Some(self.current_task().clone()),
@@ -261,9 +263,11 @@ pub trait ContextDerivationConcept: ReasonContextWithLinks {
             // * 🚩判断句⇒返回实际的「可修订」
             // * 🚩疑问句⇒返回一个用不到的空值
             .map_or(false, Judgement::revisable);
+        drop(current_task); // ! 先释放「借用代理」
+        drop(current_task_ref);
         // * 🚩判断句⇒返回实际的「可修订」
         // * 🚩疑问句⇒返回一个用不到的空值
-        let new_sentence = SentenceV1::new_sentence_from_punctuation(
+        let new_sentence = SentenceV1::with_punctuation(
             new_content,
             punctuation,
             new_stamp,
@@ -276,6 +280,7 @@ pub trait ContextDerivationConcept: ReasonContextWithLinks {
         };
         // * 🚩构造新任务
         let new_task = Task::from_derived(
+            self.reasoner_mut().updated_task_current_serial(),
             new_sentence,
             new_budget,
             // * 🚩拷贝共享引用
@@ -283,8 +288,6 @@ pub trait ContextDerivationConcept: ReasonContextWithLinks {
             None,
         );
         // * 🚩导出
-        drop(current_task); // ! 先释放「借用代理」
-        drop(current_task_ref);
         self.derived_task(new_task);
     }
 

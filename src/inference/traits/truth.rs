@@ -3,7 +3,7 @@
 //! * 🎯只复刻外部读写方法，不限定内部数据字段
 //!   * ❌不迁移「具体类型」特征
 
-use crate::{entity::ShortFloat, global::Float, io::symbols::*, util::ToDisplayAndBrief};
+use crate::{entity::ShortFloat, global::Float, symbols::*, util::ToDisplayAndBrief};
 use nar_dev_utils::join;
 use narsese::lexical::Truth as LexicalTruth;
 
@@ -103,6 +103,13 @@ pub trait Truth: ToDisplayAndBrief {
         /* 📄OpenNARS源码：
         return getFrequency() < 0.5; */
         self.frequency() < ShortFloat::HALF
+    }
+
+    /// 🆕模拟[`isNegative`](Self::is_negative)的反面：真值是否为【正面】
+    /// * 🎯让代码更好理解
+    #[inline]
+    fn is_positive(&self) -> bool {
+        !self.is_negative()
     }
 
     /// 模拟`TruthValue.equals`

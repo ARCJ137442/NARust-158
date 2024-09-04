@@ -25,7 +25,7 @@ use nar_dev_utils::unwrap_or_return;
 /// The task and belief have the same content
 pub fn match_task_and_belief(context: &mut ReasonContextConcept) {
     // * 🚩保证提取出「当前信念」
-    let shuffle_rng_seed = context.shuffle_rng_seed(); // 提前生成随机种子
+    let shuffle_rng_seed = context.shuffle_rng_seeds(); // 提前生成随机种子
     let current_belief = unwrap_or_return!(?context.current_belief());
     let current_task_rc = context.current_task();
     let current_task = current_task_rc.get_();
@@ -120,9 +120,8 @@ mod tests {
     use super::*;
     use crate::{
         expect_narsese_term,
-        inference::{process_direct, test_inference::*, InferenceEngine},
+        inference::{process_direct, tools::*, InferenceEngine},
     };
-    use navm::output::Output;
 
     /// 引擎
     const ENGINE: InferenceEngine = InferenceEngine::new(
@@ -135,7 +134,7 @@ mod tests {
     /// 修正判断
     #[test]
     fn revise_after_direct() {
-        let mut vm = create_vm_from_engine(ENGINE);
+        let mut vm = create_reasoner_from_engine(ENGINE);
         // * 🚩输入指令并拉取输出
         vm.input_fetch_print_expect(
             "
@@ -152,7 +151,7 @@ mod tests {
     /// 修正判断+答问
     #[test]
     fn answer_after_revise() {
-        let mut vm = create_vm_from_engine(ENGINE);
+        let mut vm = create_reasoner_from_engine(ENGINE);
 
         // 匹配时回答
         vm.input_fetch_print_expect(
@@ -187,7 +186,7 @@ mod tests {
     /// 回答带变量问题
     #[test]
     fn answer_question_with_variables() {
-        let mut vm = create_vm_from_engine(ENGINE);
+        let mut vm = create_reasoner_from_engine(ENGINE);
         // * 🚩输入指令并拉取输出
         vm.input_fetch_print_expect(
             "
@@ -198,14 +197,25 @@ mod tests {
             ",
             expect_narsese_term!(ANSWER "<A --> B>" in outputs),
         );
+        vm.input_fetch_print_expect(
+            "
+            res
+            nse <A --> B>.
+            cyc 5
+            nse <A --> ?1>?
+            cyc 50
+            ",
+            expect_narsese_term!(ANSWER "<A --> B>" in outputs),
+        );
     }
 
     /// 稳定性
+    /// * 🚩【2024-08-12 22:56:38】考虑到单测时间太长，目前压到16轮
     #[test]
     fn stability() {
-        let mut vm = create_vm_from_engine(ENGINE);
+        let mut vm = create_reasoner_from_engine(ENGINE);
         // * 🚩检验长期稳定性
-        for i in 0..0x100 {
+        for i in 0..0x10 {
             let _outs = vm.input_cmds_and_fetch_out(&format!(
                 "
                 nse <A{i} --> B>. %1.0;0.9%

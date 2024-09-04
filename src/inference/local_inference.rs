@@ -97,7 +97,8 @@ fn process_judgement(context: &mut ReasonContextDirect) {
         let overflowed_belief = this.add_belief(judgment);
         // * 🚩报告溢出
         if let Some(overflowed_belief) = overflowed_belief {
-            let message = format!( // ! 提取成单独的变量，避免对`this`的借用问题
+            let message = format!(
+                // ! 提取成单独的变量，避免对`this`的借用问题
                 "!!! Overflowed Belief in '{}': {}",
                 this.term(),
                 overflowed_belief.to_display_long()
@@ -162,7 +163,7 @@ fn process_question(context: &mut ReasonContextDirect) {
     // * 🚩🆕未能新增⇒跳过问题
     else {
         context.report_comment(format!(
-            "!!! Skipped Question Task: {}",
+            "!!! Skipped Non-new Question Task: {}",
             question_task.get_().to_display_long()
         ));
     }
@@ -227,14 +228,14 @@ fn find_existed_question<'c>(concept: &'c Concept, task_content: &Term) -> Optio
 /// # 📄OpenNARS
 ///
 /// Evaluate a query against beliefs (and desires in the future)
-fn evaluation<'a, S, J: 'a>(
+fn evaluation<'a, S, J>(
     query: &S,
     list: impl IntoIterator<Item = &'a J>,
     solution_quality: fn(&S, &J) -> ShortFloat,
 ) -> Option<(&'a J, ShortFloat)>
 where
     S: Sentence,
-    J: Judgement,
+    J: Judgement + 'a,
 {
     // * 🚩筛选出其中排行最前的回答
     let mut current_best = ShortFloat::default();
@@ -260,10 +261,11 @@ where
 mod tests {
     use super::*;
     use crate::{
+        control::Reasoner,
         expect_narsese_term,
-        inference::{test_inference::*, InferenceEngine},
+        inference::{tools::*, InferenceEngine},
     };
-    use navm::{output::Output, vm::VmRuntime};
+    use navm::output::Output;
 
     /// 推理引擎
     const ENGINE: InferenceEngine = InferenceEngine::new(
@@ -273,14 +275,14 @@ mod tests {
         InferenceEngine::ECHO.reason_f(),
     );
 
-    fn vm() -> impl VmRuntime {
-        create_vm_from_engine(ENGINE)
+    fn reasoner() -> Reasoner {
+        create_reasoner_from_engine(ENGINE)
     }
 
     /// 直接回答问题
     #[test]
     fn direct_answer_question() {
-        let mut vm = vm();
+        let mut vm = reasoner();
         // * 🚩输入指令并拉取输出
         vm.input_fetch_print_expect(
             "
@@ -296,7 +298,7 @@ mod tests {
     /// 多次回答相同问题
     #[test]
     fn answer_question_multiple_time() {
-        let mut vm = vm();
+        let mut vm = reasoner();
         let has_answer = |answer: &Output| matches!(answer, Output::ANSWER { .. });
 
         // 初次回答
@@ -337,22 +339,23 @@ mod tests {
     }
 
     /// 稳定性
+    /// * 🚩【2024-08-12 22:56:38】考虑到单测时间太长，目前压到16轮、每轮10步、最后1000步
     #[test]
     fn stability() {
-        let mut vm = vm();
+        let mut vm = reasoner();
         // * 🚩检验长期稳定性
-        for i in 0..0x100 {
+        for i in 0..0x10 {
             let _outs = vm.input_cmds_and_fetch_out(&format!(
                 "
                 nse <A{i} --> B>.
                 nse <A{i} --> B>?
-                rem cyc 50
+                rem cyc 10
                 "
             ));
             // ! ⚠️【2024-07-09 02:22:12】不一定有回答：预算竞争约束着资源调配，可能没法立即回答
             // // * 🚩检测有回答
             // expect_outputs(&outs, |answer| matches!(answer, Output::ANSWER { .. }));
         }
-        vm.input_cmds("cyc 10000");
+        vm.input_cmds("cyc 1000");
     }
 }

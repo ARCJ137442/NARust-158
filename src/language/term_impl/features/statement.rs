@@ -21,8 +21,8 @@
 //! It can be of either first-order or higher-order.
 
 use super::compound_term::CompoundTermRef;
-use crate::io::symbols::*;
 use crate::language::*;
+use crate::symbols::*;
 use nar_dev_utils::{if_return, matches_or};
 use std::{
     fmt::{Display, Formatter},
@@ -161,6 +161,26 @@ impl Term {
         }
     }
 
+    /// 🆕用于判断词项是否为「陈述」并解包其中的主项、系词和谓项
+    /// * 🚩模式匹配后返回一个[`Option`]，只在其为「符合指定类型的词项」时为[`Some`]
+    /// * 🚩返回标识符与内部所有元素的所有权
+    #[must_use]
+    pub fn unwrap_statement_id_components(self) -> Option<(Term, String, Term)> {
+        matches_or! {
+            ?self.unwrap_compound_id_components(),
+            // * 🚩匹配到（语句所作为的）复合词项，同时长度合规
+            Some((copula, terms)) if terms.len() == 2
+            // * 🚩返回内容
+            => {
+                // ? 💭后续或许能提取出一个统一的逻辑
+                let mut terms = terms.into_vec();
+                let predicate = terms.pop().expect("已经假定了长度为2");
+                let subject = terms.pop().expect("已经假定了长度为2");
+                (subject, copula, predicate)
+            }
+        }
+    }
+
     /// 🆕用于判断词项是否为「指定类型的陈述」，并解包其中的主项和谓项
     /// * 🚩模式匹配后返回一个[`Option`]，只在其为「符合指定类型的词项」时为[`Some`]
     /// * 🚩返回内部所有元素的所有权
@@ -254,7 +274,7 @@ impl<'s> StatementRef<'s> {
     /// # 📄OpenNARS
     ///
     /// 🈚
-    pub fn subject(&self) -> &Term {
+    pub fn subject(&self) -> &'s Term {
         self.subject
     }
 
@@ -263,8 +283,13 @@ impl<'s> StatementRef<'s> {
     /// # 📄OpenNARS
     ///
     /// 🈚
-    pub fn predicate(&self) -> &Term {
+    pub fn predicate(&self) -> &'s Term {
         self.predicate
+    }
+
+    /// 🆕主项-谓项 二元数组
+    pub fn sub_pre(&self) -> [&'s Term; 2] {
+        [self.subject, self.predicate]
     }
 
     /// 📄OpenNARS `invalidStatement`
@@ -485,34 +510,38 @@ pub struct StatementRefMut<'a> {
     predicate: *mut Term,
 }
 
-impl StatementRefMut<'_> {
+impl<'a> StatementRefMut<'a> {
     /// 获取陈述整体
-    pub fn statement(&mut self) -> &mut Term {
+    #[doc(alias = "inner")]
+    pub fn statement(self) -> &'a mut Term {
         self.statement
     }
 
-    /// 📄OpenNARS `getSubject`
+    /// 🆕同时获取「主项」与「谓项」的可变引用
     /// * ⚠️此处对裸指针解引用
     ///   * 📄安全性保证同[`CompoundTermRefMut::components`]
-    ///
+    /// * 🎯获取陈述的主谓项，在这之后对齐进行变量替换
+    pub fn sub_pre(&mut self) -> [&'a mut Term; 2] {
+        // SAFETY: 同[`Compound::components`]
+        unsafe { [&mut *self.subject, &mut *self.predicate] }
+    }
+
+    /// 📄OpenNARS `getSubject`
     /// # 📄OpenNARS
     ///
     /// 🈚
-    pub fn subject(&mut self) -> &mut Term {
-        // SAFETY: 同[`Compound::components`]
-        unsafe { &mut *self.subject }
+    pub fn subject(&mut self) -> &'a mut Term {
+        let [sub, _] = self.sub_pre();
+        sub
     }
 
     /// 📄OpenNARS `getPredicate`
-    /// * ⚠️此处对裸指针解引用
-    ///   * 📄安全性保证同[`CompoundTermRefMut::components`]
-    ///
     /// # 📄OpenNARS
     ///
     /// 🈚
-    pub fn predicate(&mut self) -> &mut Term {
-        // SAFETY: 同[`Compound::components`]
-        unsafe { &mut *self.predicate }
+    pub fn predicate(&mut self) -> &'a mut Term {
+        let [_, pre] = self.sub_pre();
+        pre
     }
 
     /// 生成一个不可变引用
@@ -615,10 +644,31 @@ impl Statement {
         self.term.as_statement_mut().unwrap()
     }
 
+    /// 🆕同时快捷获取`[主项, 谓项]`
+    /// * 🚩【2024-07-31 22:24:07】现场解包[`StatementRef`]中的引用，避免「临时对象dropped」
+    pub fn sub_pre(&self) -> [&Term; 2] {
+        let StatementRef {
+            subject, predicate, ..
+        } = self.get_ref();
+        [subject, predicate]
+    }
+
+    /// 🆕同时快捷获取`[主项, 谓项]`的可变引用
+    /// * 🎯用于场景「获取 主项/谓项，然后对齐进行变量替换」
+    pub fn sub_pre_mut(&mut self) -> [&mut Term; 2] {
+        self.mut_ref().sub_pre()
+    }
+
     /// 解包为内部元素（主项、谓项）
     /// * 🎯用于「推理规则」中的新词项生成
     pub fn unwrap_components(self) -> [Term; 2] {
         self.term.unwrap_statement_components().unwrap()
+    }
+
+    /// 解包为内部成分（主项、系词、谓项）
+    /// * 🎯用于「推理规则」中的新词项生成
+    pub fn unwrap(self) -> (Term, String, Term) {
+        self.term.unwrap_statement_id_components().unwrap()
     }
 }
 
@@ -664,6 +714,18 @@ impl DerefMut for Statement {
 impl Display for Statement {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         self.term.fmt(f)
+    }
+}
+
+/// 陈述引用⇒陈述
+impl StatementRef<'_> {
+    /// 从「陈述引用」转换为陈述（获得所有权）
+    /// * ✅对于「陈述可变引用」可以先转换为「不可变引用」使用
+    pub fn to_owned(&self) -> Statement {
+        debug_assert!(self.statement.is_statement()); // 转换前检验是否为陈述类词项
+        Statement {
+            term: self.statement.clone(),
+        }
     }
 }
 

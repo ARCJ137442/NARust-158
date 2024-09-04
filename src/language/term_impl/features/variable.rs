@@ -18,8 +18,8 @@
 //!
 //! A variable term, which does not correspond to a concept
 
-use crate::io::symbols::*;
 use crate::language::*;
+use crate::symbols::*;
 use nar_dev_utils::matches_or;
 
 impl Term {
@@ -68,6 +68,7 @@ impl Term {
     ///
     /// * ✅【2024-06-19 02:06:12】跟随最新改版更新，删去字段并铺开实现此功能
     /// * ♻️【2024-06-26 02:07:27】重构修正：禁止「占位符」作为「常量词项」
+    /// * ♻️【2024-07-31 21:41:49】修正：不再将查询变量计入「常量词项」
     ///
     /// # 📄OpenNARS
     ///
@@ -78,7 +79,7 @@ impl Term {
     /// - (for `CompoundTerm`) check if the term contains free variable
     #[inline(always)]
     pub fn is_constant(&self) -> bool {
-        !self.is_placeholder() && !self.contains_sole_variable()
+        !self.instanceof_variable() && !self.is_placeholder() && !self.contains_sole_variable()
     }
 
     /// 🆕检查自身是否包含有「孤立非查询变量」
@@ -156,6 +157,74 @@ impl Term {
     #[inline(always)]
     pub fn get_variable_type(&self) -> &str {
         &self.identifier
+    }
+
+    /// 🆕获取多个词项中编号最大的变量词项id
+    pub fn maximum_variable_id_multi<'s>(terms: impl IntoIterator<Item = &'s Term>) -> usize {
+        terms
+            .into_iter()
+            .map(Term::maximum_variable_id) // 统计各个词项的最大变量id
+            .max() // 取最大值
+            .unwrap_or(0) // 以0为补充（即便空集）
+    }
+}
+
+/// 🆕获取编号最大的变量词项id
+/// * 🎯兼容「词项」与「词项数组」
+pub trait MaximumVariableId {
+    fn maximum_variable_id(&self) -> usize;
+}
+
+/// 词项本身
+impl MaximumVariableId for Term {
+    /// 🆕获取一个词项中编号最大的变量词项id
+    fn maximum_variable_id(&self) -> usize {
+        use TermComponents::*;
+        match self.components() {
+            // 变量⇒自身id
+            Variable(id) => *id,
+            // 内含词项⇒递归深入
+            Compound(terms) => Term::maximum_variable_id_multi(terms.iter()),
+            // 其它⇒0 | 后续开放补充
+            Empty | Word(..) | Interval(..) => 0,
+        }
+    }
+}
+
+/// 词项引用
+impl MaximumVariableId for &Term {
+    fn maximum_variable_id(&self) -> usize {
+        Term::maximum_variable_id(*self)
+    }
+}
+
+/// 兼容词项数组
+impl<const N: usize> MaximumVariableId for [Term; N] {
+    fn maximum_variable_id(&self) -> usize {
+        Term::maximum_variable_id_multi(self)
+    }
+}
+
+/// 兼容引用数组
+impl<const N: usize> MaximumVariableId for [&Term; N] {
+    fn maximum_variable_id(&self) -> usize {
+        // * 🚩使用`cloned`将`&&Term`转换为`&Term`
+        Term::maximum_variable_id_multi(self.iter().cloned())
+    }
+}
+
+/// 兼容数组切片
+impl MaximumVariableId for [Term] {
+    fn maximum_variable_id(&self) -> usize {
+        Term::maximum_variable_id_multi(self)
+    }
+}
+
+/// 兼容引用数组切片
+impl MaximumVariableId for [&Term] {
+    fn maximum_variable_id(&self) -> usize {
+        // * 🚩使用`cloned`将`&&Term`转换为`&Term`
+        Term::maximum_variable_id_multi(self.iter().cloned())
     }
 }
 

@@ -7,8 +7,8 @@ use crate::{
     },
     entity::{Sentence, TLink, TruthValue},
     inference::{BudgetInferenceContext, TruthFunctions},
-    io::symbols::*,
     language::{CompoundTermRef, StatementRef, Term},
+    symbols::*,
     util::RefCount,
 };
 use nar_dev_utils::unwrap_or_return;
@@ -95,12 +95,7 @@ fn truth_transforming(
     // * 🚩真值 * //
     let truth = match direction {
         Forward => Some(
-            context
-                .current_task()
-                .get_()
-                .as_judgement()
-                .expect("前向推理要求「当前任务」必须有真值")
-                .identity(), // 真值函数：恒等
+            context.current_task().get_().unwrap_judgement().identity(), // 真值函数：恒等
         ),
         Backward => None,
     };
@@ -219,8 +214,7 @@ fn replaced_transformed_content(
                     indexes.len() == 4,
                     "【2024-07-03 21:55:34】此处原意是「四层、条件、在条件项中」"
                 );
-                let new_condition =
-                    CompoundTermRef::set_component(conditional, indexes[1], Some(new_inheritance))?;
+                let new_condition = conditional.set_component(indexes[1], Some(new_inheritance))?;
                 Term::make_statement(&statement, new_condition, statement.predicate.clone())
             }
             _ => {
@@ -293,54 +287,54 @@ fn transform_inheritance(
             //   * ℹ️新陈述：积 --> 关系词项
             //   * 📝实际情况是「索引在1⇒构造词项」
             //   * 📄「关系词项」如："open" @ "(/,open,$1,_)" | 始终在第一位，只是存储时放占位符的位置上
-            0 => [
-                inner_compound.component_at(index)?.clone(),
-                Term::make_image_ext_from_image(
+            0 => {
+                let [image, outer] = Term::make_image_ext_from_image(
                     inner_compound,
                     inheritance_to_be_transform.subject,
                     index,
-                )?,
-            ],
+                )?;
+                [outer, image]
+            }
             // * 🚩其它⇒调转占位符位置
             //   * ℹ️新陈述：另一元素 --> 新像
             //   * 📄「关系词项」如"{lock1}" @ "(/,open,_,{lock1})"
             //   * inh="<$1 --> (/,open,_,{lock1})>"
             //   * => "(/,open,$1,_)"
-            _ => [
-                inner_compound.component_at(index)?.clone(),
-                Term::make_image_ext_from_image(
+            _ => {
+                let [image, outer] = Term::make_image_ext_from_image(
                     inner_compound,
                     inheritance_to_be_transform.subject,
                     index,
-                )?,
-            ],
+                )?;
+                [outer, image]
+            }
         },
         // * 🚩内涵像@前项⇒乘积/换索引
         IMAGE_INT_OPERATOR if side == 1 => match index {
             // * 🚩链接来源正好是「关系词项」⇒转乘积
             //   * ℹ️新陈述：关系词项 --> 积
             //   * 📄「关系词项」如："open" @ "(\,open,$1,_)" | 始终在第一位，只是存储时放占位符的位置上
-            0 => [
-                inner_compound.component_at(index)?.clone(),
-                Term::make_image_ext_from_image(
+            0 => {
+                let [image, outer] = Term::make_image_ext_from_image(
                     inner_compound,
                     inheritance_to_be_transform.subject,
                     index,
-                )?,
-            ],
+                )?;
+                [outer, image]
+            }
             // * 🚩其它⇒调转占位符位置
             //   * ℹ️新陈述：新像 --> 另一元素
             //   * 📄「关系词项」如"neutralization" @ "(\,neutralization,_,$1)"
             //   * inh="<(\,neutralization,acid,_) --> $1>"
             //   * => "<(\,neutralization,_,$1) --> acid>"
-            _ => [
-                inner_compound.component_at(index)?.clone(),
-                Term::make_image_ext_from_image(
+            _ => {
+                let [image, outer] = Term::make_image_ext_from_image(
                     inner_compound,
                     inheritance_to_be_transform.subject,
                     index,
-                )?,
-            ],
+                )?;
+                [outer, image]
+            }
         },
         // * 🚩其它⇒无效
         _ => return None,
@@ -361,7 +355,7 @@ fn transform_subject_product_image(
     inh_predicate: &Term,
     context: &mut ReasonContextTransform,
 ) {
-    // * 🚩积⇒内涵像
+    // * 🚩积⇒外延像
     if let Some(product) = inh_subject.as_compound_type(PRODUCT_OPERATOR) {
         // * 🚩一次多个：遍历所有可能的索引
         for (i, new_subject) in product.components.iter().cloned().enumerate() {
@@ -379,21 +373,22 @@ fn transform_subject_product_image(
     // * 🚩内涵像⇒积/其它内涵像
     else if let Some(image) = inh_subject.as_compound_type(IMAGE_INT_OPERATOR) {
         let placeholder_index = image.get_placeholder_index();
-        // * 🚩一次多个：遍历所有可能的索引
-        for (i, component) in image.components.iter().cloned().enumerate() {
+        // * 🚩一次多个：遍历除「关系词项」外所有位置
+        for i in 1..image.size() {
             // * 🚩词项 * //
             // * 🚩根据「链接索引」与「关系索引（占位符位置）」的关系决定「积/像」
             let [new_subject, new_predicate] = match i == placeholder_index {
                 // * 🚩转换回「积」
-                true => [
-                    component,
-                    unwrap_or_return!(?Term::make_product(image, inh_predicate, i) => continue),
-                ],
+                true => {
+                    let [product, relation] =
+                        unwrap_or_return!(?Term::make_product(image, inh_predicate) => continue);
+                    [relation, product] // 此时`component`是占位符
+                }
                 // * 🚩更改位置
-                false => [
-                    unwrap_or_return!(?Term::make_image_int_from_image(image, inh_predicate, i) => continue),
-                    component.clone(),
-                ],
+                false => {
+                    let [image, outer] = unwrap_or_return!(?Term::make_image_int_from_image(image, inh_predicate, i-1) => continue);
+                    [image, outer]
+                }
             };
             let inheritance =
                 unwrap_or_return!(?Term::make_inheritance(new_subject, new_predicate) => continue);
@@ -418,12 +413,12 @@ fn transform_predicate_product_image(
     inh_predicate: CompoundTermRef,
     context: &mut ReasonContextTransform,
 ) {
-    // * 🚩积⇒外延像
+    // * 🚩积⇒内涵像
     if let Some(product) = inh_predicate.as_compound_type(PRODUCT_OPERATOR) {
-        // * 🚩一次多个：遍历所有可能的索引
+        // * 🚩一次多个：遍历除「关系词项」外所有位置
         for (i, new_predicate) in product.components.iter().cloned().enumerate() {
             // * 🚩词项 * //
-            let new_subject = unwrap_or_return!(?Term::make_image_ext_from_product(product, inh_subject, i) => continue);
+            let new_subject = unwrap_or_return!(?Term::make_image_int_from_product(product, inh_subject, i) => continue);
             let inheritance =
                 unwrap_or_return!(?Term::make_inheritance(new_subject, new_predicate) => continue);
             // * 🚩真值&预算 | 恒等真值+复合前向/反向 * //
@@ -436,21 +431,22 @@ fn transform_predicate_product_image(
     // * 🚩外延像⇒积/其它外延像
     else if let Some(image) = inh_predicate.as_compound_type(IMAGE_EXT_OPERATOR) {
         let placeholder_index = image.get_placeholder_index();
-        // * 🚩一次多个：遍历所有可能的索引
-        for (i, component) in image.components.iter().cloned().enumerate() {
+        // * 🚩一次多个：遍历除「关系词项」外所有位置
+        for i in 1..image.size() {
             // * 🚩词项 * //
             // * 🚩根据「链接索引」与「关系索引（占位符位置）」的关系决定「积/像」
             let [new_subject, new_predicate] = match i == placeholder_index {
                 // * 🚩转换回「积」
-                true => [
-                    unwrap_or_return!(?Term::make_product(image, inh_subject, i) => continue),
-                    component,
-                ],
+                true => {
+                    let [product, relation] =
+                        unwrap_or_return!(?Term::make_product(image, inh_subject) => continue);
+                    [product, relation] // 此时`component`是占位符
+                }
                 // * 🚩更改位置
-                false => [
-                    component.clone(),
-                    unwrap_or_return!(?Term::make_image_ext_from_image(image, inh_subject, i) => continue),
-                ],
+                false => {
+                    let [image, outer] = unwrap_or_return!(?Term::make_image_ext_from_image(image, inh_subject, i-1) => continue);
+                    [outer, image]
+                }
             };
             let inheritance =
                 unwrap_or_return!(?Term::make_inheritance(new_subject, new_predicate) => continue);
@@ -467,7 +463,7 @@ fn transform_predicate_product_image(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::inference::{process_direct, test_inference::*, InferenceEngine};
+    use crate::inference::{process_direct, tools::*, InferenceEngine};
     use narsese::lexical_nse_term;
 
     const ENGINE: InferenceEngine = InferenceEngine::new(
@@ -477,42 +473,90 @@ mod tests {
         InferenceEngine::ECHO.reason_f(),
     );
 
-    /// 基础转换推理
-    #[test]
-    fn transform_basic() {
-        let mut vm = create_vm_from_engine(ENGINE);
+    /// 通用测试：输入系列指令，拉取打印输出，检查其中的所有词项
+    fn test_transform_and_expect_terms(
+        cmds: impl AsRef<str>,
+        expect_terms: impl IntoIterator<Item = narsese::lexical::Term>,
+    ) {
+        let mut vm = create_reasoner_from_engine(ENGINE);
         // * 🚩输入指令并拉取输出
-        let outs = vm.input_cmds_and_fetch_out(
-            "
+        let outs = vm.input_cmds_and_fetch_out(cmds.as_ref());
+        // * 🚩打印输出
+        print_outputs(&outs);
+        // * 🚩检查其中是否有结论
+        for expected in expect_terms {
+            expect_outputs_contains_term(&outs, expected);
+        }
+    }
+
+    /// 基础转换推理
+    /// * 🚩积⇒像 @ 外延
+    #[test]
+    fn transform_basic_ext() {
+        test_transform_and_expect_terms(
+            r"
             nse <(*, A, B) --> R>.
             cyc 10
             ",
-        );
-        // * 🚩打印输出
-        print_outputs(&outs);
-        // * 🚩检查其中是否有结论
-        expect_outputs_contains_term(&outs, lexical_nse_term!("<A --> (/, R, _, B)>"));
-        expect_outputs_contains_term(&outs, lexical_nse_term!("<B --> (/, R, A, _)>"));
+            [
+                lexical_nse_term!(r"<A --> (/, R, _, B)>"),
+                lexical_nse_term!(r"<B --> (/, R, A, _)>"),
+            ],
+        )
+    }
 
-        // * 🚩输入指令并拉取输出
-        let outs = vm.input_cmds_and_fetch_out(
-            "
-            res
+    /// 基础转换推理
+    /// * 🚩积⇒像
+    #[test]
+    fn transform_basic_int() {
+        test_transform_and_expect_terms(
+            r"
             nse <S --> (*, C, D)>.
             cyc 10
             ",
-        );
-        // * 🚩打印输出
-        print_outputs(&outs);
-        // * 🚩检查其中是否有结论
-        expect_outputs_contains_term(&outs, lexical_nse_term!("<(/, S, _, D) --> C>"));
-        expect_outputs_contains_term(&outs, lexical_nse_term!("<(/, S, C, _) --> D>"));
+            [
+                lexical_nse_term!(r"<(\, S, _, D) --> C>"),
+                lexical_nse_term!(r"<(\, S, C, _) --> D>"),
+            ],
+        )
+    }
+
+    /// 反向转换推理 @ 外延
+    /// * 🚩像⇒积/像
+    #[test]
+    fn transform_backward_ext() {
+        test_transform_and_expect_terms(
+            r"
+            nse <A --> (/, R, _, B)>.
+            cyc 10
+            ",
+            [
+                lexical_nse_term!(r"<(*, A, B) --> R>"),
+                lexical_nse_term!(r"<B --> (/, R, A, _)>"),
+            ],
+        )
+    }
+
+    /// 反向转换推理 @ 内涵
+    /// * 🚩像⇒积/像
+    #[test]
+    fn transform_backward_int() {
+        test_transform_and_expect_terms(
+            r"
+            nse <(\, S, _, D) --> C>.
+            cyc 10
+            ",
+            [
+                lexical_nse_term!(r"<S --> (*, C, D)>"),
+                lexical_nse_term!(r"<(\, S, C, _) --> D>"),
+            ],
+        )
     }
 
     /// 稳定性
     #[test]
     fn stability() {
-        let mut vm = create_vm_from_engine(ENGINE);
+        let mut vm = create_reasoner_from_engine(ENGINE);
         // * 🚩输入指令并拉取输出
         let outs = vm.input_cmds_and_fetch_out(
             "

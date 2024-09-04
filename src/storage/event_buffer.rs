@@ -11,9 +11,9 @@ use crate::{
     entity::{BudgetValue, JudgementV1, Sentence, ShortFloat, Stamp, Task, TruthValue},
     global::Float,
     inference::{BudgetFunctions, Evidential, Truth, TruthFunctions},
-    io::symbols::{IMPLICATION_RELATION, PREDICTIVE_IMPLICATION_RELATION},
     language::Term,
     storage::Memory,
+    symbols::*,
 };
 use nar_dev_utils::{impl_once, list, unwrap_or_return};
 use std::collections::VecDeque;
@@ -238,7 +238,7 @@ mod utils {
             Stamp::from_evidential(task),
             task.as_judgement().unwrap().revisable(),
         );
-        Task::from_input(sentence.into(), BudgetValue::from(task))
+        Task::from_input(0, sentence, BudgetValue::from(task)) // TODO: 处理序列号一事
     }
 
     /// 🆕从旧任务构建【内容、预算值完全相同】的新任务，**只有真值不同**
@@ -289,7 +289,7 @@ mod utils {
         //     raise "Invalid case."
         let sentence = JudgementV1::new(term, truth, stamp, true);
 
-        let task = Task::from_input(sentence.into(), budget);
+        let task = Task::from_input(0, sentence, budget); // TODO: 处理「序列号」一事
         Some(task)
     }
 }
@@ -563,7 +563,7 @@ impl EventBuffer {
         let sentence = JudgementV1::new(term, truth, stamp, true);
 
         // task
-        let task = Task::from_input(sentence.into(), budget);
+        let task = Task::from_input(0, sentence, budget); // TODO: 处理序列号一事
         Some(task)
     }
 
@@ -599,7 +599,7 @@ impl EventBuffer {
         let sentence = JudgementV1::new(term, truth, stamp, true);
 
         // task
-        let task = Task::from_input(sentence.into(), budget);
+        let task = Task::from_input(0, sentence, budget); // TODO: 处理序列号一事
         Some(task)
     }
 
@@ -640,7 +640,7 @@ impl EventBuffer {
         let sentence = JudgementV1::new(term, truth, stamp, true);
 
         // task
-        let task = Task::from_input(sentence.into(), budget);
+        let task = Task::from_input(0, sentence, budget); // TODO: 处理序列号一事
         let predictive_implication = PredictiveImplication::new(
             event_1.clone_content(),
             interval,
@@ -1084,22 +1084,34 @@ pub struct BufferCycleParameters {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{control::Reasoner, global::ClockTime, util::ToDisplayAndBrief};
+    use crate::{
+        control::Reasoner,
+        global::ClockTime,
+        util::{Serial, ToDisplayAndBrief},
+    };
     use narsese::conversion::string::impl_lexical::format_instances::FORMAT_ASCII;
 
-    fn parse_task(s: impl AsRef<str>, stamp_time: ClockTime) -> Task {
+    fn parse_task(s: impl AsRef<str>, stamp_time: ClockTime, task_serial: Serial) -> Task {
         let task = FORMAT_ASCII
             .parse(s.as_ref())
             .unwrap()
             .try_into_task_compatible()
             .unwrap();
-        Reasoner::parse_task_full(&DEFAULT_PARAMETERS, stamp_time, task, stamp_time).unwrap()
+        Reasoner::parse_task_full(
+            &DEFAULT_PARAMETERS,
+            stamp_time,
+            task,
+            stamp_time,
+            task_serial,
+        )
+        .unwrap()
     }
+
     fn parse_task_inc(s: impl AsRef<str>, clock: &mut ClockTime) -> Task {
-        parse_task(s, {
-            *clock += 1;
-            *clock - 1
-        })
+        *clock += 1;
+        let stamp_time = *clock - 1;
+        let task_serial = (*clock - 1) as Serial; // TODO: 【2024-09-05 00:27:09】暂时一样，后续考虑修改
+        parse_task(s, stamp_time, task_serial)
     }
 
     fn parse_tasks<'s, S: AsRef<str> + 's>(

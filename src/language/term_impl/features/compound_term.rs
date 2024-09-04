@@ -30,8 +30,8 @@
 //!
 //! This abstract class contains default methods for all CompoundTerms.
 
-use crate::io::symbols::*;
 use crate::language::*;
+use crate::symbols::*;
 use nar_dev_utils::matches_or;
 use narsese::api::{GetCapacity, TermCapacity};
 use std::{
@@ -135,7 +135,28 @@ impl Term {
         }
     }
 
-    /// 🆕用于判断词项是否为「指定类型的复合词项」
+    /// 🆕用于判断词项是否为复合词项
+    /// * 📌包括陈述
+    /// * 🚩模式匹配后返回一个[`Option`]，只在其为「符合指定类型的词项」时为[`Some`]
+    /// * 🚩返回标识符与内部所有元素的所有权
+    #[must_use]
+    pub fn unwrap_compound_id_components(self) -> Option<(String, Box<[Term]>)> {
+        matches_or! {
+            ?self,
+            // * 🚩匹配到如下结构⇒返回Some，否则返回None
+            Term {
+                // * 🚩标识符
+                identifier,
+                // * 🚩内容为「复合词项」
+                components: TermComponents::Compound(terms),
+                ..
+            }
+            // * 🚩返回内容
+            => (identifier, terms)
+        }
+    }
+
+    /// 🆕用于判断词项是否为复合词项
     /// * 📌包括陈述
     /// * 🚩模式匹配后返回一个[`Option`]，只在其为「符合指定类型的词项」时为[`Some`]
     /// * 🚩返回内部所有元素的所有权
@@ -330,6 +351,7 @@ impl Term {
     /// Commutative CompoundTerms: Sets, Intersections
     /// Commutative Statements: Similarity, Equivalence (except the one with a temporal order)
     /// Commutative CompoundStatements: Disjunction, Conjunction (except the one with a temporal order)
+    #[doc(alias = "is_symmetric")]
     pub fn is_commutative(&self) -> bool {
         matches!(
             self.identifier.as_str(),
@@ -799,6 +821,12 @@ impl CompoundTerm {
     pub fn mut_ref(&mut self) -> CompoundTermRefMut {
         // SAFETY: 在构造时，已经检查了是否为复合词项，因此此处无需检查
         unsafe { self.term.as_compound_mut_unchecked() }
+    }
+
+    /// 解包为内部成分（主项、系词、谓项）
+    /// * 🎯用于「推理规则」中的新词项生成
+    pub fn unwrap(self) -> (String, Box<[Term]>) {
+        self.term.unwrap_compound_id_components().unwrap()
     }
 }
 

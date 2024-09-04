@@ -6,20 +6,23 @@
 //! * ♻️【2024-06-26 12:08:43】开始根据改版OpenNARS重写
 
 nar_dev_utils::mods! {
+    // 实用工具
+    use utils;
+
     // 规则表 `RuleTables`
-    pub use rule_tables;
+    pub use table;
 
     // 本地规则 `LocalRules`
     pub use local_rules;
 
     // 三段论规则 `SyllogisticRules`
-    pub use syllogistic_rules;
+    use syllogistic_rules;
 
-    // // 组合规则 `CompositionalRules`
-    // pub use compositional_rules;
+    // 组合规则 `CompositionalRules`
+    use compositional_rules;
 
-    // // 结构规则 `StructuralRules`
-    // pub use structural_rules;
+    // 结构规则 `StructuralRules`
+    use structural_rules;
 
     // 🆕匹配规则 `MatchingRules`
     pub use matching_rules;

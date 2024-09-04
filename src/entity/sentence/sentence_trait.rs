@@ -10,6 +10,7 @@ use crate::{
 use anyhow::Result;
 use nar_dev_utils::matches_or;
 use narsese::lexical::Sentence as LexicalSentence;
+use serde::{Deserialize, Serialize};
 
 /// 模拟`nars.entity.Sentence`
 /// * 📌【2024-05-10 20:17:04】此处不加入对[`PartialEq`]的要求：会将要求传播到上层的「词项链」「任务链」
@@ -64,7 +65,7 @@ pub trait Sentence: ToDisplayAndBrief + Evidential {
         self.content().clone()
     }
 
-    // * ⚠️Rust中必须预先定义其中的「判断句」「问题句」类型
+    // * ⚠️Rust中必须预先定义其中的「判断句」「疑问句」类型
     //   * 📌直接原因：对于带泛型的`as_XXX`，需要知道其中的类型参数，才能正常参与编译
     type Judgement: Judgement;
     type Question: Question;
@@ -123,7 +124,7 @@ pub trait Sentence: ToDisplayAndBrief + Evidential {
         }
     }
     /// `as_judgement`的快捷解包
-    /// * 🎯推理规则中对「正向推理⇒任务有真值」的使用
+    /// * 🎯推理规则中对「前向推理⇒任务有真值」的使用
     fn unwrap_judgement(&self) -> &Self::Judgement {
         // * 🚩【2024-07-09 13:17:25】现在直接复用一个函数
         self.as_judgement().unwrap()
@@ -239,7 +240,7 @@ pub trait Sentence: ToDisplayAndBrief + Evidential {
 }
 
 /// 🆕一个用于「复用共有字段」的内部对象
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct SentenceInner {
     /// 内部词项
     content: Term,

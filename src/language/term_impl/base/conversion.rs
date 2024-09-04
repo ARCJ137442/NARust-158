@@ -2,7 +2,7 @@
 //! * 🎯转换为「词法Narsese」以便「获取名称」
 
 use super::structs::*;
-use crate::io::symbols::*;
+use crate::symbols::*;
 use anyhow::{anyhow, Result};
 use nar_dev_utils::*;
 use narsese::{

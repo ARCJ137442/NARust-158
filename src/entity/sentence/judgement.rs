@@ -3,6 +3,9 @@ use crate::inference::Truth;
 use nar_dev_utils::join;
 use narsese::lexical::Sentence as LexicalSentence;
 
+/// 统一的「判断句」特征
+/// * 🎯通用地表示「语句+真值」的概念
+/// * 📌在[「语句」](Sentence)的基础上具有「可修正」等功能
 pub trait Judgement: Sentence + Truth {
     /// 📄改版OpenNARS `static revisable`
     fn revisable_to(&self, other: &Self) -> bool {

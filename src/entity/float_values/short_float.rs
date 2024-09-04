@@ -75,6 +75,36 @@ pub struct ShortFloat {
     value: UShort,
 }
 
+/// 定制的序列反序列化方法
+/// * 🎯节省序列化后的占用空间
+///   * 📄在JSON中不再需要是一个object，是一个number就行了
+mod serde {
+    use super::{ShortFloat, UShort};
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    impl Serialize for ShortFloat {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: Serializer,
+        {
+            // 直接委托到内部整数值
+            self.value.serialize(serializer)
+        }
+    }
+
+    impl<'de> Deserialize<'de> for ShortFloat {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: Deserializer<'de>,
+        {
+            // 先反序列化到内部整数值
+            let value = UShort::deserialize(deserializer)?;
+            // 然后尝试创建，并在其中转换Error类型
+            Self::new(value).map_err(serde::de::Error::custom)
+        }
+    }
+}
+
 /// 用于表示「短浮点」可能产生的错误
 #[derive(Debug, Clone, Error)]
 pub enum ShortFloatError {
@@ -218,9 +248,12 @@ impl ShortFloat {
     ///
     /// ! ⚠️在「范围越界」时直接panic
     /// * 🎯降低代码冗余量（减少过多的「错误处理」）
+    ///
+    /// ```plaintext
     /// conflicting implementation in crate `core`:
     /// - impl<T, U> std::convert::TryFrom<U> for T
     /// where U: std::convert::Into<T>;
+    /// ```
     #[inline(always)]
     pub fn from_float(value: Float) -> Self {
         // ! ⚠️【2024-05-02 20:41:19】直接unwrap
@@ -437,6 +470,7 @@ impl BitOr for ShortFloat {
     type Output = Self;
 
     fn bitor(self, rhs: Self) -> Self::Output {
+        // a ∨ b = ¬(¬a ∧ ¬b)
         // pipe! {
         //     // 非
         //     self.not()

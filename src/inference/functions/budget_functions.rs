@@ -547,13 +547,13 @@ mod budget_inference_functions {
     /// * 🎯统一呈现「在推理过程中计算预算值」的「预算超参数」
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
     pub enum BudgetInferenceFunction {
-        /// 正向推理
+        /// 前向推理
         Forward,
         /// 反向强推理
         Backward,
         /// 反向弱推理
         BackwardWeak,
-        /// 复合正向推理
+        /// 复合前向推理
         CompoundForward,
         /// 复合反向强推理
         CompoundBackward,

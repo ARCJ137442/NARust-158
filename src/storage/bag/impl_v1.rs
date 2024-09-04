@@ -2,12 +2,13 @@
 
 use super::{BagItemTable, BagNameTable, Distribute, Distributor, NameValue};
 use crate::{
-    control::DEFAULT_PARAMETERS,
-    entity::{Item, ShortFloat},
+    control::{Parameters, DEFAULT_PARAMETERS},
+    entity::{Item, MergeOrder, ShortFloat},
     global::Float,
     inference::{Budget, BudgetFunctions, BudgetInference},
     util::ToDisplayAndBrief,
 };
+use serde::{Deserialize, Serialize};
 
 // ! 删除「具体类型」特征：能直接`struct`就直接`struct`
 
@@ -26,8 +27,6 @@ use crate::{
 ///   * 📌因为直接使用`Item`而非`BagItem`，故相应地改其中的`Item`为`E`
 ///   * 📝此中之`E`其实亦代表「Entity」（首字母）
 /// * 🚩【2024-06-22 15:19:14】目前基于OpenNARS改版，将特征窄化为具体结构，以简化代码
-///
-/// TODO: 【2024-05-08 17:25:24】🏗️日后需要统一所有的「DEFAULT_PARAMETERS」：考虑引用计数
 ///
 /// * ✅【2024-05-04 16:38:16】初步完成设计与测试
 
@@ -48,7 +47,7 @@ use crate::{
 ///
 /// 1. level selection vs. item selection
 /// 2. decay rate
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Bag<E: Item> {
     /// 🆕分派器
     /// * 🚩不再作为全局变量，而是在构造函数中附带
@@ -95,9 +94,27 @@ pub struct Bag<E: Item> {
     /// array of lists of items, for items on different level
     level_map: BagItemTable,
 
+    /// 🆕所有「袋参数」
+    /// * 🎯存储「袋」的所有「参数变量」
+    ///   * 📌往往在构造后不再修改
+    #[serde(flatten)]
+    parameters: BagParameters,
+
+    /// 🆕所有「状态变量」
+    /// * 🎯存储「袋」在「状态指示」「取出元素」时需要 暂存/缓存 的变量
+    /// * 📝【2024-09-02 16:17:03】通过serde的「结构体展平」兼容先前序列反序列化布局
+    ///   * 🔗<https://serde.rs/attr-flatten.html>
+    #[serde(flatten)]
+    status: BagStatus,
+}
+
+/// 有关「袋」的参数
+/// * 🎯分离出「袋」的「参数变量」
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+struct BagParameters {
     /// 袋容量
     /// * 📌在不同地方有不同的定义
-    /// * 📝是一个「构造时固定」的属性
+    /// * 📝参数属性：是一个「构造后固定」的属性
     ///
     /// # 📄OpenNARS
     ///
@@ -109,7 +126,7 @@ pub struct Bag<E: Item> {
 
     /// 遗忘速率
     /// * 📌在不同地方有不同的定义
-    /// * 📝是一个「构造时固定」的属性
+    /// * 📝参数属性：是一个「构造后固定」的属性
     /// * 📝OpenNARS用于[`Bag::put_back`]的「放回时遗忘」中
     ///
     /// # 📄OpenNARS
@@ -120,122 +137,6 @@ pub struct Bag<E: Item> {
     /// @return The number of times for a decay factor to be fully applied
     forget_rate: usize,
 
-    /// 质量
-    /// * ❓暂且不能完全明白其含义
-    ///
-    /// # 📄OpenNARS
-    ///
-    /// current sum of occupied level
-    mass: usize,
-
-    /// 层级索引
-    /// * ❓暂且不能完全明白其含义
-    ///
-    /// # 📄OpenNARS
-    ///
-    /// index to get next level, kept in individual objects
-    level_index: usize,
-
-    /// 当前层级
-    /// * ❓暂且不能完全明白其含义
-    ///
-    /// # 📄OpenNARS
-    ///
-    /// current take out level
-    current_level: usize,
-
-    /// 当前层级
-    /// * ❓暂且不能完全明白其含义
-    ///
-    /// # 📄OpenNARS
-    ///
-    /// maximum number of items to be taken out at current level
-    current_counter: usize,
-
-    /// 🆕决定「预算合并顺序」的函数指针
-    /// * 🎯根据元素决定「预算合并」的顺序：新→旧 or 旧→新
-    /// * 🚩目前采用函数指针
-    merge_order_f: MergeOrderF<E>,
-}
-
-/// 🆕决定「预算合并顺序」的函数指针类型
-pub type MergeOrderF<E> = fn(&E, &E) -> MergeOrder;
-
-/// 预算合并顺序（枚举）
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub enum MergeOrder {
-    /// 从「将移出的Item」合并到「新进入的Item」
-    /// * 📌修改「新进入的Item」
-    /// * 📜亦为默认值
-    #[default]
-    OldToNew,
-    /// 从「新进入的Item」合并到「将移出的Item」
-    /// * 📌修改「将移出的Item」
-    NewToOld,
-}
-
-impl MergeOrder {
-    /// 默认的「合并顺序」：旧→新
-    pub fn default_order<E>(_: &E, _: &E) -> Self {
-        Self::default()
-    }
-}
-
-impl<E: Item> Default for Bag<E> {
-    /// * 🚩【2024-05-04 16:26:53】默认当「概念袋」使
-    fn default() -> Self {
-        Self::new(
-            DEFAULT_PARAMETERS.concept_bag_size,
-            DEFAULT_PARAMETERS.concept_forgetting_cycle,
-        )
-    }
-}
-
-// impl<E: Item> BagConcrete<E> for Bag<E> {
-impl<E: Item> Bag<E> {
-    pub fn with_merge_order(
-        capacity: usize,
-        forget_rate: usize,
-        merge_order_f: MergeOrderF<E>,
-    ) -> Self {
-        /* 📄OpenNARS源码：
-        self.memory = memory;
-        capacity = capacity();
-        init(); */
-        let mut this = Self {
-            // 这两个是「超参数」要因使用者而异
-            capacity,
-            forget_rate,
-            // 后续都是「内部状态变量」
-            distributor: Distributor::new(Self::__TOTAL_LEVEL),
-            // ? ❓【2024-05-04 12:32:58】因为上边这个不支持[`Default`]，所以就要写这些模板代码吗？
-            // * 💭以及，这个`new`究竟要不要照抄OpenNARS的「先创建全空属性⇒再全部init初始化」特性
-            //   * 毕竟Rust没有`null`要担心
-            item_map: BagNameTable::default(),
-            level_map: BagItemTable::default(),
-            mass: usize::default(),
-            level_index: usize::default(),
-            current_level: usize::default(),
-            current_counter: usize::default(),
-            merge_order_f,
-        };
-        this.init();
-        this
-    }
-
-    pub fn new(capacity: usize, forget_rate: usize) -> Self
-    where
-        Self: Sized,
-    {
-        Self::with_merge_order(capacity, forget_rate, MergeOrder::default_order::<E>)
-    }
-}
-
-/// 对「以字符串为索引的袋」实现特征
-/// * 🚩【2024-05-04 12:01:15】下面这些就是给出自己的属性，即「属性映射」
-// impl<E: Item> Bagging<E> for Bag<E> {
-impl<E: Item> Bag<E> {
-    // * ↑此处`Item`泛型仿OpenNARS`Bag`
     /// 模拟`Bag.TOTAL_LEVEL`
     /// *📌总层数
     /// * 🚩【2024-05-04 01:44:29】根据OpenNARS中「常量」的定义，在此将其全局化
@@ -244,7 +145,8 @@ impl<E: Item> Bag<E> {
     /// # 📄OpenNARS
     ///
     /// priority levels
-    const __TOTAL_LEVEL: usize = DEFAULT_PARAMETERS.bag_level;
+    #[serde(default = "default::total_level")]
+    total_level: usize,
 
     /// 模拟`Bag.THRESHOLD`
     /// * 📌触发阈值
@@ -253,7 +155,8 @@ impl<E: Item> Bag<E> {
     /// # 📄OpenNARS
     ///
     /// firing threshold
-    const __THRESHOLD: usize = DEFAULT_PARAMETERS.bag_threshold;
+    #[serde(default = "default::threshold")]
+    threshold: usize,
 
     /// 模拟`Bag.RELATIVE_THRESHOLD`
     /// 相对阈值
@@ -262,7 +165,8 @@ impl<E: Item> Bag<E> {
     /// # 📄OpenNARS
     ///
     /// relative threshold, only calculate once
-    const __RELATIVE_THRESHOLD: Float = Self::__THRESHOLD as Float / Self::__TOTAL_LEVEL as Float;
+    #[serde(default = "default::relative_threshold")]
+    relative_threshold: Float,
 
     /// 模拟`Bag.LOAD_FACTOR`
     /// * 📌加载因子
@@ -271,7 +175,164 @@ impl<E: Item> Bag<E> {
     /// # 📄OpenNARS
     ///
     /// hash table load factor
-    const __LOAD_FACTOR: Float = DEFAULT_PARAMETERS.load_factor;
+    #[serde(default = "default::load_factor")]
+    load_factor: Float,
+}
+
+/// 所有「默认超参数」的函数
+mod default {
+    use super::BagParameters;
+    use crate::{control::DEFAULT_PARAMETERS, global::Float};
+
+    /// 📜为缺省字段提供默认值
+    /// * 🎯兼容旧版本中无此字段的[`Bag`]
+    pub const fn total_level() -> usize {
+        DEFAULT_PARAMETERS.bag_level
+    }
+
+    /// 📜为缺省字段提供默认值
+    /// * 🎯兼容旧版本中无此字段的[`Bag`]
+    pub const fn threshold() -> usize {
+        DEFAULT_PARAMETERS.bag_threshold
+    }
+
+    /// 📜为缺省字段提供默认值
+    /// * 🎯兼容旧版本中无此字段的[`Bag`]
+    ///
+    /// ! ❌【2024-09-02 16:51:01】无法变为常量函数：常量函数中不允许浮点计算
+    pub fn relative_threshold() -> Float {
+        const TOTAL_LEVEL: usize = total_level();
+        const THRESHOLD: usize = threshold();
+        BagParameters::calculate_relative_threshold(TOTAL_LEVEL, THRESHOLD)
+    }
+
+    /// 📜为缺省字段提供默认值
+    /// * 🎯兼容旧版本中无此字段的[`Bag`]
+    pub const fn load_factor() -> Float {
+        DEFAULT_PARAMETERS.load_factor
+    }
+}
+
+impl BagParameters {
+    /// 根据「总层级」与「触发阈值」计算「相对阈值」
+    ///
+    /// ! ❌【2024-09-02 16:51:01】无法变为常量函数：常量函数中不允许浮点计算
+    fn calculate_relative_threshold(total_level: usize, threshold: usize) -> Float {
+        threshold as Float / total_level as Float
+    }
+
+    /// 从全局的「超参数」中生成「袋参数」
+    /// * 🎯解耦硬编码的「默认超参数」
+    fn from_parameters(capacity: usize, forget_rate: usize, parameters: &Parameters) -> Self {
+        // 提取所需参数
+        let &Parameters {
+            bag_level: total_level,
+            bag_threshold: threshold,
+            load_factor,
+            ..
+        } = parameters;
+        // 计算附加参数
+        let relative_threshold = Self::calculate_relative_threshold(total_level, threshold);
+        // 初始化参数
+        Self {
+            capacity,
+            forget_rate,
+            total_level,
+            threshold,
+            relative_threshold,
+            load_factor,
+        }
+    }
+}
+
+/// 有关「袋」的状态
+/// * 🎯分离出「常修改的部分」与「不常修改的部分」
+/// * 📌【2024-09-02 15:52:18】基本用于存储基础类型数据
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+struct BagStatus {
+    /// 质量
+    /// * 📝状态变量：袋内所有物品所在层级的和
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// current sum of occupied level
+    mass: usize,
+
+    /// 层级索引
+    /// * 📝状态变量：当前层级的索引
+    ///   * 📄参考：[「概率随机性选取物品」](Self::select_next_level_for_take)
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// index to get next level, kept in individual objects
+    level_index: usize,
+
+    /// 当前层级
+    /// * 📝状态变量：当前选中的层级
+    ///   * 📄参考：[「概率随机性选取物品」](Self::select_next_level_for_take)
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// current take out level
+    current_level: usize,
+
+    /// 当前计数器
+    /// * 📝状态变量：当前所选中之链接的计数器
+    ///   * 📄参考：[「概率随机性选取物品」](Self::select_next_level_for_take)
+    ///
+    /// # 📄OpenNARS
+    ///
+    /// maximum number of items to be taken out at current level
+    current_counter: usize,
+}
+
+// impl<E: Item> BagConcrete<E> for Bag<E> {
+impl<E: Item> Bag<E> {
+    /// 结合传入的「超参数」构建
+    pub fn from_parameters(capacity: usize, forget_rate: usize, parameters: &Parameters) -> Self {
+        Self::with_parameters(BagParameters::from_parameters(
+            capacity,
+            forget_rate,
+            parameters,
+        ))
+    }
+
+    /// 兼容旧有构造函数
+    pub fn new(capacity: usize, forget_rate: usize) -> Self {
+        let parameters = BagParameters::from_parameters(capacity, forget_rate, &DEFAULT_PARAMETERS);
+        Self::with_parameters(parameters)
+    }
+
+    /// 与「袋超参数」一同构建
+    fn with_parameters(parameters: BagParameters) -> Self {
+        /* 📄OpenNARS源码：
+        self.memory = memory;
+        capacity = capacity();
+        init(); */
+        // 构造
+        let mut this = Self {
+            // 后续都是「内部状态变量」
+            distributor: Distributor::new(parameters.total_level),
+            // ? ❓【2024-05-04 12:32:58】因为上边这个不支持[`Default`]，所以就要写这些模板代码吗？
+            // * 💭以及，这个`new`究竟要不要照抄OpenNARS的「先创建全空属性⇒再全部init初始化」特性
+            //   * 毕竟Rust没有`null`要担心
+            item_map: BagNameTable::default(),
+            level_map: BagItemTable::default(),
+            status: BagStatus::default(),
+            // 参数变量
+            // * 🚩【2024-09-02 16:43:31】最后再初始化：内部有字段要在初始化之前用
+            parameters,
+        };
+        this.init();
+        this
+    }
+}
+
+/// 对「以字符串为索引的袋」实现特征
+/// * 🚩【2024-05-04 12:01:15】下面这些就是给出自己的属性，即「属性映射」
+// impl<E: Item> Bagging<E> for Bag<E> {
+impl<E: Item> Bag<E> {
+    // * ↑此处`Item`泛型仿OpenNARS`Bag`
 
     /// 模拟`Bag.capacity`
     /// * 📌一个「袋」的「容量」
@@ -287,7 +348,7 @@ impl<E: Item> Bag<E> {
     /// * 【作为方法】To get the capacity of the concrete subclass
     ///   * @return Bag capacity, in number of Items allowed
     pub fn capacity(&self) -> usize {
-        self.capacity
+        self.parameters.capacity
     }
 
     /// 模拟`Bag.mass`
@@ -299,8 +360,8 @@ impl<E: Item> Bag<E> {
     /// # 📄OpenNARS
     ///
     /// current sum of occupied level
-    pub fn mass(&self) -> usize {
-        self.mass
+    fn mass(&self) -> usize {
+        self.status.mass
     }
 
     /// 模拟`Bag.init`
@@ -320,15 +381,18 @@ impl<E: Item> Bag<E> {
         levelIndex = capacity % TOTAL_LEVEL; // so that different bags start at different point
         mass = 0;
         currentCounter = 0; */
-        self.level_map = BagItemTable::new(Self::__TOTAL_LEVEL);
-        for level in 0..Self::__TOTAL_LEVEL {
+        self.level_map = BagItemTable::new(self.parameters.total_level);
+        for level in 0..self.parameters.total_level {
             self.level_map.add_new(level);
         }
         self.item_map = BagNameTable::new();
-        self.current_level = Self::__TOTAL_LEVEL - 1;
-        self.level_index = self.capacity() % Self::__TOTAL_LEVEL; // 不同的「袋」在分派器中有不同的起点
-        self.mass = 0;
-        self.current_counter = 0;
+        // 状态初始化
+        self.status = BagStatus {
+            current_level: self.parameters.total_level - 1,
+            level_index: self.capacity() % self.parameters.total_level, // 不同的「袋」在分派器中有不同的起点
+            mass: 0,
+            current_counter: 0,
+        }; // * 📌【2024-09-02 15:45:01】此处直接用新结构体覆盖，可由此检查穷尽性
     }
 
     // ! 🚩`Bag.capacity`已在`self.__capacity`中实现
@@ -367,9 +431,21 @@ impl<E: Item> Bag<E> {
         }
         Float::min(
             // 复刻最后一个条件判断
-            (self.mass() as Float) / (self.size() * Self::__TOTAL_LEVEL) as Float,
+            (self.mass() as Float) / (self.size() * self.parameters.total_level) as Float,
             1.0,
         )
+    }
+
+    /// 🆕迭代内部所有元素
+    pub fn iter(&self) -> impl Iterator<Item = &E> {
+        self.item_map.iter_items()
+    }
+
+    /// 🆕迭代内部所有元素（可变）
+    /// * 🎯用于「序列反序列化」「归一化任务共享引用」
+    /// * ⚠️慎用
+    pub(crate) fn iter_mut(&mut self) -> impl Iterator<Item = &mut E> {
+        self.item_map.iter_items_mut()
     }
 
     /// 模拟`Bag.contains`
@@ -462,7 +538,7 @@ impl<E: Item> Bag<E> {
 
             // * 🚩计算「合并顺序」
             let new_item = self.get(&new_key).unwrap(); // * 🚩🆕重新获取「置入后的新项」（⚠️一定有）
-            let merge_order = (self.merge_order_f)(&old_item, new_item); // 此处调用函数指针，一定是不可变引用
+            let merge_order = old_item.merge_order(new_item); // 此处调用函数指针，一定是不可变引用
             let new_item = self.get_mut(&new_key).unwrap(); // * 🚩🆕重新获取「置入后的新项」（⚠️一定有）
 
             // * 🚩按照计算出的「合并顺序」合并预算值
@@ -514,7 +590,10 @@ impl<E: Item> Bag<E> {
     /// 🆕以一定函数修改某个Item的优先级
     /// * 🚩改成泛型函数，以便适用在所有地方
     pub fn forget(&self, item: &mut impl Budget) {
-        let new_priority = item.forget(self.forget_rate as Float, Self::__RELATIVE_THRESHOLD);
+        let new_priority = item.forget(
+            self.parameters.forget_rate as Float,
+            self.parameters.relative_threshold,
+        );
         item.set_priority(ShortFloat::from_float(new_priority));
     }
 
@@ -562,32 +641,68 @@ impl<E: Item> Bag<E> {
         let level = self.select_next_level_for_take();
         let selected_key = self.take_out_first(level);
         // * 此处需要对内部可能有的「元素id」进行转换
-        let overflowed = match selected_key {
-            Some(key) => self.item_map.remove_item(&key),
-            None => None,
-        };
-        self.assert_valid();
-        overflowed
+        let selected = selected_key.and_then(|key| self.item_map.remove_item(&key));
+        self.assert_valid(); // 在移除元素后检查
+        selected
+    }
+
+    /// 🆕对整个袋进行「一瞥」
+    /// * 🎯在不修改袋结构的情况下，获取下一个要取出的元素
+    pub fn peek(&self) -> Option<&String> {
+        if self.item_map.is_empty() {
+            return None;
+        }
+        // 只获取下一个层级，不改变当前层级
+        let (level, ..) = self.calculate_next_level();
+        self.peek_first(level)
     }
 
     /// 为[`Self::take_out`]选择下一个要被取走的level
-    /// * 🚩计算并返回「下一个level值」
+    /// * 🚩计算并返回「下一个level值」，并**同时修改自身状态**
     fn select_next_level_for_take(&mut self) -> usize {
-        if self.empty_level(self.current_level) || (self.current_counter) == 0 {
-            self.current_level = self.distributor.pick(self.level_index);
-            self.level_index = self.distributor.next(self.level_index);
-            while self.empty_level(self.current_level) {
+        // 直接并行赋值
+        (
+            self.status.current_level,
+            self.status.level_index,
+            self.status.current_counter,
+        ) = self.calculate_next_level();
+        // 新的「当前层级」即为返回值
+        self.status.current_level
+    }
+
+    /// 🆕根据自身不可变引用，拆分出「计算下一待取层级」的函数
+    /// * 📌在计算过程中会修改「当前层级」「层级索引」「当前计数器」等内部状态变量
+    ///   * 📝【2024-09-02 15:23:58】目前将这些「内部状态变量」提取出来，以便在不可变上下文中集成
+    ///   * 📄不修改自身，只获取不修改的「一瞥」函数
+    #[inline]
+    fn calculate_next_level(&self) -> (usize, usize, usize) {
+        // 获取自身的状态变量
+        // * 🎯创建新状态变量，用于后续「计算出新的状态」
+        // * ✨可选性赋值：计算出的「新状态变量」可以合并入自身（取出）也可丢弃（一瞥）
+        let BagStatus {
+            mut current_level,
+            mut level_index,
+            mut current_counter,
+            ..
+        } = self.status;
+        // 根据这几个状态变量，计算新的状态变量
+        // * 🚩此中计算出的新「当前层级」将会作为返回值「下一层级」
+        // ! ⚠️此后不访问`self.status`
+        if self.empty_level(current_level) || current_counter == 0 {
+            current_level = self.distributor.pick(level_index);
+            level_index = self.distributor.next(level_index);
+            while self.empty_level(current_level) {
                 // * 📝这里实际上就是一个do-while
-                self.current_level = self.distributor.pick(self.level_index);
-                self.level_index = self.distributor.next(self.level_index);
+                current_level = self.distributor.pick(level_index);
+                level_index = self.distributor.next(level_index);
             }
-            self.current_counter = match self.current_level < Self::__THRESHOLD {
+            current_counter = match current_level < self.parameters.threshold {
                 true => 1,
-                false => self.level_map.get(self.current_level).size(),
+                false => self.level_map.get(current_level).size(),
             };
         }
-        self.current_counter -= 1;
-        self.current_level
+        current_counter -= 1;
+        (current_level, level_index, current_counter)
     }
 
     /// 模拟`Bag.pickOut`
@@ -646,7 +761,7 @@ impl<E: Item> Bag<E> {
         float fl = item.getPriority() * TOTAL_LEVEL;
         int level = (int) Math.ceil(fl) - 1;
         return (level < 0) ? 0 : level; // cannot be -1 */
-        let fl = item.priority().to_float() * Self::__TOTAL_LEVEL as Float;
+        let fl = item.priority().to_float() * self.parameters.total_level as Float;
         let level = (fl.ceil()) as usize; // ! 此处不提前-1，避免溢出
         level.saturating_sub(1) // * 🚩↓相当于如下代码
                                 /* if level < 1 {
@@ -697,16 +812,16 @@ impl<E: Item> Bag<E> {
         let in_level = self.calculate_level_for_item(new_item);
 
         // 🆕先假设「新元素已被置入」，「先加后减」防止usize溢出
-        self.mass += in_level + 1;
+        self.status.mass += in_level + 1;
         if self.size() > self.capacity() {
             // * 📝逻辑：低优先级溢出——从低到高找到「第一个非空层」然后弹出其中第一个（最先的）元素
             // * 🚩【2024-05-04 13:14:02】实际上与Java代码等同；但若直接按源码来做就会越界
-            let out_level = (0..Self::__TOTAL_LEVEL)
+            let out_level = (0..self.parameters.total_level)
                 .find(|level| !self.empty_level(*level))
-                .unwrap_or(Self::__TOTAL_LEVEL);
+                .unwrap_or(self.parameters.total_level);
             if out_level > in_level {
                 // 若到了自身所在层⇒弹出自身（相当于「添加失败」）
-                self.mass -= in_level + 1; // 🆕失败，减去原先相加的数
+                self.status.mass -= in_level + 1; // 🆕失败，减去原先相加的数
                 return Some(new_key.to_string()); // 提早返回
             } else {
                 old_item = self.take_out_first(out_level);
@@ -716,6 +831,12 @@ impl<E: Item> Bag<E> {
         self.level_map.get_mut(in_level).add(new_key.to_string());
         // self.refresh(); // ! ❌【2024-05-04 11:16:55】不复刻这个有关「观察者」的方法
         old_item
+    }
+
+    /// 🆕对某一层的首个元素进行「一瞥」
+    /// * 🎯获取某一层的首个元素
+    fn peek_first(&self, level: usize) -> Option<&String> {
+        self.level_map.get(level).get_first()
     }
 
     /// 模拟`Bag.takeOutFirst`
@@ -737,7 +858,7 @@ impl<E: Item> Bag<E> {
         if selected.is_some() {
             // * 🚩仅在「有选择到」时移除 | ✅【2024-05-04 14:31:30】此举修复了「mass溢出」的bug！
             self.level_map.get_mut(level).remove_first();
-            self.mass -= level + 1;
+            self.status.mass -= level + 1;
         }
         selected
     }
@@ -757,7 +878,7 @@ impl<E: Item> Bag<E> {
         mass -= (level + 1);
         refresh(); */
         self.level_map.remove_element(old_item.key());
-        self.mass -= level + 1;
+        self.status.mass -= level + 1;
     }
 
     fn debug_display(&self) -> String {
@@ -835,7 +956,7 @@ impl<E: Item> Bag<E> {
         return buf.toString(); */
         let mut buf = String::new();
         // * 🚩倒序遍历所有非空层
-        for level in (0..Self::__TOTAL_LEVEL)
+        for level in (0..self.parameters.total_level)
             .rev()
             .filter(|&level| !self.empty_level(level))
         {
@@ -904,6 +1025,7 @@ mod tests {
     /// * 🎯挑出 [`Bag::pick_out`]
     /// * 🎯放回 [`Bag::put_back`]
     /// * 🎯取出 [`Bag::take_out`]
+    /// * 🎯一瞥 [`Bag::peek`]
     #[test]
     fn single_item() -> AResult {
         // 构造测试用「袋」
@@ -951,10 +1073,14 @@ mod tests {
             bag.mass() == 1, // 放进第0层，获得(0+1)的重量
         }
 
+        // 一瞥元素
+        let peeked = bag.peek().unwrap().clone();
+
         // 取出元素
         let mut taken = bag.take_out().unwrap();
         asserts! {
             taken == item1, // 取出的就是放回了的
+            peeked == *taken.key(), // 所取出之元素的key就是一瞥出来的key
             bag.size() == 0, // 取走了
             bag.mass() == 0, // 取走了
             bag.empty_level(0) => true, // 取走的是第0层
@@ -976,8 +1102,8 @@ mod tests {
             overflowed => None, // 没有溢出
             bag.size() == 1, // 放回了
             bag.empty_level(0) => true, // 放入的不再是第0层
-            bag.empty_level(Bag1::__TOTAL_LEVEL-1) => false, // 放入的是最高层
-            bag.mass() == Bag1::__TOTAL_LEVEL, // 放进第最高层，获得 层数 的重量
+            bag.empty_level(bag.parameters.total_level-1) => false, // 放入的是最高层
+            bag.mass() == bag.parameters.total_level, // 放进第最高层，获得 层数 的重量
         }
 
         // 最后完成
@@ -994,10 +1120,14 @@ mod tests {
     /// * 🎯挑出 [`Bag::pick_out`]
     /// * 🎯放回 [`Bag::put_back`]
     /// * 🎯取出 [`Bag::take_out`]
+    /// * 🎯一瞥 [`Bag::peek`]
     #[test]
     fn multi_item() -> AResult {
         // 构造测试用「袋」并初始化
-        let mut bag = Bag1::default();
+        let mut bag = Bag1::new(
+            DEFAULT_PARAMETERS.concept_bag_size,
+            DEFAULT_PARAMETERS.concept_forgetting_cycle,
+        );
         bag.init();
         dbg!(&bag);
         asserts! {
@@ -1019,8 +1149,9 @@ mod tests {
         // * 📌层级计算公式：
         //   * 层级百分比：`i / N`
         //   * 层级：`ceil(百分比 * 层数) - 1`
+        let total_level = bag.parameters.total_level;
         let expected_level = |i| {
-            let level_percent = priority(i) as Float * Bag1::__TOTAL_LEVEL as Float;
+            let level_percent = priority(i) as Float * total_level as Float;
             (level_percent.ceil() as usize).saturating_sub(1)
         };
         let items = list![
@@ -1073,11 +1204,13 @@ mod tests {
         }
         println!("第一次放回后：{bag:#?}");
 
-        // 取出元素
+        // 取出&一瞥 元素
         let mut taken_items = vec![];
         for i in 0..=N {
+            let peeked = bag.peek().unwrap().clone();
             let taken = bag.take_out().unwrap(); // 一定拿得出来
             asserts! {
+                peeked == *taken.key() // 一瞥出来的元素，应该和取出来的元素一致
                 bag.size() == N - i, // 取走了
                 // bag._empty_level(0) => true, // 取走的是第0层
             }
