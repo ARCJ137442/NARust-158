@@ -3,7 +3,6 @@
 //! * ♻️【2024-06-24 18:59:59】开始基于改版OpenNARS重写
 
 use crate::{
-    control::{Parameters, DEFAULT_PARAMETERS},
     entity::{
         BudgetValue, Item, Judgement, JudgementV1, RCTask, Sentence, TaskLink, TermLink,
         TermLinkTemplate, Token,
@@ -11,6 +10,7 @@ use crate::{
     global::{ClockTime, Float},
     inference::{Budget, BudgetFunctions},
     language::Term,
+    parameters::{Parameters, DEFAULT_PARAMETERS},
     storage::{ArrayBuffer, ArrayRankTable, Bag, Buffer, IsCompatibleToAddF, RankF, RankTable},
     util::{to_display_when_has_content, Iterable, RefCount, ToDisplayAndBrief},
 };

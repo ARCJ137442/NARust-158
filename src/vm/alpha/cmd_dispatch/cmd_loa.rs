@@ -69,14 +69,12 @@ impl Reasoner {
 mod tests {
     use super::*;
     use crate::{
-        control::{
-            test_util_ser_de::{status_consistent, status_synced, GetReasoner},
-            DEFAULT_PARAMETERS,
-        },
+        control::test_util_ser_de::{status_consistent, status_synced, GetReasoner},
         inference::{
             match_task_and_belief, process_direct, reason, transform_task, InferenceEngine,
         },
         ok,
+        parameters::DEFAULT_PARAMETERS,
         storage::tests_memory::{memory_consistent, memory_synced, GetMemory},
         util::AResult,
         vm::alpha::{RuntimeAlpha, SavCallback},

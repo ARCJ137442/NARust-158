@@ -4,7 +4,7 @@
 //! * ✅【2024-05-15 17:01:58】完成初代实现：名称、超参数
 
 use super::RuntimeAlpha;
-use crate::{control::Parameters, inference::InferenceEngine};
+use crate::{inference::InferenceEngine, parameters::Parameters};
 use anyhow::Result;
 use navm::vm::VmLauncher;
 

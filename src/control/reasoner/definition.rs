@@ -6,9 +6,9 @@
 
 use super::ReasonRecorder;
 use crate::{
-    control::Parameters,
     global::ClockTime,
     inference::InferenceEngine,
+    parameters::Parameters,
     storage::{Memory, TaskBuffer},
     util::Serial,
 };

@@ -7,9 +7,10 @@
 use super::{ReasonContext, ReasonContextCore, ReasonContextCoreOut, ReasonContextWithLinks};
 use crate::{
     __delegate_from_core,
-    control::{Parameters, Reasoner},
+    control::Reasoner,
     entity::{Concept, JudgementV1, RCTask, TLink, Task, TaskLink, TermLink},
     global::{ClockTime, Float},
+    parameters::Parameters,
     storage::Memory,
     util::RefCount,
 };

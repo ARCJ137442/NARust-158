@@ -3,7 +3,7 @@
 
 use super::{TLink, TLinkType, TLinkage, TermLink, TermLinkTemplate};
 use crate::{
-    control::DEFAULT_PARAMETERS,
+    parameters::DEFAULT_PARAMETERS,
     entity::{BudgetValue, Item, RCTask, Sentence, ShortFloat, Task, Token},
     global::ClockTime,
     inference::{Budget, Evidential},

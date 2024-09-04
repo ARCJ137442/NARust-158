@@ -3,10 +3,11 @@
 use super::{ReasonContext, ReasonContextCore, ReasonContextCoreOut};
 use crate::{
     __delegate_from_core,
-    control::{Parameters, Reasoner},
+    control::Reasoner,
     entity::{Concept, RCTask, Task},
     global::{ClockTime, Float},
     language::Term,
+    parameters::Parameters,
     storage::Memory,
 };
 use navm::output::Output;

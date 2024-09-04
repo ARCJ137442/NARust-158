@@ -5,10 +5,10 @@
 //! * ⚠️不缓存「NAVM输出」：输出保存在[「推理记录器」](super::report)中
 
 use crate::{
-    control::{Parameters, DEFAULT_PARAMETERS},
     entity::{RCTask, Sentence, Task},
     global::Float,
     inference::Truth,
+    parameters::{Parameters, DEFAULT_PARAMETERS},
     storage::Bag,
     util::{IterInnerRcSelf, ToDisplayAndBrief},
 };

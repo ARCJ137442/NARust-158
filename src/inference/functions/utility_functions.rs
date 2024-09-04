@@ -10,9 +10,7 @@
 //!   * `c2w`
 //! * ✅【2024-05-03 19:28:13】基本完成所有单元测试
 
-use crate::control::DEFAULT_PARAMETERS;
-use crate::entity::ShortFloat;
-use crate::global::Float;
+use crate::{entity::ShortFloat, global::Float, parameters::DEFAULT_PARAMETERS};
 use nar_dev_utils::pipe;
 use std::ops::Not;
 

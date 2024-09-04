@@ -8,10 +8,11 @@
 
 use super::Bag;
 use crate::{
-    control::{prepare_term_link_templates, Parameters, DEFAULT_PARAMETERS},
+    control::prepare_term_link_templates,
     entity::{BudgetValue, Concept, Item, RCTask},
     inference::{Budget, BudgetFunctions},
     language::Term,
+    parameters::{Parameters, DEFAULT_PARAMETERS},
 };
 use serde::{Deserialize, Deserializer, Serialize};
 
@@ -261,7 +262,7 @@ pub mod tests_memory {
     use super::*;
     use crate::{
         assert_eq_try,
-        control::DEFAULT_PARAMETERS,
+        parameters::DEFAULT_PARAMETERS,
         entity::*,
         ok, test_term as term,
         util::{AResult, RefCount, ToDisplayAndBrief},

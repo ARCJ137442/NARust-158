@@ -4,8 +4,8 @@
 
 use anyhow::Result;
 use narust_158::{
-    control::DEFAULT_PARAMETERS,
     inference::{match_task_and_belief, process_direct, reason, transform_task, InferenceEngine},
+    parameters::DEFAULT_PARAMETERS,
     vm::alpha::{LauncherAlpha, SavCallback},
 };
 use navm::{cmd::Cmd, output::Output, vm::VmLauncher, vm::VmRuntime};

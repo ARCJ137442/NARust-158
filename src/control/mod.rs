@@ -5,11 +5,6 @@
 //!   * 📌推理过程：直接推理/概念推理
 //! * ⚠️此处代码与[原版OpenNARS 1.5.8](https://github.com/patham9/opennars_declarative_core)已有很大不同，不建议完全参考其源码
 
-// 超参数
-// TODO: 有待外迁到根部模块，以同数据结构解耦合
-mod parameters;
-pub use parameters::*;
-
 // 推理器
 mod reasoner;
 pub use reasoner::*;

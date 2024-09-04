@@ -4,9 +4,7 @@
 
 use super::{ChannelIn, ChannelOut, ReasonerChannels};
 use crate::{
-    control::{Parameters, Reasoner},
-    global::RC,
-    inference::InferenceEngine,
+    control::Reasoner, global::RC, inference::InferenceEngine, parameters::Parameters,
     util::RefCount,
 };
 use anyhow::Result;

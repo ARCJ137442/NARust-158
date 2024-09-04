@@ -2,10 +2,10 @@
 
 use super::{BagItemTable, BagNameTable, Distribute, Distributor, NameValue};
 use crate::{
-    control::{Parameters, DEFAULT_PARAMETERS},
     entity::{Item, MergeOrder, ShortFloat},
     global::Float,
     inference::{Budget, BudgetFunctions, BudgetInference},
+    parameters::{Parameters, DEFAULT_PARAMETERS},
     util::ToDisplayAndBrief,
 };
 use serde::{Deserialize, Serialize};
@@ -182,7 +182,7 @@ struct BagParameters {
 /// 所有「默认超参数」的函数
 mod default {
     use super::BagParameters;
-    use crate::{control::DEFAULT_PARAMETERS, global::Float};
+    use crate::{parameters::DEFAULT_PARAMETERS, global::Float};
 
     /// 📜为缺省字段提供默认值
     /// * 🎯兼容旧版本中无此字段的[`Bag`]

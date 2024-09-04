@@ -1,8 +1,8 @@
 use anyhow::Result;
 use narsese::conversion::string::impl_lexical::format_instances::FORMAT_ASCII;
 use narust_158::{
-    control::DEFAULT_PARAMETERS,
     inference::{match_task_and_belief, process_direct, reason, transform_task, InferenceEngine},
+    parameters::DEFAULT_PARAMETERS,
     vm::alpha::{LauncherAlpha, SavCallback},
 };
 use navm::{

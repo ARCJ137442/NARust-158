@@ -9,12 +9,13 @@
 #![doc(alias = "derivation_context")]
 
 use crate::{
-    control::{util_outputs, Parameters, Reasoner},
+    control::{util_outputs, Reasoner},
     entity::{
         Concept, JudgementV1, Punctuation, RCTask, Sentence, ShortFloat, Task, TaskLink, TermLink,
     },
     global::{ClockTime, Float},
     language::Term,
+    parameters::Parameters,
     storage::Memory,
     util::RefCount,
 };

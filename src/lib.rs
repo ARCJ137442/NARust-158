@@ -9,6 +9,9 @@ pub mod global;
 // 符号
 pub mod symbols;
 
+// 超参数
+pub mod parameters;
+
 // 语言
 pub mod language;
 

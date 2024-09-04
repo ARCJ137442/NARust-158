@@ -1,5 +1,10 @@
 //! 用于NARS推理器的「超参数」
 //! * 🆕不再是全局常量，而是可随推理器而变的结构体
+//!
+//! ## logs
+//!
+//! * ♻️【2024-09-05 01:22:19】现移至模块根部，以统领全局超参数
+//!   * ℹ️理由：避免让`control`模块与其它模块耦合——让`entity`、`storage`与之解耦
 
 use crate::global::Float;
 use nar_dev_utils::macro_once;

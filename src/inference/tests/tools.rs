@@ -1,10 +1,11 @@
 //! 单元测试 通用函数
 
 use crate::{
-    control::{Parameters, Reasoner, DEFAULT_PARAMETERS},
+    control::Reasoner,
     inference::{match_task_and_belief, process_direct, reason, transform_task, InferenceEngine},
     language::Term,
     ok,
+    parameters::{Parameters, DEFAULT_PARAMETERS},
     util::AResult,
 };
 use nar_dev_utils::{list, unwrap_or_return};
