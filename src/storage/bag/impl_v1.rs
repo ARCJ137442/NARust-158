@@ -181,7 +181,6 @@ struct BagParameters {
 
 /// 所有「默认超参数」的函数
 mod default {
-    // TODO: 是否要和control包耦合——有待将Parameters外迁出全局
     use super::BagParameters;
     use crate::{control::DEFAULT_PARAMETERS, global::Float};
 
