@@ -1,7 +1,7 @@
 //! 模仿复刻自PyNARS/`EventBuffer.py`
-//! * 🔗参考自: <https://github.com/bowen-xu/PyNARS/blob/72091454adc676fae7d40aad418eb9e8e728c51a/pynars/NARS/DataStructures/MC/EventBuffer.py>
-//!   * `Utils.py`: <https://github.com/bowen-xu/PyNARS/blob/72091454adc676fae7d40aad418eb9e8e728c51a/pynars/NARS/DataStructures/MC/Utils.py>
-//!   * `EventBuffer.py`: <https://github.com/bowen-xu/PyNARS/blob/72091454adc676fae7d40aad418eb9e8e728c51a/pynars/NARS/DataStructures/MC/EventBuffer.py>
+//! * 🔗参考自: <https://github.com/opennars/OpenNARS-4/blob/72091454adc676fae7d40aad418eb9e8e728c51a/pynars/NARS/DataStructures/MC/EventBuffer.py>
+//!   * `Utils.py`: <https://github.com/opennars/OpenNARS-4/blob/72091454adc676fae7d40aad418eb9e8e728c51a/pynars/NARS/DataStructures/MC/Utils.py>
+//!   * `EventBuffer.py`: <https://github.com/opennars/OpenNARS-4/blob/72091454adc676fae7d40aad418eb9e8e728c51a/pynars/NARS/DataStructures/MC/EventBuffer.py>
 //! * ℹ️原作者: **Tory Li**
 //!
 //! ! ⚠️【2024-07-25 15:15:11】目前不包含Python源码中任何有关"cheating"的内容
@@ -15,6 +15,7 @@ use crate::{
     language::Term,
     storage::Memory,
 };
+use nar_dev_utils::{impl_once, list, unwrap_or_return};
 use std::collections::VecDeque;
 
 mod utils {
@@ -292,7 +293,6 @@ mod utils {
         Some(task)
     }
 }
-use nar_dev_utils::{list, unwrap_or_return};
 use utils::*;
 
 /// 📝预测性蕴含（缓冲区专用）
@@ -1026,6 +1026,49 @@ impl EventBuffer {
         // 时间窗口轮替
         self.slots_cycle();
     }
+
+    /// 通过一个记忆区来执行「缓冲区周期」
+    /// * 🎯合并「读取记忆区」与「新任务传入记忆区」两处代码
+    /// * ✨免去额外的「上下文对象」构建
+    pub fn buffer_cycle_with_memory(
+        &mut self,
+        tasks: impl IntoIterator<Item = Task>,
+        memory: &mut Memory,
+        // popped_task: PoppedTask, // ! ❌【2024-09-05 00:14:01】无法用闭包：「一次性实现」中无法捕获闭包，不支持类型约束的传递
+        // <PoppedTask: FnMut(Task)>
+        parameters: &BufferCycleParameters, // * ✨缓冲区循环参数
+    ) {
+        self.buffer_cycle(
+            tasks,
+            impl_once! {
+                struct Context in 'a {
+                    memory: &'a mut Memory = memory,
+                    parameters: &'a BufferCycleParameters = parameters,
+                } impl BufferCycleContext {
+                    fn memory(&self) -> &Memory {
+                        self.memory
+                    }
+
+                    fn output_task(&mut self, _task: Task) {
+                        // memory.accept(each[1].task)
+                        // TODO: 【2024-09-05 00:09:48】此处方法在PyNARS中涉及到类似「直接推理」的逻辑
+                        //   * 在PyNARS
+                        todo!("逻辑待实现")
+                    }
+
+                    /// ! ❌【2024-09-05 00:15:05】此处无法处理：特征实现中调用传入的闭包，但又因此需要限制字段类型为`FnMut`
+                    /// * 🚩目前决策：直接抛掉
+                    fn popped_task(&mut self, _task: Task) {
+                        // (self.popped_task_f)(task);
+                    }
+
+                    fn parameters(&self) -> &BufferCycleParameters {
+                        self.parameters
+                    }
+                }
+            },
+        )
+    }
 }
 
 /// 用于简化「事件缓冲区循环」
@@ -1042,7 +1085,6 @@ pub struct BufferCycleParameters {
 mod tests {
     use super::*;
     use crate::{control::Reasoner, global::ClockTime, util::ToDisplayAndBrief};
-    use nar_dev_utils::impl_once;
     use narsese::conversion::string::impl_lexical::format_instances::FORMAT_ASCII;
 
     fn parse_task(s: impl AsRef<str>, stamp_time: ClockTime) -> Task {
