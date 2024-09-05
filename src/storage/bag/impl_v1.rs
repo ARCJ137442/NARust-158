@@ -182,7 +182,7 @@ struct BagParameters {
 /// 所有「默认超参数」的函数
 mod default {
     use super::BagParameters;
-    use crate::{parameters::DEFAULT_PARAMETERS, global::Float};
+    use crate::{global::Float, parameters::DEFAULT_PARAMETERS};
 
     /// 📜为缺省字段提供默认值
     /// * 🎯兼容旧版本中无此字段的[`Bag`]

@@ -262,9 +262,10 @@ pub mod tests_memory {
     use super::*;
     use crate::{
         assert_eq_try,
-        parameters::DEFAULT_PARAMETERS,
         entity::*,
-        ok, test_term as term,
+        ok,
+        parameters::DEFAULT_PARAMETERS,
+        test_term as term,
         util::{AResult, RefCount, ToDisplayAndBrief},
     };
     use nar_dev_utils::*;
