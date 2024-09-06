@@ -294,6 +294,9 @@ fn fold_term(term: TermLexical, var_id_map: &mut Vec<String>) -> Result<Term> {
         (SEQUENTIAL_CONJUNCTION_OPERATOR, Compound { terms, .. }) => {
             Term::new_sequential_conjunction(fold_inner_lexical_vec(terms, var_id_map)?)
         }
+        (TEMPORAL_CONJUNCTION_OPERATOR, Compound { terms, .. }) => {
+            Term::new_temporal_conjunction(fold_inner_lexical_vec(terms, var_id_map)?)
+        }
         (PARALLEL_CONJUNCTION_OPERATOR, Compound { terms, .. }) => {
             Term::new_parallel_conjunction(fold_inner_lexical_vec(terms, var_id_map)?)
         }

@@ -123,6 +123,7 @@ impl Term {
             DISJUNCTION_OPERATOR => Self::make_disjunction_arg(argument),
             SEQUENTIAL_CONJUNCTION_OPERATOR => Self::make_sequential_conjunction_arg(argument),
             PARALLEL_CONJUNCTION_OPERATOR => Self::make_parallel_conjunction_arg(argument),
+            TEMPORAL_CONJUNCTION_OPERATOR => Self::make_temporal_conjunction_arg(argument),
             // * 🚩其它⇒未知/域外⇒空
             _ => None,
         }
@@ -864,6 +865,13 @@ impl Term {
             // * 🚩其它⇒空（失败）
             _ => None,
         }
+    }
+
+    /* TemporalConjunction */
+
+    fn make_temporal_conjunction_arg(argument: Vec<Term>) -> Option<Term> {
+        // TODO: 后续还可以做「区间合并」等「自动简化」操作
+        Some(Term::new_sequential_conjunction(argument))
     }
 
     /* SequentialConjunction */

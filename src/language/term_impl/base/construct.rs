@@ -211,6 +211,15 @@ impl Term {
         Self::new(NEGATION_OPERATOR, TermComponents::new_unary(term))
     }
 
+    /// NAL-7 / 🆕时间合取
+    /// * 🎯【2024-09-06 17:25:22】实践「以『间隔』区分的统一合取词项」
+    pub fn new_temporal_conjunction(terms: impl Into<Vec<Term>>) -> Self {
+        Self::new(
+            TEMPORAL_CONJUNCTION_OPERATOR,
+            TermComponents::new_multi(terms.into()),
+        )
+    }
+
     /// NAL-7 / 序列合取
     pub fn new_sequential_conjunction(terms: impl Into<Vec<Term>>) -> Self {
         Self::new(

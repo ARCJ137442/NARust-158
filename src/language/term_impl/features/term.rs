@@ -101,6 +101,7 @@ impl GetCategory for Term {
             | DISJUNCTION_OPERATOR
             | SEQUENTIAL_CONJUNCTION_OPERATOR
             | PARALLEL_CONJUNCTION_OPERATOR
+            | TEMPORAL_CONJUNCTION_OPERATOR
              => Compound,
             // * 🚩其它⇒panic（不应出现）
             _ => panic!("Unexpected compound term identifier: {}", self.identifier),

@@ -116,6 +116,7 @@ impl Term {
                 | NEGATION_OPERATOR
                 | SEQUENTIAL_CONJUNCTION_OPERATOR
                 | PARALLEL_CONJUNCTION_OPERATOR
+                | TEMPORAL_CONJUNCTION_OPERATOR
         )
     }
 
@@ -504,6 +505,8 @@ impl GetCapacity for Term {
             | IMAGE_EXT_OPERATOR
             | IMAGE_INT_OPERATOR
             | SEQUENTIAL_CONJUNCTION_OPERATOR => Vec,
+            // ! ⚠️【2024-09-06 17:28:18】新的「时序合取」实际上不包含在此中——部分有序，部分无序
+            TEMPORAL_CONJUNCTION_OPERATOR => Vec,
             // * 🚩多元集合：词项集、交集、合取、析取、平行合取
             SET_EXT_OPERATOR
             | SET_INT_OPERATOR
