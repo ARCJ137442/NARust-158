@@ -87,9 +87,11 @@ impl Term {
     /// * 🚩【2024-06-13 18:39:33】现在是「词法折叠」使用本处实现
     /// * ⚠️在「词法折叠」的过程中，即开始「变量匿名化」
     ///   * 📌【2024-07-02 00:40:39】需要保证「格式化」的是个「整体」：变量只在「整体」范围内有意义
+    /// * 🚩【2024-09-06 17:32:12】在「词法折叠」的过程中，即开始使用`make`系列方法
+    ///   * 🎯应对类似「`(&&, A, A)` => `(&&, A)`」的「不完整简化」现象
     #[inline(always)]
     pub fn from_lexical(lexical: TermLexical) -> Result<Self> {
-        fold_term(lexical, &mut vec![])
+        fold_term(lexical, &mut FoldContext::new())
     }
 
     /// 从「内部Narsese」转换为「词法Narsese」
@@ -200,18 +202,42 @@ fn get_identifier(term: &TermLexical) -> String {
     }
 }
 
+/// 词法折叠的上下文对象
+/// * 🎯统一存储如「变量id映射」的临时状态
+#[derive(Debug, Clone)]
+struct FoldContext {
+    /// 有关「变量id⇒词项名称」的映射
+    var_id_map: Vec<String>,
+}
+
+impl FoldContext {
+    /// 创建一个新的上下文
+    fn new() -> Self {
+        Self { var_id_map: vec![] }
+    }
+}
+
 /// 根部折叠（带「变量编号化」逻辑）
 /// * 🚩接受初始化后的数组
 /// * ℹ️可能被递归调用
-fn fold_term(term: TermLexical, var_id_map: &mut Vec<String>) -> Result<Term> {
+/// * 🚩大体调用流程：`conversion` => `term_making` => `construct`
+///   * 【折叠】时【制作】词项，最终才【构造】
+///   * 🚧【2024-09-06 17:43:36】有待实装
+fn fold_term(term: TermLexical, context: &mut FoldContext) -> Result<Term> {
+    // TODO: 理清「折叠时简化」与「make」的 区别/差异
+    // ? ❓简化的时机
+    // ? ❓是否要「边解析边简化」「内部元素解析简化后再到此处」
+    // TODO: 简化其中的「make」相关选项
+
     /// 更新并返回一个「变量词项」，根据传入的「变量id映射」将原「变量名」映射到「变量id」
     #[inline]
     fn update_var(
         original_name: String,
-        var_id_map: &mut Vec<String>,
+        context: &mut FoldContext,
         new_var_from_id: fn(usize) -> Term, // * 📝不用特意引用
     ) -> Term {
-        match var_id_map
+        match context
+            .var_id_map
             .iter()
             .position(|stored_name| &original_name == stored_name)
         {
@@ -219,8 +245,8 @@ fn fold_term(term: TermLexical, var_id_map: &mut Vec<String>) -> Result<Term> {
             Some(existed) => new_var_from_id(existed + 1),
             // * 🚩新名称
             None => {
-                var_id_map.push(original_name);
-                new_var_from_id(var_id_map.len())
+                context.var_id_map.push(original_name);
+                new_var_from_id(context.var_id_map.len())
             }
         }
     }
@@ -232,64 +258,73 @@ fn fold_term(term: TermLexical, var_id_map: &mut Vec<String>) -> Result<Term> {
         // 原子词项 | ⚠️虽然「单独的占位符」在OpenNARS中不合法，但在解析「像」时需要用到 //
         (WORD, Atom { name, .. }) => Term::new_word(name),
         (PLACEHOLDER, Atom { .. }) => Term::new_placeholder(),
-        (VAR_INDEPENDENT, Atom { name, .. }) => update_var(name, var_id_map, Term::new_var_i),
-        (VAR_DEPENDENT, Atom { name, .. }) => update_var(name, var_id_map, Term::new_var_d),
-        (VAR_QUERY, Atom { name, .. }) => update_var(name, var_id_map, Term::new_var_q),
+        (VAR_INDEPENDENT, Atom { name, .. }) => update_var(name, context, Term::new_var_i),
+        (VAR_DEPENDENT, Atom { name, .. }) => update_var(name, context, Term::new_var_d),
+        (VAR_QUERY, Atom { name, .. }) => update_var(name, context, Term::new_var_q),
         // 复合词项 //
         (SET_EXT_OPERATOR, Set { terms, .. }) => {
-            Term::new_set_ext(fold_inner_lexical_vec(terms, var_id_map)?)
+            Term::make_set_ext_arg(fold_inner_lexical_vec(terms, context)?)
+                .ok_or(anyhow!("词项简化失败"))?
         }
         (SET_INT_OPERATOR, Set { terms, .. }) => {
-            Term::new_set_int(fold_inner_lexical_vec(terms, var_id_map)?)
+            Term::make_set_int_arg(fold_inner_lexical_vec(terms, context)?)
+                .ok_or(anyhow!("词项简化失败"))?
         }
         (INTERSECTION_EXT_OPERATOR, Compound { terms, .. }) => {
-            Term::new_intersection_ext(fold_inner_lexical_vec(terms, var_id_map)?)
+            Term::make_intersection_ext_arg(fold_inner_lexical_vec(terms, context)?)
+                .ok_or(anyhow!("词项简化失败"))?
         }
         (INTERSECTION_INT_OPERATOR, Compound { terms, .. }) => {
-            Term::new_intersection_int(fold_inner_lexical_vec(terms, var_id_map)?)
+            Term::make_intersection_ext_arg(fold_inner_lexical_vec(terms, context)?)
+                .ok_or(anyhow!("词项简化失败"))?
         }
         (DIFFERENCE_EXT_OPERATOR, Compound { terms, .. }) if terms.len() == 2 => {
             let mut iter = terms.into_iter();
-            let term1 = fold_inner_lexical(iter.next().unwrap(), var_id_map)?;
-            let term2 = fold_inner_lexical(iter.next().unwrap(), var_id_map)?;
-            Term::new_diff_ext(term1, term2)
+            let term1 = fold_inner_lexical(iter.next().unwrap(), context)?;
+            let term2 = fold_inner_lexical(iter.next().unwrap(), context)?;
+            Term::make_difference_ext(term1, term2).ok_or(anyhow!("词项简化失败"))?
         }
         (DIFFERENCE_INT_OPERATOR, Compound { terms, .. }) if terms.len() == 2 => {
             let mut iter = terms.into_iter();
-            let term1 = fold_inner_lexical(iter.next().unwrap(), var_id_map)?;
-            let term2 = fold_inner_lexical(iter.next().unwrap(), var_id_map)?;
-            Term::new_diff_int(term1, term2)
+            let term1 = fold_inner_lexical(iter.next().unwrap(), context)?;
+            let term2 = fold_inner_lexical(iter.next().unwrap(), context)?;
+            Term::make_difference_int(term1, term2).ok_or(anyhow!("词项简化失败"))?
         }
         (PRODUCT_OPERATOR, Compound { terms, .. }) => {
-            Term::new_product(fold_inner_lexical_vec(terms, var_id_map)?)
+            Term::make_product_arg(fold_inner_lexical_vec(terms, context)?)
+                .ok_or(anyhow!("词项简化失败"))?
         }
         (IMAGE_EXT_OPERATOR, Compound { terms, .. }) => {
             // ! ⚠️现在解析出作为「像之内容」的「词项序列」包含「占位符」作为内容
-            let (i, terms) = fold_lexical_terms_as_image(terms, var_id_map)?;
+            let (i, terms) = fold_lexical_terms_as_image(terms, context)?;
             match i {
                 // 占位符在首位⇒视作「乘积」 | 📝NAL-4中保留「第0位」作「关系」词项
-                0 => Term::new_product(terms),
+                0 => Term::make_product_arg(terms).ok_or(anyhow!("词项简化失败"))?,
                 _ => Term::new_image_ext(terms)?,
             }
         }
         (IMAGE_INT_OPERATOR, Compound { terms, .. }) => {
             // ! ⚠️现在解析出作为「像之内容」的「词项序列」包含「占位符」作为内容
-            let (i, terms) = fold_lexical_terms_as_image(terms, var_id_map)?;
+            let (i, terms) = fold_lexical_terms_as_image(terms, context)?;
             match i {
                 // 占位符在首位⇒视作「乘积」 | 📝NAL-4中保留「第0位」作「关系」词项
-                0 => Term::new_product(terms),
+                0 => Term::make_product_arg(terms).ok_or(anyhow!("词项简化失败"))?,
                 _ => Term::new_image_int(terms)?,
             }
         }
         (CONJUNCTION_OPERATOR, Compound { terms, .. }) => {
-            Term::new_conjunction(fold_inner_lexical_vec(terms, var_id_map)?)
+            Term::make_conjunction_arg(fold_inner_lexical_vec(terms, context)?)
+                .ok_or(anyhow!("词项简化失败"))?
         }
         (DISJUNCTION_OPERATOR, Compound { terms, .. }) => {
-            Term::new_disjunction(fold_inner_lexical_vec(terms, var_id_map)?)
+            Term::make_disjunction_arg(fold_inner_lexical_vec(terms, context)?)
+                .ok_or(anyhow!("词项简化失败"))?
         }
         (NEGATION_OPERATOR, Compound { terms, .. }) if terms.len() == 1 => {
-            let inner = fold_inner_lexical(terms.into_iter().next().unwrap(), var_id_map)?;
-            Term::new_negation(inner)
+            // TODO: 提取形如「数组中『判断指定数量并取出数组』」的语义 `fn extract_term_vec<const N: usize>(terms: Vec<Term>) -> Result<[Term; N]>`
+            // * 💡使用「占位符」作为「数组初始化」的占位符
+            let inner = fold_inner_lexical(terms.into_iter().next().unwrap(), context)?;
+            Term::make_negation(inner).ok_or(anyhow!("词项简化失败"))?
         }
         // 陈述
         (
@@ -297,64 +332,75 @@ fn fold_term(term: TermLexical, var_id_map: &mut Vec<String>) -> Result<Term> {
             Statement {
                 subject, predicate, ..
             },
-        ) => Term::new_inheritance(
-            fold_inner_lexical(*subject, var_id_map)?,
-            fold_inner_lexical(*predicate, var_id_map)?,
-        ),
+        ) => Term::make_inheritance(
+            fold_inner_lexical(*subject, context)?,
+            fold_inner_lexical(*predicate, context)?,
+        )
+        .ok_or(anyhow!("词项简化失败"))?,
         (
             SIMILARITY_RELATION,
             Statement {
                 subject, predicate, ..
             },
-        ) => Term::new_similarity(
-            fold_inner_lexical(*subject, var_id_map)?,
-            fold_inner_lexical(*predicate, var_id_map)?,
-        ),
+        ) => Term::make_similarity(
+            fold_inner_lexical(*subject, context)?,
+            fold_inner_lexical(*predicate, context)?,
+        )
+        .ok_or(anyhow!("词项简化失败"))?,
         (
             IMPLICATION_RELATION,
             Statement {
                 subject, predicate, ..
             },
-        ) => Term::new_implication(
-            fold_inner_lexical(*subject, var_id_map)?,
-            fold_inner_lexical(*predicate, var_id_map)?,
-        ),
+        ) => Term::make_implication(
+            fold_inner_lexical(*subject, context)?,
+            fold_inner_lexical(*predicate, context)?,
+        )
+        .ok_or(anyhow!("词项简化失败"))?,
         (
             EQUIVALENCE_RELATION,
             Statement {
                 subject, predicate, ..
             },
-        ) => Term::new_equivalence(
-            fold_inner_lexical(*subject, var_id_map)?,
-            fold_inner_lexical(*predicate, var_id_map)?,
-        ),
+        ) => Term::make_equivalence(
+            fold_inner_lexical(*subject, context)?,
+            fold_inner_lexical(*predicate, context)?,
+        )
+        .ok_or(anyhow!("词项简化失败"))?,
         (
             INSTANCE_RELATION, // 派生系词/实例
             Statement {
                 subject, predicate, ..
             },
-        ) => Term::new_inheritance(
-            Term::new_set_ext(vec![fold_inner_lexical(*subject, var_id_map)?]),
-            fold_inner_lexical(*predicate, var_id_map)?,
-        ),
+        ) => Term::make_inheritance(
+            Term::make_set_ext_arg(vec![fold_inner_lexical(*subject, context)?])
+                .ok_or(anyhow!("词项简化失败"))?,
+            fold_inner_lexical(*predicate, context)?,
+        )
+        .ok_or(anyhow!("词项简化失败"))?,
         (
             PROPERTY_RELATION, // 派生系词/属性
             Statement {
                 subject, predicate, ..
             },
-        ) => Term::new_inheritance(
-            fold_inner_lexical(*subject, var_id_map)?,
-            Term::new_set_int(vec![fold_inner_lexical(*predicate, var_id_map)?]),
-        ),
+        ) => Term::make_inheritance(
+            fold_inner_lexical(*subject, context)?,
+            Term::make_set_int_arg(vec![fold_inner_lexical(*predicate, context)?])
+                .ok_or(anyhow!("词项简化失败"))?,
+        )
+        .ok_or(anyhow!("词项简化失败"))?,
         (
             INSTANCE_PROPERTY_RELATION, // 派生系词/实例属性
             Statement {
                 subject, predicate, ..
             },
-        ) => Term::new_inheritance(
-            Term::new_set_ext(vec![fold_inner_lexical(*subject, var_id_map)?]),
-            Term::new_set_int(vec![fold_inner_lexical(*predicate, var_id_map)?]),
-        ),
+        ) => Term::make_inheritance(
+            Term::make_set_ext_arg(vec![fold_inner_lexical(*subject, context)?])
+                .ok_or(anyhow!("词项简化失败"))?,
+            Term::make_set_int_arg(vec![fold_inner_lexical(*predicate, context)?])
+                .ok_or(anyhow!("词项简化失败"))?,
+        )
+        .ok_or(anyhow!("词项简化失败"))?,
         // 其它情况⇒不合法
         (identifier, this) => return Err(anyhow!("标识符为「{identifier}」的非法词项：{this:?}")),
     };
@@ -364,9 +410,9 @@ fn fold_term(term: TermLexical, var_id_map: &mut Vec<String>) -> Result<Term> {
 /// 词法折叠/单个转换
 /// * ⚠️拒绝呈递占位符：不允许「像占位符」在除了「外延像/内涵像」外的词项中出现
 #[inline]
-fn fold_inner_lexical(term: TermLexical, var_id_map: &mut Vec<String>) -> Result<Term> {
+fn fold_inner_lexical(term: TermLexical, context: &mut FoldContext) -> Result<Term> {
     // * 🚩正常转换
-    let term = fold_term(term, var_id_map)?;
+    let term = fold_term(term, context)?;
     // * 🚩拦截解析出的「占位符」词项
     if term.is_placeholder() {
         return Err(anyhow!("词法折叠错误：占位符仅能直属于 外延像/内涵像 词项"));
@@ -384,13 +430,10 @@ fn fold_inner_lexical(term: TermLexical, var_id_map: &mut Vec<String>) -> Result
 /// * ❌【2024-07-08 23:20:02】现不允许在其中解析出「占位符」词项
 ///   * 🎯提早避免「像占位符溢出」情形
 #[inline]
-fn fold_inner_lexical_vec(
-    terms: Vec<TermLexical>,
-    var_id_map: &mut Vec<String>,
-) -> Result<Vec<Term>> {
+fn fold_inner_lexical_vec(terms: Vec<TermLexical>, context: &mut FoldContext) -> Result<Vec<Term>> {
     let mut v = vec![];
     for term in terms {
-        v.push(fold_inner_lexical(term, var_id_map)?);
+        v.push(fold_inner_lexical(term, context)?);
     }
     check_folded_terms(v)
 }
@@ -411,13 +454,13 @@ fn check_folded_terms(v: Vec<Term>) -> Result<Vec<Term>> {
 #[inline]
 fn fold_lexical_terms_as_image(
     terms: Vec<TermLexical>,
-    var_id_map: &mut Vec<String>,
+    context: &mut FoldContext,
 ) -> Result<(usize, Vec<Term>)> {
     // 构造「组分」
     let mut v = vec![];
     let mut placeholder_index = 0;
     for (i, term) in terms.into_iter().enumerate() {
-        let term: Term = fold_term(term, var_id_map)?;
+        let term: Term = fold_term(term, context)?;
         // 识别「占位符位置」
         // 🆕【2024-04-21 01:12:50】不同于OpenNARS：只会留下（且位置取决于）最后一个占位符
         // 📄OpenNARS在「没找到占位符」时，会将第一个元素作为占位符，然后把「占位符索引」固定为`1`
@@ -620,21 +663,21 @@ mod tests {
         println!("{term1_s}");
 
         // 内部折叠方法
-        let mut var_map = vec![];
-        let term2 = fold_term(lexical.clone(), &mut var_map)?;
+        let mut context = FoldContext::new();
+        let term2 = fold_term(lexical.clone(), &mut context)?;
         let term2_s = term2.to_display_ascii();
         println!("{term2_s}");
         assert_eq!(term1_s, term2_s); // 两种转换之后，字符串形式应该相等
 
         // 对比：映射表
-        println!("{:?}", var_map);
-        for (var_i, original_name) in var_map.iter().enumerate() {
+        println!("{:?}", context);
+        for (var_i, original_name) in context.var_id_map.iter().enumerate() {
             println!("{original_name} => {}", var_i + 1);
         }
         let expected = [("1", 1), ("2", 2), ("d", 3), ("c", 4)];
         for (original_name, var_i) in expected.iter() {
             // 断言映射表相等
-            assert_eq!(var_map[*var_i - 1], *original_name);
+            assert_eq!(context.var_id_map[*var_i - 1], *original_name);
         }
         ok!()
     }

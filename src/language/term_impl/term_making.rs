@@ -328,12 +328,12 @@ impl Term {
     /// * 📝同时包括「用户输入」与「从参数构造」两种来源
     /// * 📄来源1：结构规则「structuralCompose2」
     /// * 🆕现在构造时也会用reduce逻辑尝试合并
-    fn make_intersection_ext_arg(argument: Vec<Term>) -> Option<Term> {
+    pub(super) fn make_intersection_ext_arg(argument: Vec<Term>) -> Option<Term> {
         Self::make_intersection_arg(argument, Self::make_intersection_ext)
     }
 
     /// * 🚩只依照集合数量进行化简
-    fn make_intersection_ext_vec(terms: Vec<Term>) -> Option<Term> {
+    pub(super) fn make_intersection_ext_vec(terms: Vec<Term>) -> Option<Term> {
         Self::make_intersection_vec(terms, Term::new_intersection_ext)
     }
 
@@ -458,7 +458,7 @@ impl Term {
 
     /* Product */
 
-    fn make_product_arg(argument: Vec<Term>) -> Option<Term> {
+    pub(super) fn make_product_arg(argument: Vec<Term>) -> Option<Term> {
         Some(Term::new_product(argument))
     }
 
@@ -796,7 +796,7 @@ impl Term {
     /* Conjunction */
     // ? 【2024-06-17 23:24:39】单独的单元测试
 
-    fn make_conjunction_arg(argument: Vec<Term>) -> Option<Term> {
+    pub(super) fn make_conjunction_arg(argument: Vec<Term>) -> Option<Term> {
         Self::make_junction_arg(argument, Term::new_conjunction)
     }
 
@@ -812,7 +812,7 @@ impl Term {
     /* Disjunction */
     // ? 【2024-06-17 23:24:39】单独的单元测试
 
-    fn make_disjunction_arg(argument: Vec<Term>) -> Option<Term> {
+    pub(super) fn make_disjunction_arg(argument: Vec<Term>) -> Option<Term> {
         Self::make_junction_arg(argument, Term::new_disjunction)
     }
 
