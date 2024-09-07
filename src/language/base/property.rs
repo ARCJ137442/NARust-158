@@ -5,9 +5,6 @@
 use super::structs::*;
 use crate::symbols::*;
 use crate::util::ToDisplayAndBrief;
-use narsese::{
-    conversion::string::impl_lexical::format_instances::FORMAT_ASCII, lexical::Term as TermLexical,
-};
 
 /// 内建属性
 impl Term {
@@ -106,8 +103,9 @@ impl std::fmt::Display for Term {
 /// * 🚩【2024-05-08 23:30:59】「简略显示」与「完全显示」相同
 /// * 🚩【2024-05-08 23:31:32】目前使用ASCII格式化器去做，性能可能会低
 impl ToDisplayAndBrief for Term {
+    #[inline]
     fn to_display(&self) -> String {
-        FORMAT_ASCII.format(&TermLexical::from(self))
+        self.format_ascii()
     }
 }
 

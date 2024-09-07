@@ -13,6 +13,10 @@ use narsese::{
 /// * 🎯用于从「词法Narsese」中解析
 ///   * 考虑「变量语义」
 impl Term {
+    /// 格式化名称
+    /// * 🚩以方便打印的「内部方言语法」呈现Narsese
+    ///   * 📌括号全用 圆括号
+    ///   * 📌无逗号分隔符
     pub fn format_name(&self) -> String {
         // 格式化所用常量
         const OPENER: &str = "(";
@@ -116,7 +120,8 @@ impl Term {
     /// 转换为显示呈现上的ASCII格式
     /// * 📌对标OpenNARS的默认呈现
     /// * ⚠️【2024-07-02 00:52:54】目前需要「词法Narsese」作为中间格式，可能会有性能损失
-    pub fn to_display_ascii(&self) -> String {
+    #[doc(alias = "to_display_ascii")]
+    pub fn format_ascii(&self) -> String {
         use narsese::conversion::string::impl_lexical::format_instances::FORMAT_ASCII;
         self.to_lexical().format_to(&FORMAT_ASCII)
     }

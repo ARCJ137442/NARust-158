@@ -10,6 +10,7 @@ impl Serialize for Term {
     where
         S: Serializer,
     {
+        // * 🚩为保证稳定性，此处不使用`Term::format_ascii`
         // 转换为词法Narsese
         let lexical = self.to_lexical();
         // 再变为字符串

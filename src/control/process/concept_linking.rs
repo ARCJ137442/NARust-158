@@ -368,7 +368,6 @@ mod tests {
     use crate::test_term as term;
     use crate::{ok, util::AResult};
     use nar_dev_utils::{join, macro_once, JoinTo};
-    use narsese::conversion::string::impl_lexical::format_instances::FORMAT_ASCII;
     use std::fmt::Display;
 
     /// 快捷构造词项链模板
@@ -397,7 +396,7 @@ mod tests {
             write!(
                 f,
                 "\"{}\" #{:?} @{:?}",
-                FORMAT_ASCII.format(&self.target().to_lexical()),
+                self.target().format_ascii(),
                 self.link_type(),
                 self.indexes()
             )

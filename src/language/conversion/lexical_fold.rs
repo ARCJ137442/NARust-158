@@ -449,13 +449,13 @@ mod tests {
 
         // 词法折叠
         let term1 = Term::from_lexical(lexical.clone())?;
-        let term1_s = term1.to_display_ascii();
+        let term1_s = term1.format_ascii();
         println!("{term1_s}");
 
         // 内部折叠方法
         let mut context = FoldContext::new();
         let term2 = fold_term(lexical.clone(), &mut context)?;
-        let term2_s = term2.to_display_ascii();
+        let term2_s = term2.format_ascii();
         println!("{term2_s}");
         assert_eq!(term1_s, term2_s); // 两种转换之后，字符串形式应该相等
 
