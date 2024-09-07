@@ -1,7 +1,7 @@
 //! 与其它类型相互转换
 //! * 🎯转换为「词法Narsese」以便「获取名称」
 
-use super::structs::*;
+use super::base::*;
 use crate::symbols::*;
 use anyhow::{anyhow, Result};
 use nar_dev_utils::*;
@@ -146,7 +146,7 @@ impl Term {
     #[inline(always)]
     #[cfg(feature = "dialect_parser")]
     pub fn from_dialect(input: &str) -> Result<Self> {
-        use super::super::dialect::parse_term;
+        use super::dialect::parse_term;
         parse_term(input)
     }
 }
@@ -232,9 +232,9 @@ fn fold_term(term: TermLexical, context: &mut FoldContext) -> Result<Term> {
     /// 更新并返回一个「变量词项」，根据传入的「变量id映射」将原「变量名」映射到「变量id」
     #[inline]
     fn update_var(
+        var_type: impl Into<String>,
         original_name: String,
         context: &mut FoldContext,
-        new_var_from_id: fn(usize) -> Term, // * 📝不用特意引用
     ) -> Term {
         match context
             .var_id_map
@@ -242,11 +242,11 @@ fn fold_term(term: TermLexical, context: &mut FoldContext) -> Result<Term> {
             .position(|stored_name| &original_name == stored_name)
         {
             // * 🚩id从1开始
-            Some(existed) => new_var_from_id(existed + 1),
+            Some(existed) => Term::from_var_similar(var_type, existed + 1),
             // * 🚩新名称
             None => {
                 context.var_id_map.push(original_name);
-                new_var_from_id(context.var_id_map.len())
+                Term::from_var_similar(var_type, context.var_id_map.len())
             }
         }
     }
@@ -267,11 +267,11 @@ fn fold_term(term: TermLexical, context: &mut FoldContext) -> Result<Term> {
     use TermLexical::*;
     let term = match (identifier.as_str(), term) {
         // 原子词项 | ⚠️虽然「单独的占位符」在OpenNARS中不合法，但在解析「像」时需要用到 //
-        (WORD, Atom { name, .. }) => Term::new_word(name),
-        (PLACEHOLDER, Atom { .. }) => Term::new_placeholder(),
-        (VAR_INDEPENDENT, Atom { name, .. }) => update_var(name, context, Term::new_var_i),
-        (VAR_DEPENDENT, Atom { name, .. }) => update_var(name, context, Term::new_var_d),
-        (VAR_QUERY, Atom { name, .. }) => update_var(name, context, Term::new_var_q),
+        (WORD, Atom { name, .. }) => Term::make_word(name),
+        (PLACEHOLDER, Atom { .. }) => Term::make_placeholder(),
+        (VAR_INDEPENDENT, Atom { name, .. }) => update_var(VAR_INDEPENDENT, name, context),
+        (VAR_DEPENDENT, Atom { name, .. }) => update_var(VAR_DEPENDENT, name, context),
+        (VAR_QUERY, Atom { name, .. }) => update_var(VAR_QUERY, name, context),
         // 复合词项 //
         (SET_EXT_OPERATOR, Set { terms, .. }) => {
             Term::make_set_ext_arg(fold_inner_lexical_vec(terms, context)?).ok_or(make_error!())?
@@ -308,7 +308,7 @@ fn fold_term(term: TermLexical, context: &mut FoldContext) -> Result<Term> {
             match i {
                 // 占位符在首位⇒视作「乘积」 | 📝NAL-4中保留「第0位」作「关系」词项
                 0 => Term::make_product_arg(terms).ok_or(make_error!())?,
-                _ => Term::new_image_ext(terms)?,
+                _ => Term::make_image_ext_vec(terms).ok_or(make_error!())?,
             }
         }
         (IMAGE_INT_OPERATOR, Compound { terms, .. }) => {
@@ -317,7 +317,7 @@ fn fold_term(term: TermLexical, context: &mut FoldContext) -> Result<Term> {
             match i {
                 // 占位符在首位⇒视作「乘积」 | 📝NAL-4中保留「第0位」作「关系」词项
                 0 => Term::make_product_arg(terms).ok_or(make_error!())?,
-                _ => Term::new_image_int(terms)?,
+                _ => Term::make_image_int_vec(terms).ok_or(make_error!())?,
             }
         }
         (CONJUNCTION_OPERATOR, Compound { terms, .. }) => {
@@ -446,10 +446,9 @@ fn fold_inner_lexical_vec(terms: Vec<TermLexical>, context: &mut FoldContext) ->
     check_folded_terms(v)
 }
 
-#[inline]
-
 /// 检查折叠好了的词项表
 /// * 🚩【2024-06-14 00:13:29】目前仅检查「是否为空集」
+#[inline]
 fn check_folded_terms(v: Vec<Term>) -> Result<Vec<Term>> {
     match v.is_empty() {
         true => Err(anyhow!("词法折叠错误：NAL不允许构造空集")),

@@ -22,6 +22,14 @@ impl Term {
         Term::new_word(name)
     }
 
+    /* 🆕Placeholder */
+
+    /// 制作「占位符」
+    #[inline]
+    pub fn make_placeholder() -> Term {
+        Term::new_placeholder()
+    }
+
     /* Variable */
 
     /// 制作「独立变量」
