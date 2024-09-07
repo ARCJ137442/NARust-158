@@ -151,6 +151,8 @@ pub enum TermComponents {
 /// * 🎯提供通用的测试用函数
 #[cfg(test)]
 pub(crate) mod test_term {
+    use super::*;
+    use nar_dev_utils::ResultBoost;
 
     /// 用于批量生成「解析后的词项」
     /// * 🚩使用`?`直接在解析处上抛错误
@@ -180,5 +182,35 @@ pub(crate) mod test_term {
         ($($t:tt)*) => {
             $crate::test_term!(str stringify!($($t)*))
         };
+    }
+
+    /// 快捷构造[`Option<Term>`](Option)
+    #[macro_export]
+    macro_rules! option_term {
+        () => {
+            None
+        };
+        (None) => {
+            None
+        };
+        ($t:literal) => {
+            parse_option_term($t)
+        };
+    }
+
+    /// 用于封装作为`result`的方法
+    /// * 🚩在解析失败时，打印错误信息并返回`None`
+    ///   * 📌一般这时会有「预期比对」能触发失败
+    pub fn parse_option_term(t: &str) -> Option<Term> {
+        t.parse::<Term>()
+            .ok_or_run(|e| eprintln!("!!! 词项 {t:?} 解析失败：{e}"))
+    }
+
+    /// 快捷格式化[`Option<Term>`](Option)
+    pub fn format_option_term(ot: &Option<Term>) -> String {
+        match ot {
+            Some(t) => format!("Some(\"{t}\")"),
+            None => "None".to_string(),
+        }
     }
 }
