@@ -275,7 +275,7 @@ fn fold_term(term: TermLexical, context: &mut FoldContext) -> Result<Term> {
                 .ok_or(anyhow!("词项简化失败"))?
         }
         (INTERSECTION_INT_OPERATOR, Compound { terms, .. }) => {
-            Term::make_intersection_ext_arg(fold_inner_lexical_vec(terms, context)?)
+            Term::make_intersection_int_arg(fold_inner_lexical_vec(terms, context)?)
                 .ok_or(anyhow!("词项简化失败"))?
         }
         (DIFFERENCE_EXT_OPERATOR, Compound { terms, .. }) if terms.len() == 2 => {
