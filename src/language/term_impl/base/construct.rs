@@ -21,7 +21,7 @@ impl Term {
     // * ⚠️在MakeTerm中另有一套方法（参见term_making.rs）
 
     /// NAL-1 / 词语
-    pub(in super::super) fn new_word(name: impl Into<String>) -> Self {
+    pub(super) fn new_word(name: impl Into<String>) -> Self {
         Self::new(WORD, TermComponents::Word(name.into()))
     }
 
@@ -30,7 +30,7 @@ impl Term {
     /// * 🚩仅使用「占位符标识符+空组分」表示
     /// * 🎯仅在解析时临时出现
     /// * ⚠️【2024-04-25 09:45:51】不允许外部直接创建
-    pub(in super::super) fn new_placeholder() -> Self {
+    pub(super) fn new_placeholder() -> Self {
         Self::new(PLACEHOLDER, TermComponents::Empty)
     }
 
@@ -41,23 +41,23 @@ impl Term {
     }
 
     /// NAL-6 / 独立变量
-    pub(in super::super) fn new_var_i(id: impl Into<usize>) -> Self {
+    pub(super) fn new_var_i(id: impl Into<usize>) -> Self {
         Self::new_var(VAR_INDEPENDENT, id.into())
     }
 
     /// NAL-6 / 非独变量
-    pub(in super::super) fn new_var_d(id: impl Into<usize>) -> Self {
+    pub(super) fn new_var_d(id: impl Into<usize>) -> Self {
         Self::new_var(VAR_DEPENDENT, id.into())
     }
 
     /// NAL-6 / 查询变量
-    pub(in super::super) fn new_var_q(id: impl Into<usize>) -> Self {
+    pub(super) fn new_var_q(id: impl Into<usize>) -> Self {
         Self::new_var(VAR_QUERY, id.into())
     }
 
-    /// 从旧的原子词项构造，但使用新的名称
-    /// * 🎯重命名变量时，将变量「换名复制」
-    /// * 🚩使用旧词项的标识符，但产生新的变量
+    /// 从「变量类型」与「id」构造一个变量
+    /// * 🎯在「变量替换」中创建新变量
+    ///   * 📌【2024-09-07 16:17:57】因为外部「变量处理」要用到，此处暂且放开
     /// * ⚠️【2024-04-25 23:08:20】内部使用：会导致产生无效类型（改变了组分类型）
     pub(in super::super) fn from_var_similar(
         var_type: impl Into<String>,
@@ -70,7 +70,7 @@ impl Term {
 
     /// NAL-3 / 外延集
     /// * 🚩【2024-04-21 13:39:28】使用统一的「无序不重复集合」构造组分
-    pub(in super::super) fn new_set_ext(terms: impl Into<Vec<Term>>) -> Self {
+    pub(super) fn new_set_ext(terms: impl Into<Vec<Term>>) -> Self {
         Self::new(
             SET_EXT_OPERATOR,
             TermComponents::new_multi_set(terms.into()),
@@ -79,7 +79,7 @@ impl Term {
 
     /// NAL-3 / 内涵集
     /// * 🚩【2024-04-21 13:39:28】使用统一的「无序不重复集合」构造组分
-    pub(in super::super) fn new_set_int(terms: impl Into<Vec<Term>>) -> Self {
+    pub(super) fn new_set_int(terms: impl Into<Vec<Term>>) -> Self {
         Self::new(
             SET_INT_OPERATOR,
             TermComponents::new_multi_set(terms.into()),
@@ -88,7 +88,7 @@ impl Term {
 
     /// NAL-3 / 外延交
     /// * 🚩【2024-04-21 13:39:28】使用统一的「无序不重复集合」构造组分
-    pub(in super::super) fn new_intersection_ext(terms: impl Into<Vec<Term>>) -> Self {
+    pub(super) fn new_intersection_ext(terms: impl Into<Vec<Term>>) -> Self {
         Self::new(
             INTERSECTION_EXT_OPERATOR,
             TermComponents::new_multi_set(terms.into()),
@@ -97,7 +97,7 @@ impl Term {
 
     /// NAL-3 / 内涵交
     /// * 🚩【2024-04-21 13:39:28】使用统一的「无序不重复集合」构造组分
-    pub(in super::super) fn new_intersection_int(terms: impl Into<Vec<Term>>) -> Self {
+    pub(super) fn new_intersection_int(terms: impl Into<Vec<Term>>) -> Self {
         Self::new(
             INTERSECTION_INT_OPERATOR,
             TermComponents::new_multi_set(terms.into()),
@@ -105,7 +105,7 @@ impl Term {
     }
 
     /// NAL-3 / 外延差
-    pub(in super::super) fn new_diff_ext(term1: Term, term2: Term) -> Self {
+    pub(super) fn new_diff_ext(term1: Term, term2: Term) -> Self {
         Self::new(
             DIFFERENCE_EXT_OPERATOR,
             TermComponents::new_binary(term1, term2),
@@ -113,7 +113,7 @@ impl Term {
     }
 
     /// NAL-3 / 内涵差
-    pub(in super::super) fn new_diff_int(term1: Term, term2: Term) -> Self {
+    pub(super) fn new_diff_int(term1: Term, term2: Term) -> Self {
         Self::new(
             DIFFERENCE_INT_OPERATOR,
             TermComponents::new_binary(term1, term2),
@@ -121,7 +121,7 @@ impl Term {
     }
 
     /// NAL-4 / 乘积
-    pub(in super::super) fn new_product(terms: impl Into<Vec<Term>>) -> Self {
+    pub(super) fn new_product(terms: impl Into<Vec<Term>>) -> Self {
         Self::new(PRODUCT_OPERATOR, TermComponents::new_multi(terms.into()))
     }
 
@@ -130,7 +130,7 @@ impl Term {
     ///   * ⚠️占位符索引=0 ⇒ 不被允许
     ///
     /// ! ⚠️【2024-06-16 16:50:23】现在传入的「词项列表」将附带「像占位符」词项
-    pub(in super::super) fn new_image_ext(terms: impl Into<Vec<Term>>) -> Result<Self> {
+    pub(super) fn new_image_ext(terms: impl Into<Vec<Term>>) -> Result<Self> {
         Ok(Self::new(
             IMAGE_EXT_OPERATOR,
             Self::_process_image_terms(terms)?,
@@ -142,7 +142,7 @@ impl Term {
     ///   * ⚠️占位符索引=0 ⇒ 不被允许
     ///
     /// ! ⚠️【2024-06-16 16:50:23】现在传入的「词项列表」将附带「像占位符」词项
-    pub(in super::super) fn new_image_int(terms: impl Into<Vec<Term>>) -> Result<Self> {
+    pub(super) fn new_image_int(terms: impl Into<Vec<Term>>) -> Result<Self> {
         Ok(Self::new(
             IMAGE_INT_OPERATOR,
             Self::_process_image_terms(terms)?,
@@ -179,7 +179,7 @@ impl Term {
 
     /// NAL-5 / 合取
     /// * 🚩【2024-04-21 13:39:28】使用统一的「无序不重复集合」构造组分
-    pub(in super::super) fn new_conjunction(terms: impl Into<Vec<Term>>) -> Self {
+    pub(super) fn new_conjunction(terms: impl Into<Vec<Term>>) -> Self {
         Self::new(
             CONJUNCTION_OPERATOR,
             TermComponents::new_multi_set(terms.into()),
@@ -188,7 +188,7 @@ impl Term {
 
     /// NAL-5 / 析取
     /// * 🚩【2024-04-21 13:39:28】使用统一的「无序不重复集合」构造组分
-    pub(in super::super) fn new_disjunction(terms: impl Into<Vec<Term>>) -> Self {
+    pub(super) fn new_disjunction(terms: impl Into<Vec<Term>>) -> Self {
         Self::new(
             DISJUNCTION_OPERATOR,
             TermComponents::new_multi_set(terms.into()),
@@ -196,14 +196,14 @@ impl Term {
     }
 
     /// NAL-5 / 否定
-    pub(in super::super) fn new_negation(term: Term) -> Self {
+    pub(super) fn new_negation(term: Term) -> Self {
         Self::new(NEGATION_OPERATOR, TermComponents::new_unary(term))
     }
 
     // 陈述 //
 
     /// NAL-1 / 继承
-    pub(in super::super) fn new_inheritance(subject: Term, predicate: Term) -> Self {
+    pub(super) fn new_inheritance(subject: Term, predicate: Term) -> Self {
         Self::new(
             INHERITANCE_RELATION,
             TermComponents::new_binary(subject, predicate),
@@ -211,7 +211,7 @@ impl Term {
     }
 
     /// NAL-3 / 相似
-    pub(in super::super) fn new_similarity(subject: Term, predicate: Term) -> Self {
+    pub(super) fn new_similarity(subject: Term, predicate: Term) -> Self {
         Self::new(
             SIMILARITY_RELATION,
             TermComponents::new_binary_unordered(subject, predicate),
@@ -219,7 +219,7 @@ impl Term {
     }
 
     /// NAL-5 / 蕴含
-    pub(in super::super) fn new_implication(subject: Term, predicate: Term) -> Self {
+    pub(super) fn new_implication(subject: Term, predicate: Term) -> Self {
         Self::new(
             IMPLICATION_RELATION,
             TermComponents::new_binary(subject, predicate),
@@ -227,7 +227,7 @@ impl Term {
     }
 
     /// NAL-5 / 等价
-    pub(in super::super) fn new_equivalence(subject: Term, predicate: Term) -> Self {
+    pub(super) fn new_equivalence(subject: Term, predicate: Term) -> Self {
         Self::new(
             EQUIVALENCE_RELATION,
             TermComponents::new_binary_unordered(subject, predicate),
@@ -238,13 +238,13 @@ impl Term {
 impl TermComponents {
     /// 一元组分
     /// * 🚩【2024-06-12 22:43:34】现在封装「内部枚举变种」接口
-    pub(in super::super) fn new_unary(term: Term) -> Self {
+    pub(super) fn new_unary(term: Term) -> Self {
         Self::Compound(Box::new([term]))
     }
 
     /// 二元有序组分
     /// * 🚩【2024-06-12 22:43:34】现在封装「内部枚举变种」接口
-    pub(in super::super) fn new_binary(term1: Term, term2: Term) -> Self {
+    pub(super) fn new_binary(term1: Term, term2: Term) -> Self {
         Self::Compound(Box::new([term1, term2]))
     }
 
@@ -253,7 +253,7 @@ impl TermComponents {
     /// * ⚠️无法去重：元素数量固定为`2`
     /// * 📄相似、等价
     /// * 🚩使用「临时数组切片」实现（较为简洁）
-    pub(in super::super) fn new_binary_unordered(term1: Term, term2: Term) -> Self {
+    pub(super) fn new_binary_unordered(term1: Term, term2: Term) -> Self {
         pipe! {
             // 排序
             manipulate!(
@@ -267,7 +267,7 @@ impl TermComponents {
     }
 
     /// 多元有序组分
-    pub(in super::super) fn new_multi(terms: Vec<Term>) -> Self {
+    pub(super) fn new_multi(terms: Vec<Term>) -> Self {
         pipe! {
             terms
             // 转换
@@ -281,7 +281,7 @@ impl TermComponents {
     /// * 🎯用于【无序不重复】的集合类组分
     /// * 📄外延集、内涵集
     /// * 📄外延交、内涵交
-    pub(in super::super) fn new_multi_set(terms: Vec<Term>) -> Self {
+    pub(super) fn new_multi_set(terms: Vec<Term>) -> Self {
         pipe! {
             manipulate!(
                 terms

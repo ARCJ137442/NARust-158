@@ -24,8 +24,5 @@ pub mod dialect;
 mod features;
 pub use features::*;
 
-// 「制作词项」
-mod term_making;
-
 // 「变量处理」
 pub mod variable_process;

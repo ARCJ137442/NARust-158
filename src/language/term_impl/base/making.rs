@@ -4,11 +4,14 @@
 //!   * 检查其合法性
 //!   * 简化其表达
 //! * 🎯用于「制作词项」
+//!   * 📝是NARS中「词项逻辑」的重要部分——非推理语义简化
+//! * 🚩【2024-09-07 16:09:46】从外部IO解析出一个新词项的流程：词法折叠→语义简化→创建结构体
 
-use super::{
-    variable::MaximumVariableId, vec_utils, CompoundTermRef, StatementRef, Term, TermComponents,
+use super::{Term, TermComponents};
+use crate::{
+    language::{variable::MaximumVariableId, vec_utils, CompoundTermRef, StatementRef},
+    symbols::*,
 };
-use crate::symbols::*;
 
 impl Term {
     /* Word */
