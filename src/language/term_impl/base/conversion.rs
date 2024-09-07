@@ -250,6 +250,13 @@ fn fold_term(term: TermLexical, context: &mut FoldContext) -> Result<Term> {
             }
         }
     }
+
+    macro_rules! 词项简化失败 {
+        () => {
+            anyhow::anyhow!("词项简化失败 @ {}:{}", file!(), line!())
+        };
+    }
+
     // 正式开始
     let identifier = get_identifier(&term);
     // 在有限的标识符范围内匹配
@@ -264,42 +271,42 @@ fn fold_term(term: TermLexical, context: &mut FoldContext) -> Result<Term> {
         // 复合词项 //
         (SET_EXT_OPERATOR, Set { terms, .. }) => {
             Term::make_set_ext_arg(fold_inner_lexical_vec(terms, context)?)
-                .ok_or(anyhow!("词项简化失败"))?
+                .ok_or(词项简化失败!())?
         }
         (SET_INT_OPERATOR, Set { terms, .. }) => {
             Term::make_set_int_arg(fold_inner_lexical_vec(terms, context)?)
-                .ok_or(anyhow!("词项简化失败"))?
+                .ok_or(词项简化失败!())?
         }
         (INTERSECTION_EXT_OPERATOR, Compound { terms, .. }) => {
             Term::make_intersection_ext_arg(fold_inner_lexical_vec(terms, context)?)
-                .ok_or(anyhow!("词项简化失败"))?
+                .ok_or(词项简化失败!())?
         }
         (INTERSECTION_INT_OPERATOR, Compound { terms, .. }) => {
             Term::make_intersection_int_arg(fold_inner_lexical_vec(terms, context)?)
-                .ok_or(anyhow!("词项简化失败"))?
+                .ok_or(词项简化失败!())?
         }
         (DIFFERENCE_EXT_OPERATOR, Compound { terms, .. }) if terms.len() == 2 => {
             let mut iter = terms.into_iter();
             let term1 = fold_inner_lexical(iter.next().unwrap(), context)?;
             let term2 = fold_inner_lexical(iter.next().unwrap(), context)?;
-            Term::make_difference_ext(term1, term2).ok_or(anyhow!("词项简化失败"))?
+            Term::make_difference_ext(term1, term2).ok_or(词项简化失败!())?
         }
         (DIFFERENCE_INT_OPERATOR, Compound { terms, .. }) if terms.len() == 2 => {
             let mut iter = terms.into_iter();
             let term1 = fold_inner_lexical(iter.next().unwrap(), context)?;
             let term2 = fold_inner_lexical(iter.next().unwrap(), context)?;
-            Term::make_difference_int(term1, term2).ok_or(anyhow!("词项简化失败"))?
+            Term::make_difference_int(term1, term2).ok_or(词项简化失败!())?
         }
         (PRODUCT_OPERATOR, Compound { terms, .. }) => {
             Term::make_product_arg(fold_inner_lexical_vec(terms, context)?)
-                .ok_or(anyhow!("词项简化失败"))?
+                .ok_or(词项简化失败!())?
         }
         (IMAGE_EXT_OPERATOR, Compound { terms, .. }) => {
             // ! ⚠️现在解析出作为「像之内容」的「词项序列」包含「占位符」作为内容
             let (i, terms) = fold_lexical_terms_as_image(terms, context)?;
             match i {
                 // 占位符在首位⇒视作「乘积」 | 📝NAL-4中保留「第0位」作「关系」词项
-                0 => Term::make_product_arg(terms).ok_or(anyhow!("词项简化失败"))?,
+                0 => Term::make_product_arg(terms).ok_or(词项简化失败!())?,
                 _ => Term::new_image_ext(terms)?,
             }
         }
@@ -308,23 +315,23 @@ fn fold_term(term: TermLexical, context: &mut FoldContext) -> Result<Term> {
             let (i, terms) = fold_lexical_terms_as_image(terms, context)?;
             match i {
                 // 占位符在首位⇒视作「乘积」 | 📝NAL-4中保留「第0位」作「关系」词项
-                0 => Term::make_product_arg(terms).ok_or(anyhow!("词项简化失败"))?,
+                0 => Term::make_product_arg(terms).ok_or(词项简化失败!())?,
                 _ => Term::new_image_int(terms)?,
             }
         }
         (CONJUNCTION_OPERATOR, Compound { terms, .. }) => {
             Term::make_conjunction_arg(fold_inner_lexical_vec(terms, context)?)
-                .ok_or(anyhow!("词项简化失败"))?
+                .ok_or(词项简化失败!())?
         }
         (DISJUNCTION_OPERATOR, Compound { terms, .. }) => {
             Term::make_disjunction_arg(fold_inner_lexical_vec(terms, context)?)
-                .ok_or(anyhow!("词项简化失败"))?
+                .ok_or(词项简化失败!())?
         }
         (NEGATION_OPERATOR, Compound { terms, .. }) if terms.len() == 1 => {
             // TODO: 提取形如「数组中『判断指定数量并取出数组』」的语义 `fn extract_term_vec<const N: usize>(terms: Vec<Term>) -> Result<[Term; N]>`
             // * 💡使用「占位符」作为「数组初始化」的占位符
             let inner = fold_inner_lexical(terms.into_iter().next().unwrap(), context)?;
-            Term::make_negation(inner).ok_or(anyhow!("词项简化失败"))?
+            Term::make_negation(inner).ok_or(词项简化失败!())?
         }
         // 陈述
         (
@@ -336,7 +343,7 @@ fn fold_term(term: TermLexical, context: &mut FoldContext) -> Result<Term> {
             fold_inner_lexical(*subject, context)?,
             fold_inner_lexical(*predicate, context)?,
         )
-        .ok_or(anyhow!("词项简化失败"))?,
+        .ok_or(词项简化失败!())?,
         (
             SIMILARITY_RELATION,
             Statement {
@@ -346,7 +353,7 @@ fn fold_term(term: TermLexical, context: &mut FoldContext) -> Result<Term> {
             fold_inner_lexical(*subject, context)?,
             fold_inner_lexical(*predicate, context)?,
         )
-        .ok_or(anyhow!("词项简化失败"))?,
+        .ok_or(词项简化失败!())?,
         (
             IMPLICATION_RELATION,
             Statement {
@@ -356,7 +363,7 @@ fn fold_term(term: TermLexical, context: &mut FoldContext) -> Result<Term> {
             fold_inner_lexical(*subject, context)?,
             fold_inner_lexical(*predicate, context)?,
         )
-        .ok_or(anyhow!("词项简化失败"))?,
+        .ok_or(词项简化失败!())?,
         (
             EQUIVALENCE_RELATION,
             Statement {
@@ -366,7 +373,7 @@ fn fold_term(term: TermLexical, context: &mut FoldContext) -> Result<Term> {
             fold_inner_lexical(*subject, context)?,
             fold_inner_lexical(*predicate, context)?,
         )
-        .ok_or(anyhow!("词项简化失败"))?,
+        .ok_or(词项简化失败!())?,
         (
             INSTANCE_RELATION, // 派生系词/实例
             Statement {
@@ -374,10 +381,10 @@ fn fold_term(term: TermLexical, context: &mut FoldContext) -> Result<Term> {
             },
         ) => Term::make_inheritance(
             Term::make_set_ext_arg(vec![fold_inner_lexical(*subject, context)?])
-                .ok_or(anyhow!("词项简化失败"))?,
+                .ok_or(词项简化失败!())?,
             fold_inner_lexical(*predicate, context)?,
         )
-        .ok_or(anyhow!("词项简化失败"))?,
+        .ok_or(词项简化失败!())?,
         (
             PROPERTY_RELATION, // 派生系词/属性
             Statement {
@@ -386,9 +393,9 @@ fn fold_term(term: TermLexical, context: &mut FoldContext) -> Result<Term> {
         ) => Term::make_inheritance(
             fold_inner_lexical(*subject, context)?,
             Term::make_set_int_arg(vec![fold_inner_lexical(*predicate, context)?])
-                .ok_or(anyhow!("词项简化失败"))?,
+                .ok_or(词项简化失败!())?,
         )
-        .ok_or(anyhow!("词项简化失败"))?,
+        .ok_or(词项简化失败!())?,
         (
             INSTANCE_PROPERTY_RELATION, // 派生系词/实例属性
             Statement {
@@ -396,11 +403,11 @@ fn fold_term(term: TermLexical, context: &mut FoldContext) -> Result<Term> {
             },
         ) => Term::make_inheritance(
             Term::make_set_ext_arg(vec![fold_inner_lexical(*subject, context)?])
-                .ok_or(anyhow!("词项简化失败"))?,
+                .ok_or(词项简化失败!())?,
             Term::make_set_int_arg(vec![fold_inner_lexical(*predicate, context)?])
-                .ok_or(anyhow!("词项简化失败"))?,
+                .ok_or(词项简化失败!())?,
         )
-        .ok_or(anyhow!("词项简化失败"))?,
+        .ok_or(词项简化失败!())?,
         // 其它情况⇒不合法
         (identifier, this) => return Err(anyhow!("标识符为「{identifier}」的非法词项：{this:?}")),
     };
@@ -570,8 +577,8 @@ mod tests {
             "(&&, C, B, A, (/, A, _, B))"
             // "<(*, {SELF}, x, y) --> ^left>" // ! ⚠️【2024-04-25 10:02:20】现在对「操作符」不再支持
             "[2, 1, 0, $0, #1, ?2]"
-            "<A <-> {A}>"
-            "<{B} <=> B>"
+            "<A <-> {B}>" // ! 原先的「类重言式」`<A <-> {A}>`是无效的
+            "<{A} <=> B>" // ! 原先的「类重言式」`<{B} <=> B>`是无效的
             "<{SELF} ==> (--, [good])>"
         }
         ok!()

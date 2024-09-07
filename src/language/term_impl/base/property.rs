@@ -355,15 +355,15 @@ mod tests {
                 // 复合词项
                 "{A}" => SET_EXT_OPERATOR
                 "[A]" => SET_INT_OPERATOR
-                "(&, A)" => INTERSECTION_EXT_OPERATOR
-                "(|, A)" => INTERSECTION_INT_OPERATOR
+                "(&, A, B)" => INTERSECTION_EXT_OPERATOR // ! 📌【2024-09-07 13:10:43】现在需要保证词项有效，不能再用单个词项了
+                "(|, A, B)" => INTERSECTION_INT_OPERATOR // ! 📌【2024-09-07 13:10:43】现在需要保证词项有效，不能再用单个词项了
                 "(-, A, B)" => DIFFERENCE_EXT_OPERATOR
                 "(~, A, B)" => DIFFERENCE_INT_OPERATOR
                 "(*, A)" => PRODUCT_OPERATOR
                 r"(/, R, _)" => IMAGE_EXT_OPERATOR
                 r"(\, R, _)" => IMAGE_INT_OPERATOR
-                r"(&&, A)" => CONJUNCTION_OPERATOR
-                r"(||, A)" => DISJUNCTION_OPERATOR
+                r"(&&, A, B)" => CONJUNCTION_OPERATOR // ! 📌【2024-09-07 13:10:43】现在需要保证词项有效，不能再用单个词项了
+                r"(||, A, B)" => DISJUNCTION_OPERATOR // ! 📌【2024-09-07 13:10:43】现在需要保证词项有效，不能再用单个词项了
                 r"(--, A)" => NEGATION_OPERATOR
                 // 陈述
                 "<A --> B>" => INHERITANCE_RELATION
@@ -435,8 +435,8 @@ mod tests {
                 // 复合词项
                 "{A}" => false
                 "[A]" => false
-                "(&, A)" => false
-                "(|, A)" => false
+                "(&, A, B)" => false // ! 【2024-09-07 12:55:51】现在"(&, A)" 会被自动简化
+                "(|, A, B)" => false // ! 【2024-09-07 12:55:51】现在"(|, A)" 会被自动简化
                 "(-, A, B)" => false
                 "(~, A, B)" => false
                 "(*, A)" => false
@@ -544,15 +544,15 @@ mod tests {
                 // 复合词项
                 WORD in "{A}"
                 WORD in "[A]"
-                WORD in "(&, A)"
-                WORD in "(|, A)"
+                WORD in "(&, A, B)" // ! 【2024-09-07 12:55:51】现在"(&, A)" 会被自动简化
+                WORD in "(|, A, B)" // ! 【2024-09-07 12:55:51】现在"(|, A)" 会被自动简化
                 WORD in "(-, A, B)"
                 WORD in "(~, A, B)"
                 WORD in "(*, A)"
                 WORD in r"(/, R, _)"
                 WORD in r"(\, R, _)"
-                WORD in r"(&&, A)"
-                WORD in r"(||, A)"
+                WORD in r"(&&, A, B)" // ! 【2024-09-07 12:55:51】现在"(&&, A)" 会被自动简化
+                WORD in r"(||, A, B)" // ! 【2024-09-07 12:55:51】现在"(||, A)" 会被自动简化
                 WORD in r"(--, A)"
 
                 VAR_INDEPENDENT in "{$A}"
@@ -564,21 +564,23 @@ mod tests {
                 VAR_INDEPENDENT in "(*, $A)"
                 VAR_INDEPENDENT in r"(/, $R, _)"
                 VAR_INDEPENDENT in r"(\, $R, _)"
-                VAR_INDEPENDENT in r"(&&, $A)"
-                VAR_INDEPENDENT in r"(||, $A)"
+                VAR_INDEPENDENT in r"(&&, $A, #B)" // ! 【2024-09-07 12:55:51】现在"(&&, A)" 会被自动简化
+                VAR_INDEPENDENT in r"(||, $A, #B)" // ! 【2024-09-07 12:55:51】现在"(||, A)" 会被自动简化
+                VAR_DEPENDENT   in r"(&&, $A, #B)" // ! 【2024-09-07 12:55:51】现在"(&&, A)" 会被自动简化
+                VAR_DEPENDENT   in r"(||, $A, #B)" // ! 【2024-09-07 12:55:51】现在"(||, A)" 会被自动简化
                 VAR_INDEPENDENT in r"(--, $A)"
 
                 PRODUCT_OPERATOR in "{(*, A)}"
                 PRODUCT_OPERATOR in "[(*, A)]"
-                PRODUCT_OPERATOR in "(&, (*, A))"
-                PRODUCT_OPERATOR in "(|, (*, A))"
+                PRODUCT_OPERATOR in "(&, (*, A), B)" // ! 【2024-09-07 12:55:51】现在"(&, X)" 会被自动简化
+                PRODUCT_OPERATOR in "(|, (*, A), B)" // ! 【2024-09-07 12:55:51】现在"(|, X)" 会被自动简化
                 PRODUCT_OPERATOR in "(-, (*, A), B)"
                 PRODUCT_OPERATOR in "(~, (*, A), B)"
                 PRODUCT_OPERATOR in "(*, (*, A))"
                 PRODUCT_OPERATOR in r"(/, (*, R), _)"
                 PRODUCT_OPERATOR in r"(\, (*, R), _)"
-                PRODUCT_OPERATOR in r"(&&, (*, A))"
-                PRODUCT_OPERATOR in r"(||, (*, A))"
+                PRODUCT_OPERATOR in r"(&&, (*, A), B)" // ! 【2024-09-07 12:55:51】现在"(&&, X)" 会被自动简化
+                PRODUCT_OPERATOR in r"(||, (*, A), B)" // ! 【2024-09-07 12:55:51】现在"(||, X)" 会被自动简化
                 PRODUCT_OPERATOR in r"(--, (*, A))"
 
                 // 陈述
@@ -587,10 +589,10 @@ mod tests {
                 WORD in "<A ==> B>"
                 WORD in "<A <=> B>"
 
-                INHERITANCE_RELATION in "<<A --> B> --> <A --> B>>"
-                SIMILARITY_RELATION in "<<A <-> B> <-> <A <-> B>>"
-                IMPLICATION_RELATION in "<<A ==> B> ==> <A ==> B>>"
-                EQUIVALENCE_RELATION in "<<A <=> B> <=> <A <=> B>>"
+                INHERITANCE_RELATION in "<<A --> B> --> <C ==> D>>" // ! ⚠️【2024-09-07 13:13:05】现在需要通过`make`的检验
+                SIMILARITY_RELATION  in "<<A <-> B> <-> <C <=> D>>" // ! ⚠️【2024-09-07 13:13:05】现在需要通过`make`的检验
+                IMPLICATION_RELATION in "<<A --> B> ==> <C ==> D>>" // ! ⚠️【2024-09-07 13:13:05】现在需要通过`make`的检验
+                EQUIVALENCE_RELATION in "<<A <-> B> <=> <C <=> D>>" // ! ⚠️【2024-09-07 13:13:05】现在需要通过`make`的检验
             }
             ok!()
         }
@@ -616,15 +618,15 @@ mod tests {
                 // 复合词项
                 "{A}" => "{a}"
                 "[A]" => "[a]"
-                "(&, A)" => "(&, a)"
-                "(|, A)" => "(|, a)"
+                "(&, A, B)" => "(&, a, b)"
+                "(|, A, B)" => "(|, a, b)"
                 "(-, A, B)" => "(-, a, b)"
                 "(~, A, B)" => "(~, a, b)"
                 "(*, A)" => "(*, a)"
                 r"(/, R, _)" => r"(/, r, _)"
                 r"(\, R, _)" => r"(\, r, _)"
-                r"(&&, A)" => r"(&&, a)"
-                r"(||, A)" => r"(||, a)"
+                r"(&&, A, B)" => r"(&&, a, b)"
+                r"(||, A, B)" => r"(||, a, b)"
                 r"(--, A)" => r"(--, a)"
                 // 陈述
                 "<A --> B>" => "<a --> b>"

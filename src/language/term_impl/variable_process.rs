@@ -534,7 +534,7 @@ fn find_unification(
         /// * 🚩【2024-08-08 13:43:24】现在创建一个新的「域外变量」代替
         #[inline]
         fn make_common_variable(&self, id1: usize, id2: usize) -> Term {
-            Term::new_var(self.var_type, self.common_var_id_from(id1, id2))
+            Term::from_var_similar(self.var_type, self.common_var_id_from(id1, id2))
         }
     }
 

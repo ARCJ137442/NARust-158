@@ -345,6 +345,8 @@ impl<'s> StatementRef<'s> {
 
     /// 📄OpenNARS `invalidReflexive`
     /// * 🚩主词项是「非像复合词项」并且包括另一词项
+    ///   * 📄`<A <-> {A}>`
+    ///   * 📄`<A ==> (*, B, C, A)>`
     ///
     /// # 📄OpenNARS
     ///
@@ -367,13 +369,18 @@ impl<'s> StatementRef<'s> {
         }
         container.contain_component(maybe_component)
         */
-        match may_container.as_compound() {
-            // 仅在复合词项时继续检查
-            Some(compound) => {
-                !compound.inner.instanceof_image() && compound.contain_component(may_component)
+        // 筛查词项类型：复合词项
+        // ! 仅在复合词项时继续检查
+        if let Some(compound) = may_container.as_compound() {
+            // 筛查词项类型
+            if_return! {
+                compound.inner.instanceof_image() => false
             }
-            None => false,
+            // 若包含词项，则为「无效」
+            return compound.contain_component(may_component);
         }
+        // 非复合词项⇒通过
+        false
     }
 
     /// 📄OpenNARS `invalidPair`
