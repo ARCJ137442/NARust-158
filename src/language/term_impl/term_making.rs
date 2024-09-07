@@ -332,12 +332,12 @@ impl Term {
     /// * 📝同时包括「用户输入」与「从参数构造」两种来源
     /// * 📄来源1：结构规则「structuralCompose2」
     /// * 🆕现在构造时也会用reduce逻辑尝试合并
-    pub(super) fn make_intersection_ext_arg(argument: Vec<Term>) -> Option<Term> {
+    pub fn make_intersection_ext_arg(argument: Vec<Term>) -> Option<Term> {
         Self::make_intersection_arg(argument, Self::make_intersection_ext)
     }
 
     /// * 🚩只依照集合数量进行化简
-    pub(super) fn make_intersection_ext_vec(terms: Vec<Term>) -> Option<Term> {
+    pub fn make_intersection_ext_vec(terms: Vec<Term>) -> Option<Term> {
         Self::make_intersection_vec(terms, Term::new_intersection_ext)
     }
 
@@ -359,12 +359,12 @@ impl Term {
     /// * 📝同时包括「用户输入」与「从参数构造」两种来源
     /// * 📄来源1：结构规则「structuralCompose2」
     /// * 🆕现在构造时也会用reduce逻辑尝试合并
-    pub(super) fn make_intersection_int_arg(argument: Vec<Term>) -> Option<Term> {
+    pub fn make_intersection_int_arg(argument: Vec<Term>) -> Option<Term> {
         Self::make_intersection_arg(argument, Self::make_intersection_int)
     }
 
     /// * 🚩只依照集合数量进行化简
-    pub(super) fn make_intersection_int_vec(terms: Vec<Term>) -> Option<Term> {
+    pub fn make_intersection_int_vec(terms: Vec<Term>) -> Option<Term> {
         Self::make_intersection_vec(terms, Term::new_intersection_int)
     }
 
@@ -462,7 +462,7 @@ impl Term {
 
     /* Product */
 
-    pub(super) fn make_product_arg(argument: Vec<Term>) -> Option<Term> {
+    pub fn make_product_arg(argument: Vec<Term>) -> Option<Term> {
         Some(Term::new_product(argument))
     }
 
@@ -666,8 +666,8 @@ impl Term {
     /// * * => "(/,neutralization,_,base)"
     /// * 📄argList=[open, $120, _] => argument=[$120, open], index=1
     /// * * => "(/,open,$120,_)"
-    fn make_image_ext_vec(argument: Vec<Term>) -> Option<Term> {
-        Self::make_image_vec(argument, Term::new_image_ext)
+    pub fn make_image_ext_vec(argument: impl Into<Vec<Term>>) -> Option<Term> {
+        Self::make_image_vec(argument.into(), Term::new_image_ext)
     }
 
     /// 从一个「乘积」构造外延像
@@ -715,8 +715,8 @@ impl Term {
         Self::make_image_arg(argument, placeholder_index, Self::make_image_int_vec)
     }
 
-    fn make_image_int_vec(argument: Vec<Term>) -> Option<Term> {
-        Self::make_image_vec(argument, Term::new_image_int)
+    pub fn make_image_int_vec(argument: impl Into<Vec<Term>>) -> Option<Term> {
+        Self::make_image_vec(argument.into(), Term::new_image_int)
     }
 
     pub fn make_image_int_from_product(
@@ -800,7 +800,7 @@ impl Term {
     /* Conjunction */
     // ? 【2024-06-17 23:24:39】单独的单元测试
 
-    pub(super) fn make_conjunction_arg(argument: Vec<Term>) -> Option<Term> {
+    pub fn make_conjunction_arg(argument: Vec<Term>) -> Option<Term> {
         Self::make_junction_arg(argument, Term::new_conjunction)
     }
 
@@ -816,7 +816,7 @@ impl Term {
     /* Disjunction */
     // ? 【2024-06-17 23:24:39】单独的单元测试
 
-    pub(super) fn make_disjunction_arg(argument: Vec<Term>) -> Option<Term> {
+    pub fn make_disjunction_arg(argument: Vec<Term>) -> Option<Term> {
         Self::make_junction_arg(argument, Term::new_disjunction)
     }
 

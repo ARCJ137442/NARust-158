@@ -165,11 +165,9 @@ impl Term {
         // 检查占位符索引范围
         match i_placeholder {
             Some(i_placeholder) => {
-                if_return! {
-                    i_placeholder == 0
-                        => Err(anyhow::anyhow!("占位符不能压在「关系词项」的位置上"))
-                    i_placeholder > terms.len()
-                        => Err(anyhow::anyhow!("占位符索引超出范围"))
+                // * ✅`terms.iter().position`保证：占位符索引不会超出范围
+                if i_placeholder == 0 {
+                    return Err(anyhow::anyhow!("占位符不能压在「关系词项」的位置上"));
                 }
             }
             None => return Err(anyhow::anyhow!("未在像的元素中找到占位符")),

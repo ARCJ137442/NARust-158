@@ -137,12 +137,34 @@ mod tests {
 
     #[test]
     fn instanceof_image() -> AResult {
+        /// 📌工具方法：直接调用`make_image_xxt_vec`构造词项
+        fn make_image(
+            argument: impl IntoIterator<Item = &'static str>,
+            make_vec: impl Fn(Vec<Term>) -> Option<Term>,
+        ) -> AResult<Term> {
+            let argument = argument
+                .into_iter()
+                .map(|t| t.parse::<Term>().expect("内部词项解析失败"))
+                .collect::<Vec<_>>();
+            make_vec(argument).ok_or(anyhow::anyhow!("词项解析失败"))
+        }
+        fn make_ext(argument: impl IntoIterator<Item = &'static str>) -> AResult<Term> {
+            make_image(argument, Term::make_image_ext_vec)
+        }
+        fn make_int(argument: impl IntoIterator<Item = &'static str>) -> AResult<Term> {
+            make_image(argument, Term::make_image_int_vec)
+        }
         asserts! {
             // 像占位符在第一位的「像」会被解析为「乘积」
             term!(r"(/, _, A, B)").identifier() => PRODUCT_OPERATOR,
             term!(r"(\, _, A, B)").identifier() => PRODUCT_OPERATOR,
             // 其余正常情况
-            Term::new_image_ext(vec![term!("S"), term!("_"), term!("A"), term!("B")])?.instanceof_image()
+            make_ext(["S", "_", "A", "B"])?.instanceof_image()
+            make_int(["S", "_", "A", "B"])?.instanceof_image()
+            make_ext(["S", "A", "_", "B"])?.instanceof_image()
+            make_int(["S", "A", "_", "B"])?.instanceof_image()
+            make_ext(["S", "A", "B", "_"])?.instanceof_image()
+            make_int(["S", "A", "B", "_"])?.instanceof_image()
             term!(r"(/, A, _, B)").instanceof_image()
             term!(r"(\, A, _, B)").instanceof_image()
             term!(r"(/, A, B, _)").instanceof_image()
