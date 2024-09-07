@@ -315,6 +315,9 @@ impl Term {
         mut terms: Vec<Term>,
         new_intersection: fn(Vec<Term>) -> Term,
     ) -> Option<Term> {
+        // * 🚩重排去重 | 📌只重排一层：OpenNARS原意如此，并且在外部构建的词项也经过了重排去重
+        TermComponents::sort_dedup_term_vec(&mut terms);
+        // * 🚩再按照重排后的集合大小分派
         match terms.len() {
             // * 🚩空集⇒空
             0 => None,
@@ -765,12 +768,16 @@ impl Term {
         mut argument: Vec<Term>,
         new_junction: fn(Vec<Term>) -> Term,
     ) -> Option<Term> {
+        // * 🚩重排去重 | 📌只重排一层：OpenNARS原意如此，并且在外部构建的词项也经过了重排去重
+        TermComponents::sort_dedup_term_vec(&mut argument);
+        // * 🚩再根据参数数目分派
         match argument.len() {
             // * 🚩不允许空集
             0 => None,
-            // * 🚩单元素⇒直接用元素
+            // * 🚩单元素⇒直接用元素（可提取）
             // special case: single component
             1 => argument.pop(),
+            // * 🚩多元素⇒构造新的词项
             _ => Some(new_junction(argument)),
         }
     }

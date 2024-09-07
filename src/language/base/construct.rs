@@ -71,19 +71,13 @@ impl Term {
     /// NAL-3 / 外延集
     /// * 🚩【2024-04-21 13:39:28】使用统一的「无序不重复集合」构造组分
     pub(super) fn new_set_ext(terms: impl Into<Vec<Term>>) -> Self {
-        Self::new(
-            SET_EXT_OPERATOR,
-            TermComponents::new_multi_set(terms.into()),
-        )
+        Self::new(SET_EXT_OPERATOR, TermComponents::new_multi(terms.into()))
     }
 
     /// NAL-3 / 内涵集
     /// * 🚩【2024-04-21 13:39:28】使用统一的「无序不重复集合」构造组分
     pub(super) fn new_set_int(terms: impl Into<Vec<Term>>) -> Self {
-        Self::new(
-            SET_INT_OPERATOR,
-            TermComponents::new_multi_set(terms.into()),
-        )
+        Self::new(SET_INT_OPERATOR, TermComponents::new_multi(terms.into()))
     }
 
     /// NAL-3 / 外延交
@@ -91,7 +85,7 @@ impl Term {
     pub(super) fn new_intersection_ext(terms: impl Into<Vec<Term>>) -> Self {
         Self::new(
             INTERSECTION_EXT_OPERATOR,
-            TermComponents::new_multi_set(terms.into()),
+            TermComponents::new_multi(terms.into()),
         )
     }
 
@@ -100,7 +94,7 @@ impl Term {
     pub(super) fn new_intersection_int(terms: impl Into<Vec<Term>>) -> Self {
         Self::new(
             INTERSECTION_INT_OPERATOR,
-            TermComponents::new_multi_set(terms.into()),
+            TermComponents::new_multi(terms.into()),
         )
     }
 
@@ -182,7 +176,7 @@ impl Term {
     pub(super) fn new_conjunction(terms: impl Into<Vec<Term>>) -> Self {
         Self::new(
             CONJUNCTION_OPERATOR,
-            TermComponents::new_multi_set(terms.into()),
+            TermComponents::new_multi(terms.into()),
         )
     }
 
@@ -191,7 +185,7 @@ impl Term {
     pub(super) fn new_disjunction(terms: impl Into<Vec<Term>>) -> Self {
         Self::new(
             DISJUNCTION_OPERATOR,
-            TermComponents::new_multi_set(terms.into()),
+            TermComponents::new_multi(terms.into()),
         )
     }
 
@@ -266,30 +260,16 @@ impl TermComponents {
         }
     }
 
-    /// 多元有序组分
+    /// 多元组分
+    /// * 📌兼容「有序可重复」「无序不重复」两种
+    /// * 🚩【2024-09-07 17:27:00】现在将「无序不重复组分」外包到[`super::making`]模块中
+    ///   * 📌在外部保证「有序性/无序性/可重复性/不重复性」
     pub(super) fn new_multi(terms: Vec<Term>) -> Self {
         pipe! {
             terms
             // 转换
             => .into_boxed_slice()
             // 构造
-            => Self::Compound
-        }
-    }
-
-    /// 多元无序不重复组分
-    /// * 🎯用于【无序不重复】的集合类组分
-    /// * 📄外延集、内涵集
-    /// * 📄外延交、内涵交
-    pub(super) fn new_multi_set(terms: Vec<Term>) -> Self {
-        pipe! {
-            manipulate!(
-                terms
-                // 重排 & 去重
-                => .sort()
-                => .dedup()
-            )
-            => .into_boxed_slice()
             => Self::Compound
         }
     }
