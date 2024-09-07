@@ -191,21 +191,21 @@ mod tests {
             r"(&&, A, B)" => 3
             r"(||, A, B)" => 3
             r"(--, A)" => 2
-            r"(--, (--, A))" => 3
-            r"(--, (--, (--, A)))" => 4
+            r"(*, (*, A))" => 3
+            r"(*, (*, (*, A)))" => 4
             // 陈述
             "<A --> B>" => 3
             "<A <-> B>" => 3
             "<A ==> B>" => 3
             "<A <=> B>" => 3
-            "<<A --> B> --> B>" => 5
-            "<<A <-> B> <-> B>" => 5
-            "<<A ==> B> ==> B>" => 5
-            "<<A <=> B> <=> B>" => 5
-            "<<A --> B> --> <A --> B>>" => 7
-            "<<A <-> B> <-> <A <-> B>>" => 7
-            "<<A ==> B> ==> <A ==> B>>" => 7
-            "<<A <=> B> <=> <A <=> B>>" => 7
+            "<<A --> B> ==> X>" => 5
+            "<<A <-> B> <=> X>" => 5
+            "<<A --> B> ==> X>" => 5
+            "<<A <-> B> <=> X>" => 5
+            "<<A --> B> --> <C ==> D>>" => 7
+            "<<A <-> B> <-> <C <=> D>>" => 7
+            "<<A --> B> ==> <C ==> D>>" => 7
+            "<<A <-> B> <=> <C <=> D>>" => 7
         }
         ok!()
     }
@@ -234,21 +234,21 @@ mod tests {
             // 复合词项
             "{A}" ~ "{x, y, z}" => SET_EXT_OPERATOR
             "[A]" ~ "[ㄚ, ㄛ, ㄜ]" => SET_INT_OPERATOR
-            "(&, A)" ~ "(&, x, y)" => INTERSECTION_EXT_OPERATOR
-            "(|, A)" ~ "(|, a, b)" => INTERSECTION_INT_OPERATOR
+            "(&, A, B)" ~ "(&, x, y)" => INTERSECTION_EXT_OPERATOR
+            "(|, A, B)" ~ "(|, a, b)" => INTERSECTION_INT_OPERATOR
             "(-, A, B)" ~ "(-, B, A)" => DIFFERENCE_EXT_OPERATOR
             "(~, A, B)" ~ "(~, B, C)" => DIFFERENCE_INT_OPERATOR
             "(*, A)" ~ "(*, α, β, γ)" => PRODUCT_OPERATOR
             r"(/, R, _)" ~ r"(/, R, A, _, B)" => IMAGE_EXT_OPERATOR
             r"(\, R, _)" ~ r"(\, R, A, B, _)" => IMAGE_INT_OPERATOR
-            r"(&&, A)" ~ r"(&&, X, Y, Z)" => CONJUNCTION_OPERATOR
-            r"(||, A)" ~ r"(||, (||, A), B)" => DISJUNCTION_OPERATOR
+            r"(&&, A, B)" ~ r"(&&, X, Y, Z)" => CONJUNCTION_OPERATOR
+            r"(||, A, B)" ~ r"(||, (||, A, B), C)" => DISJUNCTION_OPERATOR
             r"(--, A)" ~ r"(--, (~, B, A))" => NEGATION_OPERATOR
             // 陈述
-            "<A --> B>" ~ "<<B --> C> --> A>" => INHERITANCE_RELATION
-            "<A <-> B>" ~ "<<B <-> C> <-> A>" => SIMILARITY_RELATION
-            "<A ==> B>" ~ "<<B ==> C> ==> A>" => IMPLICATION_RELATION
-            "<A <=> B>" ~ "<<B <=> C> <=> A>" => EQUIVALENCE_RELATION
+            "<A --> B>" ~ "<<B ==> C> --> A>" => INHERITANCE_RELATION
+            "<A <-> B>" ~ "<<B <=> C> <-> A>" => SIMILARITY_RELATION
+            "<A ==> B>" ~ "<<B --> C> ==> A>" => IMPLICATION_RELATION
+            "<A <=> B>" ~ "<<B <-> C> <=> A>" => EQUIVALENCE_RELATION
         }
         ok!()
     }

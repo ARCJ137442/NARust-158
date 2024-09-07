@@ -285,11 +285,15 @@ impl Term {
         // ! ❌【2024-06-17 23:52:45】不能「从尾到头」：先后顺序不一样
         let mut term = argument.remove(0);
         // * 🚩取出剩下的
-        for t in argument {
-            // * 🚩尝试做交集：失败⇒返回空
-            let new_term = make_arg(term, t)?;
-            // * 🚩更新
-            term = new_term;
+        let mut argument = argument.into_iter();
+        while let Some(t) = argument.next() {
+            // * 🚩尝试做交集
+            term = match make_arg(term, t) {
+                // * 🚩成功⇒更新
+                Some(new_term) => new_term,
+                // * 🚩失败⇒空集⇒跳到下一个
+                None => argument.next()?,
+            };
         }
         // * 🚩返回
         Some(term)
@@ -956,6 +960,8 @@ impl Term {
     /* Implication */
 
     pub fn make_implication(subject: Term, predicate: Term) -> Option<Term> {
+        // TODO: 🚧【2024-09-07 15:28:30】有待继续提取至独立的「检查是否合法」方法
+        //   * 🏗️后续继续为「变量替换后检查有效性」做准备
         // * 🚩检查有效性
         if StatementRef::invalid_statement(&subject, &predicate) {
             return None;
@@ -1109,7 +1115,7 @@ impl CompoundTermRef<'_> {
 mod tests {
     use super::*;
     use crate::{ok, test_term as term, util::AResult};
-    use nar_dev_utils::macro_once;
+    use nar_dev_utils::{macro_once, ResultBoost};
 
     /// 快捷构造[`Option<Term>`](Option)
     macro_rules! option_term {
@@ -1120,8 +1126,16 @@ mod tests {
             None
         };
         ($t:literal) => {
-            Some(term!($t))
+            parse_option_term($t)
         };
+    }
+
+    /// 用于封装作为`result`的方法
+    /// * 🚩在解析失败时，打印错误信息并返回`None`
+    ///   * 📌一般这时会有「预期比对」能触发失败
+    fn parse_option_term(t: &str) -> Option<Term> {
+        t.parse::<Term>()
+            .ok_or_run(|e| eprintln!("!!! 词项 {t:?} 解析失败：{e}"))
     }
 
     /// 快捷格式化[`Option<Term>`](Option)
@@ -1724,6 +1738,7 @@ mod tests {
 
     mod compound {
         use super::*;
+        use nar_dev_utils::unwrap_or_return;
 
         fn test_make_term_with_identifier_f(
             make: fn(&str, Vec<Term>) -> Option<Term>,
@@ -2047,10 +2062,10 @@ mod tests {
                 "(|,CAT,(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish))", ["(\\,(\\,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish)", "(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish)"] => "(|,(/,(/,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish),(\\,(\\,REPRESENT,_,<(*,CAT,FISH) --> FOOD>),_,eat,fish))";
                 "(|,[strong],(~,youth,girl))", ["(~,boy,girl)", "(~,youth,girl)"] => "(|,(~,boy,girl),(~,youth,girl))";
                 "(|,[strong],(~,youth,girl))", ["boy", "(~,youth,girl)"] => "(|,boy,(~,youth,girl))";
-                "(|,[with_wings],[yellow],{Birdie})", ["[with_wings]", "(|,flyer,{Tweety})", "{Birdie}"] => "(|,flyer,[with_wings],{Birdie},{Tweety})";
-                "(|,[with_wings],[yellow],{Birdie})", ["[with_wings]", "flyer", "{Birdie}"] => "(|,flyer,[with_wings],{Birdie})";
-                "(|,[with_wings],[yellow],{Birdie})", ["[with_wings]", "{Tweety}", "{Birdie}"] => "(|,[with_wings],{Birdie},{Tweety})";
-                "(|,[with_wings],[yellow],{Birdie})", ["flyer", "[yellow]", "{Birdie}"] => "(|,flyer,[yellow],{Birdie})";
+                "(|,X,Y)", ["[with_wings]", "(|,flyer,{Tweety})", "{Birdie}"] => "(|,flyer,[with_wings],{Birdie},{Tweety})"; // ! 📌【2024-09-07 14:17:33】为避免左侧词项被自动约简，将「模板词项」简化
+                "(|,X,Y)", ["[with_wings]", "flyer", "{Birdie}"] => "(|,flyer,[with_wings],{Birdie})";                       // ! 📌【2024-09-07 14:17:33】为避免左侧词项被自动约简，将「模板词项」简化
+                "(|,X,Y)", ["[with_wings]", "{Tweety}", "{Birdie}"] => "(|,[with_wings],{Birdie},{Tweety})";                 // ! 📌【2024-09-07 14:17:33】为避免左侧词项被自动约简，将「模板词项」简化
+                "(|,X,Y)", ["flyer", "[yellow]", "{Birdie}"] => "(|,flyer,[yellow],{Birdie})";                               // ! 📌【2024-09-07 14:17:33】为避免左侧词项被自动约简，将「模板词项」简化
                 "(|,[with_wings],{Birdie})", ["flyer", "{Birdie}"] => "(|,flyer,{Birdie})";
                 "(|,[with_wings],{Birdie})", ["{Tweety}", "{Birdie}"] => "{Birdie,Tweety}";
                 "(|,[with_wings],{Birdie},(&,bird,(|,[yellow],{Birdie})))", ["flyer", "{Birdie}", "(&,bird,(|,[yellow],{Birdie}))"] => "(|,flyer,{Birdie},(&,bird,(|,[yellow],{Birdie})))";
@@ -2117,10 +2132,10 @@ mod tests {
                     $( test(term!($term), $expected); )*
                 }
                 // * 🚩正例
-                "(&&, A)" => true
-                "(||, A)" => true
-                "(&, A)" => true
-                "(|, A)" => true
+                "(&&, A, B)" => true
+                "(||, A, B)" => true
+                "(&, A, B)" => true
+                "(|, A, B)" => true
                 "(-, A, B)" => true
                 "(~, A, B)" => true
                 // * 🚩反例
@@ -2136,15 +2151,19 @@ mod tests {
             /// * * ℹ️宏展开里头的代码，每个都是实实在在要「一个个铺开」被编译器看到的
             /// * * ⚠️若直接在里头写过程式代码，即便代码只有十多行，但若有成百上千个测试用例，则代码行数会成倍增长
             /// * * 💥过多的代码行数，编译器就会爆炸
-            fn test(compound: Term, term: Term, expected: Option<Term>) {
+            fn test(compound_str: &str, term_str: &str, expected: Option<Term>) {
+                // * 🚩解析词项（解析失败则报警返回）
+                let compound: Term = unwrap_or_return!(@compound_str.parse(), err => eprintln!("{compound_str:?}解析失败: {err}"));
+                let term: Term = unwrap_or_return!(@term_str.parse(), err => eprintln!("{term_str:?}解析失败: {err}"));
+                // * 🚩获取复合词项引用
                 let compound_ref = compound.as_compound().expect("构造出来的不是复合词项");
-                let compound_s = compound.to_string();
-                let term_s = term.to_string();
+                // * 🚩运行代码
                 let out = CompoundTermRef::reduce_components(compound_ref, &term);
+                // * 🚩检验结果
                 assert_eq!(
                     out,
                     expected,
-                    "{compound_s:?}, {term_s:?} => {} != {}",
+                    "{compound_str:?}, {term_str:?} => {} != {}",
                     format_option_term(&out),
                     format_option_term(&expected),
                 );
@@ -2152,21 +2171,25 @@ mod tests {
             macro_once! {
                 // * 🚩模式：参数列表 ⇒ 预期词项
                 macro test($($compound:tt, $term:tt => $expected:tt;)*) {
-                    $( test(term!($compound), term!($term), option_term!($expected)); )*
+                    $( test($compound, $term, option_term!($expected)); )*
                 }
                 // * ℹ️用例均源自OpenNARS实际运行
-                "(&&,<(&,bird,gull) --> bird>,<(&,bird,gull) --> [swimmer]>)", "<(&,bird,gull) --> [swimmer]>" => "<(&,bird,gull) --> bird>";
+                // * 📌【2024-09-07 14:39:12】对「预期的可空词项」不过滤
+                //   * 💭若「预期的可空词项」解析失败为空，则作为参数的词项也将为空 ⇒ 测试不会在无效参数中进行
+                //   * 📄所谓「无效词项」如下边少数注释所述
+                //     * ⚠️注释尚不全面：仅标注了前边几个无效参数
+                "(&&,<(&,bird,gull) --> bird>,<(&,bird,gull) --> [swimmer]>)", "<(&,bird,gull) --> [swimmer]>" => "<(&,bird,gull) --> bird>"; // ! ❌【2024-09-07 14:20:04】陈述`<(&,bird,gull) --> bird>`非法——主项包含谓项
                 "(&&,<(&,bird,swan) --> [bird]>,<(&,bird,swan) --> [swimmer]>)", "<(&,bird,swan) --> [swimmer]>" => "<(&,bird,swan) --> [bird]>";
                 "(&&,<(&,bird,swimmer) --> (&,animal,swimmer)>,<(&,bird,swimmer) --> (|,swan,swimmer)>)", "<(&,bird,swimmer) --> (&,animal,swimmer)>" => "<(&,bird,swimmer) --> (|,swan,swimmer)>";
-                "(&&,<(&,chess,sport) --> chess>,<(&,chess,sport) --> competition>)", "<(&,chess,sport) --> competition>" => "<(&,chess,sport) --> chess>";
-                "(&&,<(&,key,(/,open,_,lock)) --> key>,<(&,key,(/,open,_,lock)) --> (/,open,_,{lock1})>)", "<(&,key,(/,open,_,lock)) --> (/,open,_,{lock1})>" => "<(&,key,(/,open,_,lock)) --> key>";
+                "(&&,<(&,chess,sport) --> chess>,<(&,chess,sport) --> competition>)", "<(&,chess,sport) --> competition>" => "<(&,chess,sport) --> chess>"; // ! ❌【2024-09-07 14:21:34】陈述`<(&,chess,sport) --> chess>`非法——主项包含谓项
+                "(&&,<(&,key,(/,open,_,lock)) --> key>,<(&,key,(/,open,_,lock)) --> (/,open,_,{lock1})>)", "<(&,key,(/,open,_,lock)) --> (/,open,_,{lock1})>" => "<(&,key,(/,open,_,lock)) --> key>";  // ! ❌【2024-09-07 14:21:34】陈述`<(&,key,(/,open,_,lock)) --> key>`非法——主项包含谓项
                 "(&&,<(*,0) --> (*,(/,num,_))>,<{0} --> (*,(/,num,_))>)", "<(*,0) --> (*,(/,num,_))>" => "<{0} --> (*,(/,num,_))>";
                 "(&&,<(*,0) --> (*,{0})>,<(*,(*,0)) --> (*,{0})>)", "<(*,(*,0)) --> (*,{0})>" => "<(*,0) --> (*,{0})>";
                 "(&&,<(*,0) --> (/,num,_)>,<(*,0) --> [num]>)", "<(*,0) --> (/,num,_)>" => "<(*,0) --> [num]>";
                 "(&&,<(*,0) --> num>,<(/,num,_) --> num>)", "<(/,num,_) --> num>" => "<(*,0) --> num>";
                 "(&&,<(*,0) --> num>,<{0} --> num>)", "<(*,0) --> num>" => "<{0} --> num>";
                 "(&&,<(*,0) --> num>,<{0} --> num>)", "<{0} --> num>" => "<(*,0) --> num>";
-                "(&&,<(*,a,b) --> like>,<(*,a,b) --> (*,a,b)>)", "<(*,a,b) --> like>" => "<(*,a,b) --> (*,a,b)>";
+                "(&&,<(*,a,b) --> like>,<(*,a,b) --> (*,a,b)>)", "<(*,a,b) --> like>" => "<(*,a,b) --> (*,a,b)>"; // ! ❌【2024-09-07 14:34:40】`<(*,a,b) --> (*,a,b)>`非法：重言式
                 "(&&,<(*,b,a) --> [like]>,<(*,b,a) --> (*,b,(/,like,_,b))>)", "<(*,b,a) --> [like]>" => "<(*,b,a) --> (*,b,(/,like,_,b))>";
                 "(&&,<(*,b,a) --> like>,<(*,b,a) --> (*,(/,like,b,_),b)>)", "<(*,b,a) --> like>" => "<(*,b,a) --> (*,(/,like,b,_),b)>";
                 "(&&,<(/,(*,(/,num,_)),_) --> (/,num,_)>,<(/,(*,(/,num,_)),_) --> [num]>)", "<(/,(*,(/,num,_)),_) --> (/,num,_)>" => "<(/,(*,(/,num,_)),_) --> [num]>";

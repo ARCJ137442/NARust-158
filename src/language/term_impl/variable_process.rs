@@ -764,7 +764,13 @@ mod tests {
     /// 测试/变量替换
     #[test]
     fn apply_substitute() -> AResult {
-        fn test(substitution: &VarSubstitution, mut term: Term, expected: Term) {
+        fn test(substitution: &VarSubstitution, term: &str, expected: &str) {
+            let parse = |term: &str| match term.parse() {
+                Ok(term) => term,
+                Err(e) => panic!("{term:?}解析失败: {e}"),
+            };
+            let mut term: Term = parse(term);
+            let expected: Term = parse(expected);
             let mut compound = term
                 .as_compound_mut()
                 .expect("传入的不是复合词项，无法进行替换");
@@ -790,7 +796,7 @@ mod tests {
                 )*
             ) {
                 $(
-                    test(&$substitution, term!($term_str), term!($substituted_str));
+                    test(&$substitution, $term_str, $substituted_str);
                 )*
             }
             // * 🚩一般复合词项
@@ -811,9 +817,9 @@ mod tests {
             "<var_word --> $1>", substitution => "<word --> 1>"
             // * 🚩多层复合词项
             "<<$1 --> A> ==> <B --> $1>>", substitution => "<<1 --> A> ==> <B --> 1>>"
-            "<<$1 --> var_word> ==> <var_word --> $1>>", substitution => "<<1 --> word> ==> <word --> 1>>"
+            "<<$1 --> var_word> --> (*, var_word, $1)>", substitution => "<<1 --> word> --> (*, word, 1)>"
             "<<var_word --> A> ==> [#1]>", substitution => "<<word --> A> ==> <X --> (*, Y, [Z])>>"
-            "(--, (&&, (||, (&, (|, (*, ?1))))))", substitution => "(--, (&&, (||, (&, (|, (*, (/, A, <lock --> swan>, _, [1])))))))"
+            "(--, (&&, (||, (&, (|, (*, ?1), x), x), x), x))", substitution => "(--, (&&, (||, (&, (|, (*, (/, A, <lock --> swan>, _, [1])), x), x), x), x))"
             // ! from issue #1: unsafe可变引用迭代器的迭代器失效——边迭代边修改，且在修改后又递归深入
             "<<{O1} --> $1> ==> <{O2} --> $1>>", substitution2 => "<<{O1} --> (/,$1,_,{L2})> ==> <{O2} --> (/,$1,_,{L2})>>"
         }

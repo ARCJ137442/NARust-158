@@ -404,11 +404,11 @@ mod tests {
                 // 多元
                 "{A}" => Compound(..)
                 "[A]" => Compound(..)
-                "(&, A)" => Compound(..)
-                "(|, A)" => Compound(..)
+                "(&, A, B)" => Compound(..)
+                "(|, A, B)" => Compound(..)
                 "(*, A)" => Compound(..)
-                r"(&&, A)" => Compound(..)
-                r"(||, A)" => Compound(..)
+                r"(&&, A, B)" => Compound(..)
+                r"(||, A, B)" => Compound(..)
                 // 多元索引
                 r"(/, R, _)" => Compound(..)
                 r"(\, R, _)" => Compound(..)

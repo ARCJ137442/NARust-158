@@ -89,18 +89,22 @@ impl Term {
     }
 
     /// 🆕判断一个词项是否为「陈述词项」
-    /// * 🚩判断其「内部元素」的个数是否为2
+    /// * 🚩判断其「内部元素」的个数是否为2，并且要判断其标识符
+    /// * 🚩【2024-09-07 14:59:00】现在采用更严格的条件——需要判断是否为「陈述系词」
     pub fn is_statement(&self) -> bool {
-        matches!(&self.components, TermComponents::Compound(terms) if terms.len() == 2)
+        self.instanceof_statement()
+            && matches!(&self.components, TermComponents::Compound(terms) if terms.len() == 2)
     }
 
     /// 🆕将一个复合词项转换为「陈述词项」（不可变引用）
     /// * 🚩转换为Option
+    /// * 🚩【2024-09-07 14:59:00】现在采用更严格的条件——需要判断是否为「陈述系词」
     #[must_use]
     pub fn as_statement(&self) -> Option<StatementRef> {
         matches_or!(
             ?self.components,
-            TermComponents::Compound(ref terms) if terms.len() == 2
+            TermComponents::Compound(ref terms)
+            if self.instanceof_statement() && terms.len() == 2
             => StatementRef {
                 statement: self,
                 subject: &terms[0],
@@ -761,6 +765,10 @@ mod tests {
         (mut $term:expr) => {
             $term.as_statement_mut().unwrap()
         };
+        // 不可变引用 解包
+        (unwrap $term:literal) => {
+            statement!(term!(unwrap $term))
+        };
         // 不可变引用
         ($term:literal) => {
             statement!(term!($term))
@@ -774,6 +782,7 @@ mod tests {
     /// 不可变引用
     mod statement_ref {
         use super::*;
+        use nar_dev_utils::fail_tests;
 
         /// 陈述有效性
         /// * 🎯一并测试
@@ -784,11 +793,6 @@ mod tests {
         #[test]
         fn invalid() -> AResult {
             asserts! {
-                // 非法
-                statement!("<A --> A>").invalid()
-                statement!("<A --> [A]>").invalid()
-                statement!("<[A] --> A>").invalid()
-                statement!("<<A --> B> ==> <B --> A>>").invalid()
                 // 合法
                 !statement!("<A --> B>").invalid()
                 !statement!("<A --> [B]>").invalid()
@@ -798,6 +802,15 @@ mod tests {
                 !statement!("<<A --> B> ==> <C --> D>>").invalid()
             }
             ok!()
+        }
+
+        // ! 📌【2024-09-07 13:40:39】现在无效的词项本身就不能被构建
+        fail_tests! {
+            invalid_非陈述词项 statement!(unwrap "(*, A, B)"); // ! 📌【2024-09-07 15:00:45】二元复合词项本该不是陈述词项
+            invalid_重言式 term!(unwrap "<A --> A>");
+            invalid_被包含的重言式_主项包含谓项 term!(unwrap "<[A] --> A>");
+            invalid_被包含的重言式_谓项包含主项 term!(unwrap "<A --> [A]>");
+            invalid_蕴含重言式 term!(unwrap "<<A --> B> ==> <B --> A>>");
         }
 
         #[test]
@@ -926,18 +939,14 @@ mod tests {
                 "<S ==> (*, A, B)>"
                 "<S <=> (*, A, B)>"
                 // 多层
-                "<<A --> B> --> B>"
-                "<<A <-> B> <-> B>"
-                "<<A ==> B> ==> B>"
-                "<<A <=> B> <=> B>"
-                "<A --> <A --> B>>"
-                "<A <-> <A <-> B>>"
-                "<A ==> <A ==> B>>"
-                "<A <=> <A <=> B>>"
-                "<<A --> B> --> <A --> B>>"
-                "<<A <-> B> <-> <A <-> B>>"
-                "<<A ==> B> ==> <A ==> B>>"
-                "<<A <=> B> <=> <A <=> B>>"
+                "<X --> <A ==> B>>"
+                "<X <-> <A <=> B>>"
+                "<<A --> B> ==> X>"
+                "<<A <-> B> <=> X>"
+                "<<A ==> B> --> <C ==> D>>"
+                "<<A <=> B> <-> <C <=> D>>"
+                "<<A --> B> ==> <C --> D>>"
+                "<<A <-> B> <=> <C <-> D>>"
                 r"<(/, R, A, _) --> (\, R, _, B)>"
                 r"<(/, R, A, _) <-> (\, R, _, B)>"
                 r"<(/, R, A, _) ==> (\, R, _, B)>"
@@ -987,18 +996,14 @@ mod tests {
                 "<S ==> (*, A, B)>"
                 "<S <=> (*, A, B)>"
                 // 多层
-                "<<A --> B> --> B>"
-                "<<A <-> B> <-> B>"
-                "<<A ==> B> ==> B>"
-                "<<A <=> B> <=> B>"
-                "<A --> <A --> B>>"
-                "<A <-> <A <-> B>>"
-                "<A ==> <A ==> B>>"
-                "<A <=> <A <=> B>>"
-                "<<A --> B> --> <A --> B>>"
-                "<<A <-> B> <-> <A <-> B>>"
-                "<<A ==> B> ==> <A ==> B>>"
-                "<<A <=> B> <=> <A <=> B>>"
+                "<X --> <A ==> B>>"
+                "<X <-> <A <=> B>>"
+                "<<A --> B> ==> X>"
+                "<<A <-> B> <=> X>"
+                "<<A ==> B> --> <C ==> D>>"
+                "<<A <=> B> <-> <C <=> D>>"
+                "<<A --> B> ==> <C --> D>>"
+                "<<A <-> B> <=> <C <-> D>>"
                 r"<(/, R, A, _) --> (\, R, _, B)>"
                 r"<(/, R, A, _) <-> (\, R, _, B)>"
                 r"<(/, R, A, _) ==> (\, R, _, B)>"
@@ -1066,18 +1071,14 @@ mod tests {
                 "<S ==> (*, A, B)>"
                 "<S <=> (*, A, B)>"
                 // 多层
-                "<<A --> B> --> B>"
-                "<<A <-> B> <-> B>"
-                "<<A ==> B> ==> B>"
-                "<<A <=> B> <=> B>"
-                "<A --> <A --> B>>"
-                "<A <-> <A <-> B>>"
-                "<A ==> <A ==> B>>"
-                "<A <=> <A <=> B>>"
-                "<<A --> B> --> <A --> B>>"
-                "<<A <-> B> <-> <A <-> B>>"
-                "<<A ==> B> ==> <A ==> B>>"
-                "<<A <=> B> <=> <A <=> B>>"
+                "<X --> <A ==> B>>"
+                "<X <-> <A <=> B>>"
+                "<<A --> B> ==> X>"
+                "<<A <-> B> <=> X>"
+                "<<A ==> B> --> <C ==> D>>"
+                "<<A <=> B> <-> <C <=> D>>"
+                "<<A --> B> ==> <C --> D>>"
+                "<<A <-> B> <=> <C <-> D>>"
                 r"<(/, R, A, _) --> (\, R, _, B)>"
                 r"<(/, R, A, _) <-> (\, R, _, B)>"
                 r"<(/, R, A, _) ==> (\, R, _, B)>"
