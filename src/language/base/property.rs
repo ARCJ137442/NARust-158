@@ -9,16 +9,19 @@ use crate::util::ToDisplayAndBrief;
 /// 内建属性
 impl Term {
     /// 只读的「标识符」属性
+    #[inline]
     pub fn identifier(&self) -> &str {
         &self.identifier
     }
 
     /// 只读的「组分」属性
+    #[inline]
     pub fn components(&self) -> &TermComponents {
         &self.components
     }
 
     /// language内部可写的「组分」属性
+    #[inline]
     pub(in crate::language) fn components_mut(&mut self) -> &mut TermComponents {
         &mut self.components
     }
@@ -40,8 +43,16 @@ impl Term {
     /// * 📝【2024-04-21 00:58:58】当「标识符」为「静态字串」时，不能对其内部的`&str`属性进行修改
     ///   * 📌使用`&mut &str`会遇到生命周期问题
     ///   * 📌实际上「修改类型」本身亦不常用
-    pub fn id_comp_mut(&mut self) -> (&mut str, &mut TermComponents) {
+    /// * 🚩【2024-09-08 16:51:57】目前仅在「语言」模块的测试代码中使用
+    #[cfg(test)]
+    pub(in crate::language) fn id_comp_mut(&mut self) -> (&mut String, &mut TermComponents) {
         (&mut self.identifier, &mut self.components)
+    }
+
+    /// 解包「标识符-组分」二元组，丢弃其它字段
+    /// * 📌【2024-09-08 16:54:28】目前没有其它字段
+    pub fn unwrap_id_comp(self) -> (String, TermComponents) {
+        (self.identifier, self.components)
     }
 
     /// 判断「是否包含指定类型的词项」

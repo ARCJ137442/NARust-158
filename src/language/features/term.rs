@@ -52,7 +52,7 @@ impl Term {
     pub fn complexity(&self) -> usize {
         // 剩余类型
         use TermComponents::*;
-        match &self.components {
+        match self.components() {
             // 占位符 ⇒ 0
             Empty => 0,
             // 原子/变量 ⇒ 1 | 不包括「变量」
@@ -73,14 +73,14 @@ impl Term {
     /// 🆕用于替代Java的`x.getClass() == y.getClass()`
     #[inline(always)]
     pub fn is_same_type(&self, other: &Self) -> bool {
-        self.identifier == other.identifier
+        self.identifier() == other.identifier()
     }
 }
 
 impl GetCategory for Term {
     fn get_category(&self) -> TermCategory {
         use TermCategory::*;
-        match self.identifier.as_str() {
+        match self.identifier() {
             // * 🚩原子：词语、占位符、变量
             WORD | PLACEHOLDER | VAR_INDEPENDENT | VAR_DEPENDENT | VAR_QUERY => Atom,
             // * 🚩陈述：继承、相似、蕴含、等价 | ❌不包括「实例」「属性」「实例属性」
@@ -100,7 +100,7 @@ impl GetCategory for Term {
             | CONJUNCTION_OPERATOR
             | DISJUNCTION_OPERATOR => Compound,
             // * 🚩其它⇒panic（不应出现）
-            _ => panic!("Unexpected compound term identifier: {}", self.identifier),
+            id => panic!("Unexpected compound term identifier: {id}"),
         }
     }
 }
@@ -220,8 +220,8 @@ mod tests {
                     let term = term!($s);
                     let term2 = term!($s2);
                     assert!(term.is_same_type(&term2));
-                    assert_eq!(term.identifier, $id);
-                    assert_eq!(term2.identifier, $id);
+                    assert_eq!(term.identifier(), $id);
+                    assert_eq!(term2.identifier(), $id);
                 )*
             }
             // 占位符

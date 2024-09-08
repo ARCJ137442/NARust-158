@@ -25,14 +25,14 @@ impl Term {
 
         use narsese::api::TermCapacity::*;
         use TermComponents::*;
-        let id = &self.identifier;
-        match &self.components {
+        let id = self.identifier();
+        match self.components() {
             // 空组分
-            Empty => id.clone(),
+            Empty => id.to_string(),
             // 名称 | 原子词项
-            Word(name) => id.clone() + name,
+            Word(name) => format!("{id}{name}"),
             // 名称 | 变量词项
-            Variable(n) => id.clone() + &n.to_string(),
+            Variable(n) => format!("{id}{n}"),
             Compound(terms) => {
                 match self.get_capacity() {
                     // 一元

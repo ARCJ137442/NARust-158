@@ -34,7 +34,7 @@ impl Term {
     /// * 📄OpenNARS `instanceof Statement` 逻辑
     #[inline(always)]
     pub fn instanceof_statement(&self) -> bool {
-        Self::is_statement_identifier(&self.identifier)
+        Self::is_statement_identifier(self.identifier())
     }
 
     /// 🆕抽象出来的「标识符（对应的词项类型）是否『可交换』」
@@ -61,7 +61,7 @@ impl Term {
     /// * 🎯[`crate::inference::RuleTables`]推理规则分派
     #[inline(always)]
     pub fn instanceof_inheritance(&self) -> bool {
-        self.identifier == INHERITANCE_RELATION
+        self.identifier() == INHERITANCE_RELATION
     }
 
     /// 🆕用于判断是否为「相似」
@@ -69,7 +69,7 @@ impl Term {
     /// * 🎯[`crate::inference::RuleTables`]推理规则分派
     #[inline(always)]
     pub fn instanceof_similarity(&self) -> bool {
-        self.identifier == SIMILARITY_RELATION
+        self.identifier() == SIMILARITY_RELATION
     }
 
     /// 🆕用于判断是否为「蕴含」
@@ -77,7 +77,7 @@ impl Term {
     /// * 🎯[`crate::inference::RuleTables`]推理规则分派
     #[inline(always)]
     pub fn instanceof_implication(&self) -> bool {
-        self.identifier == IMPLICATION_RELATION
+        self.identifier() == IMPLICATION_RELATION
     }
 
     /// 🆕用于判断是否为「等价」
@@ -85,7 +85,7 @@ impl Term {
     /// * 🎯[`crate::inference::RuleTables`]推理规则分派
     #[inline(always)]
     pub fn instanceof_equivalence(&self) -> bool {
-        self.identifier == EQUIVALENCE_RELATION
+        self.identifier() == EQUIVALENCE_RELATION
     }
 
     /// 🆕判断一个词项是否为「陈述词项」
@@ -93,7 +93,7 @@ impl Term {
     /// * 🚩【2024-09-07 14:59:00】现在采用更严格的条件——需要判断是否为「陈述系词」
     pub fn is_statement(&self) -> bool {
         self.instanceof_statement()
-            && matches!(&self.components, TermComponents::Compound(terms) if terms.len() == 2)
+            && matches!(self.components(), TermComponents::Compound(terms) if terms.len() == 2)
     }
 
     /// 🆕将一个复合词项转换为「陈述词项」（不可变引用）
@@ -102,7 +102,7 @@ impl Term {
     #[must_use]
     pub fn as_statement(&self) -> Option<StatementRef> {
         matches_or!(
-            ?self.components,
+            ?self.components(),
             TermComponents::Compound(ref terms)
             if self.instanceof_statement() && terms.len() == 2
             => StatementRef {
@@ -134,7 +134,7 @@ impl Term {
     #[must_use]
     pub fn as_statement_mut(&mut self) -> Option<StatementRefMut> {
         matches_or!(
-            ?self.components,
+            ?self.components_mut(),
             TermComponents::Compound(ref mut terms) if terms.len() == 2
             => StatementRefMut {
                 // * 🚩均转换为裸指针
@@ -880,7 +880,8 @@ mod tests {
                 // * 🚩测试/Deref
                 assert!(!statement.as_statement().unwrap().invalid());
                 // * 🚩假定陈述有效
-                statement.subject().identifier = "".into();
+                let (id, _) = statement.subject().id_comp_mut();
+                *id = "".into();
                 // * 🚩转换为不可变引用
                 let statement = statement.into_ref();
                 assert!(!statement.invalid());

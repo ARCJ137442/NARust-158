@@ -101,7 +101,7 @@ impl Term {
     /// * ⚠️**不**包括陈述
     pub fn instanceof_compound_pure(&self) -> bool {
         matches!(
-            self.identifier.as_str(),
+            self.identifier(),
             SET_EXT_OPERATOR
                 | SET_INT_OPERATOR
                 | INTERSECTION_EXT_OPERATOR
@@ -140,15 +140,14 @@ impl Term {
     #[must_use]
     pub fn unwrap_compound_id_components(self) -> Option<(String, Box<[Term]>)> {
         matches_or! {
-            ?self,
+            ?self.unwrap_id_comp(),
             // * 🚩匹配到如下结构⇒返回Some，否则返回None
-            Term {
+            (
                 // * 🚩标识符
                 identifier,
                 // * 🚩内容为「复合词项」
-                components: TermComponents::Compound(terms),
-                ..
-            }
+                TermComponents::Compound(terms)
+            )
             // * 🚩返回内容
             => (identifier, terms)
         }
@@ -161,13 +160,13 @@ impl Term {
     #[must_use]
     pub fn unwrap_compound_components(self) -> Option<Box<[Term]>> {
         matches_or! {
-            ?self,
+            ?self.unwrap_id_comp(),
             // * 🚩匹配到如下结构⇒返回Some，否则返回None
-            Term {
+            (
+                _,
                 // * 🚩内容为「复合词项」
-                components: TermComponents::Compound(terms),
-                ..
-            }
+                TermComponents::Compound(terms)
+            )
             // * 🚩返回内容
             => terms
         }
@@ -183,14 +182,13 @@ impl Term {
         compound_class: impl AsRef<str>,
     ) -> Option<Box<[Term]>> {
         matches_or! {
-            ?self,
+            ?self.unwrap_id_comp(),
             // * 🚩匹配到如下结构⇒返回Some，否则返回None
-            Term {
+            (
                 identifier,
                 // * 🚩内容为「复合词项」
-                components: TermComponents::Compound(terms),
-                ..
-            }
+                TermComponents::Compound(terms)
+            )
             // * 🚩标识符相等
             if identifier.as_str() == compound_class.as_ref()
             // * 🚩返回内容
@@ -211,7 +209,7 @@ impl Term {
     /// * 🎯[`crate::inference`]推理规则分派
     #[inline(always)]
     pub fn instanceof_set_ext(&self) -> bool {
-        self.identifier == SET_EXT_OPERATOR
+        self.identifier() == SET_EXT_OPERATOR
     }
 
     /// 🆕用于判断是否为「内涵集」
@@ -219,7 +217,7 @@ impl Term {
     /// * 🎯[`crate::inference`]推理规则分派
     #[inline(always)]
     pub fn instanceof_set_int(&self) -> bool {
-        self.identifier == SET_INT_OPERATOR
+        self.identifier() == SET_INT_OPERATOR
     }
 
     /// 🆕用于判断是否为「词项集」
@@ -234,7 +232,7 @@ impl Term {
     /// * 🎯[`crate::inference`]推理规则分派
     #[inline(always)]
     pub fn instanceof_intersection_ext(&self) -> bool {
-        self.identifier == INTERSECTION_EXT_OPERATOR
+        self.identifier() == INTERSECTION_EXT_OPERATOR
     }
 
     /// 🆕用于判断是否为「内涵交」
@@ -242,7 +240,7 @@ impl Term {
     /// * 🎯[`crate::inference`]推理规则分派
     #[inline(always)]
     pub fn instanceof_intersection_int(&self) -> bool {
-        self.identifier == INTERSECTION_INT_OPERATOR
+        self.identifier() == INTERSECTION_INT_OPERATOR
     }
 
     /// 🆕用于判断是否为「词项交集」
@@ -258,7 +256,7 @@ impl Term {
     /// * 🎯[`crate::inference`]推理规则分派
     #[inline(always)]
     pub fn instanceof_difference_ext(&self) -> bool {
-        self.identifier == DIFFERENCE_EXT_OPERATOR
+        self.identifier() == DIFFERENCE_EXT_OPERATOR
     }
 
     /// 🆕用于判断是否为「内涵差」
@@ -266,7 +264,7 @@ impl Term {
     /// * 🎯[`crate::inference`]推理规则分派
     #[inline(always)]
     pub fn instanceof_difference_int(&self) -> bool {
-        self.identifier == DIFFERENCE_INT_OPERATOR
+        self.identifier() == DIFFERENCE_INT_OPERATOR
     }
 
     /// 🆕用于判断是否为「词项差集」
@@ -281,7 +279,7 @@ impl Term {
     /// * 🎯[`crate::inference`]推理规则分派
     #[inline(always)]
     pub fn instanceof_product(&self) -> bool {
-        self.identifier == PRODUCT_OPERATOR
+        self.identifier() == PRODUCT_OPERATOR
     }
 
     /// 🆕用于判断是否为「外延像」
@@ -289,7 +287,7 @@ impl Term {
     /// * 🎯[`crate::inference`]推理规则分派
     #[inline(always)]
     pub fn instanceof_image_ext(&self) -> bool {
-        self.identifier == IMAGE_EXT_OPERATOR
+        self.identifier() == IMAGE_EXT_OPERATOR
     }
 
     /// 🆕用于判断是否为「内涵像」
@@ -297,7 +295,7 @@ impl Term {
     /// * 🎯[`crate::inference`]推理规则分派
     #[inline(always)]
     pub fn instanceof_image_int(&self) -> bool {
-        self.identifier == IMAGE_INT_OPERATOR
+        self.identifier() == IMAGE_INT_OPERATOR
     }
 
     /// 🆕用于判断是否为「像」
@@ -312,7 +310,7 @@ impl Term {
     /// * 🎯[`crate::inference`]推理规则分派
     #[inline(always)]
     pub fn instanceof_conjunction(&self) -> bool {
-        self.identifier == CONJUNCTION_OPERATOR
+        self.identifier() == CONJUNCTION_OPERATOR
     }
 
     /// 🆕用于判断是否为「析取」
@@ -320,7 +318,7 @@ impl Term {
     /// * 🎯[`crate::inference`]推理规则分派
     #[inline(always)]
     pub fn instanceof_disjunction(&self) -> bool {
-        self.identifier == DISJUNCTION_OPERATOR
+        self.identifier() == DISJUNCTION_OPERATOR
     }
     /// 🆕用于判断是否为「词项差集」
     /// * 📄OpenNARS`instanceof Conjunction || instanceof Disjunction`逻辑
@@ -334,7 +332,7 @@ impl Term {
     /// * 🎯[`crate::inference`]推理规则分派
     #[inline(always)]
     pub fn instanceof_negation(&self) -> bool {
-        self.identifier == NEGATION_OPERATOR
+        self.identifier() == NEGATION_OPERATOR
     }
 
     /// 📄OpenNARS `CompoundTerm.isCommutative`
@@ -352,7 +350,7 @@ impl Term {
     #[doc(alias = "is_symmetric")]
     pub fn is_commutative(&self) -> bool {
         matches!(
-            self.identifier.as_str(),
+            self.identifier(),
             // Commutative CompoundTerms
             SET_EXT_OPERATOR
                 | SET_INT_OPERATOR
@@ -376,8 +374,8 @@ impl Term {
         self.is_same_type(other)
         // * 🚩内部组分的「结构匹配」而非自身匹配
             && self
-                .components
-                .structural_match(&other.components)
+                .components()
+                .structural_match(other.components())
     }
 
     /// 🆕判断是否真的是「复合词项」
@@ -385,7 +383,7 @@ impl Term {
     /// * 🎯用于后续「作为复合词项」使用
     ///   * ✨以此在程序层面表示「复合词项」类型
     pub fn is_compound(&self) -> bool {
-        matches!(self.components, TermComponents::Compound(..))
+        matches!(self.components(), TermComponents::Compound(..))
     }
 
     /// 🆕尝试将词项作为「复合词项」
@@ -394,7 +392,7 @@ impl Term {
     #[must_use]
     pub fn as_compound(&self) -> Option<CompoundTermRef> {
         matches_or!(
-            ?self.components,
+            ?self.components(),
             TermComponents::Compound(ref c) => CompoundTermRef {
                 inner: self,
                 components: c
@@ -428,7 +426,7 @@ impl Term {
         // * 🚩在debug模式下检查
         debug_assert!(self.is_compound(), "转换前必须假定其为复合词项");
         // * 🚩正式开始解引用
-        match self.components {
+        match self.components() {
             TermComponents::Compound(ref c) => CompoundTermRef {
                 inner: self,
                 components: c,
@@ -445,7 +443,7 @@ impl Term {
         matches_or! {
             // * 📌此处需要可变借用，才能在下头正常把Box变成可变引用（而无需Deref）
             // * ❌使用`ref mut`不能达到目的：解引用后还是Box
-            ?&mut self.components,
+            ?self.components_mut(),
             TermComponents::Compound(components) => CompoundTermRefMut {
                 // * 🚩【2024-06-15 14:00:09】此处创建裸指针，是安全行为（解引用才是不安全行为）
                 // * 📄具体使用参见[`CompoundTermRefMut::components`]
@@ -467,7 +465,7 @@ impl Term {
         // * 🚩在debug模式下检查
         debug_assert!(self.is_compound(), "转换前必须假定其为复合词项");
         // * 🚩正式开始解引用
-        match &mut self.components {
+        match self.components_mut() {
             TermComponents::Compound(components) => CompoundTermRefMut {
                 // * 🚩【2024-06-15 14:00:09】此处创建裸指针，是安全行为（解引用才是不安全行为）
                 // * 📄具体使用参见[`CompoundTermRefMut::components`]
@@ -484,7 +482,7 @@ impl Term {
 impl GetCapacity for Term {
     fn get_capacity(&self) -> TermCapacity {
         use TermCapacity::*;
-        match self.identifier.as_str() {
+        match self.identifier() {
             // * 🚩原子：词语、占位符、变量
             WORD | PLACEHOLDER | VAR_INDEPENDENT | VAR_DEPENDENT | VAR_QUERY => Atom,
             // * 🚩一元：否定
@@ -506,7 +504,7 @@ impl GetCapacity for Term {
             | CONJUNCTION_OPERATOR
             | DISJUNCTION_OPERATOR => Set,
             // * 🚩其它⇒panic（不应出现）
-            _ => panic!("Unexpected compound term identifier: {}", self.identifier),
+            id => panic!("Unexpected compound term identifier: {id}"),
         }
     }
 }
@@ -752,11 +750,11 @@ impl CompoundTermRefMut<'_> {
     pub fn reorder_components(&mut self) {
         // * 🚩构造一个「占位符」并将其与已有组分互换
         let mut placeholder = TermComponents::Empty;
-        std::mem::swap(&mut placeholder, &mut self.inner.components);
+        std::mem::swap(&mut placeholder, self.inner.components_mut());
         // * 🚩将替换后名为「占位符」的实际组分进行「重排去重」得到「新组分」
         let new_components = placeholder.sort_dedup();
         // * 🚩将「新组分」赋值回原先的组分，原先位置上的「占位符」被覆盖
-        self.inner.components = new_components;
+        *self.inner.components_mut() = new_components;
     }
 }
 
@@ -1291,7 +1289,7 @@ pub(crate) mod tests {
                 macro clone_components($($s:literal)*) {
                     asserts! {$(
                         // * 🚩假设其拷贝的词项与迭代器收集的相等
-                        compound!($s).clone_components() => term!($s).components.iter().cloned().collect::<Vec<_>>(),
+                        compound!($s).clone_components() => term!($s).components().iter().cloned().collect::<Vec<_>>(),
                     )*}
                 }
                 // // 占位符
@@ -2026,9 +2024,10 @@ pub(crate) mod tests {
                 // * 🚩像一个普通的词项（可变引用）使用：一次只能传入一个
                 dbg!(compound.components_mut());
                 let original_id = compound.identifier().to_string();
-                compound.identifier = "MUTATED".into(); // * 🚩自动解引用并修改字段
-                assert_eq!(compound.identifier, "MUTATED");
-                (*compound).identifier = original_id; // * 🚩与上述语法等价，但这次是改回原标识符
+                let (id, _) = compound.id_comp_mut();
+                *id = "MUTATED".into(); // * 🚩自动解引用并修改字段
+                assert_eq!(*id, "MUTATED");
+                *id = original_id; // * 🚩与上述语法等价，但这次是改回原标识符
 
                 // * 🚩检验潜在风险：使用Deref拷贝出并存的不可变引用
                 let compound_ref = compound.as_compound().unwrap();

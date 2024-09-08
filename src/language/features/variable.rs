@@ -28,31 +28,31 @@ impl Term {
     /// * 🎯判断「[是否内含变量](Self::contain_var)」
     pub fn instanceof_variable(&self) -> bool {
         matches!(
-            self.identifier.as_str(),
+            self.identifier(),
             VAR_INDEPENDENT | VAR_DEPENDENT | VAR_QUERY
         )
     }
 
     /// 🆕用于判断「是否为独立变量」
     pub fn instanceof_variable_i(&self) -> bool {
-        self.identifier == VAR_INDEPENDENT
+        self.identifier() == VAR_INDEPENDENT
     }
 
     /// 🆕用于判断「是否为非独变量」
     pub fn instanceof_variable_d(&self) -> bool {
-        self.identifier == VAR_DEPENDENT
+        self.identifier() == VAR_DEPENDENT
     }
 
     /// 🆕用于判断「是否为查询变量」
     pub fn instanceof_variable_q(&self) -> bool {
-        self.identifier == VAR_QUERY
+        self.identifier() == VAR_QUERY
     }
 
     /// 尝试匹配出「变量」，并返回其中的编号（若有）
     pub fn as_variable(&self) -> Option<usize> {
         matches_or!(
-            ?self.components,
-            TermComponents::Variable(n) => n
+            ?self.components(),
+            TermComponents::Variable(n) => *n
         )
     }
 
@@ -123,7 +123,7 @@ impl Term {
     /// Check whether a string represent a name of a term that contains a variable
     #[inline]
     pub fn contain_var(&self) -> bool {
-        self.instanceof_variable() || self.components.contain_var()
+        self.instanceof_variable() || self.components().contain_var()
     }
 
     /// 📄OpenNARS `Variable.containVarI` 方法
@@ -156,7 +156,7 @@ impl Term {
     /// Get the type of the variable
     #[inline(always)]
     pub fn get_variable_type(&self) -> &str {
-        &self.identifier
+        self.identifier()
     }
 
     /// 🆕获取多个词项中编号最大的变量词项id
