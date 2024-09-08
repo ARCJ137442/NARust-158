@@ -2,7 +2,10 @@
 //! * 🎯【2024-08-24 11:38:46】用于安放与issues、bugs有关的测试
 //!   * 📝这些测试往往和单个推理规则无关，也可能和控制机制有关
 
-use crate::expectation_tests;
+use super::tools::{create_reasoner_from_engine, print_outputs, ENGINE_DEV};
+use crate::{expectation_tests, language::Term};
+use narsese::{api::GetTerm, conversion::string::impl_lexical::format_instances::FORMAT_ASCII};
+use navm::output::Output;
 
 expectation_tests! {
 
@@ -30,6 +33,7 @@ expectation_tests! {
         => ANSWER "<A --> [B]>" in outputs
     }
 
+    /// [`bug_20240819_intro_var_inner_loop_substitute`]的另一个例子
     bug_20240819_intro_var_inner_another_example: {
         "
         vol 99
@@ -78,6 +82,38 @@ expectation_tests! {
         nse <(*, {P2}, {L2}) --> Bind>?
         cyc 6000
         "
-        => ANSWER "<(*, {P1}, {L2}) --> Bind>" in outputs
+        => ANSWER "<(*, {P1}, {L2}) --> Bind>" in outputs // TODO 一个测试中预期多个输出
+    }
+}
+
+#[test]
+fn bug_20240908_intro_var_inner_invalid_statement() {
+    let mut vm = create_reasoner_from_engine(ENGINE_DEV);
+    // * 🚩OUT
+    let outputs = vm.input_cmds_and_fetch_out(
+        // 示例性文本：产生「无效输出」的地方
+        "
+        nse <<$1 --> B> ==> <$1 --> A>>.
+        nse <A --> C>.
+        cyc 5
+        ",
+    );
+    // * 🚩打印输出以便跟踪
+    print_outputs(&outputs);
+    // * 🚩检查输出中的Narsese
+    for narsese_lexical in outputs
+        .iter()
+        .flat_map(Output::get_narsese)
+        .map(GetTerm::get_term)
+        .cloned()
+    {
+        // * 🚩【2024-09-08 16:28:28】目前仅对错误予以警告
+        // TODO: 启用并着手解决此类bug（筛选の方法，避免无效结论在NARS内部累积）
+        //   * 📄如：「检验是否有效」函数 @ 所有词项
+        let str_ascii = FORMAT_ASCII.format(&narsese_lexical);
+        if let Err(e) = Term::from_lexical(narsese_lexical) {
+            // panic
+            eprintln!("推理器产生了无效的内部输出 {str_ascii:?}：{e}")
+        }
     }
 }
