@@ -8,6 +8,13 @@
 
 ![logo](./docs/image/opennars-logo-modified-with-rust.svg)
 
+<div align="center">
+    <img src="https://img.shields.io/github/license/ARCJ137442/NARust-158?style=for-the-badge&color=ff7043" alt="License">
+    <img src="https://img.shields.io/github/languages/code-size/ARCJ137442/NARust-158?style=for-the-badge&color=ff7043" alt="Code Size">
+    <img src="https://www.aschey.tech/tokei/github.com/ARCJ137442/NARust-158?style=for-the-badge&color=ff7043" alt="Lines of Code">
+    <img src="https://img.shields.io/badge/language-Rust-orange?style=for-the-badge&color=ff7043" alt="Language">
+</div>
+
 A [Non-Axiomatic Reasoning System](http://www.opennars.org/) implemented in [Rust](https://www.rust-lang.org/), based on [OpenNARS 1.5.8](https://github.com/patham9/opennars_declarative_core).
 
 ## Online Demo

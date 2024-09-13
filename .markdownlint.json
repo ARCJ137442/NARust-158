@@ -1,0 +1,10 @@
+{
+    "// * 🚩【2024-09-13 23:05:38】在README中禁用「内联div、img」与「单行尺寸」以允许badges": {},
+    "line-length": false,
+    "no-inline-html": {
+        "allowed_elements": [
+            "div",
+            "img"
+        ]
+    }
+}
