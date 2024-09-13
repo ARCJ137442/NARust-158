@@ -1,5 +1,6 @@
-name: CI - test and lint
+name: CI
 # 🔗CI语法参考：https://docs.github.com/zh/actions/writing-workflows/workflow-syntax-for-github-actions
+# ! 📌【2024-09-13 23:41:22】不建议在`name`中附带空格：会影响到shields.io中的badge链接
 
 on:
   push: # 推送到特定分支
