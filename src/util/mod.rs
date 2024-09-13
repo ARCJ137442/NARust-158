@@ -4,9 +4,6 @@ nar_dev_utils::mods! {
     // 可迭代对象
     pub use iterable;
 
-    // 共享引用
-    pub use rc;
-
     // 带序列号的共享引用
     pub use serial_rc;
 

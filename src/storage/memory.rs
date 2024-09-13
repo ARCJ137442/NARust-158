@@ -266,7 +266,7 @@ pub mod tests_memory {
         ok,
         parameters::DEFAULT_PARAMETERS,
         test_term as term,
-        util::{AResult, RefCount, ToDisplayAndBrief},
+        util::{AResult, ToDisplayAndBrief},
     };
     use nar_dev_utils::*;
 

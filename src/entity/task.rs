@@ -7,9 +7,9 @@ use crate::{
     entity::MergeOrder,
     global::ClockTime,
     inference::{Budget, Evidential},
-    util::{IterInnerRcSelf, RcSerial, RefCount, Serial, SerialRef, ToDisplayAndBrief},
+    util::{IterInnerRcSelf, RcSerial, Serial, SerialRef, ToDisplayAndBrief},
 };
-use nar_dev_utils::join;
+use nar_dev_utils::{join, RefCount};
 use narsese::lexical::{Sentence as LexicalSentence, Task as LexicalTask};
 use serde::{Deserialize, Serialize};
 

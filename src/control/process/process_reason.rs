@@ -16,9 +16,9 @@ use crate::{
         Reasoner,
     },
     entity::{Concept, Sentence, TLink, TLinkType, TaskLink, TermLink},
-    util::{RefCount, ToDisplayAndBrief},
+    util::ToDisplayAndBrief,
 };
-use nar_dev_utils::{unwrap_or_return, JoinTo};
+use nar_dev_utils::{unwrap_or_return, JoinTo, RefCount};
 
 impl Reasoner {
     /// 概念推理

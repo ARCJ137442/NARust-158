@@ -17,8 +17,8 @@ use crate::{
     language::Term,
     parameters::Parameters,
     storage::Memory,
-    util::RefCount,
 };
+use nar_dev_utils::RefCount;
 use navm::output::Output;
 use rand::RngCore;
 use std::ops::{Deref, DerefMut};

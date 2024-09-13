@@ -11,9 +11,8 @@ use crate::{
         BudgetInferenceContext, TruthFunctions,
     },
     language::{variable_process, Term},
-    util::RefCount,
 };
-use nar_dev_utils::unwrap_or_return;
+use nar_dev_utils::{unwrap_or_return, RefCount};
 
 /// 匹配推理 入口函数
 /// * 🚩【2024-06-28 17:23:54】目前作为「匹配推理」的入口，不再直接暴露在控制机制中

@@ -17,9 +17,8 @@ use crate::{
     },
     language::*,
     symbols::CONJUNCTION_OPERATOR,
-    util::*,
 };
-use nar_dev_utils::unwrap_or_return;
+use nar_dev_utils::{unwrap_or_return, RefCount};
 use ReasonDirection::*;
 
 /// 🆕演绎规则

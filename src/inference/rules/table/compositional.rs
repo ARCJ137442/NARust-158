@@ -6,8 +6,8 @@ use crate::{
     entity::Sentence,
     inference::rules::{utils::*, *},
     language::*,
-    util::RefCount,
 };
+use nar_dev_utils::RefCount;
 
 /// 🆕原OpenNARS规则，现成为一个纯分派函数
 /// * ℹ️所直接包含的规则，请移步至[`crate::inference::rules::compositional_rules::compose_as_set`]

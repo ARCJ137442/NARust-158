@@ -2,8 +2,6 @@
 //! * 🎯参数类型如「浮点数」（选择哪个精度）
 //! * ⚠️【2024-04-27 10:47:59】尽量不要用来存储常量
 
-use crate::util::RcCell;
-
 /// 全局浮点数类型
 pub type Float = f64;
 
@@ -17,4 +15,4 @@ pub type ClockTime = usize;
 /// 全局引用计数类型
 /// * 🚩【2024-05-22 14:27:34】现在默认为「可变共享引用」，暂不细分「不可变」与「可变」
 ///   * 📌目前使用情况主要在「任务链」与「任务袋」中，这些情况
-pub type RC<T> = RcCell<T>;
+pub type RC<T> = nar_dev_utils::RcCell<T>;

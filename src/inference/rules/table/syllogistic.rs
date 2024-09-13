@@ -13,8 +13,8 @@ use crate::{
         *,
     },
     symbols::*,
-    util::*,
 };
+use nar_dev_utils::RefCount;
 use syllogistic_figures::*;
 use syllogistic_rules::*;
 use ReasonDirection::*;

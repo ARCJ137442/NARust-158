@@ -12,9 +12,8 @@ use crate::{
     global::{ClockTime, Float},
     parameters::Parameters,
     storage::Memory,
-    util::RefCount,
 };
-use nar_dev_utils::unwrap_or_return;
+use nar_dev_utils::{unwrap_or_return, RefCount};
 use navm::output::Output;
 use std::ops::{Deref, DerefMut};
 

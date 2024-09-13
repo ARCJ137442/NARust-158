@@ -10,9 +10,9 @@ use crate::{
     inference::{Budget, BudgetFunctions},
     language::{CompoundTermRef, Term},
     storage::Memory,
-    util::{RefCount, ToDisplayAndBrief},
+    util::ToDisplayAndBrief,
 };
-use nar_dev_utils::unwrap_or_return;
+use nar_dev_utils::{unwrap_or_return, RefCount};
 
 /// Build TermLink templates to constant components and sub-components
 ///

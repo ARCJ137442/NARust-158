@@ -10,9 +10,8 @@ use crate::{
     inference::{rules::utils::*, *},
     language::*,
     symbols::*,
-    util::RefCount,
 };
-use nar_dev_utils::{f_parallel, unwrap_or_return};
+use nar_dev_utils::{f_parallel, unwrap_or_return, RefCount};
 use variable_process::VarSubstitution;
 use ReasonDirection::*;
 use SyllogismPosition::*;

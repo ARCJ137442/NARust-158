@@ -2,9 +2,9 @@
 
 use crate::{
     global::RC,
-    util::RefCount,
     vm::alpha::io::{Channel, InputChannel},
 };
+use nar_dev_utils::RefCount;
 use navm::cmd::Cmd;
 use std::collections::VecDeque;
 

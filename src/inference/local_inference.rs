@@ -10,8 +10,9 @@ use crate::{
         BudgetFunctions, BudgetInference, Evidential, TruthFunctions,
     },
     language::Term,
-    util::{RefCount, ToDisplayAndBrief},
+    util::ToDisplayAndBrief,
 };
+use nar_dev_utils::RefCount;
 
 /// 本地推理 入口函数
 pub fn process_direct(context: &mut ReasonContextDirect) {

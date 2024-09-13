@@ -1,5 +1,5 @@
-use super::RefCount;
 use crate::global::RC;
+use nar_dev_utils::RefCount;
 use serde::{Deserialize, Serialize};
 
 /// 序列号的类型

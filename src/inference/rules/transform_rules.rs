@@ -9,9 +9,8 @@ use crate::{
     inference::{BudgetInferenceContext, TruthFunctions},
     language::{CompoundTermRef, StatementRef, Term},
     symbols::*,
-    util::RefCount,
 };
-use nar_dev_utils::unwrap_or_return;
+use nar_dev_utils::{unwrap_or_return, RefCount};
 
 /// 推理引擎「转换推理」的唯一入口
 /// * 📝【2024-05-20 11:46:32】在「直接推理」之后、「概念推理」之前使用

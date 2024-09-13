@@ -1,6 +1,6 @@
 [package]
 name = "narust-158"
-version = "0.2.7"
+version = "0.3.0"
 edition = "2021"
 description = """
 A Rust reimplementation of OpenNARS 1.5.8
@@ -27,7 +27,7 @@ features = ["rc"] # ! 引入不完备的「共享引用」实现，后续将通�
 
 # 用于开发NARS的实用工具
 [dependencies.nar_dev_utils]
-version = "0.40.0"
+version = "0.42.0"
 features = ["bundled"]
 
 # Narsese支持：API、枚举Narsese & 词法Narsese

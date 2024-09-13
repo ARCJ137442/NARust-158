@@ -7,9 +7,9 @@ use crate::{
     global::ClockTime,
     inference::{Budget, Evidential},
     parameters::DEFAULT_PARAMETERS,
-    util::{RefCount, ToDisplayAndBrief},
+    util::ToDisplayAndBrief,
 };
-use nar_dev_utils::join;
+use nar_dev_utils::{join, RefCount};
 use serde::{Deserialize, Serialize};
 use std::ops::{Deref, DerefMut};
 

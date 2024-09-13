@@ -3,11 +3,9 @@
 //! * ✅【2024-05-15 16:57:37】初代全功能实现
 
 use super::{ChannelIn, ChannelOut, ReasonerChannels};
-use crate::{
-    control::Reasoner, global::RC, inference::InferenceEngine, parameters::Parameters,
-    util::RefCount,
-};
+use crate::{control::Reasoner, global::RC, inference::InferenceEngine, parameters::Parameters};
 use anyhow::Result;
+use nar_dev_utils::RefCount;
 use navm::{
     cmd::Cmd,
     output::Output,

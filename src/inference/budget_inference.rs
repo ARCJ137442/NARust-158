@@ -8,9 +8,8 @@ use crate::{
     entity::{BudgetValue, ShortFloat, TLink, TruthValue},
     inference::{Budget, BudgetFunctions, ReviseResult},
     language::Term,
-    util::RefCount,
 };
-use nar_dev_utils::OrSomeRef;
+use nar_dev_utils::{OrSomeRef, RefCount};
 
 /// 预算推理
 pub trait BudgetInference: Budget {

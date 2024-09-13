@@ -76,9 +76,9 @@ impl InferenceEngine {
     pub const ECHO: Self = {
         use crate::{
             control::{ReasonContext, ReasonContextWithLinks},
-            util::{RefCount, ToDisplayAndBrief},
+            util::ToDisplayAndBrief,
         };
-        use nar_dev_utils::OptionBoost;
+        use nar_dev_utils::{OptionBoost, RefCount};
 
         /// 直接推理
         fn direct(context: &mut ReasonContextDirect) {

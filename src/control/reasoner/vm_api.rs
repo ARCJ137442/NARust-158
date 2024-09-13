@@ -11,9 +11,9 @@ use crate::{
     global::Float,
     inference::{Budget, Evidential, Truth},
     language::Term,
-    util::{AverageFloat, AverageUsize, RefCount, ToDisplayAndBrief},
+    util::{AverageFloat, AverageUsize, ToDisplayAndBrief},
 };
-use nar_dev_utils::{join, macro_once, JoinTo};
+use nar_dev_utils::{join, macro_once, JoinTo, RefCount};
 use narsese::lexical::Task as LexicalTask;
 
 /// 输入输出

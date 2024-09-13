@@ -9,9 +9,8 @@ use crate::{
     inference::rules::{utils::*, *},
     language::{variable_process, *},
     symbols::{IMPLICATION_RELATION, INHERITANCE_RELATION, SIMILARITY_RELATION},
-    util::RefCount,
 };
-use nar_dev_utils::unwrap_or_return;
+use nar_dev_utils::{unwrap_or_return, RefCount};
 
 /// 模拟`RuleTables.reason`
 /// * 📌规则表入口

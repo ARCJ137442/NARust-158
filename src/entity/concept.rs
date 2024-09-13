@@ -12,9 +12,9 @@ use crate::{
     language::Term,
     parameters::{Parameters, DEFAULT_PARAMETERS},
     storage::{ArrayBuffer, ArrayRankTable, Bag, Buffer, IsCompatibleToAddF, RankF, RankTable},
-    util::{to_display_when_has_content, Iterable, RefCount, ToDisplayAndBrief},
+    util::{to_display_when_has_content, Iterable, ToDisplayAndBrief},
 };
-use nar_dev_utils::join;
+use nar_dev_utils::{join, RefCount};
 use serde::{Deserialize, Serialize};
 
 /// 复刻改版OpenNARS `nars.entity.Concept`

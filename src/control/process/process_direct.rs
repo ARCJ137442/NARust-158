@@ -24,9 +24,9 @@ use crate::{
     control::{ReasonContext, ReasonContextDirect, Reasoner},
     entity::{Item, RCTask, Sentence, Task},
     inference::Budget,
-    util::{RefCount, ToDisplayAndBrief},
+    util::ToDisplayAndBrief,
 };
-use nar_dev_utils::unwrap_or_return;
+use nar_dev_utils::{unwrap_or_return, RefCount};
 
 /// 为「推理器」添加功能
 /// * 📌入口函数

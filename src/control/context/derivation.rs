@@ -9,8 +9,9 @@ use crate::{
     },
     inference::Budget,
     language::Term,
-    util::{RefCount, ToDisplayAndBrief},
+    util::ToDisplayAndBrief,
 };
+use nar_dev_utils::RefCount;
 
 /// 自动实现 for 「推理上下文」
 pub trait ContextDerivation: ReasonContext {
