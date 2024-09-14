@@ -10,7 +10,7 @@
 ![Lines of Code](https://www.aschey.tech/tokei/github.com/ARCJ137442/NARust-158?style=for-the-badge&color=ff7043)
 [![Language](https://img.shields.io/badge/language-Rust-orange?style=for-the-badge&color=ff7043)](https://www.rust-lang.org)
 
-<!-- 面向用户 -->
+<!-- Towards Users -->
 
 Cargo Status:
 
@@ -20,11 +20,11 @@ Cargo Status:
 ![Downloads](https://img.shields.io/crates/d/narust_158?style=for-the-badge)
 <!-- ![Crate Size](https://img.shields.io/crates/size/narust_158?style=for-the-badge) -->
 
-<!-- 面向开发者 -->
+<!-- Towards Developers -->
 
 Develop Status:
 
-[![CI status](https://img.shields.io/github/actions/workflow/status/ARCJ137442/NARust-158/ci.yml?style=for-the-badge)](https://github.com/ARCJ137442/NARust-158/actions/workflows/ci.yml) <!-- * 🚩【2024-09-14 09:20:11】需要扩展名`.yml` -->
+[![CI status](https://img.shields.io/github/actions/workflow/status/ARCJ137442/NARust-158/ci.yml?style=for-the-badge)](https://github.com/ARCJ137442/NARust-158/actions/workflows/ci.yml) <!-- * 🚩【2024-09-14 09:20:11】Need file extension `.yml` -->
 [![Conventional Commits](https://img.shields.io/badge/Conventional%20Commits-2.0.0-%23FE5196?style=for-the-badge)](https://conventionalcommits.org)
 ![GitHub commits since latest release](https://img.shields.io/github/commits-since/ARCJ137442/NARust-158/latest?style=for-the-badge)
 
