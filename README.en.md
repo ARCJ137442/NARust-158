@@ -18,13 +18,13 @@ Cargo Status:
 [![docs.rs](https://img.shields.io/docsrs/narust-158?style=for-the-badge)](https://docs.rs/narust_158)
 ![Recent Downloads](https://img.shields.io/crates/dr/narust_158?style=for-the-badge)
 ![Downloads](https://img.shields.io/crates/d/narust_158?style=for-the-badge)
-<!-- ![Crate Size](https://img.shields.io/crates/size/narust_158?style=for-the-badge) -->
+![Crate Size](https://img.shields.io/crates/size/narust_158?style=for-the-badge)
 
 <!-- Towards Developers -->
 
 Development Status:
 
-[![CI status](https://img.shields.io/github/actions/workflow/status/ARCJ137442/NARust-158/ci.yml?style=for-the-badge)](https://github.com/ARCJ137442/NARust-158/actions/workflows/ci.yml) <!-- * 🚩【2024-09-14 09:20:11】Need file extension `.yml` -->
+[![CI status](https://img.shields.io/github/actions/workflow/status/ARCJ137442/NARust-158/ci.yml?style=for-the-badge)](https://github.com/ARCJ137442/NARust-158/actions/workflows/ci.yml)
 [![Conventional Commits](https://img.shields.io/badge/Conventional%20Commits-2.0.0-%23FE5196?style=for-the-badge)](https://conventionalcommits.org)
 ![GitHub commits since latest release](https://img.shields.io/github/commits-since/ARCJ137442/NARust-158/latest?style=for-the-badge)
 
