@@ -61,15 +61,8 @@ impl InferenceEngine {
 
     /// 空指针引擎
     /// * 📌这个引擎「什么都不做」
-    pub const VOID: Self = {
-        // 空函数
-        fn direct(_: &mut ReasonContextDirect) {}
-        fn transform(_: &mut ReasonContextTransform) {}
-        fn matching(_: &mut ReasonContextConcept) {}
-        fn reason(_: &mut ReasonContextConcept) {}
-        // 构造自身
-        Self::new(direct, transform, matching, reason)
-    };
+    /// * 📝【2024-09-21 16:31:45】Rust中可以使用（常量）闭包当函数指针
+    pub const VOID: Self = Self::new(|_| {}, |_| {}, |_| {}, |_| {});
 
     /// 打印回显的推理引擎
     /// * ✨可用于调试控制机制
