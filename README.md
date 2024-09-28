@@ -29,10 +29,11 @@ Cargo状态：
 
 [![CI status](https://img.shields.io/github/actions/workflow/status/ARCJ137442/NARust-158/ci.yml?style=for-the-badge)](https://github.com/ARCJ137442/NARust-158/actions/workflows/ci.yml)
 [![Conventional Commits](https://img.shields.io/badge/Conventional%20Commits-2.0.0-%23FE5196?style=for-the-badge)](https://conventionalcommits.org)
-![GitHub commits since latest release](https://img.shields.io/github/commits-since/ARCJ137442/NARust-158/latest?style=for-the-badge)
+![Files](https://www.aschey.tech/tokei/github.com/ARCJ137442/NARust-158?style=for-the-badge&category=files)
 
 ![Created At](https://img.shields.io/github/created-at/ARCJ137442/NARust-158?style=for-the-badge)
 ![Last Commit](https://img.shields.io/github/last-commit/ARCJ137442/NARust-158?style=for-the-badge)
+![GitHub commits since latest release](https://img.shields.io/github/commits-since/ARCJ137442/NARust-158/latest?style=for-the-badge)
 
 <!--
 参考自 https://github.com/ferrumc-rs/ferrumc
