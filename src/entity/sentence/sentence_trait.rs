@@ -1,7 +1,7 @@
 //! 作为特征的「语句」类型
 
 use crate::{
-    entity::{Judgement, PunctuatedSentenceRef, Punctuation, Question, Stamp},
+    entity::{Goal, Judgement, PunctuatedSentenceRef, Punctuation, Question, Stamp},
     global::ClockTime,
     inference::Evidential,
     language::Term,
@@ -69,10 +69,13 @@ pub trait Sentence: ToDisplayAndBrief + Evidential {
     //   * 📌直接原因：对于带泛型的`as_XXX`，需要知道其中的类型参数，才能正常参与编译
     type Judgement: Judgement;
     type Question: Question;
+    type Goal: Goal;
 
     /// 🆕作为【标点类型与内部引用数据兼备】的「带标点引用」
     /// * 🚩【2024-07-09 13:13:23】目前只完成不可变引用
-    fn as_punctuated_ref(&self) -> PunctuatedSentenceRef<Self::Judgement, Self::Question>;
+    fn as_punctuated_ref(
+        &self,
+    ) -> PunctuatedSentenceRef<Self::Judgement, Self::Question, Self::Goal>;
 
     /// 模拟
     /// * `Sentence.punctuation`、`Sentence.getPunctuation`
@@ -156,6 +159,29 @@ pub trait Sentence: ToDisplayAndBrief + Evidential {
     fn unwrap_question(&self) -> &Self::Question {
         // * 🚩【2024-07-09 13:17:25】现在直接复用一个函数
         self.as_question().unwrap()
+    }
+
+    /// 🆕顺承`Sentence.isGoal`
+    /// * ❌【2024-06-21 15:02:36】无法外置到其它「给语句自动添加功能」的特征中去
+    ///   * 📌瓶颈：冲突的默认实现
+    fn is_goal(&self) -> bool {
+        matches!(
+            self.as_punctuated_ref(),
+            PunctuatedSentenceRef::Judgement(..)
+        )
+    }
+    fn as_goal(&self) -> Option<&Self::Judgement> {
+        // * 🚩【2024-07-09 13:17:25】现在直接复用一个函数
+        matches_or! {
+            ?self.as_punctuated_ref(),
+            PunctuatedSentenceRef::Judgement(j) => j
+        }
+    }
+    /// `as_goal`的快捷解包
+    /// * 🎯推理规则中对「前向推理⇒任务有真值」的使用
+    fn unwrap_goal(&self) -> &Self::Judgement {
+        // * 🚩【2024-07-09 13:17:25】现在直接复用一个函数
+        self.as_goal().unwrap()
     }
 
     /// 模拟`Sentence.containQueryVar`

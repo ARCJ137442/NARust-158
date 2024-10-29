@@ -1,6 +1,6 @@
 //! 存放特定的「标点」类型
 
-use super::{Judgement, Question};
+use super::{Goal, Judgement, Question};
 use crate::symbols::*;
 use anyhow::Result;
 use nar_dev_utils::unwrap_or_return;
@@ -67,21 +67,25 @@ impl Display for Punctuation {
 /// * 🎯在「标点」的基础上，附带更有用的匹配信息
 ///   * 📄减少非必要（且不易稳定）的`unwrap`，用类型系统规范使用
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum PunctuatedSentenceRef<'r, J, Q>
+pub enum PunctuatedSentenceRef<'r, J, Q, G>
 where
     J: Judgement,
     Q: Question,
+    G: Goal,
 {
     /// 判断
     Judgement(&'r J),
     /// 疑问
     Question(&'r Q),
+    /// 目标
+    Goal(&'r G),
 }
 
-impl<'r, J, Q> PunctuatedSentenceRef<'r, J, Q>
+impl<'r, J, Q, G> PunctuatedSentenceRef<'r, J, Q, G>
 where
     J: Judgement,
     Q: Question,
+    G: Goal,
 {
     /// 转换到【纯粹作为标签存在】的[`Punctuation`]
     pub const fn to_punctuation(&self) -> Punctuation {
@@ -89,6 +93,7 @@ where
         match self {
             Judgement(..) => Punctuation::Judgement,
             Question(..) => Punctuation::Question,
+            Goal(..) => Punctuation::Goal,
         }
     }
 
@@ -100,27 +105,30 @@ where
 }
 
 /// 派生性实现[`From`]
-impl<'r, J, Q> From<PunctuatedSentenceRef<'r, J, Q>> for Punctuation
+impl<'r, J, Q, G> From<PunctuatedSentenceRef<'r, J, Q, G>> for Punctuation
 where
     J: Judgement,
     Q: Question,
+    G: Goal,
 {
-    fn from(value: PunctuatedSentenceRef<'r, J, Q>) -> Self {
+    fn from(value: PunctuatedSentenceRef<'r, J, Q, G>) -> Self {
         value.to_punctuation()
     }
 }
 
 /// 派生性实现[`Display`]
-impl<'r, J, Q> Display for PunctuatedSentenceRef<'r, J, Q>
+impl<'r, J, Q, G> Display for PunctuatedSentenceRef<'r, J, Q, G>
 where
     J: Judgement,
     Q: Question,
+    G: Goal,
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         use PunctuatedSentenceRef::*;
         let sentence = match self {
             Judgement(sentence) => sentence.sentence_to_display(),
             Question(sentence) => sentence.sentence_to_display(),
+            Goal(sentence) => sentence.sentence_to_display(),
         };
         write!(f, "ref{:?} @ ({sentence})", self.to_char())
     }

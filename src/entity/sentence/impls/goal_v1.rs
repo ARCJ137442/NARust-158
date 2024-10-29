@@ -1,7 +1,7 @@
-//! 初代判断句实现
+//! 初代目标句实现
 
 use crate::entity::{
-    GoalV1, Judgement, PunctuatedSentenceRef, QuestionV1, Sentence, SentenceInner,
+    Goal, JudgementV1, PunctuatedSentenceRef, QuestionV1, Sentence, SentenceInner,
 };
 use crate::{
     __impl_to_display_and_display,
@@ -13,18 +13,18 @@ use crate::{
 use narsese::lexical::Sentence as LexicalSentence;
 use serde::{Deserialize, Serialize};
 
-/// 🆕判断句 初代实现
+/// 🆕目标句 初代实现
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct JudgementV1 {
+pub struct GoalV1 {
     /// 🆕内部存储的「语句」实现
     pub(crate) inner: SentenceInner,
     /// Whether the sentence can be revised
     revisable: bool,
-    /// The truth value of Judgment
+    /// The desire value of Judgment as truth
     truth: TruthValue,
 }
 
-impl JudgementV1 {
+impl GoalV1 {
     pub fn new(
         content: Term,
         truth: impl Into<TruthValue>,
@@ -39,7 +39,7 @@ impl JudgementV1 {
     }
 }
 
-impl Evidential for JudgementV1 {
+impl Evidential for GoalV1 {
     fn evidential_base(&self) -> &[ClockTime] {
         self.inner.stamp().evidential_base()
     }
@@ -53,7 +53,7 @@ impl Evidential for JudgementV1 {
     }
 }
 
-impl Sentence for JudgementV1 {
+impl Sentence for GoalV1 {
     fn sentence_clone<'s, 'sentence: 's>(&'s self) -> impl Sentence + 'sentence {
         self.clone()
     }
@@ -66,31 +66,31 @@ impl Sentence for JudgementV1 {
         self.inner.content_mut()
     }
 
-    type Judgement = Self;
+    type Judgement = JudgementV1;
     type Question = QuestionV1;
-    type Goal = GoalV1;
+    type Goal = Self;
 
     #[inline(always)]
     fn as_punctuated_ref(
         &self,
     ) -> PunctuatedSentenceRef<Self::Judgement, Self::Question, Self::Goal> {
-        PunctuatedSentenceRef::Judgement(self)
+        PunctuatedSentenceRef::Goal(self)
     }
 
     fn to_key(&self) -> String {
-        self.judgement_to_key()
+        self.goal_to_key()
     }
 
     fn sentence_to_display(&self) -> String {
-        self.judgement_to_display()
+        self.goal_to_display()
     }
 
     fn sentence_to_lexical(&self) -> LexicalSentence {
-        self.judgement_to_lexical()
+        self.goal_to_lexical()
     }
 }
 
-impl Truth for JudgementV1 {
+impl Truth for GoalV1 {
     #[inline(always)]
     fn frequency(&self) -> ShortFloat {
         self.truth.frequency()
@@ -122,15 +122,15 @@ impl Truth for JudgementV1 {
     }
 }
 
-impl Judgement for JudgementV1 {
+impl Goal for GoalV1 {
     fn revisable(&self) -> bool {
         self.revisable
     }
 }
 
 __impl_to_display_and_display! {
-    @(judgement_to_display;;)
-    JudgementV1 as Judgement
+    @(goal_to_display;;)
+    GoalV1 as Goal
 }
 
 // TODO: 单元测试

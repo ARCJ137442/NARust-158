@@ -13,6 +13,10 @@ pub use sentence_trait::*;
 mod judgement;
 pub use judgement::*;
 
+// 目标句
+mod goal;
+pub use goal::*;
+
 // 疑问句
 mod question;
 pub use question::*;

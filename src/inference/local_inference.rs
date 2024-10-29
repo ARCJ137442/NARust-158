@@ -112,7 +112,8 @@ fn process_judgement(context: &mut ReasonContextDirect) {
 
 /// 🆕直接处理/目标
 fn process_goal(context: &mut ReasonContextDirect) {
-    context.report_comment("// TODO: 目标处理");
+    let task = context.current_task().get_().to_display_long();
+    context.report_comment(format!("// TODO: 目标处理 - {task}"));
 }
 
 /// 用已知信念回答问题

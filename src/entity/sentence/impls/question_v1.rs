@@ -2,7 +2,9 @@
 
 use crate::{
     __impl_to_display_and_display,
-    entity::{JudgementV1, PunctuatedSentenceRef, Question, Sentence, SentenceInner, Stamp},
+    entity::{
+        GoalV1, JudgementV1, PunctuatedSentenceRef, Question, Sentence, SentenceInner, Stamp,
+    },
     inference::Evidential,
     language::Term,
 };
@@ -52,9 +54,12 @@ impl Sentence for QuestionV1 {
 
     type Judgement = JudgementV1;
     type Question = Self;
+    type Goal = GoalV1;
 
     #[inline(always)]
-    fn as_punctuated_ref(&self) -> PunctuatedSentenceRef<Self::Judgement, Self::Question> {
+    fn as_punctuated_ref(
+        &self,
+    ) -> PunctuatedSentenceRef<Self::Judgement, Self::Question, Self::Goal> {
         PunctuatedSentenceRef::Question(self)
     }
 

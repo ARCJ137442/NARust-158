@@ -8,6 +8,10 @@ pub use sentence_v1::*;
 mod judgement_v1;
 pub use judgement_v1::*;
 
+// 初代「目标」
+mod goal_v1;
+pub use goal_v1::*;
+
 // 初代「问题」
 mod question_v1;
 pub use question_v1::*;

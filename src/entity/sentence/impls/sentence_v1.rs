@@ -1,4 +1,4 @@
-use super::{JudgementV1, QuestionV1};
+use super::{GoalV1, JudgementV1, QuestionV1};
 use crate::{
     __impl_to_display_and_display,
     entity::{
@@ -24,7 +24,7 @@ use serde::{Deserialize, Serialize};
 enum_union! {
     /// 作为【可能是判断，也可能是问题】的统一「语句」类型
     #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-    pub SentenceV1 = JudgementV1 | QuestionV1;
+    pub SentenceV1 = JudgementV1 | QuestionV1 | GoalV1;
 }
 
 impl SentenceV1 {
@@ -47,9 +47,9 @@ impl SentenceV1 {
             // 问题
             (Question, _) => QuestionV1::new(new_content, new_stamp).into(),
             // 目标
-            (Goal, Some((new_truth, revisable))) => Err(anyhow::anyhow!(
-                "// TODO: 目标语句 {new_truth}, {revisable:?}"
-            ))?,
+            (Goal, Some((new_truth, revisable))) => {
+                GoalV1::new(new_content, new_truth, new_stamp, revisable).into()
+            }
             // 无效
             (Judgement | Goal, None) => Err(anyhow::anyhow!(
                 "无效的语句：{punctuation:?}, {truth_revisable:?}"
@@ -62,7 +62,8 @@ impl SentenceV1 {
     fn inner(&self) -> &SentenceInner {
         match self {
             SentenceV1::JudgementV1(JudgementV1 { inner, .. })
-            | SentenceV1::QuestionV1(QuestionV1 { inner, .. }) => inner,
+            | SentenceV1::QuestionV1(QuestionV1 { inner, .. })
+            | SentenceV1::GoalV1(GoalV1 { inner, .. }) => inner,
         }
     }
 
@@ -70,7 +71,8 @@ impl SentenceV1 {
     fn inner_mut(&mut self) -> &mut SentenceInner {
         match self {
             SentenceV1::JudgementV1(JudgementV1 { inner, .. })
-            | SentenceV1::QuestionV1(QuestionV1 { inner, .. }) => inner,
+            | SentenceV1::QuestionV1(QuestionV1 { inner, .. })
+            | SentenceV1::GoalV1(GoalV1 { inner, .. }) => inner,
         }
     }
 }
@@ -95,6 +97,7 @@ macro_rules! as_variant {
         match $this {
             SentenceV1::JudgementV1($name) => $($code)*,
             SentenceV1::QuestionV1($name) => $($code)*,
+            SentenceV1::GoalV1($name) => $($code)*,
         }
     };
 }
@@ -114,14 +117,18 @@ impl Sentence for SentenceV1 {
 
     type Judgement = JudgementV1;
     type Question = QuestionV1;
+    type Goal = GoalV1;
 
     /// ℹ️只需这一个方法，即可提供所有与「细分类型/标点」有关的信息
-    fn as_punctuated_ref(&self) -> PunctuatedSentenceRef<Self::Judgement, Self::Question> {
+    fn as_punctuated_ref(
+        &self,
+    ) -> PunctuatedSentenceRef<Self::Judgement, Self::Question, Self::Goal> {
         use PunctuatedSentenceRef::*;
         use SentenceV1::*;
         match self {
             JudgementV1(j) => Judgement(j),
             QuestionV1(q) => Question(q),
+            GoalV1(q) => Goal(q),
         }
     }
 

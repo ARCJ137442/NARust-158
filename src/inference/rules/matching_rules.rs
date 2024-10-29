@@ -52,6 +52,13 @@ pub fn match_task_and_belief(context: &mut ReasonContextConcept) {
                 context.double_premise_task_full(None, content, Some((truth, true)), budget, stamp);
             }
         }
+        // * 🚩目标⇒打印信息
+        Goal(goal) => {
+            let goal = goal.clone();
+            drop(current_task);
+            drop(current_task_rc);
+            context.report_comment(format!("// TODO: goal to belief match - {goal}"));
+        }
         // * 🚩问题⇒尝试回答「特殊疑问」（此处用「变量替换」解决查询变量）
         Question(question) => {
             // * 📝只有「匹配已知」才能回答「特殊疑问」，「一般疑问」交由「直接推理」回答
