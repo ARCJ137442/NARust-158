@@ -75,6 +75,27 @@ impl Reasoner {
 
                 Some((truth, revisable))
             }
+            // * 🚩目标句 ⇒ 生成欲望值等附加信息
+            Goal => {
+                // * 🚩生成默认真值与默认预算值
+                let truth_default_values = [
+                    ShortFloat::from_float(self.parameters.default_judgement_frequency),
+                    ShortFloat::from_float(self.parameters.default_judgement_confidence),
+                ];
+
+                // * 🚩解析真值
+                let truth_is_analytic = self.parameters.default_truth_analytic;
+                let truth =
+                    TruthValue::from_lexical(truth, truth_default_values, truth_is_analytic)?;
+
+                // * 🚩解析「是否可参与修正」
+                // 根据解析出的词项设置「是否可修正」
+                // ! 📝这段代码在不同版本间有争议
+                // * 📄OpenNARS 3.0.4不再使用`setRevisable`方法，使之变成了【仅构造时可修改】的变量
+                let revisable = !(content.instanceof_conjunction() && content.contain_var_d());
+
+                Some((truth, revisable))
+            }
             // * 🚩疑问句 ⇒ 空
             Question => None,
         };
@@ -86,21 +107,24 @@ impl Reasoner {
 
         // 解析预算值：先计算出「默认预算值」再参与「词法解析」（覆盖）
         let [priority, durability, quality] = match (punctuation, truth_revisable) {
-            // * 🚩判断
-            (Judgement, Some((truth, _))) => [
+            // * 🚩判断|目标
+            (Judgement | Goal, Some((truth, _))) => [
                 ShortFloat::from_float(self.parameters.default_judgement_priority),
                 ShortFloat::from_float(self.parameters.default_judgement_durability),
                 BudgetValue::truth_to_quality(&truth),
             ],
-            (Judgement, None) => {
-                return Err(anyhow!("【少见】在解析出判断句后，解析出的真值不应为空"))
-            }
             // * 🚩问题
             (Question, _) => [
                 ShortFloat::from_float(self.parameters.default_question_priority),
                 ShortFloat::from_float(self.parameters.default_question_durability),
                 ShortFloat::ONE,
             ],
+            // * 🚩其它「缺少真值」的情况
+            (_, None) => {
+                return Err(anyhow!(
+                    "【少见】在解析出判断句或目标句后，解析出的真值不应为空"
+                ))
+            }
         };
         let budget = BudgetValue::from_lexical(budget, [priority, durability, quality])?;
 

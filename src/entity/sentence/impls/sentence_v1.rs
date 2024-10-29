@@ -40,11 +40,18 @@ impl SentenceV1 {
     ) -> Result<Self> {
         use Punctuation::*;
         let sentence = match (punctuation, truth_revisable) {
+            // 判断
             (Judgement, Some((new_truth, revisable))) => {
                 JudgementV1::new(new_content, new_truth, new_stamp, revisable).into()
             }
-            (Question, ..) => QuestionV1::new(new_content, new_stamp).into(),
-            _ => Err(anyhow::anyhow!(
+            // 问题
+            (Question, _) => QuestionV1::new(new_content, new_stamp).into(),
+            // 目标
+            (Goal, Some((new_truth, revisable))) => Err(anyhow::anyhow!(
+                "// TODO: 目标语句 {new_truth}, {revisable:?}"
+            ))?,
+            // 无效
+            (Judgement | Goal, None) => Err(anyhow::anyhow!(
                 "无效的语句：{punctuation:?}, {truth_revisable:?}"
             ))?,
         };

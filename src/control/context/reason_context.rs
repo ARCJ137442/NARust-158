@@ -190,6 +190,8 @@ pub trait ReasonContext {
             Judgement => Forward,
             // * 🚩问题⇒判断+问题⇒反向
             Question => Backward,
+            // * 🚩目标⇒判断+目标⇒反向
+            Goal => Backward,
         }
     }
 

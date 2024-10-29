@@ -23,6 +23,7 @@ pub fn process_direct(context: &mut ReasonContextDirect) {
     match task_punctuation {
         Judgement => process_judgement(context),
         Question => process_question(context),
+        Goal => process_goal(context),
     }
 }
 
@@ -107,6 +108,11 @@ fn process_judgement(context: &mut ReasonContextDirect) {
             context.report_comment(message);
         }
     }
+}
+
+/// 🆕直接处理/目标
+fn process_goal(context: &mut ReasonContextDirect) {
+    context.report_comment("// TODO: 目标处理");
 }
 
 /// 用已知信念回答问题

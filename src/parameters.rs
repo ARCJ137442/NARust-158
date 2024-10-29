@@ -173,6 +173,25 @@ macro_once! {
         /// Default durability of input judgement
         pub default_judgement_durability: Float = 0.8,
 
+        /// 🆕默认的「输入真值频率」
+        /// * 🎯减少来自`StringParser`的硬编码
+        pub default_goal_frequency: Float = 1.0,
+
+        /// # 📄OpenNARS
+        ///
+        /// Default confidence of input goal.
+        pub default_goal_confidence: Float = 0.9,
+
+        /// # 📄OpenNARS
+        ///
+        /// Default priority of input goal
+        pub default_goal_priority: Float = 0.8,
+
+        /// # 📄OpenNARS
+        ///
+        /// Default durability of input goal
+        pub default_goal_durability: Float = 0.8,
+
         /// # 📄OpenNARS
         ///
         /// Default priority of input question
@@ -323,6 +342,10 @@ mod tests {
             default_judgement_confidence     => 0.9
             default_judgement_priority       => 0.8
             default_judgement_durability     => 0.8
+            default_goal_frequency      => 1.0
+            default_goal_confidence     => 0.9
+            default_goal_priority       => 0.8
+            default_goal_durability     => 0.8
             default_question_priority        => 0.9
             default_question_durability      => 0.9
             bag_level                        => 100

@@ -16,6 +16,8 @@ pub enum Punctuation {
     Judgement,
     /// 疑问
     Question,
+    /// 目标
+    Goal,
 }
 
 impl Punctuation {
@@ -24,6 +26,7 @@ impl Punctuation {
         match c {
             JUDGMENT_MARK => Some(Self::Judgement),
             QUESTION_MARK => Some(Self::Question),
+            GOAL_MARK => Some(Self::Goal),
             _ => None,
         }
     }
@@ -34,6 +37,7 @@ impl Punctuation {
         match self {
             Judgement => JUDGMENT_MARK,
             Question => QUESTION_MARK,
+            Goal => GOAL_MARK,
         }
     }
 
