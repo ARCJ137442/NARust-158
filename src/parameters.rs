@@ -283,6 +283,11 @@ macro_once! {
         ///   * 📌默认值数据来自「概念袋」
         #[serde(default = "default_values::novel_task_forgetting_cycle")]
         pub novel_task_forgetting_cycle: usize = 10,
+
+        /// 🆕真值投影衰减度
+        /// * 📄from ONA: `Time distance based projection decay of event truth`
+        #[serde(default = "default_values::truth_projection_decay")]
+        pub truth_projection_decay: Float = 0.8
     }
 }
 
@@ -364,6 +369,7 @@ mod tests {
             maximum_questions_length         => 5
             novel_task_bag_size              => 1000
             novel_task_forgetting_cycle      => 10
+            truth_projection_decay           => 0.8
         }
     }
 

@@ -4,6 +4,7 @@
 /// * 📝所有函数均【返回新真值对象】且【不修改所传入参数】
 use crate::{
     entity::{ShortFloat, TruthValue},
+    global::{Float, OccurrenceTime},
     inference::Truth,
 };
 
@@ -499,6 +500,42 @@ pub trait TruthFunctions: Truth + Sized {
         let v0 = TruthValue::new_fc(f1, ShortFloat::w2c(c1.to_float()));
         // * 🚩再参与「类比」（弱中之弱）
         v2.analogy(&v0)
+    }
+
+    /// 🆕真值永恒化
+    fn eternalize(&self) -> TruthValue {
+        let [f, c] = self.fc();
+        TruthValue::new_fc(f, ShortFloat::w2c(c.to_float()))
+    }
+
+    /// 🆕真值投影
+    fn projection(
+        &self,
+        original_time: impl Into<OccurrenceTime>,
+        target_time: impl Into<OccurrenceTime>,
+        decay: Float,
+    ) -> TruthValue {
+        let [original_time, target_time] = [original_time.into(), target_time.into()];
+        let [f, c] = self.fc();
+        if original_time.is_eternal() {
+            TruthValue::new_fc(f, c)
+        } else {
+            let difference = OccurrenceTime::abs_diff_int(target_time, original_time);
+            let decayed_coefficient = decay.powi(difference as i32);
+            TruthValue::new_fc(f, c * ShortFloat::from_float(decayed_coefficient))
+        }
+    }
+
+    /// 目标演绎
+    /// * 🚩使用「直接演绎」和「反演演绎」再从信度中挑高的一个
+    fn goal_deduction(&self, v2: &impl Truth) -> TruthValue {
+        let res1 = self.deduction(v2);
+        let res2 = self.negation().deduction(v2).negation();
+        if res1.confidence() >= res2.confidence() {
+            res1
+        } else {
+            res2
+        }
     }
 }
 
