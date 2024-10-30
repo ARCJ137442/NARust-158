@@ -5,8 +5,9 @@
 use super::{BudgetValue, Item, JudgementV1, Sentence, SentenceV1, Token};
 use crate::{
     entity::MergeOrder,
-    global::ClockTime,
+    global::{ClockTime, Float, OccurrenceTime},
     inference::{Budget, Evidential},
+    language::Term,
     util::{IterInnerRcSelf, RcSerial, Serial, SerialRef, ToDisplayAndBrief},
 };
 use nar_dev_utils::{join, RefCount};
@@ -295,11 +296,11 @@ impl Sentence for Task {
         self.sentence.sentence_clone()
     }
 
-    fn content(&self) -> &crate::language::Term {
+    fn content(&self) -> &Term {
         self.sentence.content()
     }
 
-    fn content_mut(&mut self) -> &mut crate::language::Term {
+    fn content_mut(&mut self) -> &mut Term {
         self.sentence.content_mut()
     }
 
@@ -315,6 +316,14 @@ impl Sentence for Task {
 
     fn to_key(&self) -> String {
         self.sentence.to_key()
+    }
+
+    fn occurrence_time(&self) -> OccurrenceTime {
+        self.sentence.occurrence_time()
+    }
+
+    fn occurrence_time_offset(&self) -> Float {
+        self.sentence.occurrence_time_offset()
     }
 
     fn sentence_to_display(&self) -> String {
@@ -362,7 +371,7 @@ mod tests {
     fn task_sample(serial: Serial) -> Task {
         Task::from_input(
             serial,
-            QuestionV1::new(term!("A").unwrap(), stamp!({0: 1})),
+            QuestionV1::new(term!("A").unwrap(), stamp!({0: 1}), 0.into(), 0.0),
             budget![1.0; 1.0; 1.0],
         )
     }

@@ -5,6 +5,7 @@ use crate::{
     entity::{
         GoalV1, JudgementV1, PunctuatedSentenceRef, Question, Sentence, SentenceInner, Stamp,
     },
+    global::{Float, OccurrenceTime},
     inference::Evidential,
     language::Term,
 };
@@ -12,15 +13,20 @@ use narsese::lexical::Sentence as LexicalSentence;
 use serde::{Deserialize, Serialize};
 
 /// 🆕疑问句 初代实现
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct QuestionV1 {
     pub(crate) inner: SentenceInner,
 }
 
 impl QuestionV1 {
-    pub fn new(content: Term, stamp: Stamp) -> Self {
+    pub fn new(
+        content: Term,
+        stamp: Stamp,
+        occurrence_time: OccurrenceTime,
+        occurrence_time_offset: Float,
+    ) -> Self {
         Self {
-            inner: SentenceInner::new(content, stamp),
+            inner: SentenceInner::new(content, stamp, occurrence_time, occurrence_time_offset),
         }
     }
 }
@@ -65,6 +71,14 @@ impl Sentence for QuestionV1 {
 
     fn to_key(&self) -> String {
         self.question_to_key()
+    }
+
+    fn occurrence_time(&self) -> OccurrenceTime {
+        self.inner.occurrence_time
+    }
+
+    fn occurrence_time_offset(&self) -> Float {
+        self.inner.occurrence_time_offset
     }
 
     fn sentence_to_display(&self) -> String {

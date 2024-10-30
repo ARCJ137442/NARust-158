@@ -5,7 +5,7 @@ use crate::{
         sentence::{PunctuatedSentenceRef, Punctuation, Sentence, SentenceInner},
         Stamp, TruthValue,
     },
-    global::ClockTime,
+    global::{ClockTime, Float, OccurrenceTime},
     inference::Evidential,
     language::Term,
 };
@@ -23,7 +23,7 @@ use serde::{Deserialize, Serialize};
 // }
 enum_union! {
     /// 作为【可能是判断，也可能是问题】的统一「语句」类型
-    #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
     pub SentenceV1 = JudgementV1 | QuestionV1 | GoalV1;
 }
 
@@ -37,19 +37,39 @@ impl SentenceV1 {
         punctuation: Punctuation,
         new_stamp: Stamp,
         truth_revisable: Option<(TruthValue, bool)>,
+        occurrence_time: OccurrenceTime,
+        occurrence_time_offset: Float,
     ) -> Result<Self> {
         use Punctuation::*;
         let sentence = match (punctuation, truth_revisable) {
             // 判断
-            (Judgement, Some((new_truth, revisable))) => {
-                JudgementV1::new(new_content, new_truth, new_stamp, revisable).into()
-            }
+            (Judgement, Some((new_truth, revisable))) => JudgementV1::new(
+                new_content,
+                new_truth,
+                new_stamp,
+                revisable,
+                occurrence_time,
+                occurrence_time_offset,
+            )
+            .into(),
             // 问题
-            (Question, _) => QuestionV1::new(new_content, new_stamp).into(),
+            (Question, _) => QuestionV1::new(
+                new_content,
+                new_stamp,
+                occurrence_time,
+                occurrence_time_offset,
+            )
+            .into(),
             // 目标
-            (Goal, Some((new_truth, revisable))) => {
-                GoalV1::new(new_content, new_truth, new_stamp, revisable).into()
-            }
+            (Goal, Some((new_truth, revisable))) => GoalV1::new(
+                new_content,
+                new_truth,
+                new_stamp,
+                revisable,
+                occurrence_time,
+                occurrence_time_offset,
+            )
+            .into(),
             // 无效
             (Judgement | Goal, None) => Err(anyhow::anyhow!(
                 "无效的语句：{punctuation:?}, {truth_revisable:?}"
@@ -137,6 +157,14 @@ impl Sentence for SentenceV1 {
         as_variant! {
             self, s => s.to_key()
         }
+    }
+
+    fn occurrence_time(&self) -> OccurrenceTime {
+        self.inner().occurrence_time
+    }
+
+    fn occurrence_time_offset(&self) -> Float {
+        self.inner().occurrence_time_offset
     }
 
     fn sentence_to_display(&self) -> String {

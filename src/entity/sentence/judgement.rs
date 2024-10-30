@@ -47,7 +47,8 @@ pub trait Judgement: Sentence + Truth {
     fn judgement_to_key(&self) -> String {
         join! {
             => self.content().to_string()
-            => self.punctuation().to_string() + " "
+            => self.punctuation().to_string()
+            => self.time_to_display()
             => self.truth_to_display_brief()
         }
     }
@@ -57,7 +58,8 @@ pub trait Judgement: Sentence + Truth {
         join! {
             => self.content().to_string()
             => self.punctuation().to_string() + " "
-            => self.truth_to_display()
+            => self.time_to_display() + " "
+            => self.truth_to_display() + " "
             => self.stamp_to_display()
         }
     }

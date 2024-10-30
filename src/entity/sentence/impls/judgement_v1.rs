@@ -1,12 +1,12 @@
 //! 初代判断句实现
 
-use crate::entity::{
-    GoalV1, Judgement, PunctuatedSentenceRef, QuestionV1, Sentence, SentenceInner,
-};
 use crate::{
     __impl_to_display_and_display,
-    entity::{ShortFloat, Stamp, TruthValue},
-    global::ClockTime,
+    entity::{
+        GoalV1, Judgement, PunctuatedSentenceRef, QuestionV1, Sentence, SentenceInner, ShortFloat,
+        Stamp, TruthValue,
+    },
+    global::{ClockTime, Float, OccurrenceTime},
     inference::{Evidential, Truth},
     language::Term,
 };
@@ -14,7 +14,7 @@ use narsese::lexical::Sentence as LexicalSentence;
 use serde::{Deserialize, Serialize};
 
 /// 🆕判断句 初代实现
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct JudgementV1 {
     /// 🆕内部存储的「语句」实现
     pub(crate) inner: SentenceInner,
@@ -30,9 +30,16 @@ impl JudgementV1 {
         truth: impl Into<TruthValue>,
         stamp: impl Into<Stamp>,
         revisable: bool,
+        occurrence_time: OccurrenceTime,
+        occurrence_time_offset: Float,
     ) -> Self {
         Self {
-            inner: SentenceInner::new(content, stamp.into()),
+            inner: SentenceInner::new(
+                content,
+                stamp.into(),
+                occurrence_time,
+                occurrence_time_offset,
+            ),
             revisable,
             truth: truth.into(),
         }
@@ -79,6 +86,14 @@ impl Sentence for JudgementV1 {
 
     fn to_key(&self) -> String {
         self.judgement_to_key()
+    }
+
+    fn occurrence_time(&self) -> OccurrenceTime {
+        self.inner.occurrence_time
+    }
+
+    fn occurrence_time_offset(&self) -> Float {
+        self.inner.occurrence_time_offset
     }
 
     fn sentence_to_display(&self) -> String {

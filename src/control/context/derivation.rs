@@ -80,10 +80,13 @@ pub trait ContextDerivation: ReasonContext {
             new_punctuation,
             new_stamp,
             Some((new_truth.into(), true)),
+            self.time().into(),
+            0.0, // ! 占位符
         );
         drop(current_task); // ! 先抛掉引用代理
         match new_sentence {
             Ok(new_sentence) => {
+                println!("// TODO: WIP @ Time: {:?}", new_sentence);
                 let new_task = Task::from_derived(
                     self.reasoner_mut().updated_task_current_serial(),
                     new_sentence,
@@ -220,7 +223,10 @@ pub trait ContextDerivationConcept: ReasonContextWithLinks {
             new_punctuation,
             new_stamp,
             new_truth_revisable.map(|(truth, revisable)| (truth.into(), revisable)),
+            self.time().into(),
+            0.0, // ! 占位符
         );
+        println!("// TODO: WIP @ Time: {:?}", new_sentence);
         if let Ok(sentence) = new_sentence {
             let new_task = Task::from_derived(
                 self.reasoner_mut().updated_task_current_serial(),
@@ -273,7 +279,10 @@ pub trait ContextDerivationConcept: ReasonContextWithLinks {
             punctuation,
             new_stamp,
             new_truth.map(|truth| (truth, revisable)),
+            self.time().into(),
+            0.0, // ! 占位符
         );
+        println!("// TODO: WIP @ Time: {:?}", new_sentence);
         let new_sentence = match new_sentence {
             // * 🚩伪·问号解包
             Ok(sentence) => sentence,

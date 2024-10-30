@@ -3,8 +3,9 @@
 //! * ✅【2024-05-05 17:03:34】单元测试初步完成
 //! * ♻️【2024-06-21 00:05:34】基本依OpenNARS改版 重复刻（去特征化）完成
 
-use crate::__impl_to_display_and_display;
-use crate::{global::ClockTime, inference::Evidential};
+use crate::{
+    __impl_to_display_and_display, global::ClockTime, inference::Evidential, symbols::STAMP_ETERNAL,
+};
 use anyhow::Result;
 use narsese::lexical::Stamp as LexicalStamp;
 use serde::{Deserialize, Serialize};
@@ -32,6 +33,8 @@ impl Evidential for Stamp {
     /// * 🎯标准Narsese输出需要（Narsese内容）
     /// * 🚩【2024-05-12 14:48:31】此处跟随OpenNARS，使用空字串
     ///   * 时态暂均为「永恒」
+    ///
+    /// TODO: 🚧【2024-10-30 16:09:40】考虑外迁到「语句」层面
     fn stamp_to_lexical(&self) -> LexicalStamp {
         LexicalStamp::new()
     }
@@ -209,6 +212,11 @@ impl Stamp {
         time: ClockTime,
     ) -> Result<Self> {
         Ok(Self::with_time(current_serial, time))
+    }
+
+    /// 🆕判断一个「词法时间戳」是否为「永恒」时态
+    pub fn is_lexical_eternal(stamp: &LexicalStamp) -> bool {
+        stamp == STAMP_ETERNAL
     }
 }
 

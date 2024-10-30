@@ -2,7 +2,7 @@
 
 use crate::{
     entity::{Goal, Judgement, PunctuatedSentenceRef, Punctuation, Question, Stamp},
-    global::ClockTime,
+    global::{ClockTime, Float, OccurrenceTime},
     inference::Evidential,
     language::Term,
     util::ToDisplayAndBrief,
@@ -196,6 +196,20 @@ pub trait Sentence: ToDisplayAndBrief + Evidential {
         self.content().contain_var_q()
     }
 
+    /// 🆕获取「发生时间」
+    /// * 📄ONA中的`Event`结构
+    fn occurrence_time(&self) -> OccurrenceTime;
+
+    /// 🆕获取「发生时间偏移」（用于「条件蕴含」）
+    /// * 📄ONA中的`Event`结构
+    fn occurrence_time_offset(&self) -> Float;
+
+    /// 🆕模拟「时间显示」
+    /// * 🚩用时间戳的形式呈现语句的「发生时间」
+    fn time_to_display(&self) -> String {
+        format!(":!{}:", self.occurrence_time())
+    }
+
     /// 模拟`Sentence.toKey`
     /// * 📝这个函数似乎被用来给Task作为「Item」提供索引
     ///   * 📄OpenNARS中没有用到时间戳
@@ -266,12 +280,17 @@ pub trait Sentence: ToDisplayAndBrief + Evidential {
 }
 
 /// 🆕一个用于「复用共有字段」的内部对象
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SentenceInner {
     /// 内部词项
     content: Term,
     /// 内部「时间戳」字段
     stamp: Stamp,
+
+    /// 🆕发生时间
+    pub occurrence_time: OccurrenceTime,
+    /// 🆕发生时间偏移
+    pub occurrence_time_offset: Float, //necessary if the event is an =/>
 }
 
 impl SentenceInner {
@@ -294,8 +313,18 @@ impl SentenceInner {
 
 /// impl<T: TruthValueConcrete, S: StampConcrete> SentenceConcrete for SentenceV1
 impl SentenceInner {
-    pub fn new(content: Term, stamp: Stamp) -> Self {
-        Self { content, stamp }
+    pub fn new(
+        content: Term,
+        stamp: Stamp,
+        occurrence_time: OccurrenceTime,
+        occurrence_time_offset: Float,
+    ) -> Self {
+        Self {
+            content,
+            stamp,
+            occurrence_time,
+            occurrence_time_offset,
+        }
     }
 
     pub fn from_lexical(
@@ -310,6 +339,6 @@ impl SentenceInner {
         // 解析时间戳
         let stamp = Stamp::from_lexical(stamp, stamp_current_serial, stamp_time)?;
         // 构造
-        Ok(Self::new(content, stamp))
+        Ok(Self::new(content, stamp, stamp_time.into(), 0.0)) // * 🚩【2024-10-30 15:36:26】默认偏移0.0
     }
 }

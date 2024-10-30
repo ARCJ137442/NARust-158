@@ -41,7 +41,8 @@ pub trait Goal: Sentence + Truth {
     fn goal_to_key(&self) -> String {
         join! {
             => self.content().to_string()
-            => self.punctuation().to_string() + " "
+            => self.punctuation().to_string()
+            => self.time_to_display()
             => self.truth_to_display_brief()
         }
     }
@@ -51,7 +52,8 @@ pub trait Goal: Sentence + Truth {
         join! {
             => self.content().to_string()
             => self.punctuation().to_string() + " "
-            => self.truth_to_display()
+            => self.time_to_display() + " "
+            => self.truth_to_display() + " "
             => self.stamp_to_display()
         }
     }

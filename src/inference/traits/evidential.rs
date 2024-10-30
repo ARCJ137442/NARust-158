@@ -158,6 +158,7 @@ pub trait Evidential: ToDisplayAndBrief {
     }
 
     /// 🆕与OpenNARS改版不同：将其中的「证据基」成分转换为「词法时间戳」
+    /// TODO: 🚧【2024-10-30 16:09:40】考虑外迁到「语句」层面
     fn stamp_to_lexical(&self) -> LexicalStamp;
 
     /// 模拟`toString`

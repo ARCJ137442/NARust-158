@@ -15,6 +15,7 @@ pub trait Question: Sentence {
         join! {
             => self.content().to_string()
             => self.punctuation().to_string()
+            => self.time_to_display()
         }
     }
 
@@ -22,7 +23,8 @@ pub trait Question: Sentence {
     fn question_to_display(&self) -> String {
         join! {
             => self.content().to_string()
-            => self.punctuation().to_string()
+            => self.punctuation().to_string() + " "
+            => self.time_to_display() + " "
             => self.stamp_to_display()
         }
     }

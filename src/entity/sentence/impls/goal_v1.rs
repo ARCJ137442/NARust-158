@@ -3,6 +3,7 @@
 use crate::entity::{
     Goal, JudgementV1, PunctuatedSentenceRef, QuestionV1, Sentence, SentenceInner,
 };
+use crate::global::{Float, OccurrenceTime};
 use crate::{
     __impl_to_display_and_display,
     entity::{ShortFloat, Stamp, TruthValue},
@@ -14,7 +15,7 @@ use narsese::lexical::Sentence as LexicalSentence;
 use serde::{Deserialize, Serialize};
 
 /// 🆕目标句 初代实现
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GoalV1 {
     /// 🆕内部存储的「语句」实现
     pub(crate) inner: SentenceInner,
@@ -30,9 +31,16 @@ impl GoalV1 {
         truth: impl Into<TruthValue>,
         stamp: impl Into<Stamp>,
         revisable: bool,
+        occurrence_time: OccurrenceTime,
+        occurrence_time_offset: Float,
     ) -> Self {
         Self {
-            inner: SentenceInner::new(content, stamp.into()),
+            inner: SentenceInner::new(
+                content,
+                stamp.into(),
+                occurrence_time,
+                occurrence_time_offset,
+            ),
             revisable,
             truth: truth.into(),
         }
@@ -79,6 +87,14 @@ impl Sentence for GoalV1 {
 
     fn to_key(&self) -> String {
         self.goal_to_key()
+    }
+
+    fn occurrence_time(&self) -> OccurrenceTime {
+        self.inner.occurrence_time
+    }
+
+    fn occurrence_time_offset(&self) -> Float {
+        self.inner.occurrence_time_offset
     }
 
     fn sentence_to_display(&self) -> String {

@@ -82,6 +82,12 @@ pub const STAMP_CLOSER: &str = "}";
 pub const STAMP_SEPARATOR: &str = ";";
 pub const STAMP_STARTER: &str = ":";
 
+// 时间戳 | NAL-7 时态
+pub const STAMP_PRESENT: &str = ":|:";
+pub const STAMP_PAST: &str = r":\:";
+pub const STAMP_FUTURE: &str = ":/:";
+pub const STAMP_ETERNAL: &str = "";
+
 // 词项链类型 | 展示用
 // * 🚩成对不单用的括弧，改写成数组形式
 pub const TO_COMPONENT: [&str; 2] = [" @(", ")_ "];
