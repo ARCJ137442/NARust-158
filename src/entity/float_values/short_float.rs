@@ -283,8 +283,11 @@ impl ShortFloat {
         self == &Self::HALF
     }
 
-    pub fn value(&self) -> Float {
-        self.to_float()
+    /// 整数乘方
+    /// * 💭后续有待提取到[`narsese`]中
+    pub fn pow(self, n: usize) -> Self {
+        // * 🚩【2024-05-02 18:23:31】乘方不会越界，故直接`unwrap`
+        self.value_float().powi(n as i32).try_into().unwrap()
     }
 }
 
@@ -432,7 +435,7 @@ impl EvidentNumber for ShortFloat {
     }
 
     fn root(self, n: usize) -> Self {
-        // * �【2024-05-02 18:23:31】开根不会越界，故直接`unwrap`
+        // * 🚩【2024-05-02 18:23:31】开根不会越界，故直接`unwrap`
         self.value_float()
             .powf(1.0 / (n as Float))
             .try_into()

@@ -71,7 +71,9 @@ pub trait Truth: ToDisplayAndBrief {
     fn expectation(&self) -> Float {
         /* 📄OpenNARS源码：
         return (float) (confidence.getValue() * (frequency.getValue() - 0.5) + 0.5); */
-        self.confidence().value() * (self.frequency().value() - 0.5) + 0.5
+        let [f, c] = self.fc();
+        let [f, c] = [f.to_float(), c.to_float()];
+        c * (f - 0.5) + 0.5
     }
 
     /// 模拟`getExpDifAbs`

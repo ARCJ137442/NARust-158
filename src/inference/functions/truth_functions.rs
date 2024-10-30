@@ -4,7 +4,7 @@
 /// * 📝所有函数均【返回新真值对象】且【不修改所传入参数】
 use crate::{
     entity::{ShortFloat, TruthValue},
-    global::{Float, OccurrenceTime},
+    global::OccurrenceTime,
     inference::Truth,
 };
 
@@ -513,7 +513,7 @@ pub trait TruthFunctions: Truth + Sized {
         &self,
         original_time: impl Into<OccurrenceTime>,
         target_time: impl Into<OccurrenceTime>,
-        decay: Float,
+        decay: ShortFloat,
     ) -> TruthValue {
         let [original_time, target_time] = [original_time.into(), target_time.into()];
         let [f, c] = self.fc();
@@ -521,8 +521,7 @@ pub trait TruthFunctions: Truth + Sized {
             TruthValue::new_fc(f, c)
         } else {
             let difference = OccurrenceTime::abs_diff_int(target_time, original_time);
-            let decayed_coefficient = decay.powi(difference as i32);
-            TruthValue::new_fc(f, c * ShortFloat::from_float(decayed_coefficient))
+            TruthValue::new_fc(f, c * decay.pow(difference))
         }
     }
 
