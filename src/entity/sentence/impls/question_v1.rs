@@ -39,10 +39,6 @@ impl Evidential for QuestionV1 {
     fn creation_time(&self) -> crate::global::ClockTime {
         self.inner.stamp().creation_time()
     }
-
-    fn stamp_to_lexical(&self) -> narsese::lexical::Stamp {
-        self.inner.stamp().stamp_to_lexical()
-    }
 }
 
 impl Sentence for QuestionV1 {
@@ -83,6 +79,10 @@ impl Sentence for QuestionV1 {
 
     fn sentence_to_display(&self) -> String {
         self.question_to_display()
+    }
+
+    fn stamp_to_lexical(&self) -> narsese::lexical::Stamp {
+        self.inner.stamp_to_lexical()
     }
 
     fn sentence_to_lexical(&self) -> LexicalSentence {

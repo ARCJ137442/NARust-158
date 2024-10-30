@@ -5,11 +5,12 @@ use crate::{
     global::{ClockTime, Float, OccurrenceTime},
     inference::Evidential,
     language::Term,
+    symbols::{STAMP_ETERNAL, STAMP_TIMED},
     util::ToDisplayAndBrief,
 };
 use anyhow::Result;
 use nar_dev_utils::matches_or;
-use narsese::lexical::Sentence as LexicalSentence;
+use narsese::lexical::{Sentence as LexicalSentence, Stamp as LexicalStamp};
 use serde::{Deserialize, Serialize};
 
 /// 模拟`nars.entity.Sentence`
@@ -207,7 +208,10 @@ pub trait Sentence: ToDisplayAndBrief + Evidential {
     /// 🆕模拟「时间显示」
     /// * 🚩用时间戳的形式呈现语句的「发生时间」
     fn time_to_display(&self) -> String {
-        format!(":!{}:", self.occurrence_time())
+        match self.occurrence_time() {
+            OccurrenceTime::Eternal => STAMP_ETERNAL.into(),
+            OccurrenceTime::Time(time) => STAMP_TIMED(time),
+        }
     }
 
     /// 模拟`Sentence.toKey`
@@ -255,6 +259,9 @@ pub trait Sentence: ToDisplayAndBrief + Evidential {
     fn sentence_to_display_long(&self) -> String {
         self.sentence_to_display()
     }
+
+    /// 🆕与OpenNARS改版不同：将其中的「证据基」成分转换为「词法时间戳」
+    fn stamp_to_lexical(&self) -> LexicalStamp;
 
     // /// 🆕与OpenNARS改版不同：从「词法语句」解析
     // /// * ℹ️原有的「内部语句」可能不存在标点信息，故只能上移至此
@@ -308,6 +315,18 @@ impl SentenceInner {
 
     pub fn stamp_mut(&mut self) -> &mut Stamp {
         &mut self.stamp
+    }
+
+    /// 🆕自身时间戳到「词法」的转换
+    /// * 🎯标准Narsese输出需要（Narsese内容）
+    /// * 🚩【2024-05-12 14:48:31】此处跟随OpenNARS，使用空字串
+    ///   * 时态暂均为「永恒」
+    /// * 🚩【2024-10-30 16:31:17】现在迁移到具有「发生时间」属性的「语句」中
+    pub fn stamp_to_lexical(&self) -> LexicalStamp {
+        match self.occurrence_time {
+            OccurrenceTime::Eternal => STAMP_ETERNAL.into(),
+            OccurrenceTime::Time(t) => STAMP_TIMED(t),
+        }
     }
 }
 

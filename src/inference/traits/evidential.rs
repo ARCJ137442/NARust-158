@@ -3,7 +3,6 @@
 
 use crate::{global::ClockTime, symbols::*, util::ToDisplayAndBrief};
 use nar_dev_utils::{join, JoinTo};
-use narsese::lexical::Stamp as LexicalStamp;
 
 /// [`Vec`]集合判等
 fn set_vec_eq<T: Clone + Ord>(v1: &[T], v2: &[T]) -> bool {
@@ -156,10 +155,6 @@ pub trait Evidential: ToDisplayAndBrief {
     fn evidential_eq(&self, other: &impl Evidential) -> bool {
         set_vec_eq(self.evidential_base(), other.evidential_base())
     }
-
-    /// 🆕与OpenNARS改版不同：将其中的「证据基」成分转换为「词法时间戳」
-    /// TODO: 🚧【2024-10-30 16:09:40】考虑外迁到「语句」层面
-    fn stamp_to_lexical(&self) -> LexicalStamp;
 
     /// 模拟`toString`
     /// * 🚩【2024-05-08 22:12:42】现在鉴于实际情况，仍然实现`toString`、`toStringBrief`方法

@@ -105,10 +105,6 @@ impl Evidential for SentenceV1 {
     fn creation_time(&self) -> ClockTime {
         self.inner().stamp().creation_time()
     }
-
-    fn stamp_to_lexical(&self) -> narsese::lexical::Stamp {
-        self.inner().stamp().stamp_to_lexical()
-    }
 }
 
 /// 将「语句」用内部的变种类型代理
@@ -172,6 +168,10 @@ impl Sentence for SentenceV1 {
         as_variant! {
             self, s => s.sentence_to_display()
         }
+    }
+
+    fn stamp_to_lexical(&self) -> narsese::lexical::Stamp {
+        self.inner().stamp_to_lexical()
     }
 
     fn sentence_to_lexical(&self) -> LexicalSentence {

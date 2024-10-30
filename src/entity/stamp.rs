@@ -4,7 +4,10 @@
 //! * ♻️【2024-06-21 00:05:34】基本依OpenNARS改版 重复刻（去特征化）完成
 
 use crate::{
-    __impl_to_display_and_display, global::ClockTime, inference::Evidential, symbols::STAMP_ETERNAL,
+    __impl_to_display_and_display,
+    global::{ClockTime, OccurrenceTime},
+    inference::Evidential,
+    symbols::{STAMP_ETERNAL, STAMP_FUTURE, STAMP_PAST, STAMP_PRESENT},
 };
 use anyhow::Result;
 use narsese::lexical::Stamp as LexicalStamp;
@@ -27,16 +30,6 @@ impl Evidential for Stamp {
     #[inline(always)]
     fn creation_time(&self) -> ClockTime {
         self.creation_time
-    }
-
-    /// 🆕自身到「词法」的转换
-    /// * 🎯标准Narsese输出需要（Narsese内容）
-    /// * 🚩【2024-05-12 14:48:31】此处跟随OpenNARS，使用空字串
-    ///   * 时态暂均为「永恒」
-    ///
-    /// TODO: 🚧【2024-10-30 16:09:40】考虑外迁到「语句」层面
-    fn stamp_to_lexical(&self) -> LexicalStamp {
-        LexicalStamp::new()
     }
 }
 
@@ -214,9 +207,23 @@ impl Stamp {
         Ok(Self::with_time(current_serial, time))
     }
 
-    /// 🆕判断一个「词法时间戳」是否为「永恒」时态
-    pub fn is_lexical_eternal(stamp: &LexicalStamp) -> bool {
-        stamp == STAMP_ETERNAL
+    /// 🆕尝试提取一个「词法时间戳」中的「发生时间」
+    /// * 📄从`:!123:`中提取出`123`
+    pub fn extract_occurrence_time(
+        stamp: &LexicalStamp,
+        time: ClockTime,
+    ) -> Result<OccurrenceTime> {
+        let stamp = match stamp.as_str() {
+            STAMP_ETERNAL => OccurrenceTime::Eternal,
+            STAMP_PRESENT => OccurrenceTime::Time(time),
+            STAMP_FUTURE | STAMP_PAST => OccurrenceTime::Time(time),
+            _ => match stamp.trim_matches(|c: char| !c.is_numeric()).parse() {
+                // 并非「数字时间戳」
+                Ok(time) => OccurrenceTime::Time(time),
+                Err(e) => return Err(anyhow::anyhow!("时间戳字符串 {stamp:?} 解析错误：{e}",)),
+            },
+        };
+        Ok(stamp)
     }
 }
 

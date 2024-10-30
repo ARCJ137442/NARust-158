@@ -4,7 +4,7 @@
 use crate::{
     control::Reasoner,
     entity::{BudgetValue, Punctuation, SentenceV1, ShortFloat, Stamp, Task, TruthValue},
-    global::{ClockTime, OccurrenceTime},
+    global::{ClockTime, Eternal},
     inference::BudgetFunctions,
     language::Term,
     util::Serial,
@@ -46,11 +46,7 @@ impl Reasoner {
         // * 🚩解析语句：解析「语句」新有的内容，再通过解析出的词项组装
 
         // 发生时间
-        let occurrence_time = if Stamp::is_lexical_eternal(&stamp) {
-            OccurrenceTime::Eternal
-        } else {
-            self.time().into()
-        };
+        let occurrence_time = Stamp::extract_occurrence_time(&stamp, self.time())?;
 
         // 时间戳
         let stamp_time = self.time();
@@ -58,6 +54,11 @@ impl Reasoner {
 
         // 标点
         let punctuation = Punctuation::from_lexical(punctuation)?;
+
+        // * 🚩筛选：❌永恒目标
+        if matches!((occurrence_time, punctuation), (Eternal, Punctuation::Goal)) {
+            return Err(anyhow!("永恒目标是未被支持的"));
+        }
 
         // 真值 & 可被修正
         let truth_revisable = match punctuation {

@@ -246,10 +246,6 @@ impl Evidential for Task {
     fn creation_time(&self) -> ClockTime {
         self.sentence.creation_time()
     }
-
-    fn stamp_to_lexical(&self) -> narsese::lexical::Stamp {
-        self.sentence.stamp_to_lexical()
-    }
 }
 
 impl ToDisplayAndBrief for Task {
@@ -328,6 +324,10 @@ impl Sentence for Task {
 
     fn sentence_to_display(&self) -> String {
         self.sentence.sentence_to_display()
+    }
+
+    fn stamp_to_lexical(&self) -> narsese::lexical::Stamp {
+        self.sentence.stamp_to_lexical()
     }
 
     fn sentence_to_lexical(&self) -> LexicalSentence {
