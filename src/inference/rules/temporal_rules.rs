@@ -1,13 +1,15 @@
 //! 🆕时序规则
 //! * 📄参考自ONA的`inference`模块
+//! * 🚩其中返回[`Option`]类型的，[`None`]语义均为「修订失败」「证据基重复」等
 
 use crate::{
     control::ReasonContext,
-    entity::{Judgement, Sentence, Stamp, TruthValue},
+    entity::{Goal, Judgement, Sentence, Stamp, TruthValue},
     global::{Float, OccurrenceTime},
     inference::{Evidential, TruthFunctions},
     language::Term,
 };
+use nar_dev_utils::debug_eprintln;
 use std::ops::{Add, Div, Mul};
 
 /// * 🚩【2024-09-19 13:26:55】实际上不需要宏，只要解构赋值就行了
@@ -67,7 +69,7 @@ where
 ///     * 涉及「修改真值」的逻辑需要让「语句」对象可变
 ///     * 在「特征方法」的语境中较为困难：影响下层几乎所有特征实现
 pub fn event_update(
-    event: &mut impl Sentence,
+    event: &impl Sentence,
     target_time: impl Into<OccurrenceTime>,
     context: &impl ReasonContext,
 ) -> (OccurrenceTime, Option<TruthValue>) {
@@ -148,4 +150,47 @@ pub fn implication_revision(
     Some((truth, conclusion_stamp, occurrence_time_offset_avg))
 }
 
-// TODO: goal_deduction 及以下
+/// {Event b!, Implication <a =/> b>.} |- Event a! Truth_Deduction
+pub fn goal_deduction(
+    component: &impl Goal,
+    implication: &impl Judgement,
+    current_time: impl Into<OccurrenceTime>,
+    context: &impl ReasonContext,
+) -> Option<(Term, TruthValue, Stamp, OccurrenceTime)> {
+    if !implication.content().instanceof_implication()
+        && !implication.content().instanceof_temporal_implication()
+    {
+        debug_eprintln!("Not a valid implication term!");
+        return None;
+    }
+    let conclusion_stamp = derivation_stamp(component, implication, context)?;
+    let precondition = implication
+        .content()
+        .as_statement()
+        .unwrap()
+        .subject
+        .as_compound()?;
+    // extract precondition: (plus unification once vars are there)
+    let term = precondition.precondition_without_op().clone();
+    let truth = component.goal_deduction(implication);
+    let occurrence_time = current_time.into();
+    Some((term, truth, conclusion_stamp, occurrence_time))
+}
+
+/// {Event (a &/ b)!, Event a.} |- Event b! Truth_Deduction
+pub fn goal_sequence_deduction(
+    component: &impl Judgement,
+    compound: &impl Goal,
+    current_time: impl Into<OccurrenceTime>,
+    context: &impl ReasonContext,
+) -> Option<(Term, TruthValue, Stamp, OccurrenceTime)> {
+    let current_time = current_time.into();
+    let conclusion_stamp = derivation_stamp(compound, component, context)?;
+    let (_, truth_compound_updated) = event_update(component, current_time, context);
+    let (_, truth_component_updated) = event_update(compound, current_time, context);
+    let [truth_compound_updated, truth_component_updated] =
+        [truth_compound_updated?, truth_component_updated?];
+    let term = component.clone_content();
+    let truth = truth_compound_updated.goal_deduction(&truth_component_updated);
+    Some((term, truth, conclusion_stamp, current_time))
+}

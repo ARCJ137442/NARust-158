@@ -33,6 +33,7 @@
 use crate::language::*;
 use crate::symbols::*;
 use nar_dev_utils::matches_or;
+use nar_dev_utils::unwrap_or_return;
 use narsese::api::{GetCapacity, TermCapacity};
 use std::{
     fmt::{Display, Formatter},
@@ -669,6 +670,49 @@ impl<'s> CompoundTermRef<'s> {
     /// ! ❌【2024-07-05 17:04:02】不再考虑支持「等价」陈述的词项链转换，同时也不再将「等价陈述」视作「条件句」
     pub fn as_conditional(self) -> Option<(StatementRef<'s>, CompoundTermRef<'s>)> {
         self.as_statement()?.as_conditional()
+    }
+
+    /// 🆕Is an compound operation
+    /// * 🚩判断是否为「复合操作词项」
+    /// * 📝NARS的「复合操作词项」：乘积继承操作符
+    pub fn is_compound_operation(&self) -> bool {
+        self.as_statement()
+            .is_some_and(|s| s.as_operation().is_some())
+    }
+
+    /// 🆕Is an executable op (has {SELF} or variable as first arg)
+    /// * 🚩判断是否为「可执行操作」
+    /// * 📝NARS的「可执行操作」：「操作符」的「参数中有{SELF}或{变量}」
+    pub fn is_executable_operation(&self) -> bool {
+        // * 📌是「原子操作」或「参数中有{SELF}或{变量}的复合操作」
+        self.instanceof_operator() || {
+            // * 🚩提取陈述、操作词项
+            let statement = unwrap_or_return!(?self.as_statement() => false);
+            let (_, _, ext_set, _) = unwrap_or_return!(?statement.as_operation() => false);
+            let first_set_arg = unwrap_or_return!(?ext_set.components.first() => false);
+
+            first_set_arg.instanceof_variable()
+                || first_set_arg.as_word().is_some_and(|name| name == SELF)
+        }
+    }
+
+    /// 🆕获取非操作词项的前提条件
+    /// * 📄复刻自ONA`Narsese::precondition_without_op`
+    ///   * 在ONA中从`((S1 &/ S2) &/ ^Op)`中提取出`S2`
+    /// * 📌词项自身作为「整体前提条件」，可能是其中的子项，也可能是自身
+    /// * 🚩从右往左扫描，返回第一个「非操作词项」
+    pub fn precondition_without_op(&self) -> &Term {
+        if self.instanceof_sequence() {
+            let non_operation_term = self.components.iter().rev().find(|term| {
+                term.as_statement()
+                    .and_then(StatementRef::as_operation)
+                    .is_none()
+            });
+            if let Some(term) = non_operation_term {
+                return term;
+            }
+        }
+        self
     }
 }
 

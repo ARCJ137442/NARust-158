@@ -26,3 +26,7 @@ mod image;
 // * 📄OpenNARS `nars.language.Statement`
 mod statement;
 pub use statement::*;
+
+// 🆕操作符
+// * 📄ONA
+pub mod operator;

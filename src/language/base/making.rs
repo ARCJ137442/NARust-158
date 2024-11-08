@@ -883,27 +883,35 @@ impl Term {
     /// * 🚩无词项⇒展开
     pub fn make_sequence(argument: impl IntoIterator<Item = Term>) -> Option<Term> {
         let mut components: Vec<Term> = vec![];
-        for argument in argument {
+        /// 展开其中的嵌套子序列
+        fn flatten_append(components: &mut Vec<Term>, argument: Term) {
             // 内部序列⇒展开
             if argument.instanceof_sequence() {
-                components.extend(
-                    argument
-                        .unwrap_compound_components()
-                        .expect("已经判断是复合词项")
-                        .into_vec(),
-                );
+                let terms = argument
+                    .unwrap_compound_components()
+                    .expect("已经判断是复合词项");
+                for term in terms.into_vec() {
+                    flatten_append(components, term);
+                }
             }
             // 直接添加
             else {
                 components.push(argument);
             }
         }
+
+        // 遍历所有参数，添加
+        for argument in argument {
+            flatten_append(&mut components, argument);
+        }
+
+        // 确定结果
         match components.len() {
             // * 🚩空⇒空
             0 => None,
             // * 🚩仅有一个⇒提取出本身
             1 => Some(components.pop().unwrap()),
-            // * 🚩其它⇒堆叠式构造序列
+            // * 🚩其它⇒构造序列
             _ => Some(Term::new_sequence(components)),
         }
     }

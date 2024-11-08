@@ -487,6 +487,36 @@ impl<'s> StatementRef<'s> {
         Some((self, subject_conjunction))
     }
 
+    /// 🆕作为「操作句」使用
+    /// * 🎯用于形如`<(*, {SELF}, argument) --> ^operator>`的词项
+    /// * 🚩返回值：(自身, 乘积词项, 乘积首个参数外延集, 操作名)
+    pub fn as_operation(
+        self,
+    ) -> Option<(
+        StatementRef<'s>,
+        CompoundTermRef<'s>,
+        CompoundTermRef<'s>,
+        &'s str,
+    )> {
+        // * 🚩蕴含 | 【2024-07-05 17:08:34】现在只判断「蕴含」陈述
+        if !self.instanceof_inheritance() {
+            return None;
+        }
+
+        // * 🚩主项是乘积，且乘积的第一个参数是外延集（`{ SELF } or { VAR }`）
+        let subject_product = self.subject.as_compound_type(PRODUCT_OPERATOR)?;
+        let first_argument = subject_product
+            .components
+            .first()?
+            .as_compound_type(SET_EXT_OPERATOR)?;
+
+        // * 🚩谓项是操作符
+        let predicate_op_name = self.predicate.as_operator()?;
+
+        // * 🚩返回
+        Some((self, subject_product, first_argument, predicate_op_name))
+    }
+
     /// 转换为「复合词项引用」
     /// * 🎯不通过额外的「类型判断」（从[`DerefMut`]中来）转换为「复合词项引用」
     /// * ❌【2024-06-15 16:37:07】危险：不能在此【只传引用】，否则将能在「拿出引用」的同时「使用自身」
