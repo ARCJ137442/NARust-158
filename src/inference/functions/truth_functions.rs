@@ -505,7 +505,7 @@ pub trait TruthFunctions: Truth + Sized {
     /// 🆕真值永恒化
     fn eternalize(&self) -> TruthValue {
         let [f, c] = self.fc();
-        TruthValue::new_fc(f, ShortFloat::w2c(c.to_float()))
+        TruthValue::new(f, ShortFloat::w2c(c.to_float()), self.is_analytic())
     }
 
     /// 🆕真值投影
@@ -518,10 +518,10 @@ pub trait TruthFunctions: Truth + Sized {
         let [original_time, target_time] = [original_time.into(), target_time.into()];
         let [f, c] = self.fc();
         if original_time.is_eternal() {
-            TruthValue::new_fc(f, c)
+            TruthValue::new(f, c, self.is_analytic())
         } else {
             let difference = OccurrenceTime::abs_diff_int(target_time, original_time);
-            TruthValue::new_fc(f, c * decay.pow(difference))
+            TruthValue::new(f, c * decay.pow(difference), self.is_analytic())
         }
     }
 

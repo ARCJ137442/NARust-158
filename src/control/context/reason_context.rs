@@ -58,6 +58,13 @@ pub trait ReasonContext {
         ShortFloat::from_float(self.parameters().reliance)
     }
 
+    /// 🆕访问「当前超参数」中的「真值投影衰减速度」
+    /// * 🎯时间投影
+    /// * 🚩返回短浮点类型
+    fn truth_projection_decay(&self) -> ShortFloat {
+        ShortFloat::from_float(self.parameters().truth_projection_decay)
+    }
+
     /// 获取「音量百分比」
     /// * 🎯在「推理上下文」中无需获取「推理器」`getReasoner`
     /// * 📌音量越大，允许的输出越多
@@ -203,6 +210,17 @@ pub trait ReasonContext {
     /// * 🚩【2024-06-28 00:06:45】现在「内置推理器可变引用」后，不再需要第二个参数
     ///   * ✅「推理器引用」可以从自身中取出来
     fn absorbed_by_reasoner(self);
+
+    // /// 🆕投影一个语句的真值到当前时间
+    // /// * 📌基于「真值函数」的「时间投影」算法
+    // /// * 🚩通过「as类型」获取真值，调用真值函数投影到新真值，然后覆写
+    // /// * 📄ONA「时间投影」机制
+    // fn project_truth(&mut self, from: OccurrenceTime, target: OccurrenceTime) {
+    //     // * 🚩提取真值
+    //     let truth = unwrap_or_return!(?self.extract_truth_value());
+    //     // * 🚩真值投影
+    //     let projected = truth.projection(from, target, decay)
+    // }
 }
 
 /// 🆕特意实现的「推理方向」

@@ -130,7 +130,7 @@ pub trait ContextDerivationConcept: ReasonContextWithLinks {
         self.current_belief().map(|belief|
                 // * 📌此处的「时间戳」一定是「当前信念」的时间戳
                 // * 📄理由：最后返回的信念与「成功时比对的信念」一致（只隔着`clone`）
-                 Stamp::from_merge_unchecked(&*current_task, belief, self.time(), self.max_evidence_base_length()))
+                Stamp::from_merge_unchecked(&*current_task, belief, self.time(), self.max_evidence_base_length()))
     }
 
     /* --------------- new task building --------------- */

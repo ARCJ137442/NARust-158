@@ -1,7 +1,7 @@
 //! 作为特征的「语句」类型
 
 use crate::{
-    entity::{Goal, Judgement, PunctuatedSentenceRef, Punctuation, Question, Stamp},
+    entity::{Goal, Judgement, PunctuatedSentenceRef, Punctuation, Question, Stamp, TruthValue},
     global::{ClockTime, Float, OccurrenceTime},
     inference::Evidential,
     language::Term,
@@ -284,6 +284,38 @@ pub trait Sentence: ToDisplayAndBrief + Evidential {
         //         .unwrap_or_default(), // * 没有真值则创建一个空数组
         // }
     } */
+
+    /// 🆕提取自身真值（欲望值）
+    /// * 📌基于ONA的设定
+    /// * 🎯方便后续集成
+    fn extract_truth_value(&self) -> Option<TruthValue> {
+        use PunctuatedSentenceRef::*;
+        let value = match self.as_punctuated_ref() {
+            // 判断⇒真值
+            Judgement(s) => TruthValue::from(s),
+            // 目标⇒欲望值
+            Goal(s) => TruthValue::from(s),
+            // 其它⇒空
+            _ => return None,
+        };
+        Some(value)
+    }
+
+    // /// 🆕投影自身（真值）到某个时间
+    // /// * 📌基于「真值函数」的「时间投影」算法
+    // /// * 🚩通过「as类型」获取真值，调用真值函数投影到新真值，然后覆写
+    // /// * 📄ONA「时间投影」机制
+    // fn project_truth(&mut self, from: OccurrenceTime, target: OccurrenceTime, decay: ShortFloat) {
+    //     // * 🚩提取真值
+    //     let truth = unwrap_or_return!(?self.extract_truth_value());
+    //     // * 🚩真值投影
+    //     let projected = truth.projection(from, target, decay);
+    //     // * 🚩覆写
+    //     let [f, c] = projected.fc();
+    //     *self.frequency_mut() = f;
+    //     *self.confidence_mut() = c;
+    //     self.set_analytic();
+    // }
 }
 
 /// 🆕一个用于「复用共有字段」的内部对象
