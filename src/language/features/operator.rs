@@ -46,7 +46,6 @@ mod tests {
     use nar_dev_utils::{asserts, macro_once};
 
     /// 测试/包含操作符
-    /// * ✨同时包含对「是否常量」的测试
     #[test]
     fn contain_operator() -> AResult {
         macro_once! {
@@ -58,8 +57,8 @@ mod tests {
             "<A --> word>"=> false
             "<A --> ^op>"=> true
             "<^op --> A>"=> true
-            "<A --> (&&, A, (*, ^op))>"=> true
-            "<(&&, A, (*, ^op)) --> A>"=> true
+            "<A --> (&&, B, (*, ^op))>"=> true
+            "<(&&, B, (*, ^op)) --> A>"=> true
             "<A --> $term>"=> false
             "<A --> #term>"=> false
             "<A --> ?term>"=> false

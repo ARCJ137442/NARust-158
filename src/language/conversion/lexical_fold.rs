@@ -53,11 +53,9 @@ pub fn lexical_fold(term: TermLexical) -> Result<Term> {
 ///   * 🚧【2024-09-06 17:43:36】有待实装
 /// * 📌带「变量编号化」逻辑
 fn fold_term(term: TermLexical, context: &mut FoldContext) -> Result<Term> {
-    // TODO: 理清「折叠时简化」与「make」的 区别/差异
-    // ? ❓简化的时机
-    // ? ❓是否要「边解析边简化」「内部元素解析简化后再到此处」
-    // TODO: 简化其中的「make」相关选项
-    // * 📄何时对「内部词项」排序
+    // * 📝【2024-11-08 19:28:24】所谓「解析」实际上也是一种「从别处制作词项」的方式
+    //   * 只是「制作」的来源不基于已有的内部Narsese词项
+    //   * 因此在「解析词项」时也将做相应的「词项简化」操作
 
     /// 更新并返回一个「变量词项」，根据传入的「变量id映射」将原「变量名」映射到「变量id」
     #[inline]
@@ -102,6 +100,7 @@ fn fold_term(term: TermLexical, context: &mut FoldContext) -> Result<Term> {
         (VAR_INDEPENDENT, Atom { name, .. }) => update_var(VAR_INDEPENDENT, name, context),
         (VAR_DEPENDENT, Atom { name, .. }) => update_var(VAR_DEPENDENT, name, context),
         (VAR_QUERY, Atom { name, .. }) => update_var(VAR_QUERY, name, context),
+        (OPERATOR, Atom { name, .. }) => Term::make_operator(name),
         // 复合词项 //
         (SET_EXT_OPERATOR, Set { terms, .. }) => {
             Term::make_set_ext_arg(fold_inner_lexical_vec(terms, context)?).ok_or(make_error!())?
@@ -399,13 +398,14 @@ mod tests {
             }
             // * 📄非法标识符
             // * 🚩【2024-04-25 10:02:20】现在对「操作符」不再支持
-            "^operator" // ^operator
-            "<(*, {SELF}, x, y) --> ^left>" // ^left
-            "<X =/> Y>" // =/>
+            // * 🚩【2024-11-08 20:14:33】现在重新支持「序列」「时序蕴含」「操作符」
+            // "^operator" // ^operator
+            // "<(*, {SELF}, x, y) --> ^left>" // ^left
+            // "<X =/> Y>" // =/>
             "<X =|> Y>" // =|>
             "<X </> Y>" // </>
             "+123" // +123
-            "(&/, 1, 2, 3)" // &/
+            // "(&/, 1, 2, 3)" // &/
             "(&|, 3, 2, 1)" // &|
             // * 📄词项数目不对
             "(-, A, B, C)"

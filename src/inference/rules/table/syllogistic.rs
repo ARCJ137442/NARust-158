@@ -14,7 +14,7 @@ use crate::{
     },
     symbols::*,
 };
-use nar_dev_utils::RefCount;
+use nar_dev_utils::{debug_eprintln, RefCount};
 use syllogistic_figures::*;
 use syllogistic_rules::*;
 use ReasonDirection::*;
@@ -97,8 +97,8 @@ pub fn syllogisms(
         // * 🚩无果匹配：相似×高阶 | 高阶×相似
         [SIMILARITY_RELATION, IMPLICATION_RELATION | EQUIVALENCE_RELATION]
         | [IMPLICATION_RELATION | EQUIVALENCE_RELATION, SIMILARITY_RELATION] => {}
-        // * ❌域外情况
-        [t_id, b_id] => unimplemented!("未知的陈述类型：{t_id:?}, {b_id:?}"),
+        // * ⚠️域外情况
+        [t_id, b_id] => debug_eprintln!("未知的陈述类型：{t_id:?}, {b_id:?}"),
     }
 }
 

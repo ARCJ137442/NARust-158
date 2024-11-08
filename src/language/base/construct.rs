@@ -66,6 +66,11 @@ impl Term {
         Self::new_var(var_type, new_id)
     }
 
+    /// 🆕NAL-8 / 操作符
+    pub(super) fn new_operator(name: impl Into<String>) -> Self {
+        Self::new(OPERATOR, TermComponents::Word(name.into()))
+    }
+
     // 复合词项 //
 
     /// NAL-3 / 外延集

@@ -58,6 +58,14 @@ impl Term {
         Term::from_var_similar(from.identifier(), id)
     }
 
+    /* 🆕Operator */
+
+    /// 制作「操作符」
+    #[inline]
+    pub fn make_operator(op: impl Into<String>) -> Term {
+        Term::new_operator(op)
+    }
+
     /* CompoundTerm */
 
     /// 📄OpenNARS `public static Term makeCompoundTerm(CompoundTerm compound, ArrayList<Term> components)`
