@@ -1,6 +1,6 @@
 [package]
 name = "narust-158"
-version = "0.3.0"
+version = "0.3.1"
 edition = "2021"
 description = """
 A Rust reimplementation of OpenNARS 1.5.8
@@ -13,13 +13,17 @@ license = "MIT OR Apache-2.0"
 categories = [] # 🔗<https://crates.io/category_slugs>
 repository = "https://github.com/ARCJ137442/narust-158"
 
+# 默认运行目标为交互式终端
+# 参考报错信息`cargo r`: `cargo run` could not determine which binary to run. Use the `--bin` option to specify a binary, or the `default-run` manifest key.
+default-run = "narust_158_shell"
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 anyhow = "1.0.86"
 rand = "0.8.5"
 serde_json = "1.0.122"
-thiserror = "1.0.63"
+thiserror = "2.0.0"
 
 [dependencies.serde]
 version = "1.0.206"
@@ -27,7 +31,7 @@ features = ["rc"] # ! 引入不完备的「共享引用」实现，后续将通�
 
 # 用于开发NARS的实用工具
 [dependencies.nar_dev_utils]
-version = "0.42.0"
+version = "0.44.0"
 features = ["bundled"]
 
 # Narsese支持：API、枚举Narsese & 词法Narsese
