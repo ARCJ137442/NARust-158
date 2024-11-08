@@ -6,10 +6,10 @@ use crate::{
     control::ReasonContext,
     entity::{Goal, Judgement, Sentence, Stamp, TruthValue},
     global::{Float, OccurrenceTime},
-    inference::{Evidential, TruthFunctions},
+    inference::{Evidential, Truth, TruthFunctions},
     language::Term,
 };
-use nar_dev_utils::debug_eprintln;
+use nar_dev_utils::OrSomeRef;
 use std::ops::{Add, Div, Mul};
 
 /// * 🚩【2024-09-19 13:26:55】实际上不需要宏，只要解构赋值就行了
@@ -69,18 +69,16 @@ where
 ///     * 涉及「修改真值」的逻辑需要让「语句」对象可变
 ///     * 在「特征方法」的语境中较为困难：影响下层几乎所有特征实现
 pub fn event_update(
-    event: &impl Sentence,
+    event: &(impl Sentence + Truth),
     target_time: impl Into<OccurrenceTime>,
     context: &impl ReasonContext,
-) -> (OccurrenceTime, Option<TruthValue>) {
+) -> (OccurrenceTime, TruthValue) {
     let target_time = target_time.into();
-    let truth = event.extract_truth_value().map(|truth| {
-        truth.projection(
-            event.occurrence_time(),
-            target_time,
-            context.truth_projection_decay(),
-        )
-    });
+    let truth = event.projection(
+        event.occurrence_time(),
+        target_time,
+        context.truth_projection_decay(),
+    );
     (target_time, truth)
 }
 
@@ -157,12 +155,11 @@ pub fn goal_deduction(
     current_time: impl Into<OccurrenceTime>,
     context: &impl ReasonContext,
 ) -> Option<(Term, TruthValue, Stamp, OccurrenceTime)> {
-    if !implication.content().instanceof_implication()
-        && !implication.content().instanceof_temporal_implication()
-    {
-        debug_eprintln!("Not a valid implication term!");
-        return None;
-    }
+    debug_assert!(
+        implication.content().instanceof_implication()
+            || implication.content().instanceof_temporal_implication(),
+        "Not a valid implication term!"
+    );
     let conclusion_stamp = derivation_stamp(component, implication, context)?;
     let precondition = implication
         .content()
@@ -188,9 +185,104 @@ pub fn goal_sequence_deduction(
     let conclusion_stamp = derivation_stamp(compound, component, context)?;
     let (_, truth_compound_updated) = event_update(component, current_time, context);
     let (_, truth_component_updated) = event_update(compound, current_time, context);
-    let [truth_compound_updated, truth_component_updated] =
-        [truth_compound_updated?, truth_component_updated?];
     let term = component.clone_content();
     let truth = truth_compound_updated.goal_deduction(&truth_component_updated);
     Some((term, truth, conclusion_stamp, current_time))
+}
+
+/// {Event a!, Event a!} |- Event a! Truth_Revision or Choice (dependent on evidential overlap)
+/// * 🚩【2024-09-29 20:13:49】现在返回(新事件, 是否已被修订)
+/// * ️📝修订结果有三种情况：
+///   * 无修订：返回传入的事件本身
+///   * 更新事件：返回更新后的传入事件
+///   * 成功修订：返回已存在事件与传入事件合并后的新事件
+/// * 📌修订结果的标点与传入的事件一致
+pub fn revision_and_choice<S: Sentence + Truth>(
+    existing_potential: impl OrSomeRef<S>,
+    incoming_spike: &S,
+    context: &impl ReasonContext, // * 🚩【2024-11-08 20:35:34】ONA的「当前时间」替换为上下文
+) -> Option<((Term, TruthValue, Stamp, OccurrenceTime), bool)> {
+    let mut revised = false;
+    let copied_event = |event: &S| {
+        (
+            event.clone_content(),
+            TruthValue::from(event),
+            Stamp::with_old(event, event.creation_time()),
+            event.occurrence_time(),
+        )
+    };
+    let Some(existing_potential) = existing_potential.or_some_ref() else {
+        return Some((copied_event(incoming_spike), revised));
+    };
+
+    let later_occurrence =
+        (existing_potential.occurrence_time()).max(incoming_spike.occurrence_time());
+    let (_, existing_updated) = event_update(existing_potential, later_occurrence, context);
+    let (_, incoming_updated) = event_update(incoming_spike, later_occurrence, context);
+    //check if there is evidential overlap
+    let overlap = incoming_spike.evidential_overlap(existing_potential);
+    let is_dep_var_conj = (incoming_spike.content().instanceof_conjunction()
+        || incoming_spike.content().instanceof_sequence())
+        && incoming_spike.content().contain_var_d();
+    //if there is or the terms aren't equal, apply choice, keeping the stronger one:
+    if overlap
+        || is_dep_var_conj
+        || existing_potential.occurrence_time().not_eternal()
+            && existing_potential.occurrence_time() != incoming_spike.occurrence_time()
+        || existing_potential.content() != incoming_spike.content()
+    {
+        // 用「更新后更强信念的事件」替代已存在的事件
+        if existing_updated.confidence() >= incoming_updated.confidence() {
+            Some((copied_event(existing_potential), revised))
+        } else {
+            Some((copied_event(incoming_spike), revised)) //preserves timing of incoming
+        }
+    } else {
+        //and else revise, increasing the "activation potential"
+        // * 🚩【2024-11-08 20:58:31】因「事件更新」无法返回整个语句（根源：没有好的「拷贝语句」方式），
+        //   * 此处采取「修订旧事件再取代真值」的方法
+        let revised_spike = incoming_updated.revision(&existing_updated);
+        let (term, _truth, stamp, occurrence_time) =
+            event_revision(existing_potential, incoming_spike, context)?;
+        assert!(
+            revised_spike.confidence() >= existing_updated.confidence(),
+            "Revision outcome can't be lower in confidence than existing event",
+        );
+        revised = true;
+        let event = (term, revised_spike, stamp, occurrence_time);
+        Some((event, revised))
+    }
+}
+
+/// {Event a., Implication <a =/> b>.} |- Event b.  Truth_Deduction
+pub fn belief_deduction(
+    component: &impl Judgement,
+    compound: &impl Judgement,
+    context: &impl ReasonContext,
+) -> Option<(Term, TruthValue, Stamp, OccurrenceTime)> {
+    // ! 🕒【2024-09-19 20:55:05】↓22小时前ONA有更新
+    debug_assert!(
+        compound.content().instanceof_implication()
+            || compound.content().instanceof_temporal_implication(),
+        "Not a valid implication term!"
+    );
+    let conclusion_stamp = derivation_stamp(component, compound, context)?;
+    let postcondition = compound.content().as_statement()?.predicate.clone();
+    let truth = compound.deduction(component);
+    let occurrence_time = component.occurrence_time() + compound.occurrence_time_offset();
+    Some((postcondition, truth, conclusion_stamp, occurrence_time))
+}
+
+/// 事件修订
+/// * 📌修订结果的标点与传入的事件一致
+pub fn event_revision<S: Sentence + Truth>(
+    a: &S,
+    b: &S,
+    context: &impl ReasonContext,
+) -> Option<(Term, TruthValue, Stamp, OccurrenceTime)> {
+    let (conclusion_stamp, conclusion_time, [truth_a, truth_b]) =
+        derivation_stamp_and_time(a, b, context)?;
+    let term = a.clone_content();
+    let truth = truth_a.revision(&truth_b);
+    Some((term, truth, conclusion_stamp, conclusion_time))
 }
