@@ -124,6 +124,7 @@ impl Term {
             NEGATION_OPERATOR => Self::make_negation_arg(argument),
             CONJUNCTION_OPERATOR => Self::make_conjunction_arg(argument),
             DISJUNCTION_OPERATOR => Self::make_disjunction_arg(argument),
+            SEQUENCE_OPERATOR => Self::make_sequence(argument),
             // * 🚩其它⇒未知/域外⇒空
             _ => None,
         }
@@ -873,6 +874,40 @@ impl Term {
         }
     }
 
+    /* Sequence */
+
+    /// 从「前后」两个词项构建序列
+    /// * 📄最初参考自ONA
+    /// * 🚩内部带有「序列」⇒展开
+    /// * 🚩单个词项⇒展开
+    /// * 🚩无词项⇒展开
+    pub fn make_sequence(argument: impl IntoIterator<Item = Term>) -> Option<Term> {
+        let mut components: Vec<Term> = vec![];
+        for argument in argument {
+            // 内部序列⇒展开
+            if argument.instanceof_sequence() {
+                components.extend(
+                    argument
+                        .unwrap_compound_components()
+                        .expect("已经判断是复合词项")
+                        .into_vec(),
+                );
+            }
+            // 直接添加
+            else {
+                components.push(argument);
+            }
+        }
+        match components.len() {
+            // * 🚩空⇒空
+            0 => None,
+            // * 🚩仅有一个⇒提取出本身
+            1 => Some(components.pop().unwrap()),
+            // * 🚩其它⇒堆叠式构造序列
+            _ => Some(Term::new_sequence(components)),
+        }
+    }
+
     /* Statement */
 
     /// 从一个「陈述系词」中构造
@@ -894,6 +929,7 @@ impl Term {
             INSTANCE_PROPERTY_RELATION => Self::make_instance_property(subject, predicate),
             IMPLICATION_RELATION => Self::make_implication(subject, predicate),
             EQUIVALENCE_RELATION => Self::make_equivalence(subject, predicate),
+            TEMPORAL_IMPLICATION_RELATION => Self::make_temporal_implication(subject, predicate),
             _ => None,
         }
     }
@@ -1030,6 +1066,32 @@ impl Term {
             true => None,
             // * ✅在创建时自动排序
             false => Some(Term::new_equivalence(subject, predicate)),
+        }
+    }
+
+    /* TemporalImplication */
+
+    pub fn make_temporal_implication(subject: Term, predicate: Term) -> Option<Term> {
+        // TODO: 🚧【2024-09-07 15:28:30】有待继续提取至独立的「检查是否合法」方法
+        //   * 🏗️后续继续为「变量替换后检查有效性」做准备
+        // * 🚩检查有效性
+        if StatementRef::invalid_statement(&subject, &predicate) {
+            return None;
+        }
+        // * 🚩检查主词类型
+        if subject.instanceof_temporal_implication() {
+            return None;
+        }
+        // B in <A ==> <B ==> C>>
+        if predicate.instanceof_temporal_implication() {
+            let [old_condition, predicate_predicate] = predicate
+                .unwrap_statement_components()
+                .expect("已经假定是复合词项");
+            // * ♻️ <A ==> <B ==> C>> ⇒ <(&&, A, B) ==> C>
+            let new_condition = Self::make_sequence([subject, old_condition])?;
+            Self::make_temporal_implication(new_condition, predicate_predicate)
+        } else {
+            Some(Term::new_temporal_implication(subject, predicate))
         }
     }
 }

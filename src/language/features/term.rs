@@ -83,9 +83,9 @@ impl GetCategory for Term {
         match self.identifier() {
             // * 🚩原子：词语、占位符、变量
             WORD | PLACEHOLDER | VAR_INDEPENDENT | VAR_DEPENDENT | VAR_QUERY => Atom,
-            // * 🚩陈述：继承、相似、蕴含、等价 | ❌不包括「实例」「属性」「实例属性」
+            // * 🚩陈述：继承、相似、蕴含、等价、时序蕴含 | ❌不包括「实例」「属性」「实例属性」
             INHERITANCE_RELATION | IMPLICATION_RELATION | SIMILARITY_RELATION
-            | EQUIVALENCE_RELATION => Statement,
+            | EQUIVALENCE_RELATION | TEMPORAL_IMPLICATION_RELATION => Statement,
             // * 🚩一元：否定
             NEGATION_OPERATOR |
             // * 🚩二元序列：差集
@@ -98,7 +98,7 @@ impl GetCategory for Term {
             | INTERSECTION_EXT_OPERATOR
             | INTERSECTION_INT_OPERATOR
             | CONJUNCTION_OPERATOR
-            | DISJUNCTION_OPERATOR => Compound,
+            | DISJUNCTION_OPERATOR| SEQUENCE_OPERATOR => Compound,
             // * 🚩其它⇒panic（不应出现）
             id => panic!("Unexpected compound term identifier: {id}"),
         }
@@ -244,11 +244,13 @@ mod tests {
             r"(&&, A, B)" ~ r"(&&, X, Y, Z)" => CONJUNCTION_OPERATOR
             r"(||, A, B)" ~ r"(||, (||, A, B), C)" => DISJUNCTION_OPERATOR
             r"(--, A)" ~ r"(--, (~, B, A))" => NEGATION_OPERATOR
+            r"(&/, A, B)" ~ r"(&/, X, Y, Z)" => SEQUENCE_OPERATOR
             // 陈述
             "<A --> B>" ~ "<<B ==> C> --> A>" => INHERITANCE_RELATION
             "<A <-> B>" ~ "<<B <=> C> <-> A>" => SIMILARITY_RELATION
             "<A ==> B>" ~ "<<B --> C> ==> A>" => IMPLICATION_RELATION
             "<A <=> B>" ~ "<<B <-> C> <=> A>" => EQUIVALENCE_RELATION
+            "<A =/> B>" ~ "<<B ==> C> =/> A>" => TEMPORAL_IMPLICATION_RELATION
         }
         ok!()
     }

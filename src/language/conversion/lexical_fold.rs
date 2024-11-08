@@ -164,6 +164,9 @@ fn fold_term(term: TermLexical, context: &mut FoldContext) -> Result<Term> {
             let inner = fold_inner_lexical(terms.into_iter().next().unwrap(), context)?;
             Term::make_negation(inner).ok_or(make_error!())?
         }
+        (SEQUENCE_OPERATOR, Compound { terms, .. }) => {
+            Term::make_sequence(fold_inner_lexical_vec(terms, context)?).ok_or(make_error!())?
+        }
         // 陈述
         (
             INHERITANCE_RELATION,
@@ -191,6 +194,16 @@ fn fold_term(term: TermLexical, context: &mut FoldContext) -> Result<Term> {
                 subject, predicate, ..
             },
         ) => Term::make_implication(
+            fold_inner_lexical(*subject, context)?,
+            fold_inner_lexical(*predicate, context)?,
+        )
+        .ok_or(make_error!())?,
+        (
+            TEMPORAL_IMPLICATION_RELATION,
+            Statement {
+                subject, predicate, ..
+            },
+        ) => Term::make_temporal_implication(
             fold_inner_lexical(*subject, context)?,
             fold_inner_lexical(*predicate, context)?,
         )

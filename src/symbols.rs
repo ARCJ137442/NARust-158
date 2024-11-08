@@ -58,6 +58,7 @@ pub const SET_INT_OPERATOR: &str = "[]"; // 🆕统一到「复合词项」中�
 pub const NEGATION_OPERATOR: &str = "--";
 pub const DISJUNCTION_OPERATOR: &str = "||";
 pub const CONJUNCTION_OPERATOR: &str = "&&";
+pub const SEQUENCE_OPERATOR: &str = "&/";
 
 // 陈述系词，长度为3
 pub const INHERITANCE_RELATION: &str = "-->";
@@ -67,6 +68,7 @@ pub const PROPERTY_RELATION: &str = "--]";
 pub const INSTANCE_PROPERTY_RELATION: &str = "{-]";
 pub const IMPLICATION_RELATION: &str = "==>";
 pub const EQUIVALENCE_RELATION: &str = "<=>";
+pub const TEMPORAL_IMPLICATION_RELATION: &str = "=/>";
 
 // 「经验行」前缀
 pub const INPUT_LINE: &str = "IN";

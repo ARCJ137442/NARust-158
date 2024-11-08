@@ -374,11 +374,13 @@ mod tests {
                 r"(&&, A, B)" => CONJUNCTION_OPERATOR // ! 📌【2024-09-07 13:10:43】现在需要保证词项有效，不能再用单个词项了
                 r"(||, A, B)" => DISJUNCTION_OPERATOR // ! 📌【2024-09-07 13:10:43】现在需要保证词项有效，不能再用单个词项了
                 r"(--, A)" => NEGATION_OPERATOR
+                r"(&/, A, B)" => SEQUENCE_OPERATOR // ! 📌【2024-11-08 13:04:56】保证词项有效，不能用单个词项
                 // 陈述
                 "<A --> B>" => INHERITANCE_RELATION
                 "<A <-> B>" => SIMILARITY_RELATION
                 "<A ==> B>" => IMPLICATION_RELATION
                 "<A <=> B>" => EQUIVALENCE_RELATION
+                "<A =/> B>" => TEMPORAL_IMPLICATION_RELATION
             }
             ok!()
         }
@@ -602,6 +604,7 @@ mod tests {
                 SIMILARITY_RELATION  in "<<A <-> B> <-> <C <=> D>>" // ! ⚠️【2024-09-07 13:13:05】现在需要通过`make`的检验
                 IMPLICATION_RELATION in "<<A --> B> ==> <C ==> D>>" // ! ⚠️【2024-09-07 13:13:05】现在需要通过`make`的检验
                 EQUIVALENCE_RELATION in "<<A <-> B> <=> <C <=> D>>" // ! ⚠️【2024-09-07 13:13:05】现在需要通过`make`的检验
+                TEMPORAL_IMPLICATION_RELATION in "<<A <-> B> ==> <C =/> D>>" // ! ⚠️【2024-09-07 13:13:05】现在需要通过`make`的检验
             }
             ok!()
         }

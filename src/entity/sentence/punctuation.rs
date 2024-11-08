@@ -133,3 +133,75 @@ where
         write!(f, "ref{:?} @ ({sentence})", self.to_char())
     }
 }
+
+/// 带标点的「特定类型语句」可变引用
+/// * 📌可变引用
+/// * 🎯在「标点」的基础上，附带更有用的匹配信息
+///   * 📄减少非必要（且不易稳定）的`unwrap`，用类型系统规范使用
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub enum PunctuatedSentenceRefMut<'r, J, Q, G>
+where
+    J: Judgement,
+    Q: Question,
+    G: Goal,
+{
+    /// 判断
+    Judgement(&'r mut J),
+    /// 疑问
+    Question(&'r mut Q),
+    /// 目标
+    Goal(&'r mut G),
+}
+
+impl<'r, J, Q, G> PunctuatedSentenceRefMut<'r, J, Q, G>
+where
+    J: Judgement,
+    Q: Question,
+    G: Goal,
+{
+    /// 转换到【纯粹作为标签存在】的[`Punctuation`]
+    pub const fn to_punctuation(&self) -> Punctuation {
+        use PunctuatedSentenceRefMut::*;
+        match self {
+            Judgement(..) => Punctuation::Judgement,
+            Question(..) => Punctuation::Question,
+            Goal(..) => Punctuation::Goal,
+        }
+    }
+
+    /// 先转换到「纯标点」再转换到字符
+    #[inline(always)]
+    pub const fn to_char(&self) -> char {
+        self.to_punctuation().to_char()
+    }
+}
+
+/// 派生性实现[`From`]
+impl<'r, J, Q, G> From<PunctuatedSentenceRefMut<'r, J, Q, G>> for Punctuation
+where
+    J: Judgement,
+    Q: Question,
+    G: Goal,
+{
+    fn from(value: PunctuatedSentenceRefMut<'r, J, Q, G>) -> Self {
+        value.to_punctuation()
+    }
+}
+
+/// 派生性实现[`Display`]
+impl<'r, J, Q, G> Display for PunctuatedSentenceRefMut<'r, J, Q, G>
+where
+    J: Judgement,
+    Q: Question,
+    G: Goal,
+{
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        use PunctuatedSentenceRefMut::*;
+        let sentence = match self {
+            Judgement(sentence) => sentence.sentence_to_display(),
+            Question(sentence) => sentence.sentence_to_display(),
+            Goal(sentence) => sentence.sentence_to_display(),
+        };
+        write!(f, "ref{:?} @ ({sentence})", self.to_char())
+    }
+}

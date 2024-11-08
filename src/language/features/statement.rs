@@ -43,11 +43,12 @@ impl Term {
     pub fn is_statement_identifier(identifier: &str) -> bool {
         matches!(
             identifier,
-            // 四大主要系词
+            // 四大主要系词 + 时间系词
             INHERITANCE_RELATION
                 | SIMILARITY_RELATION
                 | IMPLICATION_RELATION
                 | EQUIVALENCE_RELATION
+                | TEMPORAL_IMPLICATION_RELATION
                 // ↓下边都是派生系词（实际上不会出现，OpenNARS也一样）
                 | INSTANCE_RELATION
                 | PROPERTY_RELATION
@@ -86,6 +87,13 @@ impl Term {
     #[inline(always)]
     pub fn instanceof_equivalence(&self) -> bool {
         self.identifier() == EQUIVALENCE_RELATION
+    }
+
+    /// 🆕用于判断是否为「时序蕴含」
+    /// * 📄遵从ONA逻辑
+    #[inline(always)]
+    pub fn instanceof_temporal_implication(&self) -> bool {
+        self.identifier() == TEMPORAL_IMPLICATION_RELATION
     }
 
     /// 🆕判断一个词项是否为「陈述词项」

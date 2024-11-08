@@ -114,6 +114,7 @@ impl Term {
                 | CONJUNCTION_OPERATOR
                 | DISJUNCTION_OPERATOR
                 | NEGATION_OPERATOR
+                | SEQUENCE_OPERATOR
         )
     }
 
@@ -320,6 +321,7 @@ impl Term {
     pub fn instanceof_disjunction(&self) -> bool {
         self.identifier() == DISJUNCTION_OPERATOR
     }
+
     /// 🆕用于判断是否为「词项差集」
     /// * 📄OpenNARS`instanceof Conjunction || instanceof Disjunction`逻辑
     #[inline(always)]
@@ -333,6 +335,12 @@ impl Term {
     #[inline(always)]
     pub fn instanceof_negation(&self) -> bool {
         self.identifier() == NEGATION_OPERATOR
+    }
+
+    /// 🆕用于判断是否为「序列」
+    #[inline(always)]
+    pub fn instanceof_sequence(&self) -> bool {
+        self.identifier() == SEQUENCE_OPERATOR
     }
 
     /// 📄OpenNARS `CompoundTerm.isCommutative`
@@ -491,11 +499,12 @@ impl GetCapacity for Term {
             DIFFERENCE_EXT_OPERATOR
             | DIFFERENCE_INT_OPERATOR
             | INHERITANCE_RELATION
-            | IMPLICATION_RELATION => BinaryVec,
+            | IMPLICATION_RELATION
+            | TEMPORAL_IMPLICATION_RELATION => BinaryVec,
             // * 🚩二元集合：相似、等价
             SIMILARITY_RELATION | EQUIVALENCE_RELATION => BinarySet,
-            // * 🚩多元序列：乘积、像
-            PRODUCT_OPERATOR | IMAGE_EXT_OPERATOR | IMAGE_INT_OPERATOR => Vec,
+            // * 🚩多元序列：乘积、像、序列
+            PRODUCT_OPERATOR | IMAGE_EXT_OPERATOR | IMAGE_INT_OPERATOR | SEQUENCE_OPERATOR => Vec,
             // * 🚩多元集合：词项集、交集、合取、析取
             SET_EXT_OPERATOR
             | SET_INT_OPERATOR
@@ -928,6 +937,7 @@ impl CompoundTermRef<'_> {
                 | INTERSECTION_INT_OPERATOR
                 | DIFFERENCE_EXT_OPERATOR
                 | DIFFERENCE_INT_OPERATOR
+                | SEQUENCE_OPERATOR
         )
     }
 

@@ -194,6 +194,12 @@ impl Term {
         Self::new(NEGATION_OPERATOR, TermComponents::new_unary(term))
     }
 
+    /// NAL-7 / 序列合取
+    /// * 📄参考自ONA：有序可重复集合
+    pub(super) fn new_sequence(terms: impl Into<Vec<Term>>) -> Self {
+        Self::new(SEQUENCE_OPERATOR, TermComponents::new_multi(terms.into()))
+    }
+
     // 陈述 //
 
     /// NAL-1 / 继承
@@ -225,6 +231,14 @@ impl Term {
         Self::new(
             EQUIVALENCE_RELATION,
             TermComponents::new_binary_unordered(subject, predicate),
+        )
+    }
+
+    /// NAL-7 / 时序蕴含
+    pub(super) fn new_temporal_implication(subject: Term, predicate: Term) -> Self {
+        Self::new(
+            TEMPORAL_IMPLICATION_RELATION,
+            TermComponents::new_binary(subject, predicate),
         )
     }
 }

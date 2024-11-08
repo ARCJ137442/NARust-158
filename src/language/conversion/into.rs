@@ -98,8 +98,11 @@ impl Term {
             }
             //  陈述
             (
-                INHERITANCE_RELATION | SIMILARITY_RELATION | IMPLICATION_RELATION
-                | EQUIVALENCE_RELATION,
+                INHERITANCE_RELATION
+                | SIMILARITY_RELATION
+                | IMPLICATION_RELATION
+                | EQUIVALENCE_RELATION
+                | TEMPORAL_IMPLICATION_RELATION,
                 Compound(terms),
             ) if terms.len() == 2 => {
                 LTerm::new_statement(id, (&terms[0]).into(), (&terms[1]).into())
