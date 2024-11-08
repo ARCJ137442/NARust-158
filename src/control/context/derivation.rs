@@ -73,17 +73,20 @@ pub trait ContextDerivation: ReasonContext {
         new_stamp: Stamp,
     ) {
         // * 🚩仅在「任务内容」可用时构造
-        let current_task = self.current_task(); // 不能当场变为引用：后续可能要再借用自身
-        let new_punctuation = current_task.get_().punctuation();
-        let new_sentence = SentenceV1::with_punctuation(
-            new_content,
-            new_punctuation,
-            new_stamp,
-            Some((new_truth.into(), true)),
-            self.time().into(),
-            0.0, // ! 占位符
-        );
-        drop(current_task); // ! 先抛掉引用代理
+        let new_sentence = {
+            let current_task = self.current_task(); // 不能当场变为引用：后续可能要再借用自身
+            let new_punctuation = current_task.get_().punctuation();
+            let occurrence_time = current_task.get_().occurrence_time();
+            let occurrence_time_offset = current_task.get_().occurrence_time_offset();
+            SentenceV1::with_punctuation(
+                new_content,
+                new_punctuation,
+                new_stamp,
+                Some((new_truth.into(), true)),
+                occurrence_time, // ! 📝ONA中「双前提推理」用的是「当前任务」的「发生时间」及其偏移量
+                occurrence_time_offset,
+            )
+        };
         match new_sentence {
             Ok(new_sentence) => {
                 println!("// TODO: WIP @ Time: {:?}", new_sentence);
@@ -215,18 +218,24 @@ pub trait ContextDerivationConcept: ReasonContextWithLinks {
         new_stamp: Stamp,
     ) {
         // * 🚩参考「传入任务/自身默认任务」构造标点
-        let new_punctuation = current_task
-            .unwrap_or(&*self.current_task().get_()) // 立即使用的不可变引用
-            .punctuation();
-        let new_sentence = SentenceV1::with_punctuation(
-            new_content,
-            new_punctuation,
-            new_stamp,
-            new_truth_revisable.map(|(truth, revisable)| (truth.into(), revisable)),
-            self.time().into(),
-            0.0, // ! 占位符
-        );
-        println!("// TODO: WIP @ Time: {:?}", new_sentence);
+        let new_sentence = {
+            let task_ref = self.current_task();
+            let ref_task = task_ref.get_();
+            let current_task = current_task.unwrap_or(&*ref_task);
+            let new_punctuation = current_task // 立即使用的不可变引用
+                .punctuation();
+            let occurrence_time = current_task.occurrence_time();
+            let occurrence_time_offset = current_task.occurrence_time_offset();
+            SentenceV1::with_punctuation(
+                new_content,
+                new_punctuation,
+                new_stamp,
+                new_truth_revisable.map(|(truth, revisable)| (truth.into(), revisable)),
+                occurrence_time, // ! 📝ONA中「双前提推理」用的是「当前任务」的「发生时间」及其偏移量
+                occurrence_time_offset,
+            )
+        };
+        println!("// TODO: WIP @ Time: {new_sentence:?}");
         if let Ok(sentence) = new_sentence {
             let new_task = Task::from_derived(
                 self.reasoner_mut().updated_task_current_serial(),
@@ -270,6 +279,7 @@ pub trait ContextDerivationConcept: ReasonContextWithLinks {
             // * 🚩判断句⇒返回实际的「可修订」
             // * 🚩疑问句⇒返回一个用不到的空值
             .map_or(false, Judgement::revisable);
+        let occurrence_time = task_sentence.occurrence_time();
         drop(current_task); // ! 先释放「借用代理」
         drop(current_task_ref);
         // * 🚩判断句⇒返回实际的「可修订」
@@ -279,8 +289,8 @@ pub trait ContextDerivationConcept: ReasonContextWithLinks {
             punctuation,
             new_stamp,
             new_truth.map(|truth| (truth, revisable)),
-            self.time().into(),
-            0.0, // ! 占位符
+            occurrence_time,
+            0.0, // ! 📝ONA中「单前提推理」结论的偏移量默认为0，参见 <https://github.com/ARCJ137442/NARust-o/blob/1167a53f607175ac2138c4c6472bab40c20025fd/src/control/cycle.rs#L1555>
         );
         println!("// TODO: WIP @ Time: {:?}", new_sentence);
         let new_sentence = match new_sentence {
