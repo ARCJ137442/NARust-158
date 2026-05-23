@@ -145,10 +145,7 @@ fn shell_intercept_output(output: Output) -> anyhow::Result<Option<Output>> {
             // * 🚩将终端输出重定向到文件
             let message = match result {
                 // * 🚩生成「已保存」的消息
-                Ok(..) => format!(
-                    "Data has been saved to {path:?} with {} bytes",
-                    data.len()
-                ),
+                Ok(..) => format!("Data has been saved to {path:?} with {} bytes", data.len()),
                 // * 🚩或报错消息
                 Err(e) => format!("Failed to save data to {path:?}! Error: {e}"),
             };
