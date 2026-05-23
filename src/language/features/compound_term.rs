@@ -753,6 +753,12 @@ impl CompoundTermRefMut<'_> {
         std::mem::swap(&mut placeholder, self.inner.components_mut());
         // * 🚩将替换后名为「占位符」的实际组分进行「重排去重」得到「新组分」
         let new_components = placeholder.sort_dedup();
+        // * 🚩更新悬空指针：在`new_components`被移动赋值之前提前取堆地址
+        // * 📌`Box<[Term]>`的堆内存在移动后不变，所以提前取地址是安全的
+        // * 🐛若不更新，后续调用`components()`将解引用已释放的旧内存 ⇒ segfault
+        if let TermComponents::Compound(ref box_slice) = new_components {
+            self.components = &**box_slice as *const [Term] as *mut [Term];
+        }
         // * 🚩将「新组分」赋值回原先的组分，原先位置上的「占位符」被覆盖
         *self.inner.components_mut() = new_components;
     }
