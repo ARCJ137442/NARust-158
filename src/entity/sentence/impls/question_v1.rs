@@ -54,7 +54,7 @@ impl Sentence for QuestionV1 {
     type Question = Self;
 
     #[inline(always)]
-    fn as_punctuated_ref(&self) -> PunctuatedSentenceRef<Self::Judgement, Self::Question> {
+    fn as_punctuated_ref(&self) -> PunctuatedSentenceRef<'_, Self::Judgement, Self::Question> {
         PunctuatedSentenceRef::Question(self)
     }
 

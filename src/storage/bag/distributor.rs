@@ -376,7 +376,7 @@ mod tests {
     /// * 🎯越大的索引应该有越大的权重
     fn _test_weight(weights: &HashMap<usize, usize>) {
         let mut weights_arr = weights.iter().map(|(k, v)| (*k, *v)).collect::<Vec<_>>();
-        weights_arr.sort_by(|a, b| a.0.cmp(&b.0));
+        weights_arr.sort_by_key(|a| a.0);
         for (i, (term, w)) in weights_arr.iter().enumerate() {
             if i > 0 {
                 let (previous, w_p) = weights_arr[i - 1];

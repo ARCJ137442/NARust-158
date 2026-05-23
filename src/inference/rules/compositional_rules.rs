@@ -716,7 +716,7 @@ pub fn intro_var_inner(
 
 /// 🆕以「变量内引入」的内部词项，计算「共有词项」
 /// * 🎯产生的词项（二元组/空）用于生成新结论内容
-fn intro_var_commons([premise_1, premise_2]: [StatementRef; 2]) -> [Option<&Term>; 2] {
+fn intro_var_commons([premise_1, premise_2]: [StatementRef<'_>; 2]) -> [Option<&Term>; 2] {
     let [term11, term12] = premise_1.sub_pre();
     let [term21, term22] = premise_2.sub_pre();
     // * 🚩轮流判等以决定所抽取的词项

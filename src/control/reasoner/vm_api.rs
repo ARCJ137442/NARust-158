@@ -107,9 +107,7 @@ mod information_report {
             let mut target_locations = vec![];
             /// 判断引用是否唯一
             fn ref_unique(task_refs: &[*const Task], task_location: *const Task) -> bool {
-                !task_refs
-                    .iter()
-                    .any(|ptr_location: &*const Task| *ptr_location == task_location)
+                !task_refs.contains(&task_location)
             }
             let mut deal_ref = |task_ref: &Task| {
                 // 取地址

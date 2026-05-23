@@ -34,7 +34,7 @@ impl Reasoner {
 
     /// * ✅【2024-06-28 01:29:07】现在不再需要关注「推理引擎导致借用冲突」的问题
     ///   * 💡返回之后直接使用函数指针，而函数指针是[`Copy`]类型——可以复制以脱离借用
-    fn preprocess_concept(&mut self) -> Option<ReasonContextConcept> {
+    fn preprocess_concept(&mut self) -> Option<ReasonContextConcept<'_>> {
         // * 🚩从「记忆区」拿出一个「概念」准备推理 | 源自`processConcept`
         let mut current_concept = self.memory.take_out_concept()?;
         self.report_comment(format!("* Selected Concept: {}", current_concept.term()));

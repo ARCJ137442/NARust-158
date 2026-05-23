@@ -228,7 +228,6 @@ macro_rules! stamp {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::stamp;
     use crate::util::ToDisplayAndBrief;
     use nar_dev_utils::macro_once;
 

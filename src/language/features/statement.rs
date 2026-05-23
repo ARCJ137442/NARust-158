@@ -100,7 +100,7 @@ impl Term {
     /// * 🚩转换为Option
     /// * 🚩【2024-09-07 14:59:00】现在采用更严格的条件——需要判断是否为「陈述系词」
     #[must_use]
-    pub fn as_statement(&self) -> Option<StatementRef> {
+    pub fn as_statement(&self) -> Option<StatementRef<'_>> {
         matches_or!(
             ?self.components(),
             TermComponents::Compound(ref terms)
@@ -118,7 +118,7 @@ impl Term {
     /// * 🚩模式匹配后返回一个[`Option`]，只在其为「符合指定类型的词项」时为[`Some`]
     /// * 🚩返回不可变引用
     #[must_use]
-    pub fn as_statement_type(&self, statement_class: impl AsRef<str>) -> Option<StatementRef> {
+    pub fn as_statement_type(&self, statement_class: impl AsRef<str>) -> Option<StatementRef<'_>> {
         matches_or! {
             ?self.as_statement(),
             Some(statement)
@@ -132,7 +132,7 @@ impl Term {
     /// 🆕将一个复合词项转换为「陈述词项」（可变引用）
     /// * 🚩转换为Option
     #[must_use]
-    pub fn as_statement_mut(&mut self) -> Option<StatementRefMut> {
+    pub fn as_statement_mut(&mut self) -> Option<StatementRefMut<'_>> {
         matches_or!(
             ?self.components_mut(),
             TermComponents::Compound(ref mut terms) if terms.len() == 2
@@ -243,7 +243,7 @@ impl CompoundTermRefMut<'_> {
     /// 🆕将一个复合词项转换为「陈述词项」（可变引用）
     /// * 🚩转换为Option
     /// * 📌与[`Term::as_statement`]一致
-    pub fn as_statement(&mut self) -> Option<StatementRef> {
+    pub fn as_statement(&mut self) -> Option<StatementRef<'_>> {
         matches_or!(
             // * 📝此处必须内联`self.components()`，以告诉借用检查器「并非使用整个结构」
             // ! SAFETY: 此处保证对整体（整个复合词项）拥有引用
@@ -645,13 +645,13 @@ pub struct Statement {
 impl Statement {
     /// 获取不可变引用
     /// * 🚩【2024-07-10 23:51:54】此处使用[`Option::unwrap`]代替`unsafe`操作
-    pub fn get_ref(&self) -> StatementRef {
+    pub fn get_ref(&self) -> StatementRef<'_> {
         self.term.as_statement().unwrap()
     }
 
     /// 获取可变引用
     /// * 🚩【2024-07-10 23:51:54】此处使用[`Option::unwrap`]代替`unsafe`操作
-    pub fn mut_ref(&mut self) -> StatementRefMut {
+    pub fn mut_ref(&mut self) -> StatementRefMut<'_> {
         self.term.as_statement_mut().unwrap()
     }
 

@@ -263,7 +263,7 @@ pub trait ContextDerivationConcept: ReasonContextWithLinks {
             .as_judgement()
             // * 🚩判断句⇒返回实际的「可修订」
             // * 🚩疑问句⇒返回一个用不到的空值
-            .map_or(false, Judgement::revisable);
+            .is_some_and(Judgement::revisable);
         drop(current_task); // ! 先释放「借用代理」
         drop(current_task_ref);
         // * 🚩判断句⇒返回实际的「可修订」

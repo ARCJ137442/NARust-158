@@ -15,9 +15,7 @@ use narsese::lexical::Truth as LexicalTruth;
 pub trait Truth: ToDisplayAndBrief {
     /// 一种类型只可能有一种「证据值」
     /// * ✅兼容OpenNARS `ShortFloat`
-
-    // ! 🚩【2024-05-04 17:12:30】现在有关「构造」「转换」的方法，均被迁移至[`TruthValueConcrete`]特征中
-
+    /// * 🚩【2024-05-04 17:12:30】现在有关「构造」「转换」的方法，均被迁移至[`TruthValueConcrete`]特征中
     /// 模拟`TruthValue.frequency`、`getFrequency`
     /// * 📌此处仍然直接返回（新的）「证据值」而非浮点
     fn frequency(&self) -> ShortFloat;

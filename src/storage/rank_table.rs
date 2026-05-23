@@ -118,6 +118,7 @@ pub type IsCompatibleToAddF<T> = for<'a> fn(&'a T, &'a T) -> bool;
 ///   * 💫【2024-08-11 22:43:01】基于「中间类型」的方式难走通
 ///     * ❌内部存储有复杂的堆分配对象，而序列化时只拿取引用——中间类型的引用不`clone`就拿不到
 ///   * 🚩【2024-08-11 22:35:56】目前用「先反序列化到白板，再由调用处填充」的方式实现
+#[allow(unpredictable_function_pointer_comparisons)]
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct ArrayRankTable<T> {
     /// 内部数组

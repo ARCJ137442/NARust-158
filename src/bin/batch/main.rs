@@ -119,7 +119,7 @@ fn batch_intercept_output(output: Output) -> anyhow::Result<Option<Output>> {
                 // * 🚩生成「已保存」的消息
                 Ok(..) => format!(
                     "Data has been saved to {path:?} with {} bytes",
-                    data.as_bytes().len()
+                    data.len()
                 ),
                 // * 🚩或报错消息
                 Err(e) => format!("Failed to save data to {path:?}! Error: {e}"),

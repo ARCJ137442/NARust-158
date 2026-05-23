@@ -347,6 +347,7 @@ mod tests {
             }
         }
 
-        Ok(println!("测试完毕！"))
+        println!("测试完毕！");
+        Ok(())
     }
 }

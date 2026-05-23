@@ -122,7 +122,7 @@ impl Term {
     /// * 🚩模式匹配后返回一个[`Option`]，只在其为「符合指定类型的词项」时为[`Some`]
     /// * 🚩返回不可变引用
     #[must_use]
-    pub fn as_compound_type(&self, compound_class: impl AsRef<str>) -> Option<CompoundTermRef> {
+    pub fn as_compound_type(&self, compound_class: impl AsRef<str>) -> Option<CompoundTermRef<'_>> {
         matches_or! {
             ?self.as_compound(),
             Some(compound)
@@ -390,7 +390,7 @@ impl Term {
     /// * 📌通过判断「内部元素枚举」的类型实现
     /// * 🚩在其内部元素不是「复合词项」时，会返回`None`
     #[must_use]
-    pub fn as_compound(&self) -> Option<CompoundTermRef> {
+    pub fn as_compound(&self) -> Option<CompoundTermRef<'_>> {
         matches_or!(
             ?self.components(),
             TermComponents::Compound(ref c) => CompoundTermRef {
@@ -407,7 +407,7 @@ impl Term {
     pub fn as_compound_and(
         &self,
         predicate: impl FnOnce(&CompoundTermRef) -> bool,
-    ) -> Option<CompoundTermRef> {
+    ) -> Option<CompoundTermRef<'_>> {
         match self.as_compound() {
             Some(compound) if predicate(&compound) => Some(compound),
             _ => None,
@@ -422,7 +422,7 @@ impl Term {
     /// * ⚠️代码是不安全的：必须在解包前已经假定是「复合词项」
     /// * 📄逻辑参考自[`Option::unwrap_unchecked`]
     #[must_use]
-    pub unsafe fn as_compound_unchecked(&self) -> CompoundTermRef {
+    pub unsafe fn as_compound_unchecked(&self) -> CompoundTermRef<'_> {
         // * 🚩在debug模式下检查
         debug_assert!(self.is_compound(), "转换前必须假定其为复合词项");
         // * 🚩正式开始解引用
@@ -439,7 +439,7 @@ impl Term {
     /// 🆕尝试将词项作为「复合词项」
     /// * ℹ️[`Self::as_compound`]的可变版本
     #[must_use]
-    pub fn as_compound_mut(&mut self) -> Option<CompoundTermRefMut> {
+    pub fn as_compound_mut(&mut self) -> Option<CompoundTermRefMut<'_>> {
         matches_or! {
             // * 📌此处需要可变借用，才能在下头正常把Box变成可变引用（而无需Deref）
             // * ❌使用`ref mut`不能达到目的：解引用后还是Box
@@ -461,7 +461,7 @@ impl Term {
     /// * ⚠️代码是不安全的：必须在解包前已经假定是「复合词项」
     /// * 📄逻辑参考自[`Option::unwrap_unchecked`]
     #[must_use]
-    pub unsafe fn as_compound_mut_unchecked(&mut self) -> CompoundTermRefMut {
+    pub unsafe fn as_compound_mut_unchecked(&mut self) -> CompoundTermRefMut<'_> {
         // * 🚩在debug模式下检查
         debug_assert!(self.is_compound(), "转换前必须假定其为复合词项");
         // * 🚩正式开始解引用
@@ -809,13 +809,13 @@ pub struct CompoundTerm {
 
 impl CompoundTerm {
     /// 获取不可变引用
-    pub fn get_ref(&self) -> CompoundTermRef {
+    pub fn get_ref(&self) -> CompoundTermRef<'_> {
         // SAFETY: 在构造时，已经检查了是否为复合词项，因此此处无需检查
         unsafe { self.term.as_compound_unchecked() }
     }
 
     /// 获取可变引用
-    pub fn mut_ref(&mut self) -> CompoundTermRefMut {
+    pub fn mut_ref(&mut self) -> CompoundTermRefMut<'_> {
         // SAFETY: 在构造时，已经检查了是否为复合词项，因此此处无需检查
         unsafe { self.term.as_compound_mut_unchecked() }
     }

@@ -72,7 +72,7 @@ pub trait Sentence: ToDisplayAndBrief + Evidential {
 
     /// 🆕作为【标点类型与内部引用数据兼备】的「带标点引用」
     /// * 🚩【2024-07-09 13:13:23】目前只完成不可变引用
-    fn as_punctuated_ref(&self) -> PunctuatedSentenceRef<Self::Judgement, Self::Question>;
+    fn as_punctuated_ref(&self) -> PunctuatedSentenceRef<'_, Self::Judgement, Self::Question>;
 
     /// 模拟
     /// * `Sentence.punctuation`、`Sentence.getPunctuation`

@@ -17,6 +17,7 @@ use navm::output::Output;
 /// [`try_solution`]的复合返回值
 /// * 📌标明其中的所有参数语义
 #[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)]
 pub(in crate::inference) enum SolutionResult {
     /// 驳回
     /// * 📄新解差于旧解

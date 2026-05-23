@@ -306,7 +306,7 @@ impl Sentence for Task {
     type Judgement = <SentenceV1 as Sentence>::Judgement;
     type Question = <SentenceV1 as Sentence>::Question;
 
-    fn as_punctuated_ref(&self) -> super::PunctuatedSentenceRef<Self::Judgement, Self::Question> {
+    fn as_punctuated_ref(&self) -> super::PunctuatedSentenceRef<'_, Self::Judgement, Self::Question> {
         self.sentence.as_punctuated_ref()
     }
 

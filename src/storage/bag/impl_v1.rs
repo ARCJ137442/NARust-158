@@ -29,7 +29,6 @@ use serde::{Deserialize, Serialize};
 /// * 🚩【2024-06-22 15:19:14】目前基于OpenNARS改版，将特征窄化为具体结构，以简化代码
 ///
 /// * ✅【2024-05-04 16:38:16】初步完成设计与测试
-
 /// 复刻 `nars.storage.bag`
 ///
 /// # 📄OpenNARS

@@ -109,7 +109,7 @@ impl Sentence for SentenceV1 {
     type Question = QuestionV1;
 
     /// ℹ️只需这一个方法，即可提供所有与「细分类型/标点」有关的信息
-    fn as_punctuated_ref(&self) -> PunctuatedSentenceRef<Self::Judgement, Self::Question> {
+    fn as_punctuated_ref(&self) -> PunctuatedSentenceRef<'_, Self::Judgement, Self::Question> {
         use PunctuatedSentenceRef::*;
         use SentenceV1::*;
         match self {
