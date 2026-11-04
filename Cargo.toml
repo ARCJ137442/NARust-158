@@ -81,6 +81,10 @@ path = "src/bin/shell/main.rs"
 name = "narust_158_batch"
 path = "src/bin/batch/main.rs"
 
+[[bin]]
+name = "narust_158_vnars_provider"
+path = "src/bin/vnars_provider/main.rs"
+
 # 有关Clippy的参考：
 # * 🔗<https://doc.rust-lang.org/clippy/configuration.html>
 [lints.clippy]

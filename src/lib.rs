@@ -29,3 +29,6 @@ pub mod control;
 
 // 虚拟机
 pub mod vm;
+
+// vNARS 提供方适配层
+pub mod vnars_provider;

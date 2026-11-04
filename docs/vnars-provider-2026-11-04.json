@@ -1,0 +1,98 @@
+{
+  "schema": "vnars-provider-evidence-summary/v1",
+  "measured_at": "2026-11-04",
+  "source": {
+    "repository": "ARCJ137442/NARust-158",
+    "branch": "feat/vnars-provider",
+    "baseline_commit": "91e851f23db65d5d4d5860dae4f752cf1d351a13",
+    "adapter": "src/vnars_provider.rs",
+    "binary": "target/debug/narust_158_vnars_provider",
+    "binary_bytes": 20617840,
+    "binary_sha256": "d2b222c7a49ff44ed553247f3dfffeeda0eb9fd728481d88f0dafdd34f055bff"
+  },
+  "environment": {
+    "platform": "Termux Linux aarch64",
+    "device_model": "24018RPACC",
+    "android_release": "15",
+    "rust": "1.93.1",
+    "cpu_count": 8,
+    "role_cpu_attribution": "unknown",
+    "role_cpu_note": "Observed provider-tree CPU is a lower bound because short-lived descendants may start and exit between samples."
+  },
+  "provider_contract": {
+    "protocol": "vnars.provider/1",
+    "sealed_output_boundary": true,
+    "readiness": "confirmed",
+    "unsupported_operations": [
+      "register_operation",
+      "control"
+    ],
+    "state_snapshotting": "unsupported",
+    "state_restoration": "unsupported",
+    "runtime_cloning": "unsupported"
+  },
+  "service_probe": {
+    "model": "narust-158/rust-provider",
+    "repeats": 3,
+    "wall_ms_median": 3461.518,
+    "wall_ms_min": 3421.353,
+    "wall_ms_max": 3583.084,
+    "content_shapes": [
+      ["IN", "IN", "ANSWER"],
+      ["IN", "IN", "ANSWER"],
+      ["IN", "IN", "ANSWER"]
+    ],
+    "all_complete": true,
+    "all_boundaries": "sealed",
+    "close_reason_observed_in_instance_catalog": "bounded_run_finished",
+    "close_reason_observed_count_at_snapshot": 42
+  },
+  "load_probe": {
+    "rounds": 2,
+    "requests_per_cell": [2, 4, 8],
+    "concurrency": [1, 2, 4],
+    "wall_ms_median": {
+      "n1": 3391.9,
+      "n2": 3461.8,
+      "n4": 5821.4
+    },
+    "queued_ms_nonzero_counts": {
+      "n1": 0,
+      "n2": 0,
+      "n4": 4
+    },
+    "host_process_cpu_seconds_mean": {
+      "n1": 3.35,
+      "n2": 7.155,
+      "n4": 14.82
+    },
+    "provider_tree_cpu_seconds_lower_bound_mean": {
+      "n1": 3.35,
+      "n2": 7.16,
+      "n4": 14.825
+    },
+    "max_provider_rss_mib": {
+      "n1": 0.0,
+      "n2": 6.016,
+      "n4": 0.0
+    },
+    "interpretation": "A two-worker integration probe, not a throughput benchmark. Missing provider RSS cells mean the short-lived process was not observed, not zero actual memory."
+  },
+  "digest_verification": {
+    "method": "read-only Python hashlib SHA-256, 1 MiB chunks, 3 repetitions, identical digest required",
+    "median_ms": 15.522,
+    "runs_ms": [16.716, 15.522, 15.452]
+  },
+  "semantics": {
+    "truth_normalization": "four decimal places in lexical output",
+    "input_task_budget_populated": true,
+    "answer_temporal_stamp": null,
+    "comparison_boundary": "Provider adapter only; no inference-kernel changes."
+  },
+  "tests": {
+    "provider_target": "7/7 passed",
+    "all_targets": "cargo test --all-targets exited 0; library 361 passed / 1 ignored / 0 failed; provider 7/7 passed",
+    "format": "passed",
+    "clippy_strict": "failed on pre-existing repository lint debt; adapter does not claim clippy clean"
+  }
+}

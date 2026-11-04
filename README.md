@@ -45,6 +45,9 @@ Cargo状态：
 
 一个 [非公理推理系统](http://www.opennars.org/) 的 [Rust](https://www.rust-lang.org/) 版本，复刻自 [OpenNARS 1.5.8](https://github.com/patham9/opennars_declarative_core)。
 
+外部进程集成可使用 Rust 原生的 `narust_158_vnars_provider`；协议、命令映射、能力边界
+与验证命令见 [`docs/vnars-provider.md`](./docs/vnars-provider.md)。
+
 ## 在线演示
 
 得益于Rust与WebAssembly的集成技术，该推理系统具有[网页版](https://arcj137442.github.io/demo-158-dev/)，并可直接在支持WebAssembly的浏览器中运行。
